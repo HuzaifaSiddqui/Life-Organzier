@@ -38,8 +38,8 @@ export function ChatTaskScreen({ navigation }: Props) {
 
   const save = async () => {
     if (!parsed) return;
-    if (parsed.confidence < 50) {
-      setError("Confidence is low. Refine your message or save a manual task instead.");
+    if (!parsed.title.trim()) {
+      setError("Task title is missing. Please edit your text and parse again.");
       return;
     }
     setSaving(true);
@@ -114,9 +114,9 @@ export function ChatTaskScreen({ navigation }: Props) {
             <Text style={styles.confidence}>{parsed.confidence}% match</Text>
           </View>
           <Pressable
-            style={[styles.save, (parsed.confidence < 50 || saving) && styles.saveDisabled]}
+            style={[styles.save, saving && styles.saveDisabled]}
             onPress={() => void save()}
-            disabled={parsed.confidence < 50 || saving}
+            disabled={saving}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />

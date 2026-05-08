@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { TaskCard } from "../../components/TaskCard";
+import { colors, radii, shadow } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getTasks } from "../../services/tasksApi";
 import type { Task } from "../../types/models";
@@ -46,7 +47,8 @@ export function TaskListScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <Pressable style={styles.smallBtn} onPress={() => navigation.navigate("AddTask")}>
+        <Text style={styles.toolbarTitle}>All tasks</Text>
+        <Pressable style={({ pressed }) => [styles.smallBtn, pressed && styles.smallBtnPressed]} onPress={() => navigation.navigate("AddTask")}>
           <Text style={styles.smallBtnText}>+ New</Text>
         </Pressable>
       </View>
@@ -81,29 +83,40 @@ export function TaskListScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: colors.bg,
     paddingHorizontal: 16,
     paddingTop: 8,
   },
   toolbar: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
+  toolbarTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.text,
+  },
   smallBtn: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: radii.pill,
+    ...shadow,
   },
   smallBtnText: {
     color: "#fff",
     fontWeight: "600",
   },
+  smallBtnPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.985 }],
+  },
   empty: {
     textAlign: "center",
     marginTop: 32,
-    color: "#64748b",
+    color: colors.textMuted,
   },
   error: {
     color: "#b91c1c",

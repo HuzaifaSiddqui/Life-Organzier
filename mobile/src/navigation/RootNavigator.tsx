@@ -2,6 +2,7 @@ import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ActivityIndicator, StyleSheet, Text, View, Pressable } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { colors, radii, shadow } from "../constants/theme";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
 
@@ -9,8 +10,11 @@ const theme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: "#f7f8fb",
-    primary: "#2563eb",
+    background: colors.bg,
+    primary: colors.primary,
+    card: colors.surface,
+    border: colors.border,
+    text: colors.text,
   },
 };
 
@@ -38,8 +42,10 @@ export function RootNavigator() {
   if (!authReady) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Starting…</Text>
+        <View style={styles.loaderCard}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Starting…</Text>
+        </View>
       </View>
     );
   }
@@ -53,8 +59,10 @@ export function RootNavigator() {
           <Stack.Screen name="Boot">
             {() => (
               <View style={styles.centered}>
-                <ActivityIndicator size="large" />
-                <Text style={styles.loadingText}>Preparing your workspace…</Text>
+                <View style={styles.loaderCard}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Preparing your workspace…</Text>
+                </View>
               </View>
             )}
           </Stack.Screen>
@@ -74,30 +82,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: colors.bg,
+  },
+  loaderCard: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow,
   },
   loadingText: {
     marginTop: 12,
-    color: "#475569",
+    color: colors.textMuted,
+    fontWeight: "500",
   },
   title: {
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 8,
-    color: "#0f172a",
+    color: colors.text,
     textAlign: "center",
   },
   sub: {
     fontSize: 15,
-    color: "#475569",
+    color: colors.textMuted,
     textAlign: "center",
     marginBottom: 20,
   },
   button: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
+    ...shadow,
   },
   buttonText: {
     color: "#fff",

@@ -38,8 +38,8 @@ export function VoiceTaskScreen({ navigation }: Props) {
 
   const save = async () => {
     if (!parsed) return;
-    if (parsed.confidence < 50) {
-      setError("Confidence is low. Refine the text or create a manual task.");
+    if (!parsed.title.trim()) {
+      setError("Task title is missing. Refine the text and parse again.");
       return;
     }
     setSaving(true);
@@ -111,9 +111,9 @@ export function VoiceTaskScreen({ navigation }: Props) {
             <Text style={styles.badgeText}>{parsed.priority}</Text>
           </View>
           <Pressable
-            style={[styles.save, (parsed.confidence < 50 || saving) && styles.saveDisabled]}
+            style={[styles.save, saving && styles.saveDisabled]}
             onPress={() => void save()}
-            disabled={parsed.confidence < 50 || saving}
+            disabled={saving}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />

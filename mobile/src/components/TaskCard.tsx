@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { colors, radii, shadow } from "../constants/theme";
 import type { Task } from "../types/models";
 import { priorityColor } from "../utils/priorityColors";
 
@@ -44,12 +45,13 @@ export function TaskCard({ task, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
+    ...shadow,
   },
   row: {
     flexDirection: "row",
@@ -61,7 +63,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.text,
   },
   badge: {
     borderRadius: 8,
@@ -75,7 +77,7 @@ const styles = StyleSheet.create({
   },
   meta: {
     marginTop: 6,
-    color: "#64748b",
+    color: colors.textMuted,
     fontSize: 13,
   },
   tags: {
@@ -86,8 +88,8 @@ const styles = StyleSheet.create({
   },
   tag: {
     fontSize: 12,
-    color: "#475569",
-    backgroundColor: "#f1f5f9",
+    color: "#334155",
+    backgroundColor: "#eef2ff",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,

@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { colors, radii, shadow } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { createTask } from "../../services/tasksApi";
 import type { Priority } from "../../types/models";
@@ -80,13 +81,21 @@ export function AddTaskScreen({ navigation }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.card}>
       <Controller
         control={control}
         name="title"
         render={({ field, fieldState }) => (
           <View style={styles.field}>
             <Text style={styles.label}>Title *</Text>
-            <TextInput style={styles.input} placeholder="What do you need to do?" {...field} />
+            <TextInput
+              style={styles.input}
+              placeholder="What do you need to do?"
+              placeholderTextColor="#94a3b8"
+              value={field.value}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
+            />
             {fieldState.error ? (
               <Text style={styles.fieldError}>{fieldState.error.message}</Text>
             ) : null}
@@ -103,7 +112,10 @@ export function AddTaskScreen({ navigation }: Props) {
               style={[styles.input, styles.multiline]}
               multiline
               placeholder="Optional details"
-              {...field}
+              placeholderTextColor="#94a3b8"
+              value={field.value}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
             />
           </View>
         )}
@@ -114,7 +126,14 @@ export function AddTaskScreen({ navigation }: Props) {
         render={({ field }) => (
           <View style={styles.field}>
             <Text style={styles.label}>Due date (YYYY-MM-DD)</Text>
-            <TextInput style={styles.input} placeholder="2026-05-12" {...field} />
+            <TextInput
+              style={styles.input}
+              placeholder="2026-05-12"
+              placeholderTextColor="#94a3b8"
+              value={field.value}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
+            />
           </View>
         )}
       />
@@ -124,7 +143,14 @@ export function AddTaskScreen({ navigation }: Props) {
         render={({ field }) => (
           <View style={styles.field}>
             <Text style={styles.label}>Due time</Text>
-            <TextInput style={styles.input} placeholder="5:30 PM" {...field} />
+            <TextInput
+              style={styles.input}
+              placeholder="5:30 PM"
+              placeholderTextColor="#94a3b8"
+              value={field.value}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
+            />
           </View>
         )}
       />
@@ -134,7 +160,14 @@ export function AddTaskScreen({ navigation }: Props) {
         render={({ field }) => (
           <View style={styles.field}>
             <Text style={styles.label}>Category</Text>
-            <TextInput style={styles.input} placeholder="Work, Academic…" {...field} />
+            <TextInput
+              style={styles.input}
+              placeholder="Work, Academic…"
+              placeholderTextColor="#94a3b8"
+              value={field.value}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
+            />
           </View>
         )}
       />
@@ -169,9 +202,14 @@ export function AddTaskScreen({ navigation }: Props) {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.button} onPress={() => void onSubmit()} disabled={busy}>
+      <Pressable
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        onPress={() => void onSubmit()}
+        disabled={busy}
+      >
         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save task</Text>}
       </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -179,24 +217,32 @@ export function AddTaskScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: colors.bg,
     gap: 10,
     paddingBottom: 32,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: 14,
+    ...shadow,
   },
   field: {
     marginBottom: 4,
   },
   label: {
     fontSize: 14,
-    color: "#334155",
+    color: colors.textMuted,
     marginBottom: 6,
     fontWeight: "500",
   },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 10,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
@@ -218,37 +264,42 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 999,
+    borderColor: colors.border,
+    borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
   },
   chipActive: {
-    borderColor: "#2563eb",
-    backgroundColor: "#eff6ff",
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSoft,
   },
   chipText: {
-    color: "#0f172a",
+    color: colors.text,
     fontWeight: "500",
     fontSize: 13,
   },
   chipTextActive: {
-    color: "#1d4ed8",
+    color: colors.primaryDark,
   },
   error: {
     color: "#b91c1c",
   },
   button: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     alignItems: "center",
     marginTop: 8,
+    ...shadow,
   },
   buttonText: {
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+  buttonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.985 }],
   },
 });

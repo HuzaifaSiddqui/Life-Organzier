@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { sendPasswordResetEmail } from "firebase/auth";
+import { colors, radii, shadow } from "../../constants/theme";
 import { auth } from "../../lib/firebase";
 import { z } from "zod";
 
@@ -44,9 +45,9 @@ export function ForgotPasswordScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.help}>
-        Enter your account email. We will send a password reset link from Firebase.
-      </Text>
+      <Text style={styles.title}>Reset password</Text>
+      <Text style={styles.help}>Enter your email and we will send a secure reset link.</Text>
+      <View style={styles.card}>
       <Controller
         control={control}
         name="email"
@@ -60,6 +61,7 @@ export function ForgotPasswordScreen() {
               keyboardType="email-address"
               style={styles.input}
               placeholder="you@example.com"
+              placeholderTextColor="#94a3b8"
             />
             {fieldState.error ? (
               <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -72,6 +74,7 @@ export function ForgotPasswordScreen() {
       <Pressable style={styles.button} onPress={() => void onSubmit()} disabled={busy}>
         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send link</Text>}
       </Pressable>
+      </View>
     </View>
   );
 }
@@ -80,11 +83,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: colors.bg,
     gap: 12,
   },
+  title: {
+    marginTop: 8,
+    fontSize: 28,
+    color: colors.text,
+    fontWeight: "700",
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    padding: 16,
+    ...shadow,
+  },
   help: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 14,
     marginBottom: 8,
   },
@@ -93,15 +110,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: "#334155",
+    color: colors.textMuted,
     marginBottom: 6,
     fontWeight: "500",
   },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 10,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
@@ -112,15 +129,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   info: {
-    color: "#15803d",
+    color: colors.success,
   },
   error: {
-    color: "#b91c1c",
+    color: colors.danger,
   },
   button: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     alignItems: "center",
     marginTop: 8,
   },

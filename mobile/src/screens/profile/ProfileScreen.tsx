@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { signOut } from "firebase/auth";
+import { colors, radii, shadow } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -20,6 +21,10 @@ export function ProfileScreen({ navigation }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.hero}>
+        <Text style={styles.heroTitle}>Profile</Text>
+        <Text style={styles.heroSub}>Manage your account and explore FYP-2 previews.</Text>
+      </View>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Account</Text>
         <Text style={styles.meta}>{dbUser?.email}</Text>
@@ -53,32 +58,50 @@ export function ProfileScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: colors.bg,
     paddingBottom: 40,
     gap: 10,
   },
+  hero: {
+    borderRadius: radii.lg,
+    padding: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  heroSub: {
+    marginTop: 4,
+    color: colors.textMuted,
+  },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
+    ...shadow,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.text,
     marginBottom: 6,
   },
   meta: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 15,
   },
   section: {
     marginTop: 12,
     fontSize: 14,
     fontWeight: "600",
-    color: "#64748b",
+    color: colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
@@ -86,15 +109,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
+    ...shadow,
   },
   linkText: {
     fontSize: 16,
-    color: "#0f172a",
+    color: colors.text,
     fontWeight: "500",
   },
   chevron: {
@@ -104,9 +128,9 @@ const styles = StyleSheet.create({
   logout: {
     marginTop: 20,
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: "#fca5a5",
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center",
     backgroundColor: "#fef2f2",
   },

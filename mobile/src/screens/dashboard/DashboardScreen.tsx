@@ -3,6 +3,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { TaskCard } from "../../components/TaskCard";
+import { colors, radii, shadow } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getTasks } from "../../services/tasksApi";
@@ -35,10 +36,12 @@ export function DashboardScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.greeting}>
-        Hello{dbUser?.displayName ? `, ${dbUser.displayName}` : ""}
-      </Text>
-      <Text style={styles.sub}>Here is a quick overview of your tasks.</Text>
+      <View style={styles.hero}>
+        <Text style={styles.greeting}>
+          Hello{dbUser?.displayName ? `, ${dbUser.displayName}` : ""}
+        </Text>
+        <Text style={styles.sub}>Here is a quick overview of your tasks.</Text>
+      </View>
 
       <View style={styles.grid}>
         <Pressable style={styles.tile} onPress={() => navigation.navigate("TaskList")}>
@@ -96,40 +99,49 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: "#f7f8fb",
+    backgroundColor: colors.bg,
+  },
+  hero: {
+    borderRadius: radii.lg,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadow,
   },
   greeting: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.text,
   },
   sub: {
     marginTop: 4,
-    color: "#64748b",
-    marginBottom: 16,
+    color: colors.textMuted,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   tile: {
     width: "48%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
+    ...shadow,
   },
   tileTitle: {
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.text,
     marginBottom: 4,
   },
   tileMeta: {
     fontSize: 13,
-    color: "#64748b",
+    color: colors.textMuted,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -141,14 +153,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.text,
   },
   link: {
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "500",
   },
   empty: {
-    color: "#64748b",
+    color: colors.textMuted,
     marginTop: 8,
   },
   error: {
@@ -164,7 +176,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   footerText: {
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "500",
   },
 });

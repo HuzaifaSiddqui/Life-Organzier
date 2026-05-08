@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { colors } from "../constants/theme";
 import { AddTaskScreen } from "../screens/tasks/AddTaskScreen";
 import { ChatTaskScreen } from "../screens/chat/ChatTaskScreen";
 import { DashboardScreen } from "../screens/dashboard/DashboardScreen";
@@ -25,7 +26,16 @@ const Stack = createNativeStackNavigator<MainStackParamList>();
 
 export function MainStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.surface },
+        headerShadowVisible: false,
+        headerTintColor: colors.text,
+        headerTitleStyle: { fontWeight: "700" },
+        animation: "slide_from_right",
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
       <Stack.Screen
         name="Dashboard"
         component={DashboardScreen}
