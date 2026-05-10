@@ -1,17 +1,46 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useLayoutEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  LayoutAnimation,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { colors, radii, shadow } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { deleteTask, getTask } from "../../services/tasksApi";
+import { deleteTask, getTask, updateTask } from "../../services/tasksApi";
 import type { Task } from "../../types/models";
-import { priorityColor } from "../../utils/priorityColors";
+import { priorityPill } from "../../utils/priorityColors";
 
 type Props = NativeStackScreenProps<MainStackParamList, "TaskDetail">;
+
+function statusMetaColor(status: Task["status"]): string {
+  if (status === "COMPLETED") return "#16A34A";
+  if (status === "IN_PROGRESS") return "#1D99FF";
+  return colors.textMuted;
+}
+
+function formatDue(task: Task): string {
+  if (!task.dueDate && !task.dueTime) return "Not set";
+  const parts: string[] = [];
+  if (task.dueDate) {
+    const d = new Date(task.dueDate);
+    parts.push(d.toLocaleString(undefined, { dateStyle: "medium" }));
+  }
+  if (task.dueTime) parts.push(task.dueTime);
+  return parts.join(" · ");
+}
 
 export function TaskDetailScreen({ navigation, route }: Props) {
   const { taskId } = route.params;
   const [task, setTask] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
@@ -23,16 +52,6 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   useLayoutEffect(() => {
     load();
   }, [load]);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable onPress={() => navigation.navigate("EditTask", { taskId })}>
-          <Text style={styles.headerAction}>Edit</Text>
-        </Pressable>
-      ),
-    });
-  }, [navigation, taskId]);
 
   const confirmDelete = () => {
     Alert.alert("Delete task", "This task will be removed permanently.", [
@@ -52,7 +71,10 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.error}>{error}</Text>
+        <ScreenHeader title="Task" onBack={() => navigation.goBack()} />
+        <View style={styles.centerBody}>
+          <Text style={styles.error}>{error}</Text>
+        </View>
       </View>
     );
   }
@@ -60,127 +82,252 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   if (!task) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.muted}>Loading…</Text>
+        <ScreenHeader title="Task" onBack={() => navigation.goBack()} />
+        <View style={styles.centerBody}>
+          <Text style={styles.muted}>Loading task details…</Text>
+        </View>
       </View>
     );
   }
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{task.title}</Text>
-      <View style={[styles.badge, { backgroundColor: priorityColor(task.priority) }]}>
-        <Text style={styles.badgeText}>{task.priority}</Text>
-      </View>
-      <View style={styles.block}>
-        <Text style={styles.label}>Status</Text>
-        <Text style={styles.value}>{task.status.replace("_", " ")}</Text>
-      </View>
-      <View style={styles.block}>
-        <Text style={styles.label}>Source</Text>
-        <Text style={styles.value}>{task.source}</Text>
-      </View>
-      {task.category ? (
-        <View style={styles.block}>
-          <Text style={styles.label}>Category</Text>
-          <Text style={styles.value}>{task.category}</Text>
-        </View>
-      ) : null}
-      <View style={styles.block}>
-        <Text style={styles.label}>Due</Text>
-        <Text style={styles.value}>
-          {task.dueDate
-            ? `${new Date(task.dueDate).toLocaleDateString()}${task.dueTime ? ` · ${task.dueTime}` : ""}`
-            : "Not set"}
-        </Text>
-      </View>
-      {task.description ? (
-        <View style={styles.block}>
-          <Text style={styles.label}>Description</Text>
-          <Text style={styles.value}>{task.description}</Text>
-        </View>
-      ) : null}
-      {task.confidence != null ? (
-        <View style={styles.block}>
-          <Text style={styles.label}>Parser confidence</Text>
-          <Text style={styles.value}>{task.confidence}%</Text>
-        </View>
-      ) : null}
+  const pill = priorityPill(task.priority);
 
-      <Pressable style={styles.delete} onPress={confirmDelete}>
-        <Text style={styles.deleteText}>Delete task</Text>
-      </Pressable>
-    </ScrollView>
+  const markCompleted = async () => {
+    if (task.status === "COMPLETED") return;
+    setCompleting(true);
+    try {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      const updated = await updateTask(taskId, { status: "COMPLETED" });
+      setTask(updated);
+    } catch {
+      Alert.alert("Update failed", "Could not mark this task complete.");
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const metaRows: { label: string; value: string; valueColor?: string }[] = [
+    {
+      label: "Status",
+      value: task.status.replace("_", " "),
+      valueColor: statusMetaColor(task.status),
+    },
+    { label: "Due", value: formatDue(task), valueColor: colors.textMuted },
+    ...(task.category
+      ? [{ label: "Category", value: task.category, valueColor: colors.textMuted }]
+      : []),
+    {
+      label: "Source",
+      value: task.source.replace("_", " "),
+      valueColor: colors.textMuted,
+    },
+  ];
+
+  return (
+    <View style={styles.root}>
+      <ScreenHeader
+        title="Task"
+        onBack={() => navigation.goBack()}
+        right={
+          <Pressable onPress={() => navigation.navigate("EditTask", { taskId })} hitSlop={8}>
+            <Text style={styles.edit}>Edit</Text>
+          </Pressable>
+        }
+      />
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{task.title}</Text>
+          <View style={[styles.priorityPill, { backgroundColor: pill.backgroundColor }]}>
+            <Text style={[styles.priorityText, { color: pill.color }]}>{task.priority}</Text>
+          </View>
+        </View>
+
+        <View style={styles.metaList}>
+          {metaRows.map((row) => (
+            <View key={row.label} style={styles.metaCard}>
+              <Text style={styles.metaLabel}>{row.label}</Text>
+              <Text style={[styles.metaValue, row.valueColor ? { color: row.valueColor } : null]}>
+                {row.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {task.description ? (
+          <View style={styles.descCard}>
+            <Text style={styles.descHeading}>Description</Text>
+            <Text style={styles.descBody}>{task.description}</Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          style={({ pressed }) => [styles.completeWrap, pressed && styles.btnPressed]}
+          onPress={() => void markCompleted()}
+          disabled={task.status === "COMPLETED" || completing}
+        >
+          <LinearGradient
+            colors={task.status === "COMPLETED" ? ["#22C55E", "#16A34A"] : ["#16A34A", "#15803D"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.completeGrad}
+          >
+            <Text style={styles.completeText}>
+              {task.status === "COMPLETED"
+                ? "Completed ✓"
+                : completing
+                  ? "Completing…"
+                  : "Mark as complete"}
+            </Text>
+          </LinearGradient>
+        </Pressable>
+
+        <View style={styles.divider} />
+
+        <Pressable style={({ pressed }) => [styles.delete, pressed && styles.btnPressed]} onPress={confirmDelete}>
+          <Text style={styles.deleteText}>Delete task</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
   centered: {
     flex: 1,
-    alignItems: "center",
+    backgroundColor: colors.bg,
+  },
+  centerBody: {
+    flex: 1,
     justifyContent: "center",
-    backgroundColor: "#f7f8fb",
+    padding: 24,
   },
   container: {
-    padding: 20,
-    backgroundColor: "#f7f8fb",
+    padding: 24,
+    paddingBottom: 40,
+    gap: 24,
+  },
+  edit: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0065C3",
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
   },
   title: {
+    flex: 1,
     fontSize: 24,
-    fontWeight: "700",
-    color: "#0f172a",
+    fontWeight: "600",
+    color: colors.text,
+    lineHeight: 30,
   },
-  badge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
+  priorityPill: {
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: radii.pill,
+    alignSelf: "flex-start",
   },
-  badgeText: {
-    color: "#fff",
+  priorityText: {
+    fontSize: 12,
     fontWeight: "700",
-    fontSize: 12,
   },
-  block: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
+  metaList: {
+    gap: 12,
+  },
+  metaCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
+    ...shadow,
   },
-  label: {
-    fontSize: 12,
-    color: "#64748b",
-    marginBottom: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  metaLabel: {
+    fontWeight: "500",
+    color: colors.textMuted,
+    fontSize: 15,
   },
-  value: {
+  metaValue: {
+    fontWeight: "600",
+    fontSize: 15,
+    color: colors.text,
+    textAlign: "right",
+    flexShrink: 1,
+    marginLeft: 12,
+  },
+  descCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow,
+  },
+  descHeading: {
+    fontWeight: "600",
     fontSize: 16,
-    color: "#0f172a",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  descBody: {
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  completeWrap: {
+    borderRadius: radii.md,
+    overflow: "hidden",
+    ...shadow,
+  },
+  completeGrad: {
+    height: 56,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completeText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 8,
   },
   delete: {
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
-    paddingVertical: 12,
-    borderRadius: 10,
+    height: 56,
+    borderRadius: radii.md,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
   },
   deleteText: {
-    color: "#b91c1c",
+    color: "#DC2626",
     fontWeight: "600",
+    fontSize: 16,
+  },
+  btnPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.97 }],
   },
   error: {
     color: "#b91c1c",
+    textAlign: "center",
   },
   muted: {
-    color: "#64748b",
-  },
-  headerAction: {
-    color: "#2563eb",
-    fontWeight: "600",
-    marginRight: 8,
+    color: colors.textMuted,
+    textAlign: "center",
   },
 });

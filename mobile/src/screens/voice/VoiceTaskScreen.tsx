@@ -9,10 +9,12 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { colors, radii, shadow } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { createTask, parseTaskText } from "../../services/tasksApi";
 import type { ParsedTask, Priority } from "../../types/models";
-import { priorityColor } from "../../utils/priorityColors";
+import { priorityPill } from "../../utils/priorityColors";
 
 type Props = NativeStackScreenProps<MainStackParamList, "VoiceTask">;
 
@@ -65,8 +67,13 @@ export function VoiceTaskScreen({ navigation }: Props) {
     }
   };
 
+  const parsedPill = parsed ? priorityPill(parsed.priority as Priority) : null;
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.root}>
+      <ScreenHeader title="Voice task" onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.heading}>Voice capture</Text>
       <Text style={styles.help}>
         Use your device microphone on the keyboard to dictate, or type what you would have said. Tap
         &quot;Parse&quot; to extract task fields.
@@ -75,11 +82,12 @@ export function VoiceTaskScreen({ navigation }: Props) {
         style={styles.input}
         multiline
         placeholder="Spoken task appears here…"
+        placeholderTextColor="#94a3b8"
         value={transcript}
         onChangeText={setTranscript}
       />
       <Pressable
-        style={styles.button}
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
         onPress={() => void runParser()}
         disabled={busy || !transcript.trim()}
       >
@@ -107,11 +115,13 @@ export function VoiceTaskScreen({ navigation }: Props) {
             <Text style={styles.bold}>Priority: </Text>
             {parsed.priority}
           </Text>
-          <View style={[styles.badge, { backgroundColor: priorityColor(parsed.priority as Priority) }]}>
-            <Text style={styles.badgeText}>{parsed.priority}</Text>
-          </View>
+          {parsedPill ? (
+            <View style={[styles.badge, { backgroundColor: parsedPill.backgroundColor }]}>
+              <Text style={[styles.badgeText, { color: parsedPill.color }]}>{parsed.priority}</Text>
+            </View>
+          ) : null}
           <Pressable
-            style={[styles.save, saving && styles.saveDisabled]}
+            style={({ pressed }) => [styles.save, saving && styles.saveDisabled, pressed && styles.buttonPressed]}
             onPress={() => void save()}
             disabled={saving}
           >
@@ -126,35 +136,46 @@ export function VoiceTaskScreen({ navigation }: Props) {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
   container: {
-    padding: 16,
-    backgroundColor: "#f7f8fb",
+    padding: 20,
+    backgroundColor: colors.bg,
     paddingBottom: 32,
     gap: 12,
   },
+  heading: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "700",
+  },
   help: {
-    color: "#475569",
+    color: colors.textMuted,
     fontSize: 14,
   },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     padding: 12,
     minHeight: 140,
     textAlignVertical: "top",
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     alignItems: "center",
+    ...shadow,
   },
   buttonText: {
     color: "#fff",
@@ -163,17 +184,18 @@ const styles = StyleSheet.create({
   },
   preview: {
     marginTop: 8,
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.border,
     gap: 8,
+    ...shadow,
   },
   previewTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.text,
   },
   warn: {
     color: "#b45309",
@@ -181,7 +203,7 @@ const styles = StyleSheet.create({
   },
   line: {
     fontSize: 15,
-    color: "#0f172a",
+    color: colors.text,
   },
   bold: {
     fontWeight: "700",
@@ -193,15 +215,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   badgeText: {
-    color: "#fff",
     fontWeight: "700",
     fontSize: 12,
   },
   save: {
     marginTop: 8,
-    backgroundColor: "#16a34a",
+    backgroundColor: colors.success,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center",
   },
   saveDisabled: {
@@ -213,6 +234,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   error: {
-    color: "#b91c1c",
+    color: colors.danger,
+  },
+  buttonPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
   },
 });

@@ -36,23 +36,15 @@ export function MainStack() {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Stack.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{ title: "Life Organizer" }}
-      />
-      <Stack.Screen name="TaskList" component={TaskListScreen} options={{ title: "Tasks" }} />
-      <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={{ title: "Task" }} />
-      <Stack.Screen name="AddTask" component={AddTaskScreen} options={{ title: "New task" }} />
-      <Stack.Screen name="EditTask" component={EditTaskScreen} options={{ title: "Edit task" }} />
-      <Stack.Screen name="ChatTask" component={ChatTaskScreen} options={{ title: "Chat task" }} />
-      <Stack.Screen name="VoiceTask" component={VoiceTaskScreen} options={{ title: "Voice task" }} />
-      <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
-      <Stack.Screen
-        name="FuturePreview"
-        component={FuturePreviewScreen}
-        options={({ route }) => ({ title: route.params.title })}
-      />
+      <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="TaskList" component={TaskListScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AddTask" component={AddTaskScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="EditTask" component={EditTaskScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ChatTask" component={ChatTaskScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="VoiceTask" component={VoiceTaskScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="FuturePreview" component={FuturePreviewScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
