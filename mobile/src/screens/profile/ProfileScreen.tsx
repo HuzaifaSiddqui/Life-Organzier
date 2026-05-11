@@ -1,6 +1,11 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { signOut } from "firebase/auth";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
+import { BottomNav } from "../../components/BottomNav";
+import { LogoMark } from "../../components/branding/LogoMark";
 import { colors, radii, shadow } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { auth } from "../../lib/firebase";
@@ -8,134 +13,229 @@ import type { MainStackParamList } from "../../navigation/MainStack";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Profile">;
 
-const futureLinks: { title: string; label: string }[] = [
-  { title: "Analytics", label: "Analytics preview" },
-  { title: "Mood tracking", label: "Mood tracking" },
-  { title: "Document upload", label: "Document upload" },
-  { title: "Routine management", label: "Routine management" },
-  { title: "Smart scheduling", label: "Smart scheduling" },
+const futureModules = [
+  "Calendar Integration",
+  "Team Collaboration",
+  "Analytics Dashboard",
+  "API Access",
 ];
 
+function initials(displayName: string | null | undefined, email: string | null | undefined): string {
+  if (displayName?.trim()) {
+    const parts = displayName.trim().split(/\s+/);
+    const a = parts[0]?.[0] ?? "";
+    const b = parts[1]?.[0] ?? "";
+    return `${a}${b}`.toUpperCase() || a.toUpperCase();
+  }
+  const local = email?.split("@")[0]?.slice(0, 2) ?? "?";
+  return local.toUpperCase();
+}
+
+function Chevron() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M7 4L13 10L7 16"
+        stroke="#64748B"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function ProfileScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { dbUser } = useAuth();
+  const name = dbUser?.displayName ?? dbUser?.email?.split("@")[0] ?? "Account";
+  const email = dbUser?.email ?? "";
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>Profile</Text>
-        <Text style={styles.heroSub}>Manage your account and explore FYP-2 previews.</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Account</Text>
-        <Text style={styles.meta}>{dbUser?.email}</Text>
-        {dbUser?.displayName ? <Text style={styles.meta}>{dbUser.displayName}</Text> : null}
-      </View>
-
-      <Text style={styles.section}>Future modules (FYP-2)</Text>
-      {futureLinks.map((item) => (
-        <Pressable
-          key={item.title}
-          style={styles.linkRow}
-          onPress={() => navigation.navigate("FuturePreview", { title: item.title })}
-        >
-          <Text style={styles.linkText}>{item.label}</Text>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-      ))}
-
-      <Pressable
-        style={styles.logout}
-        onPress={() => {
-          void signOut(auth);
-        }}
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.logoutText}>Log out</Text>
-      </Pressable>
-    </ScrollView>
+        <View style={styles.hero}>
+          <View style={styles.logoRow}>
+            <LogoMark size={48} />
+          </View>
+          <Text style={styles.heroTitle}>Profile</Text>
+          <Text style={styles.heroSub}>Manage your account</Text>
+        </View>
+
+        <View style={styles.accountCard}>
+          <LinearGradient
+            colors={["#1D99FF", "#47AFFF"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.avatar}
+          >
+            <Text style={styles.avatarText}>{initials(dbUser?.displayName, dbUser?.email)}</Text>
+          </LinearGradient>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.name}>{name}</Text>
+            <Text style={styles.email}>{email}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionLabel}>Future Modules (FYP-2)</Text>
+        <View style={styles.listCard}>
+          {futureModules.map((item, i) => (
+            <View key={item}>
+              <Pressable
+                style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.85 }]}
+                onPress={() =>
+                  navigation.navigate("FuturePreview", {
+                    title: item,
+                  })
+                }
+              >
+                <Text style={styles.listRowText}>{item}</Text>
+                <Chevron />
+              </Pressable>
+              {i < futureModules.length - 1 ? <View style={styles.listSep} /> : null}
+            </View>
+          ))}
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.logout, pressed && { opacity: 0.92 }]}
+          onPress={() => {
+            void signOut(auth);
+          }}
+        >
+          <Text style={styles.logoutText}>Log out</Text>
+        </Pressable>
+      </ScrollView>
+
+      <View style={[styles.navDock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <BottomNav active="Profile" onChange={(tab) => navigation.navigate(tab)} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
+  root: {
+    flex: 1,
     backgroundColor: colors.bg,
-    paddingBottom: 40,
-    gap: 10,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 24,
+  },
+  navDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   hero: {
-    borderRadius: radii.lg,
-    padding: 16,
-    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.surface,
     ...shadow,
+  },
+  logoRow: {
+    alignItems: "center",
+    marginBottom: 16,
   },
   heroTitle: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "600",
+    textAlign: "center",
     color: colors.text,
+    marginBottom: 4,
   },
   heroSub: {
-    marginTop: 4,
-    color: colors.textMuted,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 6,
-  },
-  meta: {
+    textAlign: "center",
     color: colors.textMuted,
     fontSize: 15,
   },
-  section: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  linkRow: {
+  accountCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 16,
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: 14,
+    borderRadius: radii.xl,
+    padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow,
   },
-  linkText: {
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 20,
+  },
+  name: {
+    fontWeight: "600",
+    fontSize: 17,
+    color: colors.text,
+  },
+  email: {
+    color: colors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  listCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...shadow,
+  },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  listRowText: {
+    fontWeight: "500",
     fontSize: 16,
     color: colors.text,
-    fontWeight: "500",
   },
-  chevron: {
-    fontSize: 22,
-    color: "#94a3b8",
+  listSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginLeft: 24,
+    marginRight: 24,
   },
   logout: {
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: "#fca5a5",
-    paddingVertical: 12,
+    height: 56,
     borderRadius: radii.md,
     alignItems: "center",
-    backgroundColor: "#fef2f2",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+    marginBottom: 8,
   },
   logoutText: {
-    color: "#b91c1c",
+    color: "#DC2626",
     fontWeight: "600",
+    fontSize: 16,
   },
 });

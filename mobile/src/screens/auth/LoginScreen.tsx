@@ -3,7 +3,8 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
-  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { GradientPrimaryButton } from "../../components/GradientPrimaryButton";
 import { colors, radii, shadow } from "../../constants/theme";
 import { auth } from "../../lib/firebase";
 import type { AuthStackParamList } from "../../navigation/AuthStack";
@@ -33,6 +35,8 @@ export function LoginScreen({ navigation }: Props) {
     defaultValues: { email: "", password: "" },
   });
 
+  const close = () => navigation.goBack();
+
   const onSubmit = handleSubmit(async (values) => {
     setBusy(true);
     setError(null);
@@ -46,139 +50,195 @@ export function LoginScreen({ navigation }: Props) {
   });
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome back</Text>
-      <Text style={styles.subtitle}>Continue with your account to manage your day.</Text>
-      <View style={styles.card}>
-      <Controller
-        control={control}
-        name="email"
-        render={({ field, fieldState }) => (
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              {...field}
-              onChangeText={field.onChange}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-              placeholder="you@example.com"
-              placeholderTextColor="#94a3b8"
+    <View style={styles.root}>
+      <Pressable style={styles.backdrop} onPress={close} accessibilityLabel="Dismiss" />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboard}
+      >
+        <View style={styles.sheetWrap}>
+          <View style={styles.card}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Log in</Text>
+              <Pressable
+                onPress={close}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.closeBtnText}>✕</Text>
+              </Pressable>
+            </View>
+
+            <Controller
+              control={control}
+              name="email"
+              render={({ field, fieldState }) => (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    onBlur={field.onBlur}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    style={styles.input}
+                    placeholder="you@example.com"
+                    placeholderTextColor="#94a3b8"
+                  />
+                  {fieldState.error ? (
+                    <Text style={styles.fieldError}>{fieldState.error.message}</Text>
+                  ) : null}
+                </View>
+              )}
             />
-            {fieldState.error ? (
-              <Text style={styles.fieldError}>{fieldState.error.message}</Text>
-            ) : null}
-          </View>
-        )}
-      />
-      <Controller
-        control={control}
-        name="password"
-        render={({ field, fieldState }) => (
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              {...field}
-              onChangeText={field.onChange}
-              secureTextEntry
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor="#94a3b8"
+            <Controller
+              control={control}
+              name="password"
+              render={({ field, fieldState }) => (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Password</Text>
+                  <TextInput
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    onBlur={field.onBlur}
+                    secureTextEntry
+                    style={styles.input}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94a3b8"
+                  />
+                  {fieldState.error ? (
+                    <Text style={styles.fieldError}>{fieldState.error.message}</Text>
+                  ) : null}
+                </View>
+              )}
             />
-            {fieldState.error ? (
-              <Text style={styles.fieldError}>{fieldState.error.message}</Text>
-            ) : null}
+            <View style={styles.forgotRow}>
+              <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
+                <Text style={styles.forgot}>Forgot password?</Text>
+              </Pressable>
+            </View>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <GradientPrimaryButton
+              title="Log in"
+              onPress={() => void onSubmit()}
+              loading={busy}
+              disabled={busy}
+              style={{ marginTop: 8 }}
+            />
+            <Text style={styles.footer}>
+              Need an account?{" "}
+              <Text style={styles.footerLink} onPress={() => navigation.replace("Signup")}>
+                Sign up
+              </Text>
+            </Text>
           </View>
-        )}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={() => void onSubmit()} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Log in</Text>}
-      </Pressable>
-      <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
-        <Text style={styles.link}>Forgot password?</Text>
-      </Pressable>
-      <Pressable onPress={() => navigation.navigate("Signup")}>
-        <Text style={[styles.link, { marginTop: 8 }]}>Need an account? Sign up</Text>
-      </Pressable>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    padding: 20,
-    backgroundColor: colors.bg,
-    gap: 12,
+    backgroundColor: "transparent",
   },
-  title: {
-    marginTop: 8,
-    fontSize: 28,
-    color: colors.text,
-    fontWeight: "700",
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
   },
-  subtitle: {
-    marginBottom: 10,
-    color: colors.textMuted,
-    fontSize: 15,
+  keyboard: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  sheetWrap: {
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
   },
   card: {
     backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.lg,
-    padding: 16,
     ...shadow,
   },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceSoft,
+  },
+  closeBtnText: {
+    fontSize: 18,
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
   field: {
-    marginBottom: 4,
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    color: colors.textMuted,
-    marginBottom: 6,
     fontWeight: "500",
+    color: colors.text,
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.surface,
+    height: 56,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
     fontSize: 16,
+    backgroundColor: colors.surface,
+    color: colors.text,
   },
   fieldError: {
     color: "#b91c1c",
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 13,
+  },
+  forgotRow: {
+    alignItems: "flex-end",
+    marginBottom: 8,
+  },
+  forgot: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.primary,
   },
   error: {
     color: "#b91c1c",
     textAlign: "center",
+    marginBottom: 8,
   },
-  button: {
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: radii.md,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  link: {
-    marginTop: 16,
+  footer: {
     textAlign: "center",
-    color: colors.primary,
-    fontWeight: "500",
+    marginTop: 16,
+    fontSize: 14,
+    color: colors.textMuted,
   },
-  buttonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.985 }],
+  footerLink: {
+    fontWeight: "600",
+    color: colors.primary,
   },
 });

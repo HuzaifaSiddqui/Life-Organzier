@@ -13,3 +13,17 @@ export function priorityColor(priority: Priority): string {
       return "#64748b";
   }
 }
+
+/** Pill styles aligned with Life Organizer UI prototype */
+export function priorityPill(priority: Priority): { backgroundColor: string; color: string } {
+  switch (priority) {
+    case "URGENT":
+    case "HIGH":
+      return { backgroundColor: "#FEF2F2", color: "#DC2626" };
+    case "MEDIUM":
+      return { backgroundColor: "#EEF7FF", color: "#1D99FF" };
+    case "LOW":
+    default:
+      return { backgroundColor: "#F0FDF4", color: "#16A34A" };
+  }
+}

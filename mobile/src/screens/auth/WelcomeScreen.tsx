@@ -1,115 +1,155 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LogoFull } from "../../components/branding/LogoFull";
 import { colors, radii, shadow } from "../../constants/theme";
 import type { AuthStackParamList } from "../../navigation/AuthStack";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Welcome">;
 
+const features = [
+  "Natural language task capture",
+  "Smart AI categorization",
+  "Voice & chat interfaces",
+  "Seamless scheduling",
+  "Personalized reminders",
+  "One-touch organization",
+];
+
 export function WelcomeScreen({ navigation }: Props) {
   return (
-    <View style={styles.container}>
-      <View style={styles.hero}>
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>LO</Text>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+      <View style={styles.inner}>
+        {/* Full-area layer: features dead-center (vertical + horizontal) */}
+        <View style={styles.featuresPlane} pointerEvents="none">
+          <View style={styles.features}>
+            {features.map((line) => (
+              <Text key={line} style={styles.featureText}>
+                {"\u2022"} {line}
+              </Text>
+            ))}
+          </View>
         </View>
-        <Text style={styles.badge}>FYP-1 MVP</Text>
-        <Text style={styles.logo}>Life Organizer</Text>
-        <Text style={styles.tagline}>Plan smarter. Capture tasks by form, chat, or voice.</Text>
+
+        {/* Overlay: header top + actions bottom; middle is touch-transparent */}
+        <View style={styles.overlay} pointerEvents="box-none">
+          <View style={styles.headerBlock} pointerEvents="auto">
+            <View style={styles.logoWrap}>
+              <LogoFull width={200} height={75} />
+            </View>
+            <Text style={styles.headline}>Your AI-Powered Life Assistant</Text>
+            <Text style={styles.subcopy}>Capture tasks naturally, organize effortlessly</Text>
+          </View>
+
+          <View style={styles.overlaySpacer} pointerEvents="none" />
+
+          <View style={styles.actions} pointerEvents="auto">
+            <Pressable
+              style={({ pressed }) => [styles.primaryWrap, pressed && styles.btnPressed]}
+              onPress={() => navigation.navigate("Login")}
+            >
+              <LinearGradient
+                colors={["#1D99FF", "#47AFFF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.primaryGrad}
+              >
+                <Text style={styles.primaryText}>Log in</Text>
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.secondary, pressed && styles.btnPressed]}
+              onPress={() => navigation.navigate("Signup")}
+            >
+              <Text style={styles.secondaryText}>Create account</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
-      <View style={styles.features}>
-        <Text style={styles.feature}>- Firebase-secured sign in</Text>
-        <Text style={styles.feature}>- Smart parser for natural language tasks</Text>
-        <Text style={styles.feature}>- Clean dashboard and task workflow</Text>
-      </View>
-      <View style={styles.actions}>
-        <Pressable style={({ pressed }) => [styles.primary, pressed && styles.btnPressed]} onPress={() => navigation.navigate("Login")}>
-          <Text style={styles.primaryText}>Log in</Text>
-        </Pressable>
-        <Pressable style={({ pressed }) => [styles.secondary, pressed && styles.btnPressed]} onPress={() => navigation.navigate("Signup")}>
-          <Text style={styles.secondaryText}>Create account</Text>
-        </Pressable>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
-    padding: 24,
-    justifyContent: "center",
-    backgroundColor: colors.bg,
-  },
-  hero: {
-    borderRadius: radii.lg,
-    padding: 20,
+    width: "100%",
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow,
   },
-  logoMark: {
-    height: 56,
-    width: 56,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: "center",
+  inner: {
+    flex: 1,
+    width: "100%",
+  },
+  featuresPlane: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
-    marginBottom: 12,
-    ...shadow,
-  },
-  logoMarkText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 18,
-    letterSpacing: 0.5,
-  },
-  badge: {
-    alignSelf: "flex-start",
-    marginBottom: 12,
-    backgroundColor: colors.surfaceSoft,
-    color: colors.primaryDark,
-    borderRadius: radii.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  logo: {
-    fontSize: 30,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  tagline: {
-    marginTop: 8,
-    fontSize: 16,
-    color: colors.textMuted,
-    lineHeight: 22,
+    alignItems: "center",
+    paddingHorizontal: 24,
+    zIndex: 0,
   },
   features: {
-    marginTop: 16,
-    borderRadius: radii.md,
-    padding: 14,
-    backgroundColor: "#eef2ff",
-    borderWidth: 1,
-    borderColor: "#d5dcff",
+    gap: 26,
+    width: "100%",
+    maxWidth: 340,
+    alignItems: "center",
   },
-  feature: {
-    color: "#3730a3",
-    fontSize: 13,
-    fontWeight: "500",
-    marginBottom: 6,
+  featureText: {
+    width: "100%",
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    fontWeight: 400,
+  },
+  overlay: {
+    flex: 1,
+    paddingHorizontal: 24,
+    zIndex: 1,
+  },
+  overlaySpacer: {
+    flex: 1,
+  },
+  headerBlock: {
+    paddingTop: 8,
+    alignItems: "center",
+  },
+  logoWrap: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  headline: {
+    fontSize: 28,
+    fontWeight: "600",
+    textAlign: "center",
+    color: colors.text,
+    lineHeight: 34,
+    letterSpacing: -0.28,
+    marginBottom: 12,
+  },
+  subcopy: {
+    textAlign: "center",
+    color: colors.textMuted,
+    fontSize: 16,
+    lineHeight: 24,
   },
   actions: {
-    marginTop: 32,
     gap: 12,
+    width: "100%",
+    flexShrink: 0,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
-  primary: {
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
+  primaryWrap: {
+    borderRadius: radii.md,
+    overflow: "hidden",
+    ...shadow,
+  },
+  primaryGrad: {
+    height: 56,
     borderRadius: radii.md,
     alignItems: "center",
-    ...shadow,
+    justifyContent: "center",
   },
   primaryText: {
     color: "#fff",
@@ -117,11 +157,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   secondary: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 14,
+    height: 56,
     borderRadius: radii.md,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.surface,
   },
   secondaryText: {
@@ -131,6 +172,6 @@ const styles = StyleSheet.create({
   },
   btnPressed: {
     opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+    transform: [{ scale: 0.97 }],
   },
 });
