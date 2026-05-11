@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow Life Organizer to transcribe your speech into task text.",
+        "NSMicrophoneUsageDescription": "Allow Life Organizer to use the microphone for voice tasks."
+      },
+      "bundleIdentifier": "com.anonymous.lifeorganizer"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +26,28 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.VIBRATE"
+      ],
+      "package": "com.anonymous.lifeorganizer"
     },
     "web": {
       "favicon": "./assets/branding/logo-mark.png"
-    }
+    },
+    "plugins": [
+      "expo-notifications",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Life Organizer to use the microphone for voice tasks.",
+          "speechRecognitionPermission": "Allow Life Organizer to transcribe your speech into task text."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

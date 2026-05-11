@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -21,12 +21,14 @@ import type { Task } from "../../types/models";
 
 type Props = NativeStackScreenProps<MainStackParamList, "TaskList">;
 
-export function TaskListScreen({ navigation }: Props) {
+export function TaskListScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; tone: "success" | "warning" } | null>(null);
+  const [showMethodPicker, setShowMethodPicker] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -48,13 +50,23 @@ export function TaskListScreen({ navigation }: Props) {
     }, [load])
   );
 
+  useEffect(() => {
+    const text = route.params?.toast;
+    if (!text) return;
+    const tone = route.params?.toastTone ?? "success";
+    setToast({ text, tone });
+    const id = setTimeout(() => setToast(null), 2800);
+    navigation.setParams({ toast: undefined, toastTone: undefined });
+    return () => clearTimeout(id);
+  }, [navigation, route.params?.toast, route.params?.toastTone]);
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <Text style={styles.headerTitle}>Tasks</Text>
         <Pressable
           style={({ pressed }) => [pressed && styles.newPressed]}
-          onPress={() => navigation.navigate("AddTask")}
+          onPress={() => setShowMethodPicker(true)}
         >
           <LinearGradient
             colors={["#1D99FF", "#47AFFF"]}
@@ -66,6 +78,46 @@ export function TaskListScreen({ navigation }: Props) {
           </LinearGradient>
         </Pressable>
       </View>
+
+      {toast ? (
+        <View style={[styles.toast, toast.tone === "warning" ? styles.toastWarn : styles.toastOk]}>
+          <Text style={styles.toastText}>{toast.text}</Text>
+        </View>
+      ) : null}
+      {showMethodPicker ? (
+        <View style={styles.methodCard}>
+          <Text style={styles.methodTitle}>How do you want to add a task?</Text>
+          <View style={styles.methodActions}>
+            <Pressable
+              style={styles.methodBtn}
+              onPress={() => {
+                setShowMethodPicker(false);
+                navigation.navigate("AddTask");
+              }}
+            >
+              <Text style={styles.methodBtnText}>Manual</Text>
+            </Pressable>
+            <Pressable
+              style={styles.methodBtn}
+              onPress={() => {
+                setShowMethodPicker(false);
+                navigation.navigate("ChatTask");
+              }}
+            >
+              <Text style={styles.methodBtnText}>Chat</Text>
+            </Pressable>
+            <Pressable
+              style={styles.methodBtn}
+              onPress={() => {
+                setShowMethodPicker(false);
+                navigation.navigate("VoiceTask");
+              }}
+            >
+              <Text style={styles.methodBtnText}>Voice</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={{ paddingHorizontal: 16, marginTop: 8, gap: 10 }}>
@@ -161,6 +213,60 @@ const styles = StyleSheet.create({
     marginTop: 24,
     textAlign: "center",
     paddingHorizontal: 16,
+  },
+  toast: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  toastOk: {
+    backgroundColor: "#ECFDF3",
+    borderColor: "#86EFAC",
+  },
+  toastWarn: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FCD34D",
+  },
+  toastText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: "500",
+  },
+  methodCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  methodTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 10,
+  },
+  methodActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  methodBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSoft,
+    alignItems: "center",
+  },
+  methodBtnText: {
+    color: colors.text,
+    fontWeight: "600",
+    fontSize: 13,
   },
   navDock: {
     position: "absolute",

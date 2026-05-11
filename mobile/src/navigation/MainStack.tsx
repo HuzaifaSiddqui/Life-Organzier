@@ -12,7 +12,7 @@ import { VoiceTaskScreen } from "../screens/voice/VoiceTaskScreen";
 
 export type MainStackParamList = {
   Dashboard: undefined;
-  TaskList: undefined;
+  TaskList: { toast?: string; toastTone?: "success" | "warning" } | undefined;
   TaskDetail: { taskId: string };
   AddTask: undefined;
   EditTask: { taskId: string };

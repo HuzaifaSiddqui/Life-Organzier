@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
-import { LogoMark } from "../../components/branding/LogoMark";
+import { LogoFull } from "../../components/branding/LogoFull";
 import { Skeleton } from "../../components/Skeleton";
 import { TaskCard } from "../../components/TaskCard";
 import { colors, radii, shadow, shadowTile } from "../../constants/theme";
@@ -81,7 +81,7 @@ export function DashboardScreen({ navigation }: Props) {
       >
         <View style={styles.hero}>
           <View style={styles.logoRow}>
-            <LogoMark size={48} />
+            <LogoFull width={150} height={44} />
           </View>
           <Text style={styles.greeting}>Hello{firstName ? `, ${firstName}` : ""}</Text>
           <Text style={styles.sub}>
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     ...shadow,
   },
   logoRow: {
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 16,
   },
   greeting: {

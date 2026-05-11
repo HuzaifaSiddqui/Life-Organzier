@@ -13,6 +13,7 @@ import {
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { colors, radii, shadow } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
+import { clearTaskReminder, reminderFeedbackText, upsertTaskReminder } from "../../services/reminders";
 import { deleteTask, getTask, updateTask } from "../../services/tasksApi";
 import type { Task } from "../../types/models";
 import { priorityPill } from "../../utils/priorityColors";
@@ -61,7 +62,13 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         style: "destructive",
         onPress: () => {
           deleteTask(taskId)
-            .then(() => navigation.popToTop())
+            .then(async () => {
+              await clearTaskReminder(taskId);
+              navigation.navigate("TaskList", {
+                toast: "Task deleted and reminder cleared",
+                toastTone: "warning",
+              });
+            })
             .catch(() => Alert.alert("Delete failed", "Please try again."));
         },
       },
@@ -98,7 +105,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       const updated = await updateTask(taskId, { status: "COMPLETED" });
+      const reminder = await upsertTaskReminder(updated);
       setTask(updated);
+      if (reminder.kind !== "scheduled") {
+        Alert.alert("Reminder", reminderFeedbackText(reminder));
+      }
     } catch {
       Alert.alert("Update failed", "Could not mark this task complete.");
     } finally {

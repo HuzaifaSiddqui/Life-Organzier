@@ -1,4 +1,4 @@
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -25,8 +25,10 @@ import {
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
 
-const theme = {
-  ...DefaultTheme,
+/** Explicit `fonts` avoids incomplete theme objects that break navigation internals on some setups. */
+const theme: Theme = {
+  dark: DefaultTheme.dark,
+  fonts: DefaultTheme.fonts,
   colors: {
     ...DefaultTheme.colors,
     background: colors.bg,

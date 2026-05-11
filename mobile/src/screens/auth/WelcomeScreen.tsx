@@ -19,7 +19,7 @@ const features = [
 
 export function WelcomeScreen({ navigation }: Props) {
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <View style={styles.inner}>
         {/* Full-area layer: features dead-center (vertical + horizontal) */}
         <View style={styles.featuresPlane} pointerEvents="none">

@@ -32,11 +32,17 @@ export type ParsedTask = {
   title: string;
   dueDateText: string | null;
   dueTime: string | null;
+  /** Server-built single line: date · time (when available) */
+  dueSummary?: string | null;
   priority: Priority;
   category: string | null;
   confidence: number;
   needsConfirmation: boolean;
+  priorityDetected?: boolean;
+  timeDetected?: boolean;
   dueDateIso: string | null;
+  /** Client-calendar YYYY-MM-DD from parser — prefer over {@link ParsedTask.dueDateIso} for saves/reminders. */
+  dueDateYmd?: string | null;
 };
 
 export type ApiSuccess<T> = { success: true; message: string; data: T };
