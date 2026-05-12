@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { InlineTimePickerField } from "../../components/DueDateTimePickers";
+import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { GradientPrimaryButton } from "../../components/GradientPrimaryButton";
@@ -31,6 +31,10 @@ type Props = NativeStackScreenProps<MainStackParamList, "VoiceTask">;
 const intro =
   "Tap the microphone to speak your task. Your device converts speech to text (no cloud). Then we extract title, due date, time, and priority — same parser as chat.";
 
+function hasParserDate(parsed: ParsedTask): boolean {
+  return !!(parsed.dueDateYmd?.trim() || parsed.dueDateIso?.trim());
+}
+
 export function VoiceTaskScreen({ navigation }: Props) {
   const [transcript, setTranscript] = useState("");
   const [parsed, setParsed] = useState<ParsedTask | null>(null);
@@ -38,6 +42,7 @@ export function VoiceTaskScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [manualTime, setManualTime] = useState("");
+  const [manualDateYmd, setManualDateYmd] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [selectedPriority, setSelectedPriority] = useState<Priority | null>(null);
 
@@ -54,6 +59,7 @@ export function VoiceTaskScreen({ navigation }: Props) {
       setParsed(result);
       setSelectedPriority(null);
       setManualTime("");
+      setManualDateYmd("");
       setAllDay(false);
     } catch {
       setError("Could not parse that text. Try editing it or speak more clearly.");
@@ -77,6 +83,7 @@ export function VoiceTaskScreen({ navigation }: Props) {
     if (!parsed || !parsed.title.trim()) return false;
     if (!parsed.priorityDetected && !selectedPriority) return false;
     if (!parsed.timeDetected && !manualTime.trim() && !allDay) return false;
+    if (!hasParserDate(parsed) && !parsed.timeDetected && !manualDateYmd.trim()) return false;
     if ((parsed.dueDateYmd?.trim() || parsed.dueDateIso) && !parsed.dueTime) {
       return allDay || manualTime.trim().length > 0;
     }
@@ -97,7 +104,12 @@ export function VoiceTaskScreen({ navigation }: Props) {
         const merged = `${manualTime.trim() || (parsed.dueTime ?? "")}`.trim();
         dueTimeOut = merged === "" ? null : merged;
       }
-      const pickerYmd = parsed.dueDateYmd?.trim();
+      if (!hasParserDate(parsed) && !parsed.timeDetected && !manualDateYmd.trim()) {
+        setError("Please pick a due date.");
+        setSaving(false);
+        return;
+      }
+      const pickerYmd = manualDateYmd.trim() || parsed.dueDateYmd?.trim() || "";
       const { dueDateIso: dueDateOut, dueTime: dueTimeNormalized } = dueDateAndTimeForSave({
         pickerYmd: pickerYmd || undefined,
         parsedDueDateIso: pickerYmd ? null : parsed.dueDateIso,
@@ -230,17 +242,45 @@ export function VoiceTaskScreen({ navigation }: Props) {
                     </View>
                   ) : null}
                 </View>
-                {!parsed.timeDetected && !parsed.dueDateIso ? (
+                {!parsed.timeDetected && !hasParserDate(parsed) ? (
                   <View style={styles.timeGate}>
-                    <Text style={styles.timeGateTitle}>Add a due time</Text>
+                    <Text style={styles.timeGateTitle}>Add due date and time</Text>
                     <Text style={styles.timeGateHelp}>
-                      No time was detected. Pick one so we can schedule a reminder.
+                      No due date or time was detected. Pick both so we can schedule a reminder.
                     </Text>
+                    <TaskFormDueDateRow
+                      valueYmd={manualDateYmd}
+                      onChangeYmd={setManualDateYmd}
+                      onClear={() => setManualDateYmd("")}
+                      label="Due date"
+                    />
                     <InlineTimePickerField
                       value={manualTime}
-                      onChange={(v) => setManualTime(v)}
+                      onChange={(v) => {
+                        setManualTime(v);
+                        setAllDay(false);
+                      }}
                       placeholder="Tap to pick a time"
+                      baseYmd={manualDateYmd.trim() || undefined}
                     />
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.allDayBtn,
+                        allDay && styles.allDayBtnOn,
+                        pressed && { opacity: 0.9 },
+                      ]}
+                      onPress={() => {
+                        setAllDay((prev) => {
+                          const next = !prev;
+                          if (next) setManualTime("");
+                          return next;
+                        });
+                      }}
+                    >
+                      <Text style={[styles.allDayText, allDay && styles.allDayTextOn]}>
+                        All day (no specific time)
+                      </Text>
+                    </Pressable>
                   </View>
                 ) : null}
                 {!parsed.priorityDetected ? (

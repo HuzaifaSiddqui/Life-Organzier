@@ -15,7 +15,7 @@ import { BrandedBootLoader } from "../components/BrandedBootLoader";
 import { GradientPrimaryButton } from "../components/GradientPrimaryButton";
 import { LogoMark } from "../components/branding/LogoMark";
 import { useAuth } from "../context/AuthContext";
-import { colors, radii, shadow } from "../constants/theme";
+import { blue, colors, radii, shadow } from "../constants/theme";
 import { api } from "../services/api";
 import {
   isValidLanIpv4,
@@ -82,7 +82,9 @@ function SyncErrorScreen() {
         contentContainerStyle={styles.syncScroll}
         keyboardShouldPersistTaps="handled"
       >
-        <LogoMark size={48} />
+        <View style={styles.syncLogoRing}>
+          <LogoMark size={44} />
+        </View>
         <View style={styles.errorCard}>
           <Text style={styles.errorTitle}>Could not reach the server</Text>
           <Text style={styles.errorSub}>
@@ -178,6 +180,17 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingVertical: 40,
     backgroundColor: colors.bg,
+  },
+  syncLogoRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    borderColor: blue[200],
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
   errorCard: {
     width: "100%",

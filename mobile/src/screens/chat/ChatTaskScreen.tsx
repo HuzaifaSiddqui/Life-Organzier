@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { InlineTimePickerField } from "../../components/DueDateTimePickers";
+import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { MicIcon } from "../../components/icons/MicIcon";
@@ -31,6 +31,10 @@ type Props = NativeStackScreenProps<MainStackParamList, "ChatTask">;
 
 const intro = `Hi! Tell me what you need to do, and I'll help you organize it. Try something like "Review budget tomorrow at 2pm"`;
 
+function hasParserDate(parsed: ParsedTask): boolean {
+  return !!(parsed.dueDateYmd?.trim() || parsed.dueDateIso?.trim());
+}
+
 export function ChatTaskScreen({ navigation }: Props) {
   const [draft, setDraft] = useState("");
   const [lastSent, setLastSent] = useState<string | null>(null);
@@ -41,6 +45,7 @@ export function ChatTaskScreen({ navigation }: Props) {
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<Priority | null>(null);
   const [manualTime, setManualTime] = useState("");
+  const [manualDateYmd, setManualDateYmd] = useState("");
 
   const { start, stop, listening, speechSupported } = useDeviceSpeechRecognition({
     onTranscriptChange: setDraft,
@@ -61,6 +66,7 @@ export function ChatTaskScreen({ navigation }: Props) {
     setParsed(null);
     setSelectedPriority(null);
     setManualTime("");
+    setManualDateYmd("");
     setError(null);
     setBusy(true);
     try {
@@ -90,7 +96,14 @@ export function ChatTaskScreen({ navigation }: Props) {
       setError("Please provide a due time.");
       return;
     }
-    const pickerYmd = parsed.dueDateYmd?.trim();
+    const parserHasDate = hasParserDate(parsed);
+    if (!parserHasDate && !parsed.timeDetected) {
+      if (!manualDateYmd.trim()) {
+        setError("Please pick a due date.");
+        return;
+      }
+    }
+    const pickerYmd = manualDateYmd.trim() || parsed.dueDateYmd?.trim() || "";
     const { dueDateIso: dueDateOut, dueTime: dueTimeNormalized } = dueDateAndTimeForSave({
       pickerYmd: pickerYmd || undefined,
       parsedDueDateIso: pickerYmd ? null : parsed.dueDateIso,
@@ -245,13 +258,26 @@ export function ChatTaskScreen({ navigation }: Props) {
                 ) : null}
                 {!parsed.timeDetected ? (
                   <View style={styles.followUpWrap}>
-                    <Text style={styles.followUpLabel}>Please add due time</Text>
+                    <Text style={styles.followUpLabel}>
+                      {hasParserDate(parsed)
+                        ? "Please add due time"
+                        : "Please add due date and time"}
+                    </Text>
+                    {!hasParserDate(parsed) ? (
+                      <TaskFormDueDateRow
+                        valueYmd={manualDateYmd}
+                        onChangeYmd={setManualDateYmd}
+                        onClear={() => setManualDateYmd("")}
+                        label="Due date"
+                      />
+                    ) : null}
                     <InlineTimePickerField
                       value={manualTime}
                       onChange={setManualTime}
                       placeholder="Tap to pick a time"
                       style={styles.followUpInput}
                       baseYmd={
+                        manualDateYmd.trim() ||
                         parsed.dueDateYmd?.trim() ||
                         (parsed.dueDateIso
                           ? ymdFromLocalDate(new Date(parsed.dueDateIso))
