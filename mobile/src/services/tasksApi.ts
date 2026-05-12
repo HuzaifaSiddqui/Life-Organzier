@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { ParsedTask, Task } from "../types/models";
+import { ymdFromLocalDate } from "../utils/datetimeValidation";
 
 export async function getTasks(): Promise<Task[]> {
   const res = await api.get("/tasks");
@@ -26,7 +27,13 @@ export async function createTask(payload: {
   source: Task["source"];
   confidence?: number | null;
 }): Promise<Task> {
-  const res = await api.post("/tasks", payload);
+  // Axios drops `undefined`; server must receive explicit nulls or dueTime never persists (breaks reminders).
+  const requestBody = {
+    ...payload,
+    dueDate: payload.dueDate ?? null,
+    dueTime: payload.dueTime ?? null,
+  };
+  const res = await api.post("/tasks", requestBody);
   const body = res.data as { success: boolean; data: { task: Task } };
   if (!body.success) throw new Error("Could not create task");
   return body.data.task;
@@ -44,7 +51,11 @@ export async function updateTask(
     status: Task["status"];
   }>
 ): Promise<Task> {
-  const res = await api.put(`/tasks/${id}`, payload);
+  const normalized = { ...payload };
+  if ("dueDate" in payload) normalized.dueDate = payload.dueDate ?? null;
+  if ("dueTime" in payload) normalized.dueTime = payload.dueTime ?? null;
+
+  const res = await api.put(`/tasks/${id}`, normalized);
   const body = res.data as { success: boolean; data: { task: Task } };
   if (!body.success) throw new Error("Could not update task");
   return body.data.task;
@@ -57,7 +68,13 @@ export async function deleteTask(id: string): Promise<void> {
 }
 
 export async function parseTaskText(text: string): Promise<ParsedTask> {
-  const res = await api.post("/parser/task", { text });
+  const now = new Date();
+  const res = await api.post("/parser/task", {
+    text,
+    clientTodayYmd: ymdFromLocalDate(now),
+    clientNowIso: now.toISOString(),
+    clientTimezoneOffsetMinutes: now.getTimezoneOffset(),
+  });
   const body = res.data as { success: boolean; data: ParsedTask };
   if (!body.success) throw new Error("Could not parse task");
   return body.data;

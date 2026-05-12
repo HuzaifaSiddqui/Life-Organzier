@@ -1,9 +1,9 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LogoFull } from "../../components/branding/LogoFull";
-import { colors, radii, shadow } from "../../constants/theme";
+import { LogoMark } from "../../components/branding/LogoMark";
+import { blue, colors, radii, shadow } from "../../constants/theme";
 import type { AuthStackParamList } from "../../navigation/AuthStack";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Welcome">;
@@ -20,31 +20,33 @@ const features = [
 export function WelcomeScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
-      <View style={styles.inner}>
-        {/* Full-area layer: features dead-center (vertical + horizontal) */}
-        <View style={styles.featuresPlane} pointerEvents="none">
-          <View style={styles.features}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.card}>
+          <View style={styles.headerRow}>
+            <LogoMark size={52} />
+            <View style={styles.headerTitles}>
+              <Text style={styles.appName}>Life Organizer</Text>
+              <Text style={styles.tagline}>Smart Productivity Assistant</Text>
+            </View>
+          </View>
+
+          <Text style={styles.headline}>Your AI-Powered Life Assistant</Text>
+          <Text style={styles.subcopy}>Capture tasks naturally, organize effortlessly</Text>
+
+          <View style={styles.featureList}>
             {features.map((line) => (
-              <Text key={line} style={styles.featureText}>
-                {"\u2022"} {line}
-              </Text>
+              <View key={line} style={styles.featureRow}>
+                <View style={styles.bullet} />
+                <Text style={styles.featureText}>{line}</Text>
+              </View>
             ))}
           </View>
-        </View>
 
-        {/* Overlay: header top + actions bottom; middle is touch-transparent */}
-        <View style={styles.overlay} pointerEvents="box-none">
-          <View style={styles.headerBlock} pointerEvents="auto">
-            <View style={styles.logoWrap}>
-              <LogoFull width={200} height={75} />
-            </View>
-            <Text style={styles.headline}>Your AI-Powered Life Assistant</Text>
-            <Text style={styles.subcopy}>Capture tasks naturally, organize effortlessly</Text>
-          </View>
-
-          <View style={styles.overlaySpacer} pointerEvents="none" />
-
-          <View style={styles.actions} pointerEvents="auto">
+          <View style={styles.actions}>
             <Pressable
               style={({ pressed }) => [styles.primaryWrap, pressed && styles.btnPressed]}
               onPress={() => navigation.navigate("Login")}
@@ -66,7 +68,7 @@ export function WelcomeScreen({ navigation }: Props) {
             </Pressable>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -74,71 +76,105 @@ export function WelcomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    width: "100%",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bg,
   },
-  inner: {
-    flex: 1,
-    width: "100%",
-  },
-  featuresPlane: {
-    ...StyleSheet.absoluteFillObject,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
     paddingHorizontal: 24,
-    zIndex: 0,
+    paddingTop: 28,
+    paddingBottom: 26,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow,
   },
-  features: {
-    gap: 26,
-    width: "100%",
-    maxWidth: 340,
+  headerRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 14,
+    marginBottom: 18,
   },
-  featureText: {
-    width: "100%",
+  headerTitles: {
+    flex: 1,
+    justifyContent: "center",
+    minWidth: 0,
+  },
+  appName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.primary,
+    letterSpacing: -0.3,
+  },
+  tagline: {
+    marginTop: 4,
+    fontSize: 14,
+    lineHeight: 20,
     color: colors.textMuted,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: "center",
-    fontWeight: 400,
+    fontWeight: "500",
   },
-  overlay: {
-    flex: 1,
-    paddingHorizontal: 24,
-    zIndex: 1,
-  },
-  overlaySpacer: {
-    flex: 1,
-  },
-  headerBlock: {
-    paddingTop: 8,
-    alignItems: "center",
-  },
-  logoWrap: {
-    alignItems: "center",
+  badge: {
+    alignSelf: "flex-start",
+    backgroundColor: blue[50],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
     marginBottom: 20,
   },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: blue[700],
+    letterSpacing: 0.2,
+  },
   headline: {
-    fontSize: 28,
-    fontWeight: "600",
-    textAlign: "center",
+    fontSize: 24,
+    fontWeight: "700",
     color: colors.text,
-    lineHeight: 34,
-    letterSpacing: -0.28,
-    marginBottom: 12,
+    lineHeight: 30,
+    letterSpacing: -0.35,
+    marginBottom: 10,
   },
   subcopy: {
-    textAlign: "center",
+    fontSize: 15,
+    lineHeight: 22,
     color: colors.textMuted,
-    fontSize: 16,
-    lineHeight: 24,
+    marginBottom: 22,
+  },
+  featureList: {
+    gap: 14,
+    marginBottom: 28,
+  },
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  bullet: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginTop: 6,
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.textMuted,
+    fontWeight: "400",
   },
   actions: {
     gap: 12,
     width: "100%",
-    flexShrink: 0,
-    paddingTop: 16,
-    paddingBottom: 8,
   },
   primaryWrap: {
     borderRadius: radii.md,

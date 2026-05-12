@@ -1,7 +1,10 @@
-import { Text, TextInput } from "react-native";
+import { useEffect, useState } from "react";
+import { Text, TextInput, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AnimatedSplashOverlay } from "./src/components/branding/AnimatedSplashOverlay";
 import { AuthProvider } from "./src/context/AuthContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
+import { configureReminders } from "./src/services/reminders";
 
 const TextAny = Text as unknown as { defaultProps?: { style?: unknown } };
 TextAny.defaultProps = TextAny.defaultProps ?? {};
@@ -12,11 +15,20 @@ TextInputAny.defaultProps = TextInputAny.defaultProps ?? {};
 TextInputAny.defaultProps.style = [{ fontFamily: "Inter" }, TextInputAny.defaultProps.style];
 
 export default function App() {
+  const [splashFinished, setSplashFinished] = useState(false);
+
+  useEffect(() => {
+    void configureReminders();
+  }, []);
+
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
-    </SafeAreaProvider>
+    <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
+      <SafeAreaProvider style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
+        <AuthProvider>{splashFinished ? <RootNavigator /> : null}</AuthProvider>
+      </SafeAreaProvider>
+      {!splashFinished && (
+        <AnimatedSplashOverlay onFinished={() => setSplashFinished(true)} />
+      )}
+    </View>
   );
 }

@@ -4,10 +4,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
-import { LogoMark } from "../../components/branding/LogoMark";
+import { LogoFull } from "../../components/branding/LogoFull";
 import { Skeleton } from "../../components/Skeleton";
 import { TaskCard } from "../../components/TaskCard";
-import { colors, radii, shadow, shadowTile } from "../../constants/theme";
+import { colors, radii, shadowTile } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getTasks } from "../../services/tasksApi";
@@ -79,17 +79,32 @@ export function DashboardScreen({ navigation }: Props) {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <View style={styles.logoRow}>
-            <LogoMark size={48} />
+        <View style={styles.topHeader}>
+          <View style={styles.logoCenter}>
+            <LogoFull width={228} height={86} />
           </View>
           <Text style={styles.greeting}>Hello{firstName ? `, ${firstName}` : ""}</Text>
           <Text style={styles.sub}>
             You have {openCount} task{openCount === 1 ? "" : "s"} today
           </Text>
+        </View>
 
-          <View style={styles.grid}>
-            {bento.map((tile) => (
+        <View style={styles.bentoWrap}>
+          <View style={styles.bentoRow}>
+            {bento.slice(0, 2).map((tile) => (
+              <Pressable
+                key={tile.title}
+                style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
+                onPress={tile.onPress}
+              >
+                <Text style={styles.tileEmoji}>{tile.icon}</Text>
+                <Text style={styles.tileTitle}>{tile.title}</Text>
+                <Text style={styles.tileMeta}>{tile.subtitle}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.bentoRow}>
+            {bento.slice(2, 4).map((tile) => (
               <Pressable
                 key={tile.title}
                 style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
@@ -103,35 +118,37 @@ export function DashboardScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Up next</Text>
-          <Pressable onPress={() => navigation.navigate("TaskList")}>
-            <Text style={styles.link}>See all</Text>
-          </Pressable>
-        </View>
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Up next</Text>
+            <Pressable onPress={() => navigation.navigate("TaskList")}>
+              <Text style={styles.link}>See all</Text>
+            </Pressable>
+          </View>
 
-        {loading ? (
-          <View style={{ marginTop: 8, gap: 10 }}>
-            <Skeleton height={88} />
-            <Skeleton height={88} />
-            <Skeleton height={88} />
-          </View>
-        ) : error ? (
-          <Text style={styles.error}>{error}</Text>
-        ) : preview.length === 0 ? (
-          <Text style={styles.empty}>No tasks yet. Create one from the shortcuts above.</Text>
-        ) : (
-          <View>
-            {preview.map((item) => (
-              <TaskCard
-                key={item.id}
-                task={item}
-                variant="dashboard"
-                onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })}
-              />
-            ))}
-          </View>
-        )}
+          {loading ? (
+            <View style={{ marginTop: 8, gap: 10 }}>
+              <Skeleton height={88} />
+              <Skeleton height={88} />
+              <Skeleton height={88} />
+            </View>
+          ) : error ? (
+            <Text style={styles.error}>{error}</Text>
+          ) : preview.length === 0 ? (
+            <Text style={styles.empty}>No tasks yet. Create one from the shortcuts above.</Text>
+          ) : (
+            <View>
+              {preview.map((item) => (
+                <TaskCard
+                  key={item.id}
+                  task={item}
+                  variant="dashboard"
+                  onPress={() => navigation.navigate("TaskDetail", { taskId: item.id })}
+                />
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <View style={[styles.navDock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -150,9 +167,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 24,
+    paddingHorizontal: 0,
+    paddingTop: 8,
+    gap: 0,
   },
   navDock: {
     position: "absolute",
@@ -161,63 +178,86 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "transparent",
   },
-  hero: {
-    borderRadius: radii.xl,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadow,
+  topHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    alignItems: "stretch",
+    backgroundColor: colors.bg,
   },
-  logoRow: {
+  logoCenter: {
+    width: "100%",
     alignItems: "center",
-    marginBottom: 16,
   },
   greeting: {
-    fontSize: 22,
-    fontWeight: "600",
-    textAlign: "center",
+    fontSize: 28,
+    fontWeight: "700",
+    textAlign: "left",
     color: colors.text,
-    lineHeight: 28,
-    marginBottom: 4,
+    lineHeight: 34,
+    marginTop: 14,
+    marginBottom: 6,
   },
   sub: {
-    textAlign: "center",
+    textAlign: "left",
     color: colors.textMuted,
-    fontSize: 15,
-    marginBottom: 24,
+    fontSize: 17,
+    lineHeight: 24,
   },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  bentoWrap: {
+    width: "100%",
+    paddingHorizontal: 16,
     gap: 12,
+    backgroundColor: colors.bg,
+  },
+  bentoRow: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
   },
   tile: {
-    width: "47%",
-    minHeight: 112,
+    flex: 1,
+    minHeight: 132,
     backgroundColor: colors.surface,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    justifyContent: "center",
     borderRadius: radii.md,
-    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: "hidden",
     ...shadowTile,
   },
   tilePressed: {
-    transform: [{ scale: 0.98 }],
+    opacity: 0.92,
+    backgroundColor: colors.surfaceSoft,
   },
   tileEmoji: {
-    fontSize: 22,
-    marginBottom: 8,
+    fontSize: 28,
+    marginBottom: 10,
   },
   tileTitle: {
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.text,
-    marginBottom: 4,
-    fontSize: 16,
+    marginBottom: 6,
+    fontSize: 18,
   },
   tileMeta: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textMuted,
+    lineHeight: 20,
+  },
+  sectionBlock: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    gap: 8,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadowTile,
   },
   sectionHeader: {
     flexDirection: "row",

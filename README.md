@@ -16,3 +16,10 @@ npx expo start -c
 
 cd backend
 npm run dev
+
+
+npx expo prebuild --clean
+npx expo run:android
+
+cd backend
+npx prisma studio

@@ -7,8 +7,13 @@ import { parseTaskFromText } from "./taskParserService.js";
 
 export const parserRouter = Router();
 
+const ymdRegex = /^\d{4}-\d{2}-\d{2}$/;
 const bodySchema = z.object({
   text: z.string().min(1),
+  /** Device-local "today" as YYYY-MM-DD so relative phrases match the user's calendar (not the server's TZ). */
+  clientTodayYmd: z.string().regex(ymdRegex).optional(),
+  clientNowIso: z.string().min(20).optional(),
+  clientTimezoneOffsetMinutes: z.number().int().gte(-840).lte(840).optional(),
 });
 
 parserRouter.post("/task", requireFirebaseUser, (req: AuthRequest, res) => {
@@ -19,7 +24,12 @@ parserRouter.post("/task", requireFirebaseUser, (req: AuthRequest, res) => {
   }
 
   try {
-    const data = parseTaskFromText(parsed.data.text);
+    const { text, clientTodayYmd, clientNowIso, clientTimezoneOffsetMinutes } = parsed.data;
+    const data = parseTaskFromText(text, {
+      clientTodayYmd,
+      clientNowIso,
+      clientTimezoneOffsetMinutes,
+    });
     sendSuccess(res, data);
   } catch (e) {
     console.error(e);

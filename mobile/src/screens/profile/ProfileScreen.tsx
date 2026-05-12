@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { BottomNav } from "../../components/BottomNav";
 import { LogoMark } from "../../components/branding/LogoMark";
-import { colors, radii, shadow } from "../../constants/theme";
+import { blue, colors, radii, shadow } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -59,7 +59,9 @@ export function ProfileScreen({ navigation }: Props) {
       >
         <View style={styles.hero}>
           <View style={styles.logoRow}>
-            <LogoMark size={48} />
+            <View style={styles.logoRing}>
+              <LogoMark size={44} />
+            </View>
           </View>
           <Text style={styles.heroTitle}>Profile</Text>
           <Text style={styles.heroSub}>Manage your account</Text>
@@ -144,6 +146,17 @@ const styles = StyleSheet.create({
   logoRow: {
     alignItems: "center",
     marginBottom: 16,
+  },
+  /** Centers the mark in a fixed circle so it cannot sit high under the status bar / notch. */
+  logoRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    borderColor: blue[200],
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
   },
   heroTitle: {
     fontSize: 22,
