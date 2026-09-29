@@ -57,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDbUser(null);
       return;
     }
+    if (!auth.currentUser.emailVerified) {
+      setDbUser(null);
+      return;
+    }
     setBootstrapping(true);
     try {
       await resolveAndApplyApiBase();
@@ -75,6 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (!user) {
+        setDbUser(null);
+        setBootstrapping(false);
+        setAuthReady(true);
+        return;
+      }
+      // Wait for email verification before syncing with the API (Firebase sends the link from console).
+      if (!user.emailVerified) {
         setDbUser(null);
         setBootstrapping(false);
         setAuthReady(true);

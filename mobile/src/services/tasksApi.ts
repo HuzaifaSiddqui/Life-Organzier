@@ -1,12 +1,16 @@
-import { api } from "./api";
+import { api, getApiErrorMessage } from "./api";
 import type { ParsedTask, Task } from "../types/models";
 import { ymdFromLocalDate } from "../utils/datetimeValidation";
 
 export async function getTasks(): Promise<Task[]> {
-  const res = await api.get("/tasks");
-  const body = res.data as { success: boolean; data: { tasks: Task[] } };
-  if (!body.success) throw new Error("Could not load tasks");
-  return body.data.tasks;
+  try {
+    const res = await api.get("/tasks");
+    const body = res.data as { success: boolean; message?: string; data: { tasks: Task[] } };
+    if (!body.success) throw new Error(body.message ?? "Could not load tasks");
+    return body.data.tasks;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, "Could not load tasks"));
+  }
 }
 
 export async function getTask(id: string): Promise<Task> {
@@ -68,14 +72,18 @@ export async function deleteTask(id: string): Promise<void> {
 }
 
 export async function parseTaskText(text: string): Promise<ParsedTask> {
-  const now = new Date();
-  const res = await api.post("/parser/task", {
-    text,
-    clientTodayYmd: ymdFromLocalDate(now),
-    clientNowIso: now.toISOString(),
-    clientTimezoneOffsetMinutes: now.getTimezoneOffset(),
-  });
-  const body = res.data as { success: boolean; data: ParsedTask };
-  if (!body.success) throw new Error("Could not parse task");
-  return body.data;
+  try {
+    const now = new Date();
+    const res = await api.post("/parser/task", {
+      text,
+      clientTodayYmd: ymdFromLocalDate(now),
+      clientNowIso: now.toISOString(),
+      clientTimezoneOffsetMinutes: now.getTimezoneOffset(),
+    });
+    const body = res.data as { success: boolean; message?: string; data: ParsedTask };
+    if (!body.success) throw new Error(body.message ?? "Could not parse task");
+    return body.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, "Could not parse task"));
+  }
 }

@@ -18,10 +18,11 @@ import { useAuth } from "../context/AuthContext";
 import { blue, colors, radii, shadow } from "../constants/theme";
 import { api } from "../services/api";
 import {
-  isValidLanIpv4,
+  isValidLanHostEntry,
   loadSavedHostIps,
   saveHostIp,
 } from "../services/apiResolver";
+import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
 
@@ -62,8 +63,10 @@ function SyncErrorScreen() {
 
   const onSaveIpAndRetry = async () => {
     const t = ipDraft.trim();
-    if (!isValidLanIpv4(t)) {
-      setHint("Enter your Mac’s LAN IPv4, e.g. 192.168.1.12 (same network as this phone).");
+    if (!isValidLanHostEntry(t)) {
+      setHint(
+        "Enter your Mac’s LAN host, e.g. 192.168.1.12, 192.168.1.12:5050, or http://192.168.1.12:5050."
+      );
       return;
     }
     setHint(null);
@@ -89,7 +92,7 @@ function SyncErrorScreen() {
           <Text style={styles.errorTitle}>Could not reach the server</Text>
           <Text style={styles.errorSub}>
             Signed in as {firebaseUser?.email ?? "user"}. The app tries your saved URL, .env address,
-            Expo’s QR host IP, and any IPs you store below (same Wi‑Fi as your computer).
+            Expo’s QR host IP, and any hosts you store below (same Wi‑Fi as your computer).
           </Text>
 
           <Text style={styles.endpointLabel}>Active API base</Text>
@@ -130,7 +133,7 @@ function SyncErrorScreen() {
 }
 
 export function RootNavigator() {
-  const { firebaseUser, dbUser, bootstrapping, authReady, apiEndpointsReady } = useAuth();
+  const { firebaseUser, bootstrapping, authReady, apiEndpointsReady } = useAuth();
 
   if (!apiEndpointsReady || !authReady) {
     return (
@@ -147,6 +150,8 @@ export function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!firebaseUser ? (
           <Stack.Screen name="Auth" component={AuthStack} />
+        ) : !firebaseUser.emailVerified ? (
+          <Stack.Screen name="VerifyEmail" component={EmailVerificationScreen} />
         ) : bootstrapping ? (
           <Stack.Screen name="Boot">
             {() => (
@@ -155,8 +160,6 @@ export function RootNavigator() {
               </View>
             )}
           </Stack.Screen>
-        ) : !dbUser ? (
-          <Stack.Screen name="SyncError" component={SyncErrorScreen} />
         ) : (
           <Stack.Screen name="App" component={MainStack} />
         )}

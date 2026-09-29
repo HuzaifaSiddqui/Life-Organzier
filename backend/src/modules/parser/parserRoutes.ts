@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AuthRequest } from "../../middleware/authMiddleware.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendError, sendSuccess } from "../../utils/apiResponse.js";
-import { parseTaskFromText } from "./taskParserService.js";
+import { parseTaskFromTextHybrid } from "./taskParserService.js";
 
 export const parserRouter = Router();
 
@@ -16,7 +16,7 @@ const bodySchema = z.object({
   clientTimezoneOffsetMinutes: z.number().int().gte(-840).lte(840).optional(),
 });
 
-parserRouter.post("/task", requireFirebaseUser, (req: AuthRequest, res) => {
+parserRouter.post("/task", requireFirebaseUser, async (req: AuthRequest, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
     sendError(res, "Text is required", "VALIDATION_ERROR", 400);
@@ -25,7 +25,7 @@ parserRouter.post("/task", requireFirebaseUser, (req: AuthRequest, res) => {
 
   try {
     const { text, clientTodayYmd, clientNowIso, clientTimezoneOffsetMinutes } = parsed.data;
-    const data = parseTaskFromText(text, {
+    const data = await parseTaskFromTextHybrid(text, {
       clientTodayYmd,
       clientNowIso,
       clientTimezoneOffsetMinutes,

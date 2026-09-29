@@ -6,12 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/branding/app-launch-icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/branding/app-launch-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8FAFC"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -25,7 +19,6 @@
         "foregroundImage": "./assets/branding/app-launch-icon.png",
         "backgroundColor": "#F8FAFC"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -65,7 +58,8 @@
           "speechRecognitionPermission": "Allow Life Organizer to transcribe your speech into task text."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-status-bar"
     ]
   }
 }

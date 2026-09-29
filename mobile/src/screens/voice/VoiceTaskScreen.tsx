@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -19,32 +20,46 @@ import { GradientPrimaryButton } from "../../components/GradientPrimaryButton";
 import { colors, radii, shadow } from "../../constants/theme";
 import { useDeviceSpeechRecognition } from "../../hooks/useDeviceSpeechRecognition";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { createTaskWithReminder } from "../../services/createTaskWithReminder";
-import { reminderFeedbackText } from "../../services/reminders";
+import {
+  createTaskFromParsedNatural,
+  formatTaskCreatedToast,
+  initialPreviewFieldsFromParsed,
+  shouldAutoCreateFromClarityIndex,
+} from "../../services/parsedNaturalTask";
 import { parseTaskText } from "../../services/tasksApi";
 import type { ParsedTask, Priority } from "../../types/models";
-import { dueDateAndTimeForSave, validateDueDateNotPast, ymdFromLocalDate } from "../../utils/datetimeValidation";
-import { priorityPill } from "../../utils/priorityColors";
+import { ymdFromLocalDate } from "../../utils/datetimeValidation";
 
 type Props = NativeStackScreenProps<MainStackParamList, "VoiceTask">;
 
 const intro =
   "Tap the microphone to speak your task. Your device converts speech to text (no cloud). Then we extract title, due date, time, and priority — same parser as chat.";
 
-function hasParserDate(parsed: ParsedTask): boolean {
-  return !!(parsed.dueDateYmd?.trim() || parsed.dueDateIso?.trim());
-}
-
 export function VoiceTaskScreen({ navigation }: Props) {
   const [transcript, setTranscript] = useState("");
   const [parsed, setParsed] = useState<ParsedTask | null>(null);
+  const [previewEpoch, setPreviewEpoch] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [autoCreating, setAutoCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [manualTime, setManualTime] = useState("");
   const [manualDateYmd, setManualDateYmd] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [selectedPriority, setSelectedPriority] = useState<Priority | null>(null);
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+
+  useEffect(() => {
+    if (!parsed) return;
+    const init = initialPreviewFieldsFromParsed(parsed);
+    setTitleDraft(init.titleDraft);
+    setManualDateYmd(init.manualDateYmd);
+    setManualTime(init.manualTime);
+    setAllDay(false);
+    setReminderEnabled(true);
+    setSelectedPriority(null);
+  }, [parsed, previewEpoch]);
 
   const runParse = useCallback(async (text: string) => {
     const t = text.trim();
@@ -56,18 +71,43 @@ export function VoiceTaskScreen({ navigation }: Props) {
     setError(null);
     try {
       const result = await parseTaskText(t);
-      setParsed(result);
-      setSelectedPriority(null);
-      setManualTime("");
-      setManualDateYmd("");
-      setAllDay(false);
+      if (shouldAutoCreateFromClarityIndex(result.confidence)) {
+        setAutoCreating(true);
+        try {
+          const { reminder } = await createTaskFromParsedNatural({
+            parsed: result,
+            title: result.title,
+            manualDateYmd: "",
+            manualTime: "",
+            allDay: false,
+            selectedPriority: null,
+            reminderEnabled: true,
+            source: "VOICE",
+            description: t || null,
+          });
+          setTranscript("");
+          navigation.navigate("TaskList", {
+            toast: formatTaskCreatedToast(reminder),
+            toastTone: reminder.kind === "scheduled" ? "success" : "warning",
+          });
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Could not create task. Try reviewing the details below.");
+          setParsed(result);
+          setPreviewEpoch((x) => x + 1);
+        } finally {
+          setAutoCreating(false);
+        }
+      } else {
+        setParsed(result);
+        setPreviewEpoch((x) => x + 1);
+      }
     } catch {
       setError("Could not parse that text. Try editing it or speak more clearly.");
       setParsed(null);
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [navigation]);
 
   const { start, stop, listening, speechSupported } = useDeviceSpeechRecognition({
     onTranscriptChange: setTranscript,
@@ -79,73 +119,35 @@ export function VoiceTaskScreen({ navigation }: Props) {
     void start(transcript);
   };
 
-  const canSave = (() => {
-    if (!parsed || !parsed.title.trim()) return false;
-    if (!parsed.priorityDetected && !selectedPriority) return false;
-    if (!parsed.timeDetected && !manualTime.trim() && !allDay) return false;
-    if (!hasParserDate(parsed) && !parsed.timeDetected && !manualDateYmd.trim()) return false;
-    if ((parsed.dueDateYmd?.trim() || parsed.dueDateIso) && !parsed.dueTime) {
-      return allDay || manualTime.trim().length > 0;
-    }
-    return true;
-  })();
+  const cancelPreview = () => {
+    setParsed(null);
+    setError(null);
+  };
 
-  const save = async () => {
-    if (!parsed || !canSave) return;
+  const confirmPreview = async () => {
+    if (!parsed) return;
+    if (!titleDraft.trim()) {
+      setError("Please enter a task title.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      const priorityOut = selectedPriority ?? (parsed.priority as Priority);
-      let dueTimeOut: string | null;
-      if ((parsed.dueDateYmd?.trim() || parsed.dueDateIso) && !parsed.dueTime) {
-        if (allDay) dueTimeOut = null;
-        else dueTimeOut = manualTime.trim() ? manualTime.trim() : null;
-      } else {
-        const merged = `${manualTime.trim() || (parsed.dueTime ?? "")}`.trim();
-        dueTimeOut = merged === "" ? null : merged;
-      }
-      if (!hasParserDate(parsed) && !parsed.timeDetected && !manualDateYmd.trim()) {
-        setError("Please pick a due date.");
-        setSaving(false);
-        return;
-      }
-      const pickerYmd = manualDateYmd.trim() || parsed.dueDateYmd?.trim() || "";
-      const { dueDateIso: dueDateOut, dueTime: dueTimeNormalized } = dueDateAndTimeForSave({
-        pickerYmd: pickerYmd || undefined,
-        parsedDueDateIso: pickerYmd ? null : parsed.dueDateIso,
-        rawDueTime: dueTimeOut,
+      const { reminder } = await createTaskFromParsedNatural({
+        parsed,
+        title: titleDraft,
+        manualDateYmd,
+        manualTime,
+        allDay,
+        selectedPriority,
+        reminderEnabled,
+        source: "VOICE",
+        description: transcript.trim() ? transcript.trim() : null,
       });
-      if (dueTimeNormalized && !dueDateOut) {
-        setError(
-          "Couldn't read that due time for reminders. Use the time picker or a clear time like 3 PM.",
-        );
-        return;
-      }
-      const dateErr = validateDueDateNotPast(dueDateOut, dueTimeNormalized);
-      if (dateErr) {
-        setError(dateErr);
-        return;
-      }
-      const { reminder } = await createTaskWithReminder(
-        {
-          title: parsed.title.trim(),
-          description: transcript.trim() ? transcript.trim() : null,
-          dueDate: dueDateOut,
-          dueTime: dueTimeNormalized,
-          priority: priorityOut,
-          category: parsed.category,
-          source: "VOICE",
-          confidence: parsed.confidence,
-        },
-        {
-          reminderEnabled: true,
-          reminderHint: { dueDateIso: dueDateOut, dueTime: dueTimeNormalized },
-        },
-      );
       setTranscript("");
       setParsed(null);
       navigation.navigate("TaskList", {
-        toast: reminderFeedbackText(reminder),
+        toast: formatTaskCreatedToast(reminder),
         toastTone: reminder.kind === "scheduled" ? "success" : "warning",
       });
     } catch (e) {
@@ -154,18 +156,6 @@ export function VoiceTaskScreen({ navigation }: Props) {
       setSaving(false);
     }
   };
-
-  const previewPill = parsed ? priorityPill(parsed.priority as Priority) : null;
-  const confidenceStyle =
-    parsed && parsed.needsConfirmation
-      ? { backgroundColor: "#FFFBEB", color: "#B45309" }
-      : { backgroundColor: "#F0FDF4", color: "#16A34A" };
-
-  const dueDisplay =
-    parsed?.dueSummary ??
-    (parsed && (parsed.dueDateText || parsed.dueTime)
-      ? [parsed.dueDateText, parsed.dueTime].filter(Boolean).join(" · ")
-      : null);
 
   return (
     <KeyboardAvoidingView
@@ -206,10 +196,13 @@ export function VoiceTaskScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        {busy ? (
+        {busy || autoCreating ? (
           <View style={styles.rowStart}>
             <View style={[styles.bubbleAssistant, styles.thinking]}>
               <ActivityIndicator color={colors.primary} />
+              {autoCreating ? (
+                <Text style={styles.thinkingCaption}>Creating your task…</Text>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -217,163 +210,107 @@ export function VoiceTaskScreen({ navigation }: Props) {
         {parsed ? (
           <View style={styles.rowStart}>
             <View style={styles.bubbleAssistantWide}>
-              <Text style={styles.bubbleAssistantText}>Got it! Here’s what I understood:</Text>
+              <Text style={styles.bubbleAssistantText}>
+                Almost there — review your task, adjust anything missing, then create it.
+              </Text>
 
               <View style={styles.previewCard}>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Title</Text>
-                  <Text style={styles.previewValueStrong} numberOfLines={3}>
-                    {parsed.title}
+                <Text style={styles.fieldLabel}>Title</Text>
+                <TextInput
+                  style={styles.titleInput}
+                  value={titleDraft}
+                  onChangeText={setTitleDraft}
+                  placeholder="Task title"
+                  placeholderTextColor="#94a3b8"
+                />
+
+                <TaskFormDueDateRow
+                  valueYmd={manualDateYmd}
+                  onChangeYmd={setManualDateYmd}
+                  onClear={() => setManualDateYmd("")}
+                  label="Due date"
+                />
+
+                <Text style={styles.fieldLabel}>Due time</Text>
+                <InlineTimePickerField
+                  value={manualTime}
+                  onChange={(v) => {
+                    setManualTime(v);
+                    setAllDay(false);
+                  }}
+                  placeholder="Optional — tap to pick a time"
+                  baseYmd={
+                    manualDateYmd.trim() ||
+                    parsed.dueDateYmd?.trim() ||
+                    (parsed.dueDateIso ? ymdFromLocalDate(new Date(parsed.dueDateIso)) : undefined)
+                  }
+                />
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.allDayBtn,
+                    allDay && styles.allDayBtnOn,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={() => {
+                    setAllDay((prev) => {
+                      const next = !prev;
+                      if (next) setManualTime("");
+                      return next;
+                    });
+                  }}
+                >
+                  <Text style={[styles.allDayText, allDay && styles.allDayTextOn]}>
+                    All day (no specific time)
                   </Text>
-                </View>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Due</Text>
-                  <Text style={styles.previewValue}>{dueDisplay ?? "Not detected"}</Text>
-                </View>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Priority</Text>
-                  {previewPill ? (
-                    <View
-                      style={[styles.miniPill, { backgroundColor: previewPill.backgroundColor }]}
-                    >
-                      <Text style={[styles.miniPillText, { color: previewPill.color }]}>
-                        {parsed.priority}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                {!parsed.timeDetected && !hasParserDate(parsed) ? (
-                  <View style={styles.timeGate}>
-                    <Text style={styles.timeGateTitle}>Add due date and time</Text>
-                    <Text style={styles.timeGateHelp}>
-                      No due date or time was detected. Pick both so we can schedule a reminder.
-                    </Text>
-                    <TaskFormDueDateRow
-                      valueYmd={manualDateYmd}
-                      onChangeYmd={setManualDateYmd}
-                      onClear={() => setManualDateYmd("")}
-                      label="Due date"
-                    />
-                    <InlineTimePickerField
-                      value={manualTime}
-                      onChange={(v) => {
-                        setManualTime(v);
-                        setAllDay(false);
-                      }}
-                      placeholder="Tap to pick a time"
-                      baseYmd={manualDateYmd.trim() || undefined}
-                    />
+                </Pressable>
+
+                <Text style={styles.fieldLabel}>Priority</Text>
+                <View style={styles.priorityRow}>
+                  {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map((p) => (
                     <Pressable
-                      style={({ pressed }) => [
-                        styles.allDayBtn,
-                        allDay && styles.allDayBtnOn,
-                        pressed && { opacity: 0.9 },
+                      key={p}
+                      style={[
+                        styles.priorityChip,
+                        (selectedPriority ?? parsed.priority) === p && styles.priorityChipOn,
                       ]}
-                      onPress={() => {
-                        setAllDay((prev) => {
-                          const next = !prev;
-                          if (next) setManualTime("");
-                          return next;
-                        });
-                      }}
+                      onPress={() => setSelectedPriority(p)}
                     >
-                      <Text style={[styles.allDayText, allDay && styles.allDayTextOn]}>
-                        All day (no specific time)
+                      <Text
+                        style={[
+                          styles.priorityChipText,
+                          (selectedPriority ?? parsed.priority) === p && styles.priorityChipTextOn,
+                        ]}
+                      >
+                        {p}
                       </Text>
                     </Pressable>
+                  ))}
+                </View>
+
+                <View style={styles.reminderRow}>
+                  <View style={styles.reminderTextCol}>
+                    <Text style={styles.reminderLabel}>Remind me</Text>
+                    <Text style={styles.reminderHint}>Uses your due date and time when set</Text>
                   </View>
-                ) : null}
-                {!parsed.priorityDetected ? (
-                  <View style={styles.timeGate}>
-                    <Text style={styles.timeGateTitle}>Choose priority</Text>
-                    <View style={styles.priorityRow}>
-                      {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map((p) => (
-                        <Pressable
-                          key={p}
-                          style={[
-                            styles.priorityChip,
-                            (selectedPriority ?? parsed.priority) === p && styles.priorityChipOn,
-                          ]}
-                          onPress={() => setSelectedPriority(p)}
-                        >
-                          <Text
-                            style={[
-                              styles.priorityChipText,
-                              (selectedPriority ?? parsed.priority) === p && styles.priorityChipTextOn,
-                            ]}
-                          >
-                            {p}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
+                  <Switch
+                    value={reminderEnabled}
+                    onValueChange={setReminderEnabled}
+                    trackColor={{ false: colors.border, true: "#B7DCFF" }}
+                    thumbColor={reminderEnabled ? colors.primary : "#f4f4f5"}
+                  />
+                </View>
+
                 <View style={styles.previewRow}>
                   <Text style={styles.previewLabel}>Category</Text>
                   <Text style={styles.previewValue}>{parsed.category ?? "Not detected"}</Text>
                 </View>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Confidence</Text>
-                  <View
-                    style={[styles.miniPill, { backgroundColor: confidenceStyle.backgroundColor }]}
-                  >
-                    <Text style={[styles.miniPillText, { color: confidenceStyle.color }]}>
-                      {parsed.confidence}%
-                    </Text>
-                  </View>
-                </View>
               </View>
 
-              {(parsed.dueDateYmd?.trim() || parsed.dueDateIso) && !parsed.dueTime ? (
-                <View style={styles.timeGate}>
-                  <Text style={styles.timeGateTitle}>Time on that day</Text>
-                  <Text style={styles.timeGateHelp}>
-                    A date was detected but no time. Add a time or choose all-day before saving.
-                  </Text>
-                  <InlineTimePickerField
-                    value={manualTime}
-                    onChange={(v) => {
-                      setManualTime(v);
-                      setAllDay(false);
-                    }}
-                    placeholder="Tap to pick a time"
-                    baseYmd={
-                      parsed.dueDateYmd?.trim() ||
-                      (parsed.dueDateIso
-                        ? ymdFromLocalDate(new Date(parsed.dueDateIso))
-                        : undefined)
-                    }
-                  />
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.allDayBtn,
-                      allDay && styles.allDayBtnOn,
-                      pressed && { opacity: 0.9 },
-                    ]}
-                    onPress={() => {
-                      setAllDay((prev) => {
-                        const next = !prev;
-                        if (next) setManualTime("");
-                        return next;
-                      });
-                    }}
-                  >
-                    <Text style={[styles.allDayText, allDay && styles.allDayTextOn]}>
-                      All day (no specific time)
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-
               <Pressable
-                style={({ pressed }) => [
-                  styles.saveWrap,
-                  (!canSave || saving) && styles.saveDisabled,
-                  pressed && styles.btnPressed,
-                ]}
-                onPress={() => void save()}
-                disabled={!canSave || saving}
+                style={({ pressed }) => [styles.saveWrap, pressed && styles.btnPressed]}
+                onPress={() => void confirmPreview()}
+                disabled={saving}
               >
                 <LinearGradient
                   colors={["#16A34A", "#15803D"]}
@@ -384,9 +321,17 @@ export function VoiceTaskScreen({ navigation }: Props) {
                   {saving ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.saveText}>Save task</Text>
+                    <Text style={styles.saveText}>Create task</Text>
                   )}
                 </LinearGradient>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.cancelBtn, pressed && styles.btnPressed]}
+                onPress={cancelPreview}
+                disabled={saving}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
             </View>
           </View>
@@ -418,14 +363,15 @@ export function VoiceTaskScreen({ navigation }: Props) {
               setParsed(null);
             }}
             multiline
+            editable={!parsed}
           />
           <View style={styles.composerActions}>
             <View style={{ flex: 1 }}>
               <GradientPrimaryButton
                 title="Parse task"
                 onPress={() => void runParse(transcript)}
-                disabled={busy || !transcript.trim()}
-                loading={busy}
+                disabled={busy || autoCreating || !transcript.trim() || !!parsed}
+                loading={busy || autoCreating}
                 height={48}
               />
             </View>
@@ -436,7 +382,7 @@ export function VoiceTaskScreen({ navigation }: Props) {
                 pressed && { opacity: 0.92 },
               ]}
               onPress={() => startListening()}
-              disabled={busy || !speechSupported}
+              disabled={busy || autoCreating || !speechSupported || !!parsed}
             >
               <Text style={styles.micFabText}>🎤</Text>
             </Pressable>
@@ -494,6 +440,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
+    gap: 8,
+  },
+  thinkingCaption: {
+    fontSize: 13,
+    color: colors.textMuted,
   },
   bubbleAssistantText: {
     color: colors.text,
@@ -527,7 +478,24 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 8,
+    gap: 10,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+    marginBottom: -4,
+  },
+  titleInput: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: colors.text,
   },
   previewRow: {
     flexDirection: "row",
@@ -545,62 +513,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     flexShrink: 1,
     textAlign: "right",
-  },
-  previewValueStrong: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text,
-    flexShrink: 1,
-    textAlign: "right",
-  },
-  miniPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-  },
-  miniPillText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  timeGate: {
-    marginTop: 4,
-    padding: 12,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSoft,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 8,
-  },
-  timeGateTitle: {
-    fontWeight: "600",
-    fontSize: 14,
-    color: colors.text,
-  },
-  timeGateHelp: {
-    fontSize: 13,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
-  allDayBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  allDayBtnOn: {
-    borderColor: colors.primary,
-    backgroundColor: "#EEF7FF",
-  },
-  allDayText: {
-    textAlign: "center",
-    fontWeight: "600",
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-  allDayTextOn: {
-    color: colors.primaryDark,
   },
   priorityRow: {
     flexDirection: "row",
@@ -627,13 +539,54 @@ const styles = StyleSheet.create({
   priorityChipTextOn: {
     color: colors.primaryDark,
   },
+  allDayBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  allDayBtnOn: {
+    borderColor: colors.primary,
+    backgroundColor: "#EEF7FF",
+  },
+  allDayText: {
+    textAlign: "center",
+    fontWeight: "600",
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  allDayTextOn: {
+    color: colors.primaryDark,
+  },
+  reminderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginTop: 4,
+  },
+  reminderTextCol: {
+    flex: 1,
+  },
+  reminderLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  reminderHint: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
   saveWrap: {
     borderRadius: radii.md,
     overflow: "hidden",
     ...shadow,
-  },
-  saveDisabled: {
-    opacity: 0.45,
   },
   saveGrad: {
     height: 48,
@@ -643,6 +596,20 @@ const styles = StyleSheet.create({
   },
   saveText: {
     color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  cancelBtn: {
+    height: 48,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  cancelBtnText: {
+    color: colors.text,
     fontWeight: "600",
     fontSize: 16,
   },

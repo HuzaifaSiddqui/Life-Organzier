@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Constants from "expo-constants";
+import * as Network from "expo-network";
 import {
   getEnvExtraHostIps,
   getEnvFallbackApiBaseUrls,
@@ -11,10 +12,11 @@ import {
 } from "../constants/config";
 import { api } from "./api";
 
-const STORAGE_LAST_GOOD = "life-organizer:last-working-api-base";
+const STORAGE_LAST_GOOD = "life-organizer:last-working-api-base:v2";
 const STORAGE_SAVED_IPS = "life-organizer:saved-api-host-ips";
 
 const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const HOST_WITH_OPTIONAL_PORT_RE = /^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/;
 
 export function isValidLanIpv4(host: string): boolean {
   const m = host.trim().match(IPV4_RE);
@@ -25,23 +27,70 @@ export function isValidLanIpv4(host: string): boolean {
   });
 }
 
+function isValidPort(port: number): boolean {
+  return Number.isInteger(port) && port > 0 && port <= 65535;
+}
+
+export function isValidLanHostEntry(value: string): boolean {
+  return parseHostEntry(value) !== null;
+}
+
+function parseHostEntry(raw: string): { host: string; port?: number } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = trimmed.includes("://") ? new URL(trimmed) : null;
+    if (url) {
+      const host = url.hostname;
+      const port = url.port ? Number(url.port) : undefined;
+      if (!isValidLanIpv4(host)) return null;
+      if (port !== undefined && !isValidPort(port)) return null;
+      return { host, port };
+    }
+  } catch {
+    // ignore invalid URL shapes and fall back to host parsing
+  }
+
+  const hostMatch = trimmed.match(HOST_WITH_OPTIONAL_PORT_RE);
+  if (!hostMatch) return null;
+
+  const host = hostMatch[1];
+  const port = hostMatch[2] ? Number(hostMatch[2]) : undefined;
+  if (!isValidLanIpv4(host)) return null;
+  if (port !== undefined && !isValidPort(port)) return null;
+  return { host, port };
+}
+
+function normalizeSavedHostEntry(raw: string): string | null {
+  const parsed = parseHostEntry(raw);
+  if (!parsed) return null;
+  return parsed.port ? `${parsed.host}:${parsed.port}` : parsed.host;
+}
+
+function apiBaseFromSavedHost(hostEntry: string, defaultPort: number): string | null {
+  const parsed = parseHostEntry(hostEntry);
+  if (!parsed) return null;
+  return `http://${parsed.host}:${parsed.port ?? defaultPort}`;
+}
+
 export async function loadSavedHostIps(): Promise<string[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_SAVED_IPS);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((x): x is string => typeof x === "string" && isValidLanIpv4(x));
+    return parsed.filter((x): x is string => typeof x === "string" && parseHostEntry(x) !== null);
   } catch {
     return [];
   }
 }
 
 export async function saveHostIp(ip: string): Promise<void> {
-  const trimmed = ip.trim();
-  if (!isValidLanIpv4(trimmed)) return;
+  const normalized = normalizeSavedHostEntry(ip);
+  if (!normalized) return;
   const existing = await loadSavedHostIps();
-  const next = [trimmed, ...existing.filter((h) => h !== trimmed)].slice(0, 12);
+  const next = [normalized, ...existing.filter((h) => h !== normalized)].slice(0, 12);
   await AsyncStorage.setItem(STORAGE_SAVED_IPS, JSON.stringify(next));
 }
 
@@ -114,9 +163,14 @@ async function buildCandidateBases(): Promise<string[]> {
   const savedIps = await loadSavedHostIps();
   const envIps = getEnvExtraHostIps();
   const expoIp = getExpoBundlerLanIp();
+  const deviceIp = await getDeviceLanIp();
+  const localLanHosts = deviceIp ? buildLocalLanCandidates(deviceIp, port) : [];
 
-  const fromIps = (ips: string[]) =>
-    ips.filter(isValidLanIpv4).map((ip) => normalizeApiBase(`http://${ip}:${port}`));
+  const savedHostCandidates = (hosts: string[]) =>
+    hosts
+      .map((entry) => apiBaseFromSavedHost(entry, port))
+      .filter((entry): entry is string => Boolean(entry))
+      .map((entry) => normalizeApiBase(entry));
 
   const list: string[] = [];
 
@@ -127,15 +181,47 @@ async function buildCandidateBases(): Promise<string[]> {
     list.push(normalizeApiBase(`http://${expoIp}:${port}`));
   }
 
+  list.push(...localLanHosts);
+
   for (const u of getEnvFallbackApiBaseUrls()) {
     list.push(normalizeApiBase(u));
   }
 
-  list.push(...fromIps(envIps));
-  list.push(...fromIps(savedIps));
+  list.push(...savedHostCandidates(envIps));
+  list.push(...savedHostCandidates(savedIps));
 
   return dedupe(list);
 }
+
+async function getDeviceLanIp(): Promise<string | null> {
+  try {
+    const ipAddress = await Network.getIpAddressAsync();
+    if (typeof ipAddress === "string" && isValidLanIpv4(ipAddress)) {
+      return ipAddress;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function buildLocalLanCandidates(deviceIp: string, port: number): string[] {
+  const prefix = getLanSubnetPrefix(deviceIp);
+  if (!prefix) return [];
+
+  return ["1", "2", "5", "10", "20", "50", "100", "150", "200", "254"]
+    .map((last) => normalizeApiBase(`http://${prefix}.${last}:${port}`));
+}
+
+function getLanSubnetPrefix(ip: string): string | null {
+  if (!isValidLanIpv4(ip)) return null;
+  const [a, b, c] = ip.split(".").map((part) => parseInt(part, 10));
+  if (a === 10) return `${a}.${b}.${c}`;
+  if (a === 172 && b >= 16 && b <= 31) return `${a}.${b}.${c}`;
+  if (a === 192 && b === 168) return `${a}.${b}.${c}`;
+  return null;
+}
+
 
 /**
  * Probes `/health` for each candidate (last-good → env primary → Expo QR host → fallbacks → saved IPs)

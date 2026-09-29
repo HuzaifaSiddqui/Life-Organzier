@@ -82,7 +82,6 @@ export async function configureReminders(): Promise<void> {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 200, 250],
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      sound: "default",
       enableVibrate: true,
     });
   }

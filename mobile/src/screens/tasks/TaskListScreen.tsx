@@ -35,8 +35,8 @@ export function TaskListScreen({ navigation, route }: Props) {
     try {
       const data = await getTasks();
       setTasks(data);
-    } catch {
-      setError("Could not load tasks.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load tasks.");
     } finally {
       setLoading(false);
       setRefreshing(false);

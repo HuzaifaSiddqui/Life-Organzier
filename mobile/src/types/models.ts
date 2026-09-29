@@ -30,6 +30,7 @@ export type User = {
 
 export type ParsedTask = {
   title: string;
+  description?: string | null;
   dueDateText: string | null;
   dueTime: string | null;
   /** Server-built single line: date · time (when available) */

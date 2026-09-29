@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker, { type DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
 import { type ReactNode, useState } from "react";
 import {
   type StyleProp,
@@ -62,12 +62,13 @@ export function TaskFormDueDateRow({
     ? combineYmdAndTimeStrings(valueYmd, "12:00 PM")
     : new Date();
 
-  const onPick = (e: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS === "android") {
-      setShow(false);
-      if (e.type !== "set" || !selected) return;
-    }
-    if (selected) onChangeYmd(ymdFromLocalDate(selected));
+  const onPick = (_event: DateTimePickerChangeEvent, selected: Date) => {
+    if (Platform.OS === "android") setShow(false);
+    onChangeYmd(ymdFromLocalDate(selected));
+  };
+
+  const onDismiss = () => {
+    if (Platform.OS === "android") setShow(false);
   };
 
   const display = valueYmd.trim() ? valueYmd : "Choose date";
@@ -94,13 +95,14 @@ export function TaskFormDueDateRow({
             value={current}
             mode="date"
             display="spinner"
-            onChange={onPick}
+            onValueChange={onPick}
+            onDismiss={onDismiss}
             themeVariant="light"
           />
         </IosSheet>
       ) : (
         show ? (
-          <DateTimePicker value={current} mode="date" display="default" onChange={onPick} />
+          <DateTimePicker value={current} mode="date" display="default" onValueChange={onPick} onDismiss={onDismiss} />
         ) : null
       )}
     </View>
@@ -125,12 +127,13 @@ export function TaskFormDueTimeRow({
   const seed = valueTime.trim() || "9:00 AM";
   const current = combineYmdAndTimeStrings(baseYmd, seed);
 
-  const onPick = (e: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS === "android") {
-      setShow(false);
-      if (e.type !== "set" || !selected) return;
-    }
-    if (selected) onChangeTime(formatDueTime12h(selected));
+  const onPick = (_event: DateTimePickerChangeEvent, selected: Date) => {
+    if (Platform.OS === "android") setShow(false);
+    onChangeTime(formatDueTime12h(selected));
+  };
+
+  const onDismiss = () => {
+    if (Platform.OS === "android") setShow(false);
   };
 
   const display = valueTime.trim() ? valueTime : "Choose time";
@@ -161,13 +164,14 @@ export function TaskFormDueTimeRow({
             value={current}
             mode="time"
             display="spinner"
-            onChange={onPick}
+            onValueChange={onPick}
+            onDismiss={onDismiss}
             themeVariant="light"
           />
         </IosSheet>
       ) : (
         show ? (
-          <DateTimePicker value={current} mode="time" display="default" onChange={onPick} />
+          <DateTimePicker value={current} mode="time" display="default" onValueChange={onPick} onDismiss={onDismiss} />
         ) : null
       )}
     </View>
@@ -193,12 +197,13 @@ export function InlineTimePickerField({
   const seed = value.trim() || "9:00 AM";
   const current = combineYmdAndTimeStrings(baseYmd, seed);
 
-  const onPick = (e: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS === "android") {
-      setShow(false);
-      if (e.type !== "set" || !selected) return;
-    }
-    if (selected) onChange(formatDueTime12h(selected));
+  const onPick = (_event: DateTimePickerChangeEvent, selected: Date) => {
+    if (Platform.OS === "android") setShow(false);
+    onChange(formatDueTime12h(selected));
+  };
+
+  const onDismiss = () => {
+    if (Platform.OS === "android") setShow(false);
   };
 
   return (
@@ -217,13 +222,14 @@ export function InlineTimePickerField({
             value={current}
             mode="time"
             display="spinner"
-            onChange={onPick}
+            onValueChange={onPick}
+            onDismiss={onDismiss}
             themeVariant="light"
           />
         </IosSheet>
       ) : (
         show ? (
-          <DateTimePicker value={current} mode="time" display="default" onChange={onPick} />
+          <DateTimePicker value={current} mode="time" display="default" onValueChange={onPick} onDismiss={onDismiss} />
         ) : null
       )}
     </View>

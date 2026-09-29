@@ -1,7 +1,10 @@
 import { Priority } from "@prisma/client";
+import { AiService } from "../../ai/ai.service.js";
+import type { SemanticTaskExtraction } from "../../ai/providers/provider.interface.js";
 
 export type ParsedTaskPreview = {
   title: string;
+  description: string | null;
   dueDateText: string | null;
   dueTime: string | null;
   /** Single human-readable due line: date phrase · time */
@@ -283,8 +286,12 @@ function normalizeTaskTitle(working: string, original: string): string {
   let t = working.replace(/^[\s,.;:\-/]+|[\s,.;:\-/]+$/g, "").trim();
 
   const prefix =
-    /^(i\s+need\s+to|i\s+have\s+to|i\s+must|i\s+should|please\s+|can\s+you\s+|could\s+you\s+|remind\s+me\s+to\s+|don't\s+forget\s+to\s+|remember\s+to\s+|task\s*:\s*|todo\s*:\s*|add\s+(?:a\s+)?task\s*:?\s*)/i;
+    /^(i\s+need\s+to|i\s+have\s+to|i\s+must|i\s+should|please\s+|can\s+you\s+|could\s+you\s+|remind\s+me(?:\s+at)?\s+to\s+|don't\s+forget\s+to\s+|remember\s+to\s+|task\s*:\s*|todo\s*:\s*|add\s+(?:a\s+)?task\s*:?\s*)/i;
   t = t.replace(prefix, "").trim();
+
+  // Keep the actionable reminder intent and remove conversational filler.
+  t = t.replace(/^that\s+will\s+help\s+me\s+to\s+remind(?:\s+me)?\s+to\s+/i, "task to ");
+  t = t.replace(/^remind(?:\s+me)?\s+to\s+/i, "task to ");
 
   if (t.length > 130) {
     const cut = t.slice(0, 127).trim();
@@ -299,6 +306,50 @@ function normalizeTaskTitle(working: string, original: string): string {
   sentence = sentence.replace(prefix, "").trim();
   if (sentence.length > 130) sentence = sentence.slice(0, 127).trim() + "...";
   return sentence.length >= 3 ? sentence : "New task";
+}
+
+export function preprocessTaskInput(raw: string): string {
+  return raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:please\s+)?(?:add|create)\s+(?:a\s+)?task\s*:?\s*/i, "")
+    .trim();
+}
+
+const BAD_SEMANTIC_TITLES = new Set([
+  "that will help me",
+  "remind me",
+  "create a task",
+  "add a task",
+  "something important",
+  "task",
+  "reminder",
+]);
+
+function isUsableSemanticTitle(title: string): boolean {
+  const normalized = title.replace(/\s+/g, " ").trim();
+  return normalized.length >= 2 && normalized.length <= 100 && !BAD_SEMANTIC_TITLES.has(normalized.toLowerCase());
+}
+
+function mergeSemanticExtraction(
+  deterministic: ParsedTaskPreview,
+  semantic: SemanticTaskExtraction,
+): ParsedTaskPreview {
+  const category = ["Academic", "Work", "Health", "Finance", "Personal"].includes(semantic.category ?? "")
+    ? semantic.category
+    : deterministic.category;
+  const hasDueInformation = Boolean(deterministic.dueDateIso || deterministic.dueTime);
+
+  return {
+    ...deterministic,
+    title: isUsableSemanticTitle(semantic.title) ? semantic.title.trim() : deterministic.title,
+    description: semantic.description,
+    category,
+    priority: deterministic.priorityDetected ? deterministic.priority : semantic.priority,
+    confidence: Math.max(deterministic.confidence, semantic.confidence),
+    // Missing temporal information remains confirmation-worthy even when the model is confident.
+    needsConfirmation: deterministic.needsConfirmation || !hasDueInformation,
+  };
 }
 
 function smartTitleFromIntent(rawTitle: string): string {
@@ -448,6 +499,7 @@ export function parseTaskFromText(raw: string, opts?: ParseTaskOptions): ParsedT
 
   return {
     title,
+    description: null,
     dueDateText,
     dueTime,
     dueSummary,
@@ -460,4 +512,14 @@ export function parseTaskFromText(raw: string, opts?: ParseTaskOptions): ParsedT
     dueDateIso: fromPhrase.iso,
     dueDateYmd: fromPhrase.ymd,
   };
+}
+
+export async function parseTaskFromTextHybrid(
+  raw: string,
+  opts?: ParseTaskOptions,
+  aiService = new AiService(),
+): Promise<ParsedTaskPreview> {
+  const deterministic = parseTaskFromText(raw, opts);
+  const semantic = await aiService.extractTask(preprocessTaskInput(raw));
+  return semantic ? mergeSemanticExtraction(deterministic, semantic) : deterministic;
 }

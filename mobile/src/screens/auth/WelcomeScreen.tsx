@@ -27,7 +27,7 @@ export function WelcomeScreen({ navigation }: Props) {
       >
         <View style={styles.card}>
           <View style={styles.headerRow}>
-            <LogoMark size={52} />
+            <LogoMark size={72} />
             <View style={styles.headerTitles}>
               <Text style={styles.appName}>Life Organizer</Text>
               <Text style={styles.tagline}>Smart Productivity Assistant</Text>
@@ -88,6 +88,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 400,
     alignSelf: "center",
+    alignItems: "center",
     backgroundColor: colors.surface,
     borderRadius: radii.xl,
     paddingHorizontal: 24,
@@ -100,8 +101,9 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     marginBottom: 18,
+    width: "100%",
   },
   headerTitles: {
     flex: 1,
@@ -122,7 +124,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   badge: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: blue[50],
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -136,20 +138,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   headline: {
+    alignSelf: "stretch",
     fontSize: 24,
     fontWeight: "700",
     color: colors.text,
     lineHeight: 30,
     letterSpacing: -0.35,
     marginBottom: 10,
+    textAlign: "center",
   },
   subcopy: {
+    alignSelf: "stretch",
     fontSize: 15,
     lineHeight: 22,
     color: colors.textMuted,
     marginBottom: 22,
+    textAlign: "center",
   },
   featureList: {
+    alignSelf: "stretch",
+    width: "100%",
     gap: 14,
     marginBottom: 28,
   },
@@ -157,6 +165,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+    width: "100%",
   },
   bullet: {
     width: 8,
@@ -171,10 +180,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: colors.textMuted,
     fontWeight: "400",
+    textAlign: "left",
   },
   actions: {
     gap: 12,
     width: "100%",
+    alignSelf: "stretch",
   },
   primaryWrap: {
     borderRadius: radii.md,

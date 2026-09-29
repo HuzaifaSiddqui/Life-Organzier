@@ -25,6 +25,13 @@ export function isApiError(payload: unknown): payload is ApiError {
   );
 }
 
+export function getApiErrorMessage(error: unknown, fallback = "Request failed"): string {
+  if (axios.isAxiosError<ApiError>(error)) {
+    return error.response?.data?.message ?? error.message ?? fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 export async function unwrap<T>(fn: () => Promise<{ data: ApiSuccess<T> | ApiError }>): Promise<T> {
   try {
     const { data } = await fn();

@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { GradientPrimaryButton } from "../../components/GradientPrimaryButton";
 import { colors, radii, shadow } from "../../constants/theme";
 import { auth } from "../../lib/firebase";
@@ -52,7 +52,8 @@ export function SignupScreen({ navigation }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await createUserWithEmailAndPassword(auth, values.email.trim(), values.password);
+      const cred = await createUserWithEmailAndPassword(auth, values.email.trim(), values.password);
+      await sendEmailVerification(cred.user);
     } catch {
       setError("Could not create account. The email may already be in use.");
     } finally {
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(15, 23, 42, 0.52)",
   },
   keyboard: {

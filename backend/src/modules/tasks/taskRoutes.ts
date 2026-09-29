@@ -48,12 +48,18 @@ async function requireDbUser(req: AuthRequest, res: import("express").Response) 
     sendError(res, "Unauthorized", "UNAUTHORIZED", 401);
     return null;
   }
-  const user = await getUserByFirebaseUid(uid);
-  if (!user) {
-    sendError(res, "User not found. Call sync-user first.", "USER_NOT_FOUND", 404);
+  try {
+    const user = await getUserByFirebaseUid(uid);
+    if (!user) {
+      sendError(res, "User not found. Call sync-user first.", "USER_NOT_FOUND", 404);
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error("Could not load database user", error);
+    sendError(res, "Database is temporarily unavailable", "DATABASE_UNAVAILABLE", 503);
     return null;
   }
-  return user;
 }
 
 taskRouter.use(requireFirebaseUser);

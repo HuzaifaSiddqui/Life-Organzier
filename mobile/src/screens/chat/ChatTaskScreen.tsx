@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -20,32 +21,47 @@ import { SendIcon } from "../../components/icons/SendIcon";
 import { colors, radii, shadow } from "../../constants/theme";
 import { useDeviceSpeechRecognition } from "../../hooks/useDeviceSpeechRecognition";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { createTaskWithReminder } from "../../services/createTaskWithReminder";
-import { reminderFeedbackText } from "../../services/reminders";
+import {
+  createTaskFromParsedNatural,
+  formatTaskCreatedToast,
+  initialPreviewFieldsFromParsed,
+  shouldAutoCreateFromClarityIndex,
+} from "../../services/parsedNaturalTask";
 import { parseTaskText } from "../../services/tasksApi";
 import type { ParsedTask, Priority } from "../../types/models";
-import { dueDateAndTimeForSave, validateDueDateNotPast, ymdFromLocalDate } from "../../utils/datetimeValidation";
-import { priorityPill } from "../../utils/priorityColors";
+import { ymdFromLocalDate } from "../../utils/datetimeValidation";
 
 type Props = NativeStackScreenProps<MainStackParamList, "ChatTask">;
 
 const intro = `Hi! Tell me what you need to do, and I'll help you organize it. Try something like "Review budget tomorrow at 2pm"`;
 
-function hasParserDate(parsed: ParsedTask): boolean {
-  return !!(parsed.dueDateYmd?.trim() || parsed.dueDateIso?.trim());
-}
-
 export function ChatTaskScreen({ navigation }: Props) {
   const [draft, setDraft] = useState("");
   const [lastSent, setLastSent] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedTask | null>(null);
+  const [previewEpoch, setPreviewEpoch] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [autoCreating, setAutoCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<Priority | null>(null);
   const [manualTime, setManualTime] = useState("");
   const [manualDateYmd, setManualDateYmd] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [allDay, setAllDay] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+
+  useEffect(() => {
+    if (!parsed) return;
+    const init = initialPreviewFieldsFromParsed(parsed);
+    setTitleDraft(init.titleDraft);
+    setManualDateYmd(init.manualDateYmd);
+    setManualTime(init.manualTime);
+    setAllDay(false);
+    setReminderEnabled(true);
+    setSelectedPriority(null);
+  }, [parsed, previewEpoch]);
 
   const { start, stop, listening, speechSupported } = useDeviceSpeechRecognition({
     onTranscriptChange: setDraft,
@@ -57,93 +73,83 @@ export function ChatTaskScreen({ navigation }: Props) {
     await start(draft);
   }, [draft, start]);
 
+  const cancelPreview = () => {
+    setParsed(null);
+    setError(null);
+  };
+
   const send = async () => {
     const msg = draft.trim();
-    if (!msg || busy) return;
+    if (!msg || busy || autoCreating) return;
     setSpeechError(null);
     setDraft("");
     setLastSent(msg);
     setParsed(null);
-    setSelectedPriority(null);
-    setManualTime("");
-    setManualDateYmd("");
     setError(null);
     setBusy(true);
     try {
       const result = await parseTaskText(msg);
-      setParsed(result);
-    } catch {
-      setError("I could not understand the task clearly. Try adding a clearer title and due date.");
+      if (shouldAutoCreateFromClarityIndex(result.confidence)) {
+        setAutoCreating(true);
+        try {
+          const { reminder } = await createTaskFromParsedNatural({
+            parsed: result,
+            title: result.title,
+            manualDateYmd: "",
+            manualTime: "",
+            allDay: false,
+            selectedPriority: null,
+            reminderEnabled: true,
+            source: "CHAT",
+            description: null,
+          });
+          setLastSent(null);
+          navigation.navigate("TaskList", {
+            toast: formatTaskCreatedToast(reminder),
+            toastTone: reminder.kind === "scheduled" ? "success" : "warning",
+          });
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Could not create task. Try again or review the details.");
+          setParsed(result);
+          setPreviewEpoch((x) => x + 1);
+        } finally {
+          setAutoCreating(false);
+        }
+      } else {
+        setParsed(result);
+        setPreviewEpoch((x) => x + 1);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not parse the task. Please try again.");
     } finally {
       setBusy(false);
     }
   };
 
-  const save = async () => {
+  const confirmPreview = async () => {
     if (!parsed) return;
-    if (!parsed.title.trim()) {
-      setError("Task title is missing. Please edit your message and send again.");
+    if (!titleDraft.trim()) {
+      setError("Please enter a task title.");
       return;
     }
-    const priorityOut = selectedPriority ?? (parsed.priority as Priority);
-    const rawTime = `${manualTime.trim() || (parsed.dueTime ?? "")}`.trim();
-    const dueTimeForSave = rawTime === "" ? null : rawTime;
-    if (!parsed.priorityDetected && !selectedPriority) {
-      setError("Please choose a priority.");
-      return;
-    }
-    if (!parsed.timeDetected && !dueTimeForSave) {
-      setError("Please provide a due time.");
-      return;
-    }
-    const parserHasDate = hasParserDate(parsed);
-    if (!parserHasDate && !parsed.timeDetected) {
-      if (!manualDateYmd.trim()) {
-        setError("Please pick a due date.");
-        return;
-      }
-    }
-    const pickerYmd = manualDateYmd.trim() || parsed.dueDateYmd?.trim() || "";
-    const { dueDateIso: dueDateOut, dueTime: dueTimeNormalized } = dueDateAndTimeForSave({
-      pickerYmd: pickerYmd || undefined,
-      parsedDueDateIso: pickerYmd ? null : parsed.dueDateIso,
-      rawDueTime: dueTimeForSave,
-    });
-    if (dueTimeNormalized && !dueDateOut) {
-      setError(
-        "Couldn't read that due time for reminders. Tap to pick a time, or phrase it like 3 PM or 15:30.",
-      );
-      return;
-    }
-    const dateErr = validateDueDateNotPast(dueDateOut, dueTimeNormalized);
-    if (dateErr) {
-      setError(dateErr);
-      return;
-    }
-
     setSaving(true);
     setError(null);
     try {
-      const { reminder } = await createTaskWithReminder(
-        {
-          title: parsed.title.trim(),
-          description: null,
-          dueDate: dueDateOut,
-          dueTime: dueTimeNormalized,
-          priority: priorityOut,
-          category: parsed.category,
-          source: "CHAT",
-          confidence: parsed.confidence,
-        },
-        {
-          reminderEnabled: true,
-          reminderHint: { dueDateIso: dueDateOut, dueTime: dueTimeNormalized },
-        },
-      );
+      const { reminder } = await createTaskFromParsedNatural({
+        parsed,
+        title: titleDraft,
+        manualDateYmd,
+        manualTime,
+        allDay,
+        selectedPriority,
+        reminderEnabled,
+        source: "CHAT",
+        description: null,
+      });
       setLastSent(null);
       setParsed(null);
       navigation.navigate("TaskList", {
-        toast: reminderFeedbackText(reminder),
+        toast: formatTaskCreatedToast(reminder),
         toastTone: reminder.kind === "scheduled" ? "success" : "warning",
       });
     } catch (e) {
@@ -152,12 +158,6 @@ export function ChatTaskScreen({ navigation }: Props) {
       setSaving(false);
     }
   };
-
-  const previewPill = parsed ? priorityPill(parsed.priority as Priority) : null;
-  const confidenceStyle =
-    parsed && parsed.needsConfirmation
-      ? { backgroundColor: "#FFFBEB", color: "#B45309" }
-      : { backgroundColor: "#F0FDF4", color: "#16A34A" };
 
   return (
     <KeyboardAvoidingView
@@ -191,10 +191,13 @@ export function ChatTaskScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        {busy ? (
+        {busy || autoCreating ? (
           <View style={styles.rowStart}>
             <View style={[styles.bubbleAssistant, styles.thinking]}>
               <ActivityIndicator color={colors.primary} />
+              {autoCreating ? (
+                <Text style={styles.thinkingCaption}>Creating your task…</Text>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -202,107 +205,107 @@ export function ChatTaskScreen({ navigation }: Props) {
         {parsed ? (
           <View style={styles.rowStart}>
             <View style={styles.bubbleAssistantWide}>
-              <Text style={styles.bubbleAssistantText}>Got it! Here’s what I understood:</Text>
+              <Text style={styles.bubbleAssistantText}>
+                Almost there — review your task, adjust anything missing, then create it.
+              </Text>
 
               <View style={styles.previewCard}>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Title</Text>
-                  <Text style={styles.previewValueStrong} numberOfLines={2}>
-                    {parsed.title}
+                <Text style={styles.fieldLabel}>Title</Text>
+                <TextInput
+                  style={styles.titleInput}
+                  value={titleDraft}
+                  onChangeText={setTitleDraft}
+                  placeholder="Task title"
+                  placeholderTextColor="#94a3b8"
+                />
+
+                <TaskFormDueDateRow
+                  valueYmd={manualDateYmd}
+                  onChangeYmd={setManualDateYmd}
+                  onClear={() => setManualDateYmd("")}
+                  label="Due date"
+                />
+
+                <Text style={styles.fieldLabel}>Due time</Text>
+                <InlineTimePickerField
+                  value={manualTime}
+                  onChange={(t) => {
+                    setManualTime(t);
+                    setAllDay(false);
+                  }}
+                  placeholder="Optional — tap to pick a time"
+                  style={styles.followUpInput}
+                  baseYmd={
+                    manualDateYmd.trim() ||
+                    parsed.dueDateYmd?.trim() ||
+                    (parsed.dueDateIso ? ymdFromLocalDate(new Date(parsed.dueDateIso)) : undefined)
+                  }
+                />
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.allDayBtn,
+                    allDay && styles.allDayBtnOn,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={() => {
+                    setAllDay((prev) => {
+                      const next = !prev;
+                      if (next) setManualTime("");
+                      return next;
+                    });
+                  }}
+                >
+                  <Text style={[styles.allDayText, allDay && styles.allDayTextOn]}>
+                    All day (no specific time)
                   </Text>
-                </View>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Due</Text>
-                  <Text style={styles.previewValue}>
-                    {parsed.dueSummary ??
-                      (parsed.dueDateText || parsed.dueTime
-                        ? [parsed.dueDateText, parsed.dueTime].filter(Boolean).join(" · ")
-                        : "Not detected")}
-                  </Text>
-                </View>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Priority</Text>
-                  {previewPill ? (
-                    <View style={[styles.miniPill, { backgroundColor: previewPill.backgroundColor }]}>
-                      <Text style={[styles.miniPillText, { color: previewPill.color }]}>
-                        {parsed.priority}
+                </Pressable>
+
+                <Text style={styles.fieldLabel}>Priority</Text>
+                <View style={styles.followUpRow}>
+                  {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map((p) => (
+                    <Pressable
+                      key={p}
+                      style={[
+                        styles.priorityChip,
+                        (selectedPriority ?? parsed.priority) === p && styles.priorityChipOn,
+                      ]}
+                      onPress={() => setSelectedPriority(p)}
+                    >
+                      <Text
+                        style={[
+                          styles.priorityChipText,
+                          (selectedPriority ?? parsed.priority) === p && styles.priorityChipTextOn,
+                        ]}
+                      >
+                        {p}
                       </Text>
-                    </View>
-                  ) : null}
+                    </Pressable>
+                  ))}
                 </View>
-                {!parsed.priorityDetected ? (
-                  <View style={styles.followUpWrap}>
-                    <Text style={styles.followUpLabel}>Please add priority</Text>
-                    <View style={styles.followUpRow}>
-                      {(["LOW", "MEDIUM", "HIGH", "URGENT"] as Priority[]).map((p) => (
-                        <Pressable
-                          key={p}
-                          style={[
-                            styles.priorityChip,
-                            (selectedPriority ?? parsed.priority) === p && styles.priorityChipOn,
-                          ]}
-                          onPress={() => setSelectedPriority(p)}
-                        >
-                          <Text
-                            style={[
-                              styles.priorityChipText,
-                              (selectedPriority ?? parsed.priority) === p && styles.priorityChipTextOn,
-                            ]}
-                          >
-                            {p}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
+
+                <View style={styles.reminderRow}>
+                  <View style={styles.reminderTextCol}>
+                    <Text style={styles.reminderLabel}>Remind me</Text>
+                    <Text style={styles.reminderHint}>Uses your due date and time when set</Text>
                   </View>
-                ) : null}
-                {!parsed.timeDetected ? (
-                  <View style={styles.followUpWrap}>
-                    <Text style={styles.followUpLabel}>
-                      {hasParserDate(parsed)
-                        ? "Please add due time"
-                        : "Please add due date and time"}
-                    </Text>
-                    {!hasParserDate(parsed) ? (
-                      <TaskFormDueDateRow
-                        valueYmd={manualDateYmd}
-                        onChangeYmd={setManualDateYmd}
-                        onClear={() => setManualDateYmd("")}
-                        label="Due date"
-                      />
-                    ) : null}
-                    <InlineTimePickerField
-                      value={manualTime}
-                      onChange={setManualTime}
-                      placeholder="Tap to pick a time"
-                      style={styles.followUpInput}
-                      baseYmd={
-                        manualDateYmd.trim() ||
-                        parsed.dueDateYmd?.trim() ||
-                        (parsed.dueDateIso
-                          ? ymdFromLocalDate(new Date(parsed.dueDateIso))
-                          : undefined)
-                      }
-                    />
-                  </View>
-                ) : null}
+                  <Switch
+                    value={reminderEnabled}
+                    onValueChange={setReminderEnabled}
+                    trackColor={{ false: colors.border, true: "#B7DCFF" }}
+                    thumbColor={reminderEnabled ? colors.primary : "#f4f4f5"}
+                  />
+                </View>
+
                 <View style={styles.previewRow}>
                   <Text style={styles.previewLabel}>Category</Text>
                   <Text style={styles.previewValue}>{parsed.category ?? "Not detected"}</Text>
-                </View>
-                <View style={styles.previewRow}>
-                  <Text style={styles.previewLabel}>Confidence</Text>
-                  <View style={[styles.miniPill, { backgroundColor: confidenceStyle.backgroundColor }]}>
-                    <Text style={[styles.miniPillText, { color: confidenceStyle.color }]}>
-                      {parsed.confidence}%
-                    </Text>
-                  </View>
                 </View>
               </View>
 
               <Pressable
                 style={({ pressed }) => [styles.saveWrap, pressed && styles.btnPressed]}
-                onPress={() => void save()}
+                onPress={() => void confirmPreview()}
                 disabled={saving}
               >
                 <LinearGradient
@@ -314,9 +317,17 @@ export function ChatTaskScreen({ navigation }: Props) {
                   {saving ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.saveText}>Save task</Text>
+                    <Text style={styles.saveText}>Create task</Text>
                   )}
                 </LinearGradient>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.cancelBtn, pressed && styles.btnPressed]}
+                onPress={cancelPreview}
+                disabled={saving}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
             </View>
           </View>
@@ -342,7 +353,7 @@ export function ChatTaskScreen({ navigation }: Props) {
             onChangeText={setDraft}
             onSubmitEditing={() => void send()}
             returnKeyType="send"
-            editable={!listening}
+            editable={!listening && !parsed && !busy && !autoCreating}
           />
           <Pressable
             style={({ pressed }) => [
@@ -351,7 +362,7 @@ export function ChatTaskScreen({ navigation }: Props) {
               pressed && styles.btnPressed,
             ]}
             onPress={() => (listening ? stop() : void onMicPress())}
-            disabled={busy || (!listening && !speechSupported)}
+            disabled={busy || autoCreating || (!listening && !speechSupported) || !!parsed}
             accessibilityLabel={listening ? "Stop listening" : "Voice input"}
           >
             {listening ? (
@@ -363,7 +374,7 @@ export function ChatTaskScreen({ navigation }: Props) {
           <Pressable
             style={({ pressed }) => [styles.sendBtn, pressed && styles.btnPressed]}
             onPress={() => void send()}
-            disabled={busy || listening || !draft.trim()}
+            disabled={busy || autoCreating || listening || !draft.trim() || !!parsed}
           >
             <LinearGradient
               colors={["#1D99FF", "#47AFFF"]}
@@ -426,6 +437,12 @@ const styles = StyleSheet.create({
     minWidth: 56,
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+  },
+  thinkingCaption: {
+    fontSize: 13,
+    color: colors.textMuted,
   },
   bubbleAssistantText: {
     color: colors.text,
@@ -449,16 +466,24 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 8,
+    gap: 10,
   },
-  followUpWrap: {
-    marginTop: 6,
-    gap: 8,
-  },
-  followUpLabel: {
+  fieldLabel: {
     fontSize: 12,
-    color: colors.textMuted,
     fontWeight: "600",
+    color: colors.textMuted,
+    marginBottom: -4,
+  },
+  titleInput: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: colors.text,
   },
   followUpRow: {
     flexDirection: "row",
@@ -494,6 +519,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: colors.text,
   },
+  allDayBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  allDayBtnOn: {
+    borderColor: colors.primary,
+    backgroundColor: "#EEF7FF",
+  },
+  allDayText: {
+    textAlign: "center",
+    fontWeight: "600",
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  allDayTextOn: {
+    color: colors.primaryDark,
+  },
   previewRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -511,21 +557,28 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: "right",
   },
-  previewValueStrong: {
-    fontSize: 14,
+  reminderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginTop: 4,
+  },
+  reminderTextCol: {
+    flex: 1,
+  },
+  reminderLabel: {
+    fontSize: 15,
     fontWeight: "600",
     color: colors.text,
-    flexShrink: 1,
-    textAlign: "right",
   },
-  miniPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-  },
-  miniPillText: {
-    fontSize: 11,
-    fontWeight: "700",
+  reminderHint: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   saveWrap: {
     borderRadius: radii.md,
@@ -540,6 +593,20 @@ const styles = StyleSheet.create({
   },
   saveText: {
     color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  cancelBtn: {
+    height: 48,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  cancelBtnText: {
+    color: colors.text,
     fontWeight: "600",
     fontSize: 16,
   },
