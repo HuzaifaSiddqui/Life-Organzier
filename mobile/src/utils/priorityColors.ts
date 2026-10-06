@@ -1,29 +1,45 @@
 import type { Priority } from "../types/models";
 
+/** FR-TM-003: red = urgent, orange = high, yellow = medium, blue = low. */
 export function priorityColor(priority: Priority): string {
   switch (priority) {
     case "URGENT":
-      return "#dc2626";
+      return "#DC2626";
     case "HIGH":
-      return "#ea580c";
+      return "#EA580C";
     case "MEDIUM":
-      return "#ca8a04";
+      return "#CA8A04";
     case "LOW":
     default:
-      return "#64748b";
+      return "#2563EB";
   }
 }
 
-/** Pill styles aligned with Life Organizer UI prototype */
 export function priorityPill(priority: Priority): { backgroundColor: string; color: string } {
   switch (priority) {
     case "URGENT":
-    case "HIGH":
       return { backgroundColor: "#FEF2F2", color: "#DC2626" };
+    case "HIGH":
+      return { backgroundColor: "#FFF7ED", color: "#EA580C" };
     case "MEDIUM":
-      return { backgroundColor: "#EEF7FF", color: "#1D99FF" };
+      return { backgroundColor: "#FEFCE8", color: "#A16207" };
     case "LOW":
     default:
-      return { backgroundColor: "#F0FDF4", color: "#16A34A" };
+      return { backgroundColor: "#EFF6FF", color: "#2563EB" };
   }
+}
+
+export const PRIORITY_RANK: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Work: "#2563EB",
+  Personal: "#9333EA",
+  Health: "#16A34A",
+  Academic: "#EA580C",
+  Finance: "#CA8A04",
+};
+
+export function categoryColor(name: string | null | undefined, custom: Array<{ name: string; color: string }> = []): string {
+  if (!name) return "#94A3B8";
+  return custom.find((c) => c.name === name)?.color ?? CATEGORY_COLORS[name] ?? "#64748B";
 }

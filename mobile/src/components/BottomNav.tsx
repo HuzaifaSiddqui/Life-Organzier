@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, radii, shadowNav } from "../constants/theme";
+import { colors, palette, radii, shadowNav } from "../constants/theme";
 
-type Tab = "Dashboard" | "TaskList" | "Profile";
+export type Tab = "Dashboard" | "Assistant" | "TaskList" | "Insights" | "Profile";
 
 type Props = {
   active: Tab;
@@ -9,9 +9,11 @@ type Props = {
 };
 
 const tabs: { key: Tab; icon: string; label: string }[] = [
-  { key: "Dashboard", icon: "🏠", label: "Dashboard" },
+  { key: "Dashboard", icon: "🏠", label: "Home" },
   { key: "TaskList", icon: "✓", label: "Tasks" },
-  { key: "Profile", icon: "👤", label: "Profile" },
+  { key: "Assistant", icon: "✨", label: "Assistant" },
+  { key: "Insights", icon: "📊", label: "Insights" },
+  { key: "Profile", icon: "👤", label: "Me" },
 ];
 
 export function BottomNav({ active, onChange }: Props) {
@@ -20,20 +22,19 @@ export function BottomNav({ active, onChange }: Props) {
       <View style={styles.pill}>
         {tabs.map((tab) => {
           const isActive = tab.key === active;
+          const isAssistant = tab.key === "Assistant";
           return (
             <Pressable
               key={tab.key}
               onPress={() => onChange(tab.key)}
-              style={({ pressed }) => [
-                styles.tab,
-                isActive && styles.tabActive,
-                pressed && styles.pressed,
-              ]}
+              style={({ pressed }) => [styles.tab, isActive && styles.tabActive, pressed && styles.pressed]}
               accessibilityRole="button"
               accessibilityLabel={`Go to ${tab.label}`}
             >
-              <Text style={styles.emoji}>{tab.icon}</Text>
-              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab.label}</Text>
+              <View style={[isAssistant && styles.assistantBubble, isAssistant && isActive && { backgroundColor: palette.aiDark }]}>
+                <Text style={[styles.emoji, isAssistant && { fontSize: 18 }]}>{tab.icon}</Text>
+              </View>
+              <Text style={[styles.tabText, isActive && styles.tabTextActive, isAssistant && { color: palette.ai }]}>{tab.label}</Text>
             </Pressable>
           );
         })}
@@ -43,9 +44,7 @@ export function BottomNav({ active, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  outer: {
-    paddingHorizontal: 16,
-  },
+  outer: { paddingHorizontal: 12 },
   pill: {
     flexDirection: "row",
     backgroundColor: colors.surface,
@@ -55,31 +54,19 @@ const styles = StyleSheet.create({
     padding: 6,
     ...shadowNav,
   },
-  tab: {
-    flex: 1,
+  tab: { flex: 1, alignItems: "center", gap: 2, paddingVertical: 6, borderRadius: radii.pill },
+  tabActive: { backgroundColor: "#EEF7FF" },
+  assistantBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: palette.ai,
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: radii.pill,
+    justifyContent: "center",
+    marginTop: -2,
   },
-  tabActive: {
-    backgroundColor: "#EEF7FF",
-  },
-  emoji: {
-    fontSize: 20,
-    lineHeight: 24,
-  },
-  tabText: {
-    color: colors.textMuted,
-    fontWeight: "600",
-    fontSize: 12,
-  },
-  tabTextActive: {
-    color: "#0065C3",
-  },
-  pressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
+  emoji: { fontSize: 18, lineHeight: 22 },
+  tabText: { color: colors.textMuted, fontWeight: "600", fontSize: 11 },
+  tabTextActive: { color: "#0065C3" },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
 });

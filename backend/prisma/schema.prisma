@@ -9,33 +9,348 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  firebaseUid String   @unique
-  email       String   @unique
-  displayName String?
-  photoUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  firebaseUid         String    @unique
+  email               String    @unique
+  displayName         String?
+  photoUrl            String?
+  phoneNumber         String?   @unique
+  deletionRequestedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  tasks Task[]
+  tasks                Task[]
+  routines             Routine[]
+  routineOccurrences   RoutineOccurrence[]
+  preferences          UserPreference[]
+  conversations        Conversation[]
+  conversationMessages ConversationMessage[]
+  settings             UserSettings?
+  moods                MoodLog[]
+  memories             MemoryItem[]
+  patterns             UserPattern[]
+  events               ActivityEvent[]
+  categories           Category[]
+  documents            Document[]
+  taskVersions         TaskVersion[]
+  reminderLogs         ReminderLog[]
 }
 
 model Task {
-  id          String     @id @default(uuid())
-  userId      String
-  title       String
-  description String?
-  dueDate     DateTime?
-  dueTime     String?
-  priority    Priority   @default(MEDIUM)
-  category    String?
-  status      TaskStatus @default(PENDING)
-  source      TaskSource @default(MANUAL)
-  confidence  Int?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String       @id @default(uuid())
+  userId          String
+  title           String
+  description     String?
+  dueDate         DateTime?
+  dueTime         String?
+  /// Absolute deadline instant computed from dueDate + dueTime in the user's timezone.
+  dueAt           DateTime?
+  priority        Priority     @default(MEDIUM)
+  category        String?
+  status          TaskStatus   @default(PENDING)
+  source          TaskSource   @default(MANUAL)
+  confidence      Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  parentTaskId    String?
+  progress        Int          @default(0)
+  durationMinutes Int?
+  /// 1 (trivial) .. 5 (very hard)
+  difficulty      Int?
+  taskType        TaskType     @default(FLEXIBLE)
+  archived        Boolean      @default(false)
+  deletedAt       DateTime?
+  completedAt     DateTime?
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  tags            Json?
+  locationContext String?
+  reminderMinutes Int?
+  reminderMode    ReminderMode @default(ADAPTIVE)
+  /// Sync metadata (FR-MS-002 / FR-MS-004)
+  version         Int          @default(1)
+  deviceId        String?
+  lastModifiedAt  DateTime     @default(now())
+  /// Client-generated id used to make offline creates idempotent.
+  clientId        String?
+  documentId      String?
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentTask Task?         @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks   Task[]        @relation("TaskSubtasks")
+  versions   TaskVersion[]
+
+  @@unique([userId, clientId])
+  @@index([userId, dueDate])
+  @@index([userId, status])
+  @@index([userId, updatedAt])
+  @@index([parentTaskId])
+}
+
+model TaskVersion {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  version   Int
+  snapshot  Json
+  deviceId  String?
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, version])
+  @@index([userId, createdAt])
+}
+
+model Routine {
+  id              String           @id @default(uuid())
+  userId          String
+  title           String
+  description     String?
+  frequency       RoutineFrequency
+  daysOfWeek      Json?
+  dayOfMonth      Int?
+  dueTime         String?
+  durationMinutes Int?
+  category        String?
+  priority        RoutinePriority  @default(NORMAL)
+  timeLocked      Boolean          @default(false)
+  locationContext String?
+  wellnessType    String?
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occurrences RoutineOccurrence[]
+
+  @@index([userId, active])
+}
+
+model RoutineOccurrence {
+  id             String                  @id @default(uuid())
+  routineId      String
+  userId         String
+  occurrenceDate DateTime
+  dueTime        String?
+  status         RoutineOccurrenceStatus @default(PENDING)
+  completedAt    DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([routineId, occurrenceDate])
+  @@index([userId, occurrenceDate])
+}
+
+/// Legacy free-text preferences. New preferences are stored as MemoryItem(kind = PREFERENCE).
+model UserPreference {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  embedding Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserSettings {
+  userId                String    @id
+  timezone              String    @default("UTC")
+  language              String    @default("en")
+  quietStart            String    @default("22:00")
+  quietEnd              String    @default("08:00")
+  workStart             String    @default("08:00")
+  workEnd               String    @default("22:00")
+  dailyCapacityMinutes  Int       @default(480)
+  /// ADAPTIVE | FREQUENT | MINIMAL | NONE
+  notificationFrequency String    @default("ADAPTIVE")
+  /// APP | SOUND | VIBRATION | SOUND_VIBRATION
+  notificationMethod    String    @default("SOUND_VIBRATION")
+  /// ALL | PHONE | DESKTOP | WHATSAPP
+  notificationDevices   String    @default("ALL")
+  criticalOverridesDnd  Boolean   @default(true)
+  dndUntil              DateTime?
+  currentContext        String?
+  contexts              Json      @default("[\"At Home\", \"At Work\", \"At University\"]")
+  /// FREE | PRO
+  tier                  String    @default("FREE")
+  onboardingCompleted   Boolean   @default(false)
+  tutorialsEnabled      Boolean   @default(true)
+  tutorialsSeen         Json      @default("[]")
+  dismissedInsights     Json      @default("[]")
+  ttsEnabled            Boolean   @default(false)
+  ttsRate               Float     @default(1.0)
+  lastWhatsappMessageAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  color     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+}
+
+model MoodLog {
+  id         String   @id @default(uuid())
+  userId     String
+  /// stressed | anxious | happy | tired | motivated | sad | overwhelmed | focused | calm
+  mood       String
+  /// 1 (very low) .. 10 (great)
+  score      Int?
+  /// CHAT | MANUAL | CHECKIN | VOICE | WHATSAPP
+  source     String
+  confidence Int?
+  note       String?
+  context    Json?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/// Long-term semantic memory: facts, preferences, coping strategies, goals, episodes, course knowledge.
+model MemoryItem {
+  id              String    @id @default(uuid())
+  userId          String
+  /// FACT | PREFERENCE | COPING | GOAL | EPISODE | COURSE | CORRECTION
+  kind            String
+  content         String
+  importance      Float     @default(0.5)
+  embedding       Float[]
+  embeddingModel  String?
+  source          String?
+  metadata        Json?
+  reinforcedCount Int       @default(1)
+  accessCount     Int       @default(0)
+  lastAccessedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+/// Behavioural memory: patterns learned from the user's own data.
+model UserPattern {
+  id          String   @id @default(uuid())
+  userId      String
+  key         String
+  description String
+  value       Json
+  confidence  Float
+  sampleSize  Int
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}
+
+model ActivityEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  entityId  String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, createdAt])
+}
+
+model ReminderLog {
+  id        String    @id @default(uuid())
+  userId    String
+  taskId    String?
+  routineOccurrenceId String?
+  fireAt    DateTime
+  level     String
+  category  String?
+  /// SCHEDULED | ACTED | IGNORED | SENT_WHATSAPP
+  status    String    @default("SCHEDULED")
+  action    String?
+  actedAt   DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, fireAt])
+  @@index([userId, status, fireAt])
+}
+
+model Document {
+  id            String   @id @default(uuid())
+  userId        String
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  /// SYLLABUS | SCHEDULE | NOTES | OTHER
+  docType       String
+  language      String   @default("eng")
+  text          String
+  ocrConfidence Int?
+  extracted     Json?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Conversation {
+  id              String   @id @default(uuid())
+  userId          String
+  title           String?
+  /// APP | VOICE | WHATSAPP
+  channel         String   @default("APP")
+  summary         String?
+  summarizedCount Int      @default(0)
+  state           Json?
+  lastMessageAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ConversationMessage {
+  id             String           @id @default(uuid())
+  conversationId String
+  userId         String
+  role           ConversationRole
+  content        String
+  metadata       Json?
+  embedding      Json?
+  createdAt      DateTime         @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([userId, role, createdAt])
 }
 
 enum Priority {
@@ -49,6 +364,7 @@ enum TaskStatus {
   PENDING
   IN_PROGRESS
   COMPLETED
+  SKIPPED
   DELETED
 }
 
@@ -56,4 +372,49 @@ enum TaskSource {
   MANUAL
   CHAT
   VOICE
+  DOCUMENT
+  WHATSAPP
+  ASSISTANT
+}
+
+enum TaskType {
+  DEADLINE
+  FLEXIBLE
+  DURATION
+  FIXED
+  ROUTINE
+}
+
+enum ReminderMode {
+  NONE
+  SINGLE
+  MULTIPLE
+  ESCALATING
+  ADAPTIVE
+}
+
+enum ConversationRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum RoutineFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum RoutinePriority {
+  MANDATORY
+  IMPORTANT
+  NORMAL
+}
+
+enum RoutineOccurrenceStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+  MISSED
 }

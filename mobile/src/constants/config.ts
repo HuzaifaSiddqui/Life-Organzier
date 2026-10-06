@@ -17,7 +17,7 @@ export function getEnvFallbackApiBaseUrls(): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-/** Comma-separated host IPs only; port is taken from the primary URL (default 5050). */
+/** Comma-separated host IPs only; port is taken from the primary URL (default 5000). */
 export function getEnvExtraHostIps(): string[] {
   const raw = trim(process.env.EXPO_PUBLIC_API_HOST_IPS);
   if (!raw) return [];
@@ -30,7 +30,7 @@ export function inferPortFromApiUrl(apiUrl: string): number {
     if (u.port) return parseInt(u.port, 10);
     return u.protocol === "https:" ? 443 : 80;
   } catch {
-    return 5050;
+    return 5000;
   }
 }
 
