@@ -12,6 +12,8 @@ import { auth } from "../lib/firebase";
 import { api } from "../services/api";
 import { resolveAndApplyApiBase } from "../services/apiResolver";
 import type { User } from "../types/models";
+import { syncPendingTasks } from "../services/tasksApi";
+import * as Network from "expo-network";
 
 type AuthContextValue = {
   firebaseUser: FirebaseUser | null;
@@ -52,6 +54,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected && auth.currentUser) {
+        void syncPendingTasks();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   const refreshProfile = useCallback(async () => {
     if (!auth.currentUser) {
       setDbUser(null);
@@ -65,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await resolveAndApplyApiBase();
       const user = await syncAndLoadProfile();
+      await syncPendingTasks();
       setDbUser(user);
     } catch {
       setDbUser(null);
@@ -95,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await resolveAndApplyApiBase();
         const u = await syncAndLoadProfile();
+        await syncPendingTasks();
         setDbUser(u);
       } catch {
         setDbUser(null);

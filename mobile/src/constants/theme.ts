@@ -64,3 +64,22 @@ export const shadowTile = {
   shadowOffset: { width: 0, height: 2 },
   elevation: 1,
 } as const;
+
+/** Assistant accent + semantic tones used across the AI surfaces. */
+export const palette = {
+  ai: "#6D5BD0",
+  aiSoft: "#F1EEFD",
+  aiDark: "#4B3BA8",
+  warning: "#D97706",
+  warningSoft: "#FFF7E6",
+  danger: "#DC2626",
+  dangerSoft: "#FEF2F2",
+  success: "#16A34A",
+  successSoft: "#F0FDF4",
+  info: "#0284C7",
+  infoSoft: "#EFF8FF",
+  muted: "#94A3B8",
+  ink: "#0F172A",
+} as const;
+
+export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 } as const;

@@ -25,6 +25,7 @@ import {
 import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
+import { navigationRef } from "./navigationRef";
 
 /** Explicit `fonts` avoids incomplete theme objects that break navigation internals on some setups. */
 const theme: Theme = {
@@ -146,7 +147,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer theme={theme} ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!firebaseUser ? (
           <Stack.Screen name="Auth" component={AuthStack} />
