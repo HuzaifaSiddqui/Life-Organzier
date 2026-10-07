@@ -62,33 +62,24 @@ npm run dev
 cd backend
 npx prisma studio
 
+## Local development setup
 
-## AI Setup
+One-time:
 
-The project supports multiple AI providers.
+```bash
+ollama pull qwen2.5:7b          # assistant model (low-spec machine: set OLLAMA_MODEL=qwen2.5:1.5b in backend/.env)
+ollama pull nomic-embed-text    # memory search embeddings
+cd backend && npm install && npx prisma migrate deploy && npx prisma generate
+cd ../mobile && npm install
+```
 
-Default development:
+Every time:
 
-Ollama + Qwen 2.5
+```bash
+cd backend && npm run dev                     # API on http://localhost:5050 — /health shows AI model status
+adb reverse tcp:5050 tcp:5050                 # phone on USB reaches the API at 127.0.0.1:5050 (redo after replugging)
+cd mobile && npx expo start --dev-client      # or `npx expo run:android` after native changes
+```
 
-Install:
+Checks (also run by GitHub Actions on every push): `cd backend && npm run typecheck && npm test`, `cd mobile && npx tsc --noEmit`.
 
-1. Install Ollama
-2. Run:
-
-ollama pull qwen2.5:7b
-
-3. Start:
-
-ollama serve
-
-Configure:
-
-AI_PROVIDER=ollama
-
-
-For systems without Ollama:
-
-AI_PROVIDER=rules
-
-will use fallback parser.

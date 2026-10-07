@@ -4,12 +4,12 @@
 
 ```bash
 # one-time
-ollama pull qwen2.5:1.5b
+ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 cd backend && npx prisma migrate deploy && npx prisma generate
 
 # every time
-cd backend && npm run dev          # API on :5000
+cd backend && npm run dev          # API on :5050
 cd mobile  && npx expo run:android # rebuild needed: expo-document-picker + expo-speech were added
 
 # checks
@@ -20,7 +20,7 @@ cd backend && npm run e2e          # multi-turn conversation against the real lo
 
 ## Design principle
 
-A 1.5B local model is good at language but bad at arithmetic and consistency. So the LLM does
+A small local model (Qwen 2.5 7B) is good at language but bad at arithmetic and consistency. So the LLM does
 **narrow, schema-constrained jobs** (intent when rules are unsure, titles, empathetic replies,
 memory extraction, sub-task names, topics), while **dates, clarity scoring, scheduling,
 reminders, patterns and safety are deterministic code**. If Ollama is down, a circuit breaker
