@@ -1,21 +1,44 @@
-import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskType, type User, type UserSettings } from "@prisma/client";
+import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
 import { prisma } from "../../config/db.js";
-import { dueDateFromYmd } from "../../lib/time.js";
+import { dueDateFromYmd, localYmd } from "../../lib/time.js";
 import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
-import { cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmTopics, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
+import { cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmActionItems, llmTopics, maskPersonalNumbers, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
+import { gridSchedulesFromPdf } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
 export const DOC_TYPES = ["SYLLABUS", "SCHEDULE", "NOTES", "OTHER"] as const;
+
+/**
+ * Re-uploading the same file (or a newer version of it) must not create every task and routine
+ * again: an active one with the same title and the same date/time or days/time counts as existing.
+ */
+export async function existingTaskId(userId: string, title: string, dueDate: Date, dueTime: string | null): Promise<string | null> {
+  const t = await prisma.task.findFirst({
+    where: { userId, title: { equals: title, mode: "insensitive" }, dueDate, dueTime, status: { not: TaskStatus.DELETED } },
+    select: { id: true },
+  });
+  return t?.id ?? null;
+}
+
+export async function existingRoutineId(userId: string, title: string, daysOfWeek: number[], dueTime: string | null): Promise<string | null> {
+  const candidates = await prisma.routine.findMany({
+    where: { userId, active: true, title: { equals: title, mode: "insensitive" }, dueTime },
+    select: { id: true, daysOfWeek: true },
+  });
+  const key = [...daysOfWeek].sort().join(",");
+  const hit = candidates.find((r) => (Array.isArray(r.daysOfWeek) ? [...(r.daysOfWeek as number[])].sort().join(",") : "") === key);
+  return hit?.id ?? null;
+}
 
 /** Auto-creation thresholds from FR-DP-002 §4 and FR-DP-003 §4. */
 const DEADLINE_AUTO = 95;
 const SCHEDULE_AUTO = 90;
 
 type Extracted = {
-  deadlines: Array<ExtractedDeadline & { created?: boolean; taskId?: string }>;
-  schedules: Array<ExtractedSchedule & { created?: boolean; routineId?: string }>;
+  deadlines: Array<ExtractedDeadline & { created?: boolean; existing?: boolean; taskId?: string }>;
+  schedules: Array<ExtractedSchedule & { created?: boolean; existing?: boolean; routineId?: string }>;
   course: CourseInfo;
   ocrConfidence: number;
   warning: string | null;
@@ -32,12 +55,32 @@ export async function processDocument(
   const raw = input.text !== undefined
     ? { text: input.text, confidence: 100, method: "text" as const, warning: null, needsLanguage: false }
     : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language);
-  const text = cleanDocumentText(raw.text);
+  const text = maskPersonalNumbers(cleanDocumentText(raw.text));
   const now = new Date();
-  const deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
-  const schedules = input.docType === "NOTES" ? [] : extractSchedules(text, now, tz);
-  const course = extractCourseInfo(text);
-  if (input.docType === "SYLLABUS" && !course.topics.length && text.length > 200) course.topics = await llmTopics(text);
+  let deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
+  let schedules = input.docType === "NOTES" ? [] : extractSchedules(text, now, tz);
+  // Grid timetables lose their layout as plain text; read them by position instead.
+  let grid = false;
+  if (input.docType !== "NOTES" && input.buffer && /pdf/i.test(input.mimeType)) {
+    const fromGrid = await gridSchedulesFromPdf(input.buffer).catch((error) => {
+      console.warn("Grid timetable parse failed", error instanceof Error ? error.message : error);
+      return [];
+    });
+    if (fromGrid.length >= 2) {
+      schedules = fromGrid;
+      grid = true;
+    }
+  }
+  // Tickets, bills, invitations… don't match the syllabus rules: let the model find dated action items.
+  let aiNote: string | null = null;
+  if (input.docType !== "NOTES" && !deadlines.length && !schedules.length && !raw.needsLanguage) {
+    deadlines = await llmActionItems(text, localYmd(now, tz), tz);
+    const todayYmd = localYmd(now, tz);
+    if (deadlines.length && deadlines.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
+  }
+  // A grid lists many courses — picking one as "the course" would store a wrong memory.
+  const course = extractCourseInfo(grid ? "" : text);
+  if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200) course.topics = await llmTopics(text);
   if (course.code) {
     for (const s of schedules) {
       if (/^(?:lectures?|class(?:es)?|labs?|tutorials?|sessions?|sections?)$/i.test(s.title)) s.title = `${course.code} ${s.title}`;
@@ -57,12 +100,19 @@ export async function processDocument(
     },
   });
 
-  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning, needsLanguage: raw.needsLanguage, method: raw.method };
+  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? aiNote, needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method };
   const createdTasks = [];
   const createdRoutines = [];
   if (input.autoCreate && !raw.needsLanguage && raw.confidence >= 70) {
     for (const d of extracted.deadlines) {
       if (d.confidence < DEADLINE_AUTO || !d.date) continue;
+      const already = await existingTaskId(user.id, d.title, dueDateFromYmd(d.date, tz), d.time);
+      if (already) {
+        d.created = true;
+        d.existing = true;
+        d.taskId = already;
+        continue;
+      }
       const task = await createTask(
         { userId: user.id, tz },
         {
@@ -86,8 +136,16 @@ export async function processDocument(
     const autoSchedules = extracted.schedules.length <= 5;
     for (const s of extracted.schedules) {
       if (!autoSchedules || s.confidence < SCHEDULE_AUTO || !s.daysOfWeek.length) continue;
+      const title = s.room ? `${s.title} (Room ${s.room})` : s.title;
+      const already = await existingRoutineId(user.id, title, s.daysOfWeek, s.time);
+      if (already) {
+        s.created = true;
+        s.existing = true;
+        s.routineId = already;
+        continue;
+      }
       const routine = await createRoutine(user.id, tz, {
-        title: s.room ? `${s.title} (Room ${s.room})` : s.title,
+        title,
         description: s.instructor ? `Instructor: ${s.instructor}` : null,
         frequency: s.frequency ?? RoutineFrequency.WEEKLY,
         daysOfWeek: s.daysOfWeek,

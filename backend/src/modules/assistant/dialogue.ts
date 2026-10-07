@@ -431,7 +431,7 @@ function reask(turn: Turn): Out | null {
 
 export function moodChips(): QuickAction[] {
   return (["happy", "motivated", "calm", "tired", "stressed", "anxious", "sad", "overwhelmed"] as Mood[]).map((m) => ({
-    label: `${MOOD_EMOJI[m]} ${m}`,
+    label: m.charAt(0).toUpperCase() + m.slice(1),
     payload: { type: "log_mood", mood: m },
   }));
 }
@@ -609,7 +609,7 @@ export async function proceedWithDraft(
           const r = conflicts[0].routine;
           turn.state.pending = { kind: "conflict", draft, source, routine: r.title };
           return {
-            content: `⭐ Your mandatory routine "${r.title}" (${r.dueTime}) conflicts with "${draft.title}". Which should take priority?`,
+            content: `Your mandatory routine "${r.title}" (${r.dueTime}) conflicts with "${draft.title}". Which should take priority?`,
             actions: [
               { label: `Keep ${truncate(r.title, 18)}, move task`, text: "keep the routine", style: "primary" },
               { label: "Do the task anyway", text: "do the task anyway" },
@@ -653,7 +653,7 @@ export async function proceedWithDraft(
   turn.state.pending = null;
   focusOn(turn, task.id);
 
-  const lines = [`✓ Added: ${draftSummary(draft, turn.todayYmd)}`];
+  const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
   if (scheduleNote) lines.push(scheduleNote);
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
@@ -919,8 +919,8 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
         ? `Monthly (day ${draft.dayOfMonth})`
         : `Every ${listJoin((draft.daysOfWeek ?? []).map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]))}`;
   const details = [draft.dueTime ?? "flexible time", draft.durationMinutes ? formatDuration(draft.durationMinutes) : null].filter(Boolean).join(", ");
-  const lines = [`✓ Created: ${freq} ${draft.title} (${details})`];
-  if (draft.priority === RoutinePriority.MANDATORY) lines.push("⭐ Mandatory routine — I'll schedule around it and ask before skipping.");
+  const lines = [`Created: ${freq} ${draft.title} (${details})`];
+  if (draft.priority === RoutinePriority.MANDATORY) lines.push("Mandatory routine — I'll schedule around it and ask before skipping.");
   if (draft.timeLocked) lines.push("It's time-locked: if missed, I won't move it — the next one will be ready.");
   if (learnedNote) lines.push(learnedNote);
   const actions: QuickAction[] = [{ label: "View routines", payload: { type: "navigate", screen: "Routines" } }];
@@ -936,7 +936,7 @@ export function askMoodConfirm(turn: Turn, mood: Mood, confidence: number, text:
     mood === "anxious" || mood === "stressed"
       ? `Sounds like you're ${mood}. Is that right?`
       : mood === "happy" || mood === "motivated" || mood === "focused" || mood === "calm"
-        ? `Love that — you're feeling ${mood} ${MOOD_EMOJI[mood]}. Right?`
+        ? `Love that — you're feeling ${mood}. Right?`
         : `I sense you're ${mood}. Correct?`;
   const others = (["stressed", "tired", "anxious", "happy", "overwhelmed", "sad"] as Mood[]).filter((m) => m !== mood).slice(0, 3);
   return {

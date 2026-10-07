@@ -29,7 +29,8 @@ export type PlannedReminder = {
   prominent: boolean;
 };
 
-type Draft = { at: Date; level: ReminderLevel; body: string };
+/** `onTime`: the reminder at the time the user set — it fires even in quiet hours, like an alarm. */
+type Draft = { at: Date; level: ReminderLevel; body: string; onTime?: boolean };
 
 const MAX_REMINDERS = 60;
 
@@ -99,7 +100,11 @@ export function sequenceForTask(
   if (!task.dueAt || task.dueAt <= now) return startDraft;
   // Scheduled work with a date-only deadline: the start reminder is enough (no noisy escalation).
   if (startDraft.length && !task.dueTime) return startDraft;
-  return [...startDraft, ...deadlineSequence(task, settings, tz, peakStartHour, adapt, now)];
+  const sequence = deadlineSequence(task, settings, tz, peakStartHour, adapt, now);
+  // Earlier nudges alone left short-notice tasks ("remind me in 20 min") with nothing at all.
+  const onTime: Draft[] =
+    task.dueTime && sequence.length ? [{ at: task.dueAt, level: "critical", body: task.taskType === "FIXED" ? "Starting now" : "Due now", onTime: true }] : [];
+  return [...startDraft, ...sequence, ...onTime];
 }
 
 function deadlineSequence(task: Task, settings: UserSettings, tz: string, peakStartHour: number, adapt: Adaptivity | undefined, now: Date): Draft[] {
@@ -193,9 +198,9 @@ export async function planReminders(userId: string, settings: UserSettings, now 
     const prominent = Boolean(adapt && adapt.samples >= 3 && adapt.ignoreRate >= 0.5);
     const seen = new Set<number>();
     for (const draft of sequenceForTask(task, settings, tz, peakStartHour, adapt, now)) {
-      let at = respectQuietHours(draft.at, task.dueAt, settings, tz);
+      let at = draft.onTime ? draft.at : respectQuietHours(draft.at, task.dueAt, settings, tz);
       if (dndUntil && at < dndUntil && !(draft.level === "critical" && settings.criticalOverridesDnd)) at = dndUntil;
-      if (at <= now || at > horizon || (task.dueAt && at >= task.dueAt)) continue;
+      if (at <= now || at > horizon || (task.dueAt && (draft.onTime ? at > task.dueAt : at >= task.dueAt))) continue;
       const minuteKey = Math.floor(at.getTime() / 60000);
       if (seen.has(minuteKey)) continue;
       seen.add(minuteKey);
@@ -205,7 +210,7 @@ export async function planReminders(userId: string, settings: UserSettings, now 
         routineOccurrenceId: null,
         fireAt: at.toISOString(),
         level: draft.level,
-        title: draft.level === "critical" || prominent ? `⚠️ ${task.title}` : task.title,
+        title: draft.level === "critical" || prominent ? `${task.title}` : task.title,
         body: draft.body,
         prominent: prominent || draft.level === "critical",
       });
@@ -227,7 +232,7 @@ export async function planReminders(userId: string, settings: UserSettings, now 
       routineOccurrenceId: o.id,
       fireAt: at.toISOString(),
       level: o.routine.priority === RoutinePriority.MANDATORY ? "critical" : "normal",
-      title: `${o.routine.priority === RoutinePriority.MANDATORY ? "⭐ " : ""}${o.routine.title}`,
+      title: `${o.routine.priority === RoutinePriority.MANDATORY ? "" : ""}${o.routine.title}`,
       body: `Routine at ${formatClock(p.h, p.mi)}${o.routine.durationMinutes ? ` · ${formatDuration(o.routine.durationMinutes)}` : ""}`,
       prominent: o.routine.priority === RoutinePriority.MANDATORY,
     });

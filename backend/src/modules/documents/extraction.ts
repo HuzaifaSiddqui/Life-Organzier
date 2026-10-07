@@ -1,6 +1,7 @@
 import { RoutineFrequency } from "@prisma/client";
 import { z } from "zod";
 import { getAi } from "../../ai/llm.js";
+import { formatClock } from "../../lib/time.js";
 import { cleanTitle, extractEntities } from "../assistant/entities.js";
 
 export type ExtractedDeadline = {
@@ -52,6 +53,17 @@ export function cleanDocumentText(raw: string): string {
     out.push(l);
   }
   return out.join("\n").trim();
+}
+
+/**
+ * Documents like tickets carry national ID and phone numbers that extraction never needs; mask them
+ * before the text is stored or sent to the model. Dates and times are left untouched.
+ */
+export function maskPersonalNumbers(text: string): string {
+  return text
+    .replace(/(?<!\d)\d{5}-?\d{7}-?\d(?!\d)/g, "[CNIC]")
+    .replace(/(?:\+92|0092|(?<!\d)0)[\s-]?3\d{2}[\s-]?\d{7}(?!\d)/g, "[PHONE]")
+    .replace(/\+\d{1,3}[\s-]?\d{3,4}[\s-]?\d{3,4}[\s-]?\d{3,4}(?!\d)/g, "[PHONE]");
 }
 
 const ACTIVITY_RE = /\b(assignment|homework|quiz|exam|midterm|mid-term|final(?:\s+exam)?|project|presentation|report|lab(?:\s+report)?|submission|paper|essay|proposal|thesis|test|viva|deliverable)\b/i;
@@ -245,4 +257,91 @@ export async function llmTopics(text: string): Promise<string[]> {
     { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs: 45000 },
   );
   return result?.topics ?? [];
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+const actionSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        kind: z.string(),
+        title: z.string().min(2).max(100),
+        date: z.string(),
+        time: z.string(),
+        evidence: z.string(),
+      }),
+    )
+    .max(10),
+});
+
+/** True when the document itself contains this date (day-first, month-first, ISO or month name). */
+export function dateGrounded(ymd: string, text: string): boolean {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const t = text.toLowerCase();
+  const day = String(d);
+  const dd = day.padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  const numeric = [`${dd}-${mm}`, `${dd}/${mm}`, `${dd}.${mm}`, `${mm}-${dd}`, `${mm}/${dd}`, `${y}-${mm}-${dd}`, `${day}-${m}-`, `${day}/${m}/`, `${m}/${day}/`];
+  if (numeric.some((s) => t.includes(s))) return true;
+  const mon = MONTHS[m - 1];
+  return new RegExp(`\\b0?${day}(?:st|nd|rd|th)?\\s+${mon}|\\b${mon}[a-z]*\\.?\\s+0?${day}\\b`).test(t);
+}
+
+/**
+ * Fallback for documents the rules don't understand (tickets, invitations, bills, appointment
+ * letters, notices…): the LLM proposes dated action items, and only items whose date really
+ * appears in the document survive. Confidence stays below the auto-create threshold, so the user
+ * always confirms them.
+ */
+export async function llmActionItems(text: string, todayYmd: string, tz: string): Promise<ExtractedDeadline[]> {
+  if (text.replace(/\s+/g, "").length < 30) return [];
+  const result = await getAi().json(
+    [
+      {
+        role: "system",
+        content: `You read documents (tickets, receipts, invitations, bills, notices, letters, schedules) and find things the reader must do or attend: travel departures, appointments, events, payments due, submissions, exams.
+Return JSON {"items": [...]}; each item: kind (travel|appointment|event|payment|deadline|exam|task), title (short and specific, e.g. "Flight Karachi → Islamabad (PK-301)", "Dentist appointment"), date as YYYY-MM-DD, time as 24h HH:MM or "", evidence (the exact words from the document that contain the date).
+Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-month-year unless clearly not. Only include items with a date written in the document. Ignore prices, IDs, phone numbers and fine print. If there is nothing to do, return {"items": []}.`,
+      },
+      { role: "user", content: text.slice(0, 3000) },
+    ],
+    actionSchema,
+    {
+      json: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            maxItems: 10,
+            items: {
+              type: "object",
+              properties: { kind: { type: "string" }, title: { type: "string" }, date: { type: "string" }, time: { type: "string" }, evidence: { type: "string" } },
+              required: ["kind", "title", "date", "time", "evidence"],
+            },
+          },
+        },
+        required: ["items"],
+      },
+      maxTokens: 500,
+      timeoutMs: 60000,
+    },
+  );
+  const out: ExtractedDeadline[] = [];
+  for (const item of result?.items ?? []) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date) || Number.isNaN(Date.parse(item.date))) continue;
+    if (!dateGrounded(item.date, text)) continue; // hallucinated or misread date
+    const clock = item.time.match(/^(\d{1,2}):(\d{2})$/);
+    out.push({
+      index: out.length,
+      title: cleanTitle(item.title) || item.title,
+      activity: item.kind.toLowerCase(),
+      date: item.date,
+      time: clock && Number(clock[1]) < 24 ? formatClock(Number(clock[1]), Number(clock[2])) : null,
+      assumedTime: false,
+      confidence: 85,
+      source: item.evidence.slice(0, 200) || "AI reading",
+    });
+  }
+  return out;
 }

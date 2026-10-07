@@ -39,7 +39,7 @@ export async function processDocumentForWhatsapp(user: User, settings: UserSetti
   const created = result.createdTasks.length + result.createdRoutines.length;
   const pending = result.extracted.deadlines.filter((d) => !d.created).length + result.extracted.schedules.filter((s) => !s.created).length;
   if (result.extracted.warning && !created) return result.extracted.warning;
-  return `✓ Read your document. Created ${created} item${created === 1 ? "" : "s"}${pending ? `; ${pending} more need your review in the app (Documents).` : "."}`;
+  return `Read your document. Created ${created} item${created === 1 ? "" : "s"}${pending ? `; ${pending} more need your review in the app (Documents).` : "."}`;
 }
 
 let pausedUntil = 0;

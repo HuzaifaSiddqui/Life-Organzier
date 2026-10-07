@@ -191,7 +191,7 @@ export async function updateOccurrence(
   const occurrence = await prisma.routineOccurrence.findFirst({ where: { id: occurrenceId, userId }, include: { routine: true } });
   if (!occurrence) return null;
   if (status === RoutineOccurrenceStatus.SKIPPED && occurrence.routine.priority === RoutinePriority.MANDATORY && !opts.confirmMandatory) {
-    throw new HttpError(409, "MANDATORY_CONFIRMATION_REQUIRED", `⭐ "${occurrence.routine.title}" is mandatory. Are you sure you want to skip it?`);
+    throw new HttpError(409, "MANDATORY_CONFIRMATION_REQUIRED", `"${occurrence.routine.title}" is mandatory. Are you sure you want to skip it?`);
   }
   const updated = await prisma.routineOccurrence.update({
     where: { id: occurrenceId },

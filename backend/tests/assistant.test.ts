@@ -5,7 +5,7 @@ import { AiService, setAi } from "../src/ai/llm.js";
 import { cleanTitle, extractEntities, isVagueTitle } from "../src/modules/assistant/entities.js";
 import { clarityOf, draftFromEntities, fillDraft } from "../src/modules/assistant/draft.js";
 import { understand } from "../src/modules/assistant/nlu.js";
-import { extractCourseInfo, extractDeadlines, extractSchedules, cleanDocumentText } from "../src/modules/documents/extraction.js";
+import { extractCourseInfo, extractDeadlines, extractSchedules, cleanDocumentText, dateGrounded, maskPersonalNumbers } from "../src/modules/documents/extraction.js";
 import { ruleBasedMemories } from "../src/modules/memory/memoryService.js";
 import { detectCrisis, detectMood, recommendForMood } from "../src/modules/mood/moodService.js";
 import { findPeakWindows } from "../src/modules/patterns/patternService.js";
@@ -326,6 +326,15 @@ test("minimal frequency produces a single critical reminder", () => {
   assert.equal(drafts[0].level, "critical");
 });
 
+test("a timed task always gets a reminder at its time, even at short notice", () => {
+  // Due 20 minutes from NOW: every earlier nudge is already in the past.
+  const dueAt = new Date(NOW.getTime() + 20 * 60000);
+  const drafts = sequenceForTask(task({ dueAt, dueTime: "10:20 AM" }), settings(), TZ, 9, undefined, NOW);
+  const onTime = drafts.filter((d) => d.at.getTime() === dueAt.getTime());
+  assert.equal(onTime.length, 1);
+  assert.equal(onTime[0].level, "critical");
+});
+
 /* ------------------------------------------------------------ documents */
 
 const SYLLABUS = `CS301 Data Structures
@@ -375,4 +384,23 @@ test("timetable rows produce one schedule per cell", () => {
   const schedules = extractSchedules("Monday | 9:00-10:30 AM Calculus | 11:00 AM-12:30 PM Physics", NOW, TZ);
   assert.equal(schedules.length, 2);
   assert.deepEqual(schedules.map((s) => s.daysOfWeek[0]), [1, 1]);
+});
+
+test("AI document items: a date only survives if the document actually contains it", () => {
+  assert.equal(dateGrounded("2026-09-07", "Departure Date: 07-09-2026 00:30"), true);
+  assert.equal(dateGrounded("2026-10-18", "Due Date: 18 Oct 2026."), true);
+  assert.equal(dateGrounded("2026-10-15", "RSVP by 15 October"), true);
+  assert.equal(dateGrounded("2026-10-24", "Saturday 24th October 2026"), true);
+  assert.equal(dateGrounded("2026-10-07", "Total Rs 620. 06/10/2026"), false);
+  assert.equal(dateGrounded("2026-11-05", "Train ticket, seat 15B"), false);
+});
+
+test("documents: national ID and phone numbers are masked, dates and times are not", () => {
+  const ticket = "Departure Date: 07-09-2026 00:30\nPhone/099: 03104630682\nID No. (CNIC)3840530587473\nAlt: 38405-3058747-3, +92 310 4630682\nFare: Rs.1200.00";
+  const out = maskPersonalNumbers(ticket);
+  assert.ok(!/3840530587473|38405-3058747-3|03104630682|310 4630682/.test(out), out);
+  assert.match(out, /07-09-2026 00:30/);
+  assert.match(out, /Rs\.1200\.00/);
+  assert.equal((out.match(/\[CNIC\]/g) ?? []).length, 2);
+  assert.equal((out.match(/\[PHONE\]/g) ?? []).length, 2);
 });

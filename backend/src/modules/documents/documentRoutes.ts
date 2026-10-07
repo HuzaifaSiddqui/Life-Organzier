@@ -9,7 +9,7 @@ import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
-import { DOC_TYPES, processDocument } from "./documentProcessing.js";
+import { DOC_TYPES, existingRoutineId, existingTaskId, processDocument } from "./documentProcessing.js";
 import { SUPPORTED_MIME } from "./textExtraction.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -46,9 +46,16 @@ documentRouter.post(
       z.object({ docType: z.enum(DOC_TYPES).default("OTHER"), language: z.enum(LANGS).default("eng"), autoCreate: z.enum(["true", "false"]).default("true") }),
       req.body,
     );
+    // React Native percent-encodes non-ASCII file names in multipart uploads ("%E2%80%94" for "—").
+    let fileName = file.originalname;
+    try {
+      fileName = decodeURIComponent(fileName);
+    } catch {
+      // not encoded
+    }
     const result = await processDocument(req.user, req.settings, {
       buffer: file.buffer,
-      fileName: file.originalname,
+      fileName,
       mimeType: mime,
       docType: body.docType,
       language: body.language,
@@ -136,8 +143,13 @@ documentRouter.post(
     if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
     const tz = req.settings.timezone;
     const tasks = [];
+    let skipped = 0;
     for (const d of body.deadlines) {
       const time = d.time && parseClock(d.time) ? d.time : "11:59 PM";
+      if (await existingTaskId(req.user.id, d.title, dueDateFromYmd(d.date, tz), time)) {
+        skipped += 1;
+        continue;
+      }
       tasks.push(
         serializeTask(
           await createTask(
@@ -149,6 +161,10 @@ documentRouter.post(
     }
     const routines = [];
     for (const s of body.schedules) {
+      if (await existingRoutineId(req.user.id, s.title, s.daysOfWeek, s.time && parseClock(s.time) ? s.time : null)) {
+        skipped += 1;
+        continue;
+      }
       routines.push(
         await createRoutine(req.user.id, tz, {
           title: s.title,
@@ -162,6 +178,6 @@ documentRouter.post(
         }),
       );
     }
-    sendSuccess(res, { tasks, routines }, `Created ${tasks.length} tasks and ${routines.length} routines`);
+    sendSuccess(res, { tasks, routines, skipped }, `Created ${tasks.length} tasks and ${routines.length} routines${skipped ? ` (${skipped} already existed)` : ""}`);
   }),
 );

@@ -96,7 +96,7 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       return help();
     case "confirm":
     case "deny":
-      return { content: u.intent === "confirm" ? "👍" : "Okay.", intent: u.intent };
+      return { content: u.intent === "confirm" ? "Great." : "Okay.", intent: u.intent };
     case "smalltalk":
       return conversationalReply(turn, text, "chat");
     case "unclear":
@@ -225,7 +225,7 @@ async function applyUpdate(turn: Turn, task: Task, changes: TaskChanges, summary
   focusOn(turn, updated.id);
   turn.state.pending = null;
   return {
-    content: `✓ Updated: ${updated.title} — ${listJoin(summary)}`,
+    content: `Updated: ${updated.title} — ${listJoin(summary)}`,
     cards: [taskCard(updated, undefined, true)],
     actions: [{ label: "Undo", payload: { type: "undo_task", taskId: updated.id } }],
     intent: "task_updated",
@@ -255,10 +255,10 @@ async function completeTask(turn: Turn, task: Task): Promise<Out> {
   const updated = await updateTask(turn.task, task.id, { status: TaskStatus.COMPLETED });
   if (!updated) return { content: "I couldn't find that task.", intent: "not_found" };
   focusOn(turn, updated.id);
-  const lines = [`✓ Nice work! "${updated.title}" is done.`];
+  const lines = [`Nice work! "${updated.title}" is done.`];
   if (updated.parentTaskId) {
     const parent = await getTaskForUser(turn.user.id, updated.parentTaskId);
-    if (parent?.status === TaskStatus.COMPLETED) lines.push(`✓ "${parent.title}" is complete too — all parts finished! 🎉`);
+    if (parent?.status === TaskStatus.COMPLETED) lines.push(`"${parent.title}" is complete too — all parts finished!`);
     else if (parent) lines.push(`"${parent.title}" is now ${parent.progress}% complete.`);
   }
   const next = (await listActiveTasks(turn.user.id)).find((t) => t.id !== updated.id);
@@ -353,7 +353,7 @@ async function doSplit(turn: Turn, task: Task, parts: string[]): Promise<Out> {
   if (!result) return { content: "I couldn't split that task.", intent: "error" };
   focusOn(turn, task.id);
   return {
-    content: `✓ Split "${task.title}" into ${plural(result.children.length, "part")}${share ? ` (${formatDuration(share)} each)` : ""}. I'll mark it complete when all parts are done.`,
+    content: `Split "${task.title}" into ${plural(result.children.length, "part")}${share ? ` (${formatDuration(share)} each)` : ""}. I'll mark it complete when all parts are done.`,
     cards: [{ type: "task_list", title: task.title, tasks: result.children.map((c) => serializeTask(c)) }],
     actions: [{ label: "View task", payload: { type: "open_task", taskId: task.id } }],
     intent: "task_split",
@@ -372,7 +372,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
     if (r.task) {
       focusOn(turn, r.task.id);
       const t = r.task;
-      const state = t.status === TaskStatus.COMPLETED ? " — already done ✓" : t.progress ? ` (${t.progress}% done)` : "";
+      const state = t.status === TaskStatus.COMPLETED ? " — already done" : t.progress ? ` (${t.progress}% done)` : "";
       return {
         content: t.dueAt ? `"${t.title}" is due ${dueLabel(t, turn)}${state}.` : `"${t.title}" has no due date yet${state}. Want to set one?`,
         cards: [taskCard(t)],
@@ -409,7 +409,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   const label = title.charAt(0).toUpperCase() + title.slice(1);
   const content = list.length
     ? `${label}: ${plural(list.length, "task")}${list.some((t) => t.dueAt && t.dueAt < turn.now) ? ` (${list.filter((t) => t.dueAt && t.dueAt < turn.now).length} overdue)` : ""}. ${routines}`.trim()
-    : `Nothing ${title === "Overdue" ? "overdue" : `due ${title.toLowerCase()}`} 🎉 ${routines}`.trim();
+    : `Nothing ${title === "Overdue" ? "overdue" : `due ${title.toLowerCase()}`} ${routines}`.trim();
   return {
     content,
     cards: [{ type: "task_list", title: label, tasks: list.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }],
@@ -482,7 +482,7 @@ async function setContext(turn: Turn, context: string): Promise<Out> {
   turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { currentContext: context } });
   logEvent(turn.user.id, "CONTEXT_SWITCHED", null, { context });
   const routines = await todayRoutinesText(turn);
-  return { content: `📍 Switched to ${context}. I'll show the tasks and routines that fit here. ${routines}`.trim(), intent: "context_switched" };
+  return { content: `Switched to ${context}. I'll show the tasks and routines that fit here. ${routines}`.trim(), intent: "context_switched" };
 }
 
 /* ======================================================================== pending decisions owned here */
@@ -540,7 +540,7 @@ async function confirmDelete(turn: Turn, taskId: string): Promise<Out> {
   const deleted = await softDeleteTask(turn.task, taskId);
   if (!deleted) return { content: "That task is already gone.", intent: "not_found" };
   return {
-    content: `🗑 Deleted "${deleted.title}". You can undo this for 24 hours.`,
+    content: `Deleted "${deleted.title}". You can undo this for 24 hours.`,
     actions: [{ label: "Undo", payload: { type: "restore_task", taskId } }],
     intent: "task_deleted",
   };
@@ -584,7 +584,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       const end = new Date(payload.end);
       const updated = await updateTask(turn.task, task.id, { scheduledStart: start, scheduledEnd: end });
       const p = localParts(start, turn.tz);
-      return { content: `📅 Scheduled "${task.title}" ${relativeDayLabel(localYmd(start, turn.tz), turn.todayYmd)} at ${formatClock(p.h, p.mi)}.`, cards: updated ? [taskCard(updated)] : [], intent: "slot_accepted" };
+      return { content: `Scheduled "${task.title}" ${relativeDayLabel(localYmd(start, turn.tz), turn.todayYmd)} at ${formatClock(p.h, p.mi)}.`, cards: updated ? [taskCard(updated)] : [], intent: "slot_accepted" };
     }
     case "suggest_slot": {
       const task = await getTaskForUser(turn.user.id, payload.taskId);
@@ -626,7 +626,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       try {
         const o = await updateOccurrence(turn.user.id, payload.occurrenceId, payload.status as RoutineOccurrenceStatus, { confirmMandatory: payload.confirmMandatory });
         if (!o) return { content: "That routine occurrence wasn't found.", intent: "not_found" };
-        return { content: payload.status === "COMPLETED" ? `✓ ${o.routine.title} done. Keep the streak going!` : `Skipped ${o.routine.title} for now.`, intent: "routine_updated" };
+        return { content: payload.status === "COMPLETED" ? `${o.routine.title} done. Keep the streak going!` : `Skipped ${o.routine.title} for now.`, intent: "routine_updated" };
       } catch (error) {
         if (error instanceof HttpError && error.code === "MANDATORY_CONFIRMATION_REQUIRED") {
           return {
@@ -643,10 +643,10 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     }
     case "reschedule_occurrence": {
       const o = await rescheduleOccurrence(turn.user.id, turn.tz, payload.occurrenceId, payload.ymd, payload.time);
-      return o ? { content: `📅 ${o.routine.title} moved to ${relativeDayLabel(payload.ymd, turn.todayYmd)}${payload.time ? ` at ${payload.time}` : ""}.`, intent: "routine_rescheduled" } : { content: "That routine occurrence wasn't found.", intent: "not_found" };
+      return o ? { content: `${o.routine.title} moved to ${relativeDayLabel(payload.ymd, turn.todayYmd)}${payload.time ? ` at ${payload.time}` : ""}.`, intent: "routine_rescheduled" } : { content: "That routine occurrence wasn't found.", intent: "not_found" };
     }
     case "accept_recommendation":
-      return { content: `✓ ${await acceptRecommendation(turn.user, turn.settings, payload.id)}`, intent: "recommendation_accepted" };
+      return { content: `${await acceptRecommendation(turn.user, turn.settings, payload.id)}`, intent: "recommendation_accepted" };
     case "dismiss_recommendation":
       await dismissRecommendation(turn.user, turn.settings, payload.id);
       return { content: "Okay, I won't suggest that again.", intent: "recommendation_dismissed" };
@@ -656,7 +656,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
         .slice(0, 3);
       focusOn(turn, ...top.map((t) => t.id).reverse());
       return {
-        content: top.length ? "Here are your top 3. Ignore the rest for now — one thing at a time." : "You have nothing urgent. Take a breather 🌿",
+        content: top.length ? "Here are your top 3. Ignore the rest for now — one thing at a time." : "You have nothing urgent. Take a breather.",
         cards: [{ type: "task_list", title: "Top 3", tasks: top.map((t) => serializeTask(t)) }],
         actions: top[0] ? [{ label: `Break down #1`, payload: { type: "break_down", taskId: top[0].id } }, { label: `Start #1`, payload: { type: "start_task", taskId: top[0].id } }] : [],
         intent: "top3",
@@ -708,7 +708,7 @@ async function postpone(turn: Turn, ids: string[], days: number): Promise<Out> {
       logEvent(turn.user.id, "TASK_POSTPONED", id, { days });
     }
   }
-  if (!moved.length) return { content: "There was nothing to postpone. You're clear 🌿", intent: "postponed" };
+  if (!moved.length) return { content: "There was nothing to postpone. You're all clear.", intent: "postponed" };
   return {
     content: `Moved ${plural(moved.length, "task")} ${days === 1 ? "to tomorrow" : `by ${days} days`}. Take care of yourself first.`,
     cards: [{ type: "task_list", title: "Postponed", tasks: moved.map((t) => serializeTask(t)) }],
@@ -740,7 +740,7 @@ async function chunkTask(turn: Turn, taskId: string): Promise<Out> {
   };
   const outline = plan.map((b) => `${fmt(b.start)}–${fmt(b.end)} ${b.kind === "work" ? "focus" : "break"}`).join(" · ");
   return {
-    content: `✓ Broken into ${plural(work.length, "45-minute chunk")} with 15-minute breaks:\n${outline}`,
+    content: `Broken into ${plural(work.length, "45-minute chunk")} with 15-minute breaks:\n${outline}`,
     cards: [{ type: "task_list", title: task.title, tasks: result.children.map((c) => serializeTask(c)) }],
     intent: "task_chunked",
   };

@@ -136,7 +136,7 @@ export async function getAttention(user: User, settings: UserSettings, now = new
       kind: "overdue_deadline",
       severity: "critical",
       title: t.title,
-      message: `✗ "${t.title}" is still pending (was due ${relativeDayLabel(localYmd(t.dueAt as Date, tz), todayYmd)}${t.dueTime ? ` ${t.dueTime}` : ""}).`,
+      message: `"${t.title}" is still pending (was due ${relativeDayLabel(localYmd(t.dueAt as Date, tz), todayYmd)}${t.dueTime ? ` ${t.dueTime}` : ""}).`,
       actions: [
         { label: "Complete now", payload: { type: "overdue_action", taskId: t.id, choice: "complete_now" }, style: "primary" },
         { label: "I couldn't finish", payload: { type: "overdue_action", taskId: t.id, choice: "couldnt" } },

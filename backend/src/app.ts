@@ -1,6 +1,6 @@
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { getAi } from "./ai/llm.js";
+import { getAi, getModelStatus } from "./ai/llm.js";
 import { setTimezoneChangeHandler } from "./lib/http.js";
 import { accountRouter } from "./modules/account/accountRoutes.js";
 import { analyticsRouter } from "./modules/analytics/analyticsRoutes.js";
@@ -32,7 +32,9 @@ export function createApp() {
   });
 
   app.get("/health", (_req, res) => {
-    res.json({ ok: true, ai: { enabled: getAi().enabled, available: getAi().available } });
+    const models = getModelStatus();
+    const available = getAi().available && models.chat !== false;
+    res.json({ ok: true, ai: { enabled: getAi().enabled, available, models } });
   });
 
   app.get("/", (_req, res) => {

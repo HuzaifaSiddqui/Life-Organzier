@@ -22,7 +22,8 @@ function twiml(message: string): string {
 
 function validSignature(req: Request): boolean {
   const token = process.env.TWILIO_AUTH_TOKEN;
-  if (!token) return process.env.NODE_ENV !== "production";
+  // Unsigned requests would let anyone message as any user by faking "From" — only allow them on explicit opt-in.
+  if (!token) return process.env.WHATSAPP_ALLOW_UNSIGNED === "true";
   const signature = req.header("x-twilio-signature");
   const base = process.env.PUBLIC_BASE_URL;
   if (!signature || !base) return false;

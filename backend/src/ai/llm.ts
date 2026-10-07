@@ -36,7 +36,7 @@ export class OllamaProvider implements LlmProvider {
 
   constructor(
     private readonly baseUrl = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434",
-    private readonly model = process.env.OLLAMA_MODEL ?? "qwen2.5:1.5b",
+    private readonly model = process.env.OLLAMA_MODEL ?? "qwen2.5:7b",
     private readonly timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS ?? 60000),
   ) {}
 
@@ -221,4 +221,42 @@ export function getAi(): AiService {
 /** Test hook: replace the shared service with a mock. */
 export function setAi(service: AiService | null): void {
   shared = service;
+}
+
+export type ModelStatus = { checked: boolean; chat: boolean | null; embeddings: boolean | null; missing: string[] };
+const modelStatus: ModelStatus = { checked: false, chat: null, embeddings: null, missing: [] };
+
+export function getModelStatus(): ModelStatus {
+  return modelStatus;
+}
+
+/**
+ * Startup check: a missing Ollama model otherwise fails silently (rules-only replies, hashed
+ * embeddings). Also loads the chat model so the first user request doesn't pay the load time and
+ * trip the intent timeout.
+ */
+export async function checkAndWarmModels(): Promise<void> {
+  const ai = getAi();
+  // Ollama is the primary provider, or Gemini's fallback.
+  if (!ai.enabled || !["ollama", "gemini"].includes((process.env.AI_PROVIDER ?? "ollama").toLowerCase())) return;
+  const base = (process.env.OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\/$/, "");
+  const chatModel = process.env.OLLAMA_MODEL ?? "qwen2.5:7b";
+  const embedModel = process.env.EMBEDDING_MODEL ?? "nomic-embed-text";
+  try {
+    const res = await fetchWithTimeout(`${base}/api/tags`, {}, 5000);
+    const names = ((await res.json()) as { models?: Array<{ name: string }> }).models?.map((m) => m.name) ?? [];
+    const has = (m: string) => names.some((n) => n === m || n === `${m}:latest`);
+    modelStatus.chat = has(chatModel);
+    modelStatus.embeddings = process.env.EMBEDDINGS_ENABLED?.toLowerCase() === "false" ? null : has(embedModel);
+    modelStatus.missing = [modelStatus.chat ? null : chatModel, modelStatus.embeddings === false ? embedModel : null].filter((m): m is string => Boolean(m));
+    modelStatus.checked = true;
+    for (const m of modelStatus.missing) console.warn(`⚠️  Ollama model "${m}" is not installed — run: ollama pull ${m}`);
+    if (modelStatus.chat) {
+      await fetchWithTimeout(`${base}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: chatModel, keep_alive: "30m" }) }, 120000);
+      console.info(`AI model ${chatModel} loaded`);
+    }
+  } catch (error) {
+    modelStatus.checked = true;
+    console.warn("⚠️  Ollama is not reachable — the assistant will answer with rules only:", error instanceof Error ? error.message : error);
+  }
 }
