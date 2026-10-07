@@ -1,117 +1,130 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { LinearGradient } from "expo-linear-gradient";
 import { signOut } from "firebase/auth";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
 import { BottomNav } from "../../components/BottomNav";
-import { LogoMark } from "../../components/branding/LogoMark";
-import { blue, colors, radii, shadow } from "../../constants/theme";
+import { Icon, type IconName } from "../../components/icons/Icon";
+import { Card, SyncBadge, Text } from "../../components/ui";
 import { useAuth } from "../../context/AuthContext";
+import { usePreferences } from "../../context/PreferencesContext";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
+import { clearAllReminders } from "../../services/reminders";
+import { useTheme } from "../../theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Profile">;
-
-const futureModules = [
-  "Calendar Integration",
-  "Team Collaboration",
-  "Analytics Dashboard",
-  "API Access",
-];
 
 function initials(displayName: string | null | undefined, email: string | null | undefined): string {
   if (displayName?.trim()) {
     const parts = displayName.trim().split(/\s+/);
-    const a = parts[0]?.[0] ?? "";
-    const b = parts[1]?.[0] ?? "";
-    return `${a}${b}`.toUpperCase() || a.toUpperCase();
+    return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
   }
-  const local = email?.split("@")[0]?.slice(0, 2) ?? "?";
-  return local.toUpperCase();
-}
-
-function Chevron() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
-      <Path
-        d="M7 4L13 10L7 16"
-        stroke="#64748B"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return (email?.split("@")[0]?.slice(0, 2) ?? "?").toUpperCase();
 }
 
 export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { colors, spacing } = useTheme();
   const { dbUser } = useAuth();
+  const { settings, isPro } = usePreferences();
   const name = dbUser?.displayName ?? dbUser?.email?.split("@")[0] ?? "Account";
-  const email = dbUser?.email ?? "";
+
+  const groups: Array<{ title: string; items: Array<{ icon: IconName; title: string; subtitle: string; go: () => void }> }> = [
+    {
+      title: "Your data",
+      items: [
+        { icon: "memory", title: "What the assistant knows", subtitle: "Memories and learned patterns", go: () => navigation.navigate("Memory") },
+        { icon: "repeat", title: "Routines", subtitle: "Recurring habits and classes", go: () => navigation.navigate("Routines") },
+        { icon: "pulse", title: "Mood", subtitle: "Check-ins and history", go: () => navigation.navigate("Mood") },
+        { icon: "doc", title: "Documents", subtitle: "Syllabi, timetables and notes", go: () => navigation.navigate("Documents") },
+        { icon: "insights", title: "Insights", subtitle: "Productivity analytics", go: () => navigation.navigate("Insights") },
+      ],
+    },
+    {
+      title: "App",
+      items: [{ icon: "settings", title: "Settings", subtitle: "Preferences, notifications and account", go: () => navigation.navigate("Settings") }],
+    },
+  ];
+
+  const divider = <View style={[styles.divider, { backgroundColor: colors.hairline }]} />;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.hero}>
-          <View style={styles.logoRow}>
-            <View style={styles.logoRing}>
-              <LogoMark size={44} />
-            </View>
-          </View>
-          <Text style={styles.heroTitle}>Profile</Text>
-          <Text style={styles.heroSub}>Manage your account</Text>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.canvas }]}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 110, gap: spacing.xl }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <Text variant="title1" style={styles.flex}>
+            Account
+          </Text>
+          <SyncBadge />
         </View>
 
-        <View style={styles.accountCard}>
-          <LinearGradient
-            colors={["#1D99FF", "#47AFFF"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.avatar}
+        <Card style={styles.account}>
+          <View style={[styles.avatar, { backgroundColor: colors.text }]}>
+            <Text variant="headline" style={{ color: colors.canvas }}>
+              {initials(dbUser?.displayName, dbUser?.email)}
+            </Text>
+          </View>
+          <View style={styles.flex}>
+            <Text variant="headline" numberOfLines={1}>
+              {name}
+            </Text>
+            <Text variant="callout" color="secondary" numberOfLines={1}>
+              {dbUser?.email}
+            </Text>
+            <Text variant="caption" color="tertiary" style={{ marginTop: 2 }}>
+              {isPro ? "Pro plan" : "Free plan"}
+              {settings?.currentContext ? ` · ${settings.currentContext}` : ""}
+            </Text>
+          </View>
+        </Card>
+
+        {groups.map((g) => (
+          <View key={g.title}>
+            <Text variant="label" color="tertiary" style={styles.sectionLabel} accessibilityRole="header">
+              {g.title.toUpperCase()}
+            </Text>
+            <Card style={styles.listCard}>
+              {g.items.map((item, i) => (
+                <View key={item.title}>
+                  {i > 0 ? divider : null}
+                  <Pressable
+                    onPress={item.go}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.title}, ${item.subtitle}`}
+                    style={({ pressed }) => [styles.item, pressed && { backgroundColor: colors.accentSoft }]}
+                  >
+                    <Icon name={item.icon} color={colors.textSecondary} />
+                    <View style={styles.flex}>
+                      <Text variant="body">{item.title}</Text>
+                      <Text variant="caption" color="tertiary">
+                        {item.subtitle}
+                      </Text>
+                    </View>
+                    <Icon name="chevron" size={16} color={colors.textTertiary} />
+                  </Pressable>
+                </View>
+              ))}
+            </Card>
+          </View>
+        ))}
+
+        <Card style={styles.listCard}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              void clearAllReminders().finally(() => {
+                void signOut(auth);
+              });
+            }}
+            style={({ pressed }) => [styles.item, pressed && { backgroundColor: colors.danger.bg }]}
           >
-            <Text style={styles.avatarText}>{initials(dbUser?.displayName, dbUser?.email)}</Text>
-          </LinearGradient>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{name}</Text>
-            <Text style={styles.email}>{email}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionLabel}>Future Modules (FYP-2)</Text>
-        <View style={styles.listCard}>
-          {futureModules.map((item, i) => (
-            <View key={item}>
-              <Pressable
-                style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.85 }]}
-                onPress={() =>
-                  navigation.navigate("FuturePreview", {
-                    title: item,
-                  })
-                }
-              >
-                <Text style={styles.listRowText}>{item}</Text>
-                <Chevron />
-              </Pressable>
-              {i < futureModules.length - 1 ? <View style={styles.listSep} /> : null}
-            </View>
-          ))}
-        </View>
-
-        <Pressable
-          style={({ pressed }) => [styles.logout, pressed && { opacity: 0.92 }]}
-          onPress={() => {
-            void signOut(auth);
-          }}
-        >
-          <Text style={styles.logoutText}>Log out</Text>
-        </Pressable>
+            <Icon name="logout" color={colors.danger.fg} />
+            <Text variant="body" color="danger" style={styles.flex}>
+              Sign out
+            </Text>
+          </Pressable>
+        </Card>
       </ScrollView>
-
       <View style={[styles.navDock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
         <BottomNav active="Profile" onChange={(tab) => navigation.navigate(tab)} />
       </View>
@@ -120,135 +133,15 @@ export function ProfileScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 24,
-  },
-  navDock: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  hero: {
-    borderRadius: radii.xl,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadow,
-  },
-  logoRow: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  /** Centers the mark in a fixed circle so it cannot sit high under the status bar / notch. */
-  logoRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 2,
-    borderColor: blue[200],
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: "600",
-    textAlign: "center",
-    color: colors.text,
-    marginBottom: 4,
-  },
-  heroSub: {
-    textAlign: "center",
-    color: colors.textMuted,
-    fontSize: 15,
-  },
-  accountCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 20,
-  },
-  name: {
-    fontWeight: "600",
-    fontSize: 17,
-    color: colors.text,
-  },
-  email: {
-    color: colors.textMuted,
-    fontSize: 14,
-    marginTop: 4,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  listCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    ...shadow,
-  },
-  listRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  listRowText: {
-    fontWeight: "500",
-    fontSize: 16,
-    color: colors.text,
-  },
-  listSep: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginLeft: 24,
-    marginRight: 24,
-  },
-  logout: {
-    height: 56,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-    backgroundColor: "#FEF2F2",
-    marginBottom: 8,
-  },
-  logoutText: {
-    color: "#DC2626",
-    fontWeight: "600",
-    fontSize: 16,
-  },
+  root: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 16 },
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  flex: { flex: 1 },
+  account: { flexDirection: "row", alignItems: "center", gap: 14 },
+  avatar: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  sectionLabel: { marginBottom: 8 },
+  listCard: { padding: 0, overflow: "hidden" },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 50 },
+  item: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 60, paddingHorizontal: 16, paddingVertical: 10 },
+  navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
 });

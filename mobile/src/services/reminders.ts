@@ -1,72 +1,46 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import type { Task } from "../types/models";
-import { computeReminderTriggerAt, effectiveDueDateIso } from "../utils/datetimeValidation";
+import { auth } from "../lib/firebase";
+import { apiGet, apiPatch, apiPost } from "./api";
 
-const REMINDER_MAP_KEY = "taskReminderMap:v1";
+/**
+ * Offline-first reminders (FR-RN-001/002): the server computes an escalating, quiet-hours-aware
+ * plan; the device schedules it as OS notifications so reminders fire without internet and even
+ * when the app is closed. Actions (Done / Snooze / Open) feed adaptive reminder learning.
+ */
 
-type ReminderMap = Record<string, string>;
+type PlannedReminder = {
+  id: string;
+  taskId: string | null;
+  routineOccurrenceId: string | null;
+  fireAt: string;
+  level: "gentle" | "normal" | "urgent" | "critical";
+  title: string;
+  body: string;
+  prominent: boolean;
+};
 
-export type ReminderResult =
-  | { kind: "scheduled"; when: Date }
-  | { kind: "cleared" }
-  | {
-      kind: "skipped";
-      reason: "no_due_date" | "past_due" | "permission_denied" | "schedule_failed";
-    };
+type PlanResponse = {
+  reminders: PlannedReminder[];
+  settings: { method: "APP" | "SOUND" | "VIBRATION" | "SOUND_VIBRATION"; devices: string; dndUntil: string | null; frequency: string };
+};
 
+const PREFIX = "lo:";
+const CATEGORY_TASK = "lo-task";
+const CATEGORY_ROUTINE = "lo-routine";
 let configured = false;
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
-function trimToNull(s: string | null | undefined): string | null {
-  const t = (s ?? "").trim();
-  return t === "" ? null : t;
-}
-
-function notificationBody(title: string | null | undefined): string {
-  const t = String(title ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (t.length === 0) return "Your task";
-  return t.slice(0, 500);
-}
-
-async function readReminderMap(): Promise<ReminderMap> {
-  const raw = await AsyncStorage.getItem(REMINDER_MAP_KEY);
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as ReminderMap;
-  } catch {
-    return {};
-  }
-}
-
-async function writeReminderMap(map: ReminderMap): Promise<void> {
-  await AsyncStorage.setItem(REMINDER_MAP_KEY, JSON.stringify(map));
-}
-
-async function clearExistingReminder(taskId: string): Promise<void> {
-  const map = await readReminderMap();
-  const existingId = map[taskId];
-  if (existingId) {
-    await Notifications.cancelScheduledNotificationAsync(existingId);
-    delete map[taskId];
-    await writeReminderMap(map);
-  }
-}
-
-async function ensureNotificationPermissions(): Promise<boolean> {
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) return true;
-
-  const requested = await Notifications.requestPermissionsAsync();
-  return requested.granted;
-}
+const CHANNELS: Record<PlanResponse["settings"]["method"], { id: string; name: string; sound: boolean; vibrate: boolean }> = {
+  SOUND_VIBRATION: { id: "lo-sound-vibrate", name: "Reminders (sound + vibration)", sound: true, vibrate: true },
+  SOUND: { id: "lo-sound", name: "Reminders (sound only)", sound: true, vibrate: false },
+  VIBRATION: { id: "lo-vibrate", name: "Reminders (vibration only)", sound: false, vibrate: true },
+  APP: { id: "lo-silent", name: "Reminders (silent)", sound: false, vibrate: false },
+};
 
 export async function configureReminders(): Promise<void> {
   if (configured) return;
   configured = true;
-
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
@@ -75,129 +49,141 @@ export async function configureReminders(): Promise<void> {
       shouldSetBadge: false,
     }),
   });
-
   if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("task-reminders", {
-      name: "Task Reminders",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 200, 250],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      sound: "default",
-      enableVibrate: true,
-    });
-  }
-}
-
-/** Exact due fields used when saving/updating — same snapshot manual Add Task sends to POST /tasks. */
-export type TaskReminderHint = {
-  dueDateIso: string | null;
-  dueTime: string | null;
-};
-
-function mergeDuePartsFromTask(task: Task, hint?: TaskReminderHint): {
-  dueDateIso: string | null;
-  dueTime: string | null;
-} {
-  if (hint) {
-    return {
-      dueDateIso: trimToNull(hint.dueDateIso),
-      dueTime: trimToNull(hint.dueTime),
-    };
-  }
-  return {
-    dueDateIso: trimToNull(task.dueDate),
-    dueTime: trimToNull(task.dueTime),
-  };
-}
-
-export async function upsertTaskReminder(task: Task, hint?: TaskReminderHint): Promise<ReminderResult> {
-  await configureReminders();
-
-  if (task.status === "COMPLETED" || task.status === "DELETED") {
-    await clearExistingReminder(task.id);
-    return task.dueDate ? { kind: "cleared" } : { kind: "skipped", reason: "no_due_date" };
-  }
-
-  const merged = mergeDuePartsFromTask(task, hint);
-
-  // effectiveDueDateIso() rewrites any dueDate string to the same local-midnight ISO shape as manual Add Task
-  const resolvedDueDate = effectiveDueDateIso(merged.dueDateIso, merged.dueTime);
-  if (!resolvedDueDate) {
-    await clearExistingReminder(task.id);
-    return { kind: "skipped", reason: "no_due_date" };
-  }
-
-  const granted = await ensureNotificationPermissions();
-  if (!granted) {
-    return { kind: "skipped", reason: "permission_denied" };
-  }
-
-  const triggerAt = computeReminderTriggerAt(resolvedDueDate, merged.dueTime);
-  if (!triggerAt || triggerAt.getTime() <= Date.now()) {
-    await clearExistingReminder(task.id);
-    return { kind: "skipped", reason: "past_due" };
-  }
-
-  await clearExistingReminder(task.id);
-  const trigger: Notifications.NotificationTriggerInput =
-    Platform.OS === "android"
-      ? {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: triggerAt,
-          channelId: "task-reminders",
-        }
-      : {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: triggerAt,
-        };
-
-  try {
-    const content: Notifications.NotificationContentInput = {
-      title: "Task reminder",
-      body: notificationBody(task.title),
-      sound: true,
-      data: { taskId: task.id, kind: "task_reminder" },
-    };
-    if (Platform.OS === "android") {
-      content.priority = Notifications.AndroidNotificationPriority.MAX;
+    for (const c of Object.values(CHANNELS)) {
+      await Notifications.setNotificationChannelAsync(c.id, {
+        name: c.name,
+        importance: c.sound || c.vibrate ? Notifications.AndroidImportance.MAX : Notifications.AndroidImportance.DEFAULT,
+        vibrationPattern: c.vibrate ? [0, 250, 200, 250] : [0],
+        enableVibrate: c.vibrate,
+        // Omitting `sound` uses the system default; null makes the channel silent.
+        ...(c.sound ? {} : { sound: null }),
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
     }
-
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      identifier: `task-reminder:${task.id}`,
-      content,
-      trigger,
-    });
-
-    const map = await readReminderMap();
-    map[task.id] = notificationId;
-    await writeReminderMap(map);
-    return { kind: "scheduled", when: triggerAt };
-  } catch (e) {
-    console.warn("scheduleNotificationAsync failed", e);
-    return { kind: "skipped", reason: "schedule_failed" };
   }
+  await Notifications.setNotificationCategoryAsync(CATEGORY_TASK, [
+    { identifier: "DONE", buttonTitle: "Mark done", options: { opensAppToForeground: true } },
+    { identifier: "SNOOZE", buttonTitle: "Snooze 15 min", options: { opensAppToForeground: false } },
+    { identifier: "OPEN", buttonTitle: "View details", options: { opensAppToForeground: true } },
+  ]);
+  await Notifications.setNotificationCategoryAsync(CATEGORY_ROUTINE, [
+    { identifier: "DONE", buttonTitle: "Done", options: { opensAppToForeground: true } },
+    { identifier: "OPEN", buttonTitle: "Open", options: { opensAppToForeground: true } },
+  ]);
 }
 
-export async function clearTaskReminder(taskId: string): Promise<void> {
+export async function ensureNotificationPermissions(): Promise<boolean> {
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+  const requested = await Notifications.requestPermissionsAsync();
+  return requested.granted;
+}
+
+async function cancelOurs(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduled.filter((n) => n.identifier.startsWith(PREFIX)).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+  );
+}
+
+/** Downloads the reminder plan and (re)schedules local notifications. Keeps old ones when offline. */
+export async function syncReminders(): Promise<number | null> {
+  if (!auth.currentUser) return null;
+  let plan: PlanResponse;
+  try {
+    plan = await apiGet<PlanResponse>("/reminders/plan?days=7");
+  } catch {
+    return null;
+  }
   await configureReminders();
-  await clearExistingReminder(taskId);
+  if (!(await ensureNotificationPermissions())) return 0;
+  await cancelOurs();
+  if (plan.settings.devices === "DESKTOP" || plan.settings.devices === "WHATSAPP") return 0;
+  const channel = CHANNELS[plan.settings.method] ?? CHANNELS.SOUND_VIBRATION;
+  let count = 0;
+  for (const r of plan.reminders) {
+    const date = new Date(r.fireAt);
+    if (date.getTime() <= Date.now() + 5000) continue;
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${PREFIX}${r.id}`,
+        content: {
+          title: r.title,
+          body: r.body,
+          sound: channel.sound,
+          categoryIdentifier: r.taskId ? CATEGORY_TASK : CATEGORY_ROUTINE,
+          data: { taskId: r.taskId, routineOccurrenceId: r.routineOccurrenceId, fireAt: r.fireAt, level: r.level, kind: "lo-reminder" },
+          ...(Platform.OS === "android"
+            ? { priority: r.prominent ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.HIGH }
+            : {}),
+        },
+        trigger:
+          Platform.OS === "android"
+            ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: channel.id }
+            : { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+      });
+      count += 1;
+    } catch (error) {
+      console.warn("Could not schedule reminder", error);
+    }
+  }
+  return count;
 }
 
-export function reminderFeedbackText(result: ReminderResult): string {
-  if (result.kind === "scheduled") {
-    return `Reminder set for ${result.when.toLocaleString()}`;
+/** Debounced re-plan after task/routine/settings changes. */
+export function scheduleReminderSync(delayMs = 1500): void {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    void syncReminders();
+  }, delayMs);
+}
+
+export type ReminderOpenTarget = { taskId: string | null; routineOccurrenceId: string | null };
+
+async function handleResponse(response: Notifications.NotificationResponse, onOpen: (target: ReminderOpenTarget) => void): Promise<void> {
+  const content = response.notification.request.content;
+  const data = (content.data ?? {}) as { taskId?: string | null; routineOccurrenceId?: string | null; fireAt?: string; kind?: string };
+  if (data.kind !== "lo-reminder") return;
+  const target = { taskId: data.taskId ?? null, routineOccurrenceId: data.routineOccurrenceId ?? null };
+  const action = response.actionIdentifier;
+  if (action === "DONE") {
+    try {
+      if (target.taskId) {
+        const { updateTask } = await import("./tasksApi");
+        await updateTask(target.taskId, { status: "COMPLETED" });
+      } else if (target.routineOccurrenceId) {
+        await apiPatch(`/routines/occurrences/${target.routineOccurrenceId}`, { status: "COMPLETED", confirmMandatory: true });
+      }
+    } catch (error) {
+      console.warn("Could not complete from notification", error);
+    }
+  } else if (action === "SNOOZE") {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${PREFIX}snooze:${Date.now()}`,
+      content: { title: content.title ?? "Reminder", body: content.body ?? "", data: content.data, categoryIdentifier: content.categoryIdentifier ?? CATEGORY_TASK },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 15 * 60 },
+    });
+  } else {
+    onOpen(target);
   }
-  if (result.kind === "cleared") {
-    return "Reminder cleared";
-  }
-  if (result.reason === "past_due") {
-    return "Reminder not set because due time is in the past";
-  }
-  if (result.reason === "permission_denied") {
-    return "Reminder not set because notification permission is denied";
-  }
-  if (result.reason === "schedule_failed") {
-    return "Reminder not set (OS could not schedule notification — try reinstalling app or freeing storage)";
-  }
-  return "Reminder skipped (no due date)";
+  const mapped = action === "DONE" ? "DONE" : action === "SNOOZE" ? "SNOOZE" : "OPEN";
+  apiPost("/reminders/action", { taskId: target.taskId, fireAt: data.fireAt ?? null, action: mapped }).catch(() => undefined);
+}
+
+/** Listens for notification taps/actions; also handles the tap that launched the app. */
+export function startReminderResponses(onOpen: (target: ReminderOpenTarget) => void): () => void {
+  const sub = Notifications.addNotificationResponseReceivedListener((r) => {
+    void handleResponse(r, onOpen);
+  });
+  void Notifications.getLastNotificationResponseAsync().then((r) => {
+    if (r) void handleResponse(r, onOpen);
+  });
+  return () => sub.remove();
+}
+
+/** Clears every scheduled reminder (sign out). */
+export async function clearAllReminders(): Promise<void> {
+  await cancelOurs();
 }

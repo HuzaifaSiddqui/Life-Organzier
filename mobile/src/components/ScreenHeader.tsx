@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
-import { colors } from "../constants/theme";
+import { useTheme } from "../theme/ThemeProvider";
+import { Icon } from "./icons/Icon";
+import { Text } from "./primitives";
 
 type Props = {
   title: string;
@@ -10,32 +11,19 @@ type Props = {
   right?: ReactNode;
 };
 
-function ChevronBack() {
-  return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={colors.text}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 export function ScreenHeader({ title, onBack, right }: Props) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   return (
-    <View style={[styles.bar, { paddingTop: Math.max(insets.top, 12) }]}>
+    <View style={[styles.bar, { paddingTop: Math.max(insets.top, 12), backgroundColor: colors.canvas }]}>
       <View style={styles.side}>
         {onBack ? (
-          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
-            <ChevronBack />
+          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back" style={styles.back}>
+            <Icon name="back" size={24} color={colors.text} />
           </Pressable>
         ) : null}
       </View>
-      <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+      <Text variant="headline" numberOfLines={1} ellipsizeMode="tail" center style={styles.title} accessibilityRole="header">
         {title}
       </Text>
       <View style={[styles.side, styles.sideRight]}>{right}</View>
@@ -44,25 +32,9 @@ export function ScreenHeader({ title, onBack, right }: Props) {
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.bg,
-  },
-  side: {
-    width: 40,
-    justifyContent: "center",
-  },
-  sideRight: {
-    alignItems: "flex-end",
-  },
-  title: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.text,
-  },
+  bar: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingBottom: 10 },
+  side: { minWidth: 48, justifyContent: "center" },
+  sideRight: { alignItems: "flex-end" },
+  back: { width: 40, height: 40, justifyContent: "center" },
+  title: { flex: 1 },
 });

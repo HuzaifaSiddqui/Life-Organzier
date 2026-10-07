@@ -1,146 +1,105 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, radii, shadow, shadowTile } from "../constants/theme";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useTheme } from "../theme/ThemeProvider";
 import type { Task } from "../types/models";
-import { priorityPill } from "../utils/priorityColors";
-import { ClockIcon } from "./icons/ClockIcon";
+import { formatDue, isOverdue } from "../utils/format";
+import { priorityColor } from "../utils/priorityColors";
+import { Icon } from "./icons/Icon";
+import { Dot, HighlightText, ProgressBar, Text } from "./ui";
 
 type Props = {
   task: Task;
-  onPress: () => void;
-  /** Dashboard list matches prototype (clock + priority pill); task list adds status row */
-  variant?: "dashboard" | "list";
+  onPress?: () => void;
+  onLongPress?: () => void;
+  variant?: "dashboard" | "list" | "compact";
+  query?: string;
+  subtaskCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  categoryColors?: Array<{ name: string; color: string }>;
 };
 
-function formatDue(task: Task): string {
-  const parts: string[] = [];
-  if (task.dueDate) {
-    const d = new Date(task.dueDate);
-    parts.push(d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }));
-  }
-  if (task.dueTime) {
-    parts.push(task.dueTime);
-  }
-  return parts.length ? parts.join(", ") : "No due date";
-}
+const label = (p: string) => p.charAt(0) + p.slice(1).toLowerCase();
 
-function statusLabel(status: Task["status"]): string {
-  return status.replace("_", " ");
-}
-
-export function TaskCard({ task, onPress, variant = "list" }: Props) {
+export function TaskCard({ task, onPress, onLongPress, variant = "list", query = "", subtaskCount, expanded, onToggleExpand }: Props) {
+  const { colors, spacing, radii, elevation } = useTheme();
   const done = task.status === "COMPLETED";
-  const pill = priorityPill(task.priority);
+  const overdue = isOverdue(task);
+  const progress = task.progress ?? 0;
+  const meta = [formatDue(task), variant !== "compact" && !overdue && !done ? label(task.status.replace("_", " ")) : null, task.category].filter(Boolean);
 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
+      accessibilityRole="button"
+      accessibilityLabel={`${task.title}, ${label(task.priority)} priority${overdue ? ", overdue" : ""}${done ? ", completed" : ""}`}
       style={({ pressed }) => [
         styles.card,
-        done && styles.cardDone,
-        variant === "dashboard" && styles.cardDashboard,
-        pressed && styles.cardPressed,
+        variant === "compact" ? { paddingVertical: spacing.md } : elevation(1),
+        { borderRadius: radii.md, padding: variant === "compact" ? 0 : spacing.lg, marginBottom: variant === "compact" ? 0 : spacing.sm },
+        pressed && { opacity: 0.7 },
       ]}
     >
       <View style={styles.row}>
-        <Text style={[styles.title, done && styles.titleDone]} numberOfLines={2}>
-          {task.title}
-        </Text>
-        <View style={[styles.badge, { backgroundColor: pill.backgroundColor }]}>
-          <Text style={[styles.badgeText, { color: pill.color }]}>{task.priority}</Text>
+        <View style={styles.lead}>
+          {done ? (
+            <View style={[styles.doneMark, { backgroundColor: colors.text }]}>
+              <Icon name="check" size={11} color={colors.canvas} strokeWidth={2.4} />
+            </View>
+          ) : (
+            <Dot color={priorityColor(task.priority, colors)} />
+          )}
         </View>
+        <View style={styles.flex}>
+          <HighlightText
+            text={task.title}
+            query={query}
+            numberOfLines={2}
+            style={[styles.title, { color: done ? colors.textTertiary : colors.text }, done && styles.struck]}
+          />
+          <Text variant="caption" color={overdue ? "danger" : "secondary"} numberOfLines={1} style={{ marginTop: 2 }}>
+            {overdue ? "Overdue · " : ""}
+            {meta.join(" · ")}
+            {task.pendingSync ? " · Not synced" : ""}
+          </Text>
+          {variant === "list" && Array.isArray(task.tags) && task.tags.length ? (
+            <Text variant="caption" color="tertiary" numberOfLines={1} style={{ marginTop: 2 }}>
+              {task.tags.slice(0, 4).map((t) => `#${t}`).join("  ")}
+            </Text>
+          ) : null}
+          {progress > 0 && !done ? (
+            <View style={{ marginTop: spacing.sm, gap: 4 }}>
+              <ProgressBar value={progress} height={3} color={colors.text} />
+              <Text variant="caption" color="tertiary" tabular>
+                {progress}% done
+              </Text>
+            </View>
+          ) : null}
+          {subtaskCount ? (
+            <Pressable onPress={onToggleExpand} hitSlop={8} style={{ marginTop: spacing.sm }} accessibilityRole="button">
+              <Text variant="label" color="accent">
+                {expanded ? "Hide" : "Show"} {subtaskCount} subtask{subtaskCount === 1 ? "" : "s"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {variant !== "compact" ? (
+          <Text variant="caption" color="tertiary">
+            {label(task.priority)}
+          </Text>
+        ) : null}
       </View>
-      {variant === "dashboard" ? (
-        <View style={styles.timeRow}>
-          <ClockIcon size={14} color={colors.textMuted} />
-          <Text style={styles.meta}>{formatDue(task)}</Text>
-        </View>
-      ) : (
-        <View style={styles.listMetaRow}>
-          <Text style={[styles.statusText, done && styles.statusDone]}>{statusLabel(task.status)}</Text>
-          <Text style={styles.dot}>•</Text>
-          <Text style={styles.meta}>{formatDue(task)}</Text>
-        </View>
-      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadowTile,
-  },
-  cardDashboard: {
-    ...shadow,
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  cardDone: {
-    borderColor: "#BBF7D0",
-    backgroundColor: "#F0FDF4",
-  },
-  cardPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  title: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: "600",
-    color: colors.text,
-    lineHeight: 22,
-  },
-  titleDone: {
-    textDecorationLine: "line-through",
-    color: colors.textMuted,
-  },
-  badge: {
-    borderRadius: radii.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  timeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  listMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    color: colors.textMuted,
-  },
-  statusDone: {
-    color: "#16A34A",
-    fontWeight: "600",
-  },
-  dot: {
-    fontSize: 14,
-    color: colors.textMuted,
-  },
-  meta: {
-    color: colors.textMuted,
-    fontSize: 14,
-  },
+  card: {},
+  row: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  lead: { width: 16, height: 22, justifyContent: "center", alignItems: "flex-start" },
+  doneMark: { width: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  flex: { flex: 1 },
+  title: { fontFamily: "Inter_500Medium", fontSize: 15, lineHeight: 21 },
+  struck: { textDecorationLine: "line-through" },
 });

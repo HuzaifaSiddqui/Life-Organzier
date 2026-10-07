@@ -11,8 +11,8 @@ import {
 export type DeviceSpeechRecognitionOptions = {
   /** Called with full text (existing draft prefix + recognized speech) on each update. */
   onTranscriptChange?: (fullText: string) => void;
-  /** Fires when recognition stops; includes final merged text. */
-  onRecognitionEnd?: (fullText: string) => void;
+  /** Fires when recognition stops; includes final merged text and transcript confidence (0–1, or -1 if unknown). */
+  onRecognitionEnd?: (fullText: string, confidence: number) => void;
   onError?: (message: string) => void;
 };
 
@@ -29,6 +29,8 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
   const prefixRef = useRef("");
   const lastTranscriptRef = useRef("");
   const receivedResultRef = useRef(false);
+  const confidenceRef = useRef(-1);
+  const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const mod = getNativeSpeechModule();
@@ -43,6 +45,8 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
     const onResult = (event: unknown) => {
       const e = event as ExpoSpeechRecognitionResultEvent;
       const t = e.results[0]?.transcript ?? "";
+      const c = e.results[0]?.confidence;
+      if (e.isFinal && typeof c === "number") confidenceRef.current = c;
       lastTranscriptRef.current = t;
       if (t.trim().length > 0) receivedResultRef.current = true;
       const prefix = prefixRef.current;
@@ -71,10 +75,14 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
 
     const onEnd = () => {
       setListening(false);
+      if (maxTimerRef.current) {
+        clearTimeout(maxTimerRef.current);
+        maxTimerRef.current = null;
+      }
       const prefix = prefixRef.current;
       const t = lastTranscriptRef.current;
       const full = prefix + (prefix && t ? " " : "") + t;
-      optsRef.current.onRecognitionEnd?.(full);
+      optsRef.current.onRecognitionEnd?.(full, confidenceRef.current);
     };
 
     const s1 = mod.addListener("start", onStart);
@@ -100,7 +108,7 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
     };
   }, []);
 
-  const start = useCallback(async (existingText: string) => {
+  const start = useCallback(async (existingText: string, lang = "en-US") => {
     const mod = getNativeSpeechModule();
     if (!mod) {
       optsRef.current.onError?.(
@@ -112,6 +120,7 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
     prefixRef.current = existingText;
     lastTranscriptRef.current = "";
     receivedResultRef.current = false;
+    confidenceRef.current = -1;
 
     const perm = await mod.requestPermissionsAsync();
     if (!perm.granted) {
@@ -122,16 +131,20 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
     }
 
     mod.start({
-      lang: "en-US",
+      lang,
       interimResults: true,
-      continuous: true,
+      continuous: false,
       iosTaskHint: "dictation",
       androidIntentOptions: {
-        EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 3000,
-        EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 3000,
+        // FR-VF-001: auto-stop after 2+ seconds of silence.
+        EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 2000,
+        EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 2000,
         EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: 1500,
       },
     });
+    // FR-VF-001: maximum recording length of 2 minutes.
+    if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
+    maxTimerRef.current = setTimeout(() => getNativeSpeechModule()?.stop(), 120000);
     return true;
   }, []);
 

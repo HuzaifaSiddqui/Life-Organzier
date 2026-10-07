@@ -140,7 +140,7 @@ export function AnimatedSplashOverlay({ onFinished, logoSize = 168 }: Props) {
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: SPLASH_BG,
     zIndex: 9999,
     elevation: 9999,
