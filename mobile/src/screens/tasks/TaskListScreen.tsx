@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { TaskCard } from "../../components/TaskCard";
-import { Chip, EmptyState, HelpButton, SyncBadge, Toast, TutorialTip } from "../../components/ui";
+import { Chip, EmptyState, HelpButton, SyncBadge, Snackbar, TutorialTip } from "../../components/ui";
 import { colors, palette, radii } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -79,7 +79,7 @@ function SwipeRow({ children, onRight, onLeft }: { children: ReactNode; onRight:
   return (
     <View>
       <View style={styles.swipeBg}>
-        <Text style={[styles.swipeText, { color: palette.success }]}>✓ Complete</Text>
+        <Text style={[styles.swipeText, { color: palette.success }]}>Complete</Text>
         <Text style={[styles.swipeText, { color: palette.warning }]}>Postpone ⏭</Text>
       </View>
       <Animated.View style={{ transform: [{ translateX: x }] }} {...responder.panHandlers}>
@@ -183,7 +183,7 @@ export function TaskListScreen({ navigation, route }: Props) {
   const complete = async (t: Task) => {
     try {
       await updateTask(t.id, { status: t.status === "COMPLETED" ? "PENDING" : "COMPLETED" });
-      setToast({ text: t.status === "COMPLETED" ? `Reopened "${t.title}"` : `✓ Completed "${t.title}"` });
+      setToast({ text: t.status === "COMPLETED" ? `Reopened "${t.title}"` : `Completed "${t.title}"` });
     } catch (e) {
       setToast({ text: getApiErrorMessage(e) });
     }
@@ -252,7 +252,7 @@ export function TaskListScreen({ navigation, route }: Props) {
             text="Swipe right to complete, swipe left to postpone a day, long-press for more options. Filters combine; tags can match all (AND) or any (OR)."
           />
           <Pressable style={styles.addBtn} onPress={() => navigation.navigate("AddTask")}>
-            <Text style={styles.addText}>＋ New</Text>
+            <Text style={styles.addText}>New task</Text>
           </Pressable>
         </View>
       </View>
@@ -264,7 +264,7 @@ export function TaskListScreen({ navigation, route }: Props) {
       >
         <SyncBadge />
         <TutorialTip id="tasks" title="Quick actions" text="Swipe a task right to complete it, left to push it to tomorrow, or long-press for edit/delete." />
-        <TextInput style={styles.search} placeholder="🔍 Search tasks" placeholderTextColor="#94a3b8" value={query} onChangeText={setQuery} />
+        <TextInput style={styles.search} placeholder="Search tasks" placeholderTextColor="#646A78" value={query} onChangeText={setQuery} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {STATUS.map((s) => (
@@ -275,11 +275,11 @@ export function TaskListScreen({ navigation, route }: Props) {
         <View style={styles.rowBetween}>
           <Pressable onPress={() => setShowFilters((v) => !v)}>
             <Text style={styles.link}>
-              {showFilters ? "▾" : "▸"} Filters & sort{activeFilters ? ` (${activeFilters})` : ""}
+              {showFilters ? "Hide filters" : "Filters & sort"}{activeFilters ? ` (${activeFilters})` : ""}
             </Text>
           </Pressable>
           {settings?.currentContext ? (
-            <Chip small label={useContext ? `📍 ${settings.currentContext}` : "📍 All contexts"} selected={useContext} onPress={() => setUseContext((v) => !v)} />
+            <Chip small label={useContext ? settings.currentContext : "All contexts"} selected={useContext} onPress={() => setUseContext((v) => !v)} />
           ) : null}
         </View>
 
@@ -326,8 +326,7 @@ export function TaskListScreen({ navigation, route }: Props) {
 
         {filtered.length === 0 ? (
           <EmptyState
-            icon="🗂"
-            title={query ? "No matching tasks" : "Nothing here"}
+                        title={query ? "No matching tasks" : "Nothing here"}
             text={query ? "Try another word." : "Tell the assistant what you need to do — it will organise it for you."}
           />
         ) : (
@@ -360,7 +359,7 @@ export function TaskListScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
 
-      <Toast
+      <Snackbar
         text={toast?.text ?? null}
         onHide={() => setToast(null)}
         action={
@@ -391,27 +390,27 @@ export function TaskListScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
-  h1: { fontSize: 26, fontWeight: "800", color: colors.text },
-  addBtn: { backgroundColor: colors.primary, borderRadius: radii.pill, paddingHorizontal: 14, paddingVertical: 8 },
-  addText: { color: "#fff", fontWeight: "700" },
+  h1: { fontSize: 24, lineHeight: 30, fontFamily: "Inter_700Bold", color: colors.text, letterSpacing: -0.5 },
+  addBtn: { backgroundColor: colors.text, borderRadius: radii.pill, paddingHorizontal: 16, paddingVertical: 9 },
+  addText: { color: colors.bg, fontFamily: "Inter_500Medium", fontSize: 14 },
   content: { paddingHorizontal: 16, gap: 10 },
   search: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.pill,
+    borderRadius: radii.md,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: colors.surface,
     fontSize: 15,
     color: colors.text,
   },
   chips: { gap: 8 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  link: { color: colors.primary, fontWeight: "700" },
+  link: { color: colors.primary, fontFamily: "Inter_600SemiBold" },
   filters: { backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 },
-  label: { fontSize: 12, fontWeight: "700", color: colors.textMuted, textTransform: "uppercase" },
+  label: { fontSize: 12, fontFamily: "Inter_500Medium", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  count: { color: colors.textMuted, fontSize: 13, fontWeight: "600" },
+  count: { color: colors.textMuted, fontSize: 13, fontFamily: "Inter_500Medium" },
   child: { marginLeft: 22 },
   swipeBg: {
     ...StyleSheet.absoluteFill,
@@ -421,6 +420,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     marginBottom: 10,
   },
-  swipeText: { fontWeight: "800" },
+  swipeText: { fontFamily: "Inter_700Bold" },
   navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
 });

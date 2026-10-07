@@ -15,7 +15,7 @@ function MiniTask({ task, onPress }: { task: Task; onPress: () => void }) {
   const done = task.status === "COMPLETED";
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.mini, pressed && { opacity: 0.8 }]}>
-      <View style={[styles.miniBar, { backgroundColor: done ? "#86EFAC" : priorityColor(task.priority) }]} />
+      <View style={[styles.miniDot, { backgroundColor: done ? palette.muted : priorityColor(task.priority) }]} />
       <View style={{ flex: 1 }}>
         <Text style={[styles.miniTitle, done && { textDecorationLine: "line-through", color: colors.textMuted }]} numberOfLines={2}>
           {task.title}
@@ -27,7 +27,7 @@ function MiniTask({ task, onPress }: { task: Task; onPress: () => void }) {
         </Text>
         {task.progress && task.progress > 0 && !done ? (
           <View style={{ marginTop: 4 }}>
-            <ProgressBar value={task.progress} color={palette.ai} height={4} />
+            <ProgressBar value={task.progress} color={colors.text} height={3} />
           </View>
         ) : null}
       </View>
@@ -53,17 +53,17 @@ function PlanTimeline({ plan }: { plan: DayPlan }) {
             style={[
               styles.blockBody,
               b.kind === "routine" && { borderLeftColor: palette.success },
-              b.kind === "suggested" && { borderLeftColor: palette.ai, borderStyle: "dashed" },
+              b.kind === "suggested" && { borderLeftColor: colors.primary, borderStyle: "dashed" },
               b.kind === "due" && { borderLeftColor: palette.danger },
             ]}
           >
             <Text style={styles.blockTitle} numberOfLines={1}>
-              {b.kind === "routine" ? (b.mandatory ? "⭐ " : "🔁 ") : b.kind === "suggested" ? "✨ " : b.kind === "due" ? "⏰ Due: " : ""}
+              {b.kind === "due" ? "Due: " : ""}
               {b.title}
             </Text>
             <Text style={styles.meta}>
               {b.kind === "due" ? "deadline" : `${formatTime(b.start)}–${formatTime(b.end)}`}
-              {b.kind === "suggested" ? " · suggested" : ""}
+              {b.kind === "suggested" ? " · suggested" : b.kind === "routine" ? (b.mandatory ? " · mandatory routine" : " · routine") : ""}
             </Text>
           </View>
         </View>
@@ -102,7 +102,7 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
             const d = card.draft;
             const color = card.clarity >= 95 ? palette.success : card.clarity >= 50 ? palette.warning : palette.danger;
             return (
-              <View key={i} style={[styles.panel, { borderColor: "#DDD6FE" }]}>
+              <View key={i} style={styles.panel}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.panelTitle}>What I understood</Text>
                   <Text style={[styles.clarity, { color }]}>Clarity {card.clarity}%</Text>
@@ -120,13 +120,13 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
           }
           case "routine":
             return (
-              <View key={i} style={[styles.panel, { borderColor: "#BBF7D0" }]}>
+              <View key={i} style={styles.panel}>
                 <Text style={styles.panelTitle}>
-                  {card.routine.priority === "MANDATORY" ? "⭐ " : "🔁 "}
                   {card.routine.title}
                 </Text>
                 <Text style={styles.meta}>
-                  {card.routine.frequency.toLowerCase()}
+                  {card.routine.priority === "MANDATORY" ? "Mandatory · " : ""}
+                  {card.routine.frequency.charAt(0) + card.routine.frequency.slice(1).toLowerCase()}
                   {card.routine.dueTime ? ` · ${card.routine.dueTime}` : " · flexible time"}
                   {card.routine.durationMinutes ? ` · ${formatDuration(card.routine.durationMinutes)}` : ""}
                   {card.routine.timeLocked ? " · time-locked" : ""}
@@ -136,17 +136,17 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
           case "mood_support": {
             const r = card.recommendation;
             return (
-              <View key={i} style={[styles.panel, { backgroundColor: palette.aiSoft, borderColor: "#DDD6FE" }]}>
+              <View key={i} style={styles.panel}>
                 {r.primary ? (
                   <Pressable style={styles.primarySuggestion} onPress={() => onAction(r.primary!.action, r.primary!.label)}>
                     <Text style={styles.primaryText}>{r.primary.label}</Text>
-                    <Text style={styles.primaryGo}>Start →</Text>
+                    <Text style={styles.primaryGo}>Start</Text>
                   </Pressable>
                 ) : null}
                 {r.suggestions.length ? <Text style={styles.meta}>After that, you could:</Text> : null}
                 {r.suggestions.map((s) => (
                   <Pressable key={s.id} style={styles.suggestion} onPress={() => onAction(s.action, s.label)}>
-                    <Text style={styles.suggestionText}>• {s.label}</Text>
+                    <Text style={styles.suggestionText}>{s.label}</Text>
                     {s.detail ? <Text style={styles.meta}>{s.detail}</Text> : null}
                   </Pressable>
                 ))}
@@ -160,7 +160,7 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
                 <Text style={styles.panelTitle}>{card.title}</Text>
                 {card.items.map((s) => (
                   <Pressable key={s.id} style={styles.suggestion} onPress={() => onAction(s.action, s.label)}>
-                    <Text style={styles.suggestionText}>• {s.label}</Text>
+                    <Text style={styles.suggestionText}>{s.label}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -174,7 +174,7 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
             );
           case "breathing":
             return (
-              <View key={i} style={[styles.panel, { backgroundColor: palette.aiSoft, borderColor: "#DDD6FE" }]}>
+              <View key={i} style={styles.panel}>
                 <BreathingExercise minutes={card.minutes} />
               </View>
             );
@@ -187,13 +187,13 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
             );
           case "resources":
             return (
-              <View key={i} style={[styles.panel, { backgroundColor: palette.dangerSoft, borderColor: "#FECACA" }]}>
+              <View key={i} style={[styles.panel, { backgroundColor: palette.dangerSoft, borderColor: "transparent" }]}>
                 <Text style={styles.panelTitle}>You're not alone</Text>
                 <Pressable onPress={() => void Linking.openURL("tel:1122")}>
-                  <Text style={[styles.suggestionText, { color: palette.danger }]}>📞 Call emergency services (1122)</Text>
+                  <Text style={[styles.suggestionText, { color: palette.danger }]}>Call emergency services · 1122</Text>
                 </Pressable>
                 <Pressable onPress={() => void Linking.openURL("tel:115")}>
-                  <Text style={[styles.suggestionText, { color: palette.danger }]}>📞 Edhi helpline (115)</Text>
+                  <Text style={[styles.suggestionText, { color: palette.danger }]}>Edhi helpline · 115</Text>
                 </Pressable>
                 <Text style={styles.meta}>Please also reach out to someone you trust or a licensed professional.</Text>
               </View>
@@ -225,31 +225,31 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 10,
   },
-  miniBar: { width: 4, borderRadius: 2 },
-  miniTitle: { fontSize: 15, fontWeight: "600", color: colors.text },
-  miniMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  panel: { backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 6 },
-  panelTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
-  meta: { fontSize: 12, color: colors.textMuted },
+  miniDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
+  miniTitle: { fontSize: 15, fontFamily: "Inter_500Medium", color: colors.text },
+  miniMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted, marginTop: 2 },
+  panel: { backgroundColor: colors.surface, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 8 },
+  panelTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.text },
+  meta: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  clarity: { fontSize: 12, fontWeight: "800" },
+  clarity: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   field: { flexDirection: "row", gap: 8 },
-  fieldLabel: { width: 70, fontSize: 12, color: colors.textMuted },
-  fieldValue: { flex: 1, fontSize: 13, color: colors.text, fontWeight: "600" },
+  fieldLabel: { width: 70, fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted },
+  fieldValue: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", color: colors.text },
   primarySuggestion: {
-    backgroundColor: palette.ai,
+    backgroundColor: colors.text,
     borderRadius: 12,
     padding: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  primaryText: { color: "#fff", fontWeight: "700", flex: 1 },
-  primaryGo: { color: "#fff", fontWeight: "800" },
+  primaryText: { color: colors.bg, fontFamily: "Inter_500Medium", flex: 1 },
+  primaryGo: { color: colors.bg, fontFamily: "Inter_600SemiBold" },
   suggestion: { paddingVertical: 4 },
-  suggestionText: { fontSize: 14, color: colors.text, fontWeight: "600" },
+  suggestionText: { fontSize: 14, color: colors.text, fontFamily: "Inter_500Medium" },
   block: { flexDirection: "row", gap: 8, alignItems: "stretch" },
-  blockTime: { width: 62, fontSize: 12, color: colors.textMuted, paddingTop: 2 },
-  blockBody: { flex: 1, borderLeftWidth: 3, borderLeftColor: colors.primary, paddingLeft: 8, paddingVertical: 2 },
-  blockTitle: { fontSize: 13, fontWeight: "700", color: colors.text },
+  blockTime: { width: 62, fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted, paddingTop: 2 },
+  blockBody: { flex: 1, borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: 10, paddingVertical: 2 },
+  blockTitle: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.text },
 });

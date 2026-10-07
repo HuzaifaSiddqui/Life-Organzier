@@ -65,12 +65,12 @@ export function OnboardingScreen({ navigation }: Props) {
   if (step === 0) {
     return (
       <View style={[ui.screen, styles.center, { paddingTop: insets.top + 24 }]}>
-        <Text style={{ fontSize: 54 }}>✨</Text>
+        
         <Text style={styles.title}>Meet your personal assistant</Text>
         <Text style={styles.text}>
           I plan around your energy, remember what matters to you, and check in when things get heavy. A quick setup (about 2 minutes) helps me fit your life from day one.
         </Text>
-        <Button title="Set up now" kind="ai" onPress={() => setStep(1)} style={{ alignSelf: "stretch" }} />
+        <Button title="Set up now" kind="tonal" onPress={() => setStep(1)} style={{ alignSelf: "stretch" }} />
         <Button title="Start using — set up later" kind="ghost" onPress={() => void finish()} style={{ alignSelf: "stretch" }} />
       </View>
     );
@@ -141,7 +141,7 @@ export function OnboardingScreen({ navigation }: Props) {
               ))}
             </View>
             <View style={styles.row}>
-              <TextInput style={[ui.input, { flex: 1 }]} value={customContext} onChangeText={setCustomContext} placeholder="Add your own" placeholderTextColor="#94a3b8" />
+              <TextInput style={[ui.input, { flex: 1 }]} value={customContext} onChangeText={setCustomContext} placeholder="Add your own" placeholderTextColor="#646A78" />
               <Chip
                 label="Add"
                 onPress={() => {
@@ -155,22 +155,22 @@ export function OnboardingScreen({ navigation }: Props) {
         ) : null}
 
         {step === 5 ? (
-          <Card tone="ai" style={{ gap: 10 }}>
+          <Card tone="accent" style={{ gap: 10 }}>
             <Text style={ui.h2}>How to work with me</Text>
-            <Text style={ui.body}>💬 Just talk: “Complete math assignment by Friday 3 PM” — I'll ask if anything's missing.</Text>
-            <Text style={ui.body}>🎤 Tap the mic to speak instead of typing.</Text>
-            <Text style={ui.body}>🧠 Tell me what helps you — “music calms me when I'm stressed” — and I'll remember.</Text>
-            <Text style={ui.body}>📈 I learn your productive hours and plan hard work there.</Text>
-            <Text style={ui.body}>📄 Upload a syllabus and I'll add deadlines and classes.</Text>
+            <Text style={ui.body}>Just talk: “Complete math assignment by Friday 3 PM” — I'll ask if anything's missing.</Text>
+            <Text style={ui.body}>Tap the mic to speak instead of typing.</Text>
+            <Text style={ui.body}>Tell me what helps you — “music calms me when I'm stressed” — and I'll remember.</Text>
+            <Text style={ui.body}>I learn your productive hours and plan hard work there.</Text>
+            <Text style={ui.body}>Upload a syllabus and I'll add deadlines and classes.</Text>
           </Card>
         ) : null}
 
         <View style={styles.row}>
           <Button title="Back" kind="secondary" onPress={() => setStep((s) => Math.max(0, s - 1))} style={{ flex: 1 }} />
           {step < STEPS ? (
-            <Button title="Next" kind="ai" loading={saving} onPress={() => void next()} style={{ flex: 2 }} />
+            <Button title="Next" kind="tonal" loading={saving} onPress={() => void next()} style={{ flex: 2 }} />
           ) : (
-            <Button title="Let's go" kind="ai" loading={saving} onPress={() => void finish()} style={{ flex: 2 }} />
+            <Button title="Let's go" kind="tonal" loading={saving} onPress={() => void finish()} style={{ flex: 2 }} />
           )}
         </View>
         <Button title="Skip setup" kind="ghost" onPress={() => void finish()} />
@@ -181,9 +181,9 @@ export function OnboardingScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", padding: 24, gap: 16 },
-  title: { fontSize: 26, fontWeight: "800", color: colors.text, textAlign: "center" },
-  text: { fontSize: 15, color: colors.textMuted, textAlign: "center", lineHeight: 22 },
-  stepLabel: { fontSize: 13, fontWeight: "700", color: palette.ai },
-  meta: { fontSize: 12, color: colors.textMuted },
+  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: colors.text, textAlign: "center" },
+  text: { fontFamily: "Inter_400Regular", fontSize: 15, color: colors.textMuted, textAlign: "center", lineHeight: 22 },
+  stepLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: palette.ai },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
 });

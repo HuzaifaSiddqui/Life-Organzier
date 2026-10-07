@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Alert, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, SectionTitle, Toast, ui } from "../../components/ui";
+import { Button, Card, Chip, SectionTitle, Snackbar, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -118,7 +118,7 @@ export function SettingsScreen({ navigation }: Props) {
         <Card style={{ gap: 8 }}>
           <View style={styles.row}>
             <Chip label="Free" selected={settings.tier === "FREE"} onPress={() => void save({ tier: "FREE" }, "Switched to Free")} />
-            <Chip label="✨ Pro" tone="ai" selected={settings.tier === "PRO"} onPress={() => void save({ tier: "PRO" }, "Pro enabled")} />
+            <Chip label="Pro" tone="accent" selected={settings.tier === "PRO"} onPress={() => void save({ tier: "PRO" }, "Pro enabled")} />
           </View>
           <Text style={styles.meta}>Pro adds deeper AI conversations for emotional support, WhatsApp reminders and analytics export. (Demo switch — payments are out of scope.)</Text>
         </Card>
@@ -230,14 +230,14 @@ export function SettingsScreen({ navigation }: Props) {
               <Chip
                 key={c}
                 small
-                label={`${settings.currentContext === c ? "📍 " : ""}${c} ✕`}
+                label={`${c}${settings.currentContext === c ? " (current)" : ""} ✕`}
                 selected={settings.currentContext === c}
                 onPress={() => void save({ contexts: settings.contexts.filter((x) => x !== c), currentContext: settings.currentContext === c ? null : settings.currentContext })}
               />
             ))}
           </View>
           <View style={styles.row}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={newContext} onChangeText={setNewContext} placeholder="e.g. In Village" placeholderTextColor="#94a3b8" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={newContext} onChangeText={setNewContext} placeholder="e.g. In Village" placeholderTextColor="#646A78" />
             <Chip
               label="Add"
               onPress={() => {
@@ -270,7 +270,7 @@ export function SettingsScreen({ navigation }: Props) {
             ))}
           </View>
           <View style={styles.row}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={catName} onChangeText={setCatName} placeholder="New category, e.g. Traveling" placeholderTextColor="#94a3b8" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={catName} onChangeText={setCatName} placeholder="New category, e.g. Traveling" placeholderTextColor="#646A78" />
             <Chip
               label="Add"
               onPress={async () => {
@@ -319,7 +319,7 @@ export function SettingsScreen({ navigation }: Props) {
         <Card style={{ gap: 8 }}>
           <Text style={styles.meta}>Link your number to chat with the assistant on WhatsApp. Pro users also get reminders there while the 24-hour window is open.</Text>
           <View style={styles.row}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={phone} onChangeText={setPhone} placeholder="+923001234567" placeholderTextColor="#94a3b8" keyboardType="phone-pad" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={phone} onChangeText={setPhone} placeholder="+923001234567" placeholderTextColor="#646A78" keyboardType="phone-pad" />
             <Chip
               label="Save"
               onPress={async () => {
@@ -377,8 +377,8 @@ export function SettingsScreen({ navigation }: Props) {
             }
           />
           <Text style={ui.label}>Change password</Text>
-          <TextInput style={ui.input} value={pw.current} onChangeText={(current) => setPw({ ...pw, current })} placeholder="Current password" placeholderTextColor="#94a3b8" secureTextEntry />
-          <TextInput style={ui.input} value={pw.next} onChangeText={(next) => setPw({ ...pw, next })} placeholder="New password (8+ characters)" placeholderTextColor="#94a3b8" secureTextEntry />
+          <TextInput style={ui.input} value={pw.current} onChangeText={(current) => setPw({ ...pw, current })} placeholder="Current password" placeholderTextColor="#646A78" secureTextEntry />
+          <TextInput style={ui.input} value={pw.next} onChangeText={(next) => setPw({ ...pw, next })} placeholder="New password (8+ characters)" placeholderTextColor="#646A78" secureTextEntry />
           <Button
             title="Update password"
             kind="secondary"
@@ -436,7 +436,7 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.meta}>Privacy: your data is stored in your Life Organizer database and the AI runs on your own server — nothing is sold or shared.</Text>
         </Card>
       </ScrollView>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
   );
 }
@@ -444,7 +444,7 @@ export function SettingsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  meta: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, lineHeight: 17 },
   swatch: { width: 26, height: 26, borderRadius: 13 },
   swatchOn: { borderWidth: 3, borderColor: palette.ink },
 });

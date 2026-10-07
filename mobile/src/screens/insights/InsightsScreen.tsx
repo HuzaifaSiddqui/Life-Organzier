@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleS
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { BarChart, Donut, Heatmap } from "../../components/charts/Charts";
-import { Card, Chip, ConfidenceMeter, ProgressBar, SectionTitle, Toast, TutorialTip } from "../../components/ui";
+import { Card, Chip, ConfidenceMeter, ProgressBar, SectionTitle, Snackbar, TutorialTip } from "../../components/ui";
 import { colors, palette, radii } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -133,7 +133,7 @@ export function InsightsScreen({ navigation }: Props) {
                   .filter((i) => !hidden.includes(i.id))
                   .map((i) => (
                     <View key={i.id} style={styles.insightRow}>
-                      <Text style={styles.insightIcon}>{i.tone === "positive" ? "🌟" : i.tone === "warning" ? "⚠️" : "💡"}</Text>
+                      <View style={[styles.insightDot, { backgroundColor: i.tone === "positive" ? palette.success : i.tone === "warning" ? palette.warning : palette.info }]} />
                       <Text style={[styles.body, { flex: 1 }]}>{i.text}</Text>
                       <Pressable onPress={() => setHidden((h) => [...h, i.id])} hitSlop={8}>
                         <Text style={styles.dismiss}>✕</Text>
@@ -223,11 +223,11 @@ export function InsightsScreen({ navigation }: Props) {
           <>
             <SectionTitle title="Recommendations" />
             {recs.map((r) => (
-              <Card key={r.id} tone="ai" style={{ gap: 8 }}>
+              <Card key={r.id} tone="accent" style={{ gap: 8 }}>
                 <Text style={styles.body}>{r.text}</Text>
                 <ConfidenceMeter value={r.confidence} label={r.confidenceText} />
                 <View style={{ flexDirection: "row", gap: 8 }}>
-                  <Chip small tone="ai" selected label={r.acceptLabel} onPress={async () => {
+                  <Chip small tone="accent" selected label={r.acceptLabel} onPress={async () => {
                     try {
                       setToast(await acceptInsight(r.id));
                       void load(range);
@@ -245,7 +245,7 @@ export function InsightsScreen({ navigation }: Props) {
           </>
         ) : null}
       </ScrollView>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
       <View style={[styles.navDock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
         <BottomNav active="Insights" onChange={(tab) => navigation.navigate(tab)} />
       </View>
@@ -257,10 +257,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, gap: 12 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  h1: { fontSize: 26, fontWeight: "800", color: colors.text },
-  link: { color: palette.ai, fontWeight: "700" },
-  meta: { fontSize: 13, color: colors.textMuted },
-  body: { fontSize: 14, color: colors.text, lineHeight: 20 },
+  h1: { fontSize: 26, fontFamily: "Inter_700Bold", color: colors.text },
+  link: { color: palette.ai, fontFamily: "Inter_600SemiBold" },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.textMuted },
+  body: { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, lineHeight: 20 },
   metrics: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   metric: {
     width: "31.5%",
@@ -270,12 +270,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 10,
   },
-  metricValue: { fontSize: 22, fontWeight: "800", color: colors.text },
-  metricLabel: { fontSize: 12, color: colors.textMuted },
-  delta: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+  metricValue: { fontSize: 22, fontFamily: "Inter_700Bold", color: colors.text },
+  metricLabel: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
+  delta: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 2 },
   insightRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  insightIcon: { fontSize: 16 },
-  dismiss: { color: colors.textMuted, fontWeight: "700" },
+  insightDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
+  dismiss: { color: colors.textMuted, fontFamily: "Inter_600SemiBold" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
 });

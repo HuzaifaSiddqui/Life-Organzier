@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, EmptyState, HelpButton, ProgressBar, SectionTitle, Toast, TutorialTip, ui } from "../../components/ui";
+import { Button, Card, Chip, EmptyState, HelpButton, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -30,7 +30,7 @@ const FREQS: Array<{ key: RoutineFrequency; label: string }> = [
   { key: "CUSTOM", label: "Custom days" },
 ];
 const PRIORITIES: Array<{ key: RoutinePriority; label: string; hint: string }> = [
-  { key: "MANDATORY", label: "⭐ Mandatory", hint: "scheduled first; skipping needs confirmation" },
+  { key: "MANDATORY", label: "Mandatory", hint: "scheduled first; skipping needs confirmation" },
   { key: "IMPORTANT", label: "Important", hint: "kept at its preferred time" },
   { key: "NORMAL", label: "Normal", hint: "can be skipped on busy days" },
 ];
@@ -94,11 +94,11 @@ export function RoutineScreen({ navigation }: Props) {
   const setOccurrence = async (o: RoutineOccurrence & { routine: Routine }, status: "COMPLETED" | "SKIPPED", confirm = false) => {
     try {
       await updateRoutineOccurrence(o.id, status, confirm);
-      setToast(status === "COMPLETED" ? `✓ ${o.routine.title} done` : `Skipped ${o.routine.title}`);
+      setToast(status === "COMPLETED" ? `${o.routine.title} done` : `Skipped ${o.routine.title}`);
       await load();
     } catch (e) {
       if (apiErrorCode(e) === "MANDATORY_CONFIRMATION_REQUIRED") {
-        Alert.alert("⭐ Mandatory routine", getApiErrorMessage(e), [
+        Alert.alert("Mandatory routine", getApiErrorMessage(e), [
           { text: "Keep it", style: "cancel" },
           { text: "Skip anyway", style: "destructive", onPress: () => void setOccurrence(o, status, true) },
         ]);
@@ -135,7 +135,7 @@ export function RoutineScreen({ navigation }: Props) {
     try {
       if (form.id) await updateRoutine(form.id, payload);
       else await createRoutine(payload);
-      setToast(form.id ? "Routine updated" : `✓ Created ${payload.title}`);
+      setToast(form.id ? "Routine updated" : `Created ${payload.title}`);
       setForm(null);
       await load();
     } catch (e) {
@@ -156,13 +156,13 @@ export function RoutineScreen({ navigation }: Props) {
       />
       <ScrollView contentContainerStyle={ui.content}>
         <TutorialTip id="routines" title="Create recurring activities here" text="Try “Daily meditation at 6 AM for 10 minutes” in the assistant, or tap New routine." />
-        <SectionTitle title="Today" right={settings?.currentContext ? <Text style={styles.meta}>📍 {settings.currentContext}</Text> : undefined} />
+        <SectionTitle title="Today" right={settings?.currentContext ? <Text style={styles.meta}>{settings.currentContext}</Text> : undefined} />
         {today.length ? (
           today.map((o) => (
             <Card key={o.id} style={styles.occ}>
               <View style={{ flex: 1 }}>
-                <Text style={[ui.body, { fontWeight: "700" }, o.status !== "PENDING" && { color: colors.textMuted }]}>
-                  {o.routine.priority === "MANDATORY" ? "⭐ " : ""}
+                <Text style={[ui.body, { fontFamily: "Inter_600SemiBold" }, o.status !== "PENDING" && { color: colors.textMuted }]}>
+                  
                   {o.routine.title}
                 </Text>
                 <Text style={styles.meta}>
@@ -174,7 +174,7 @@ export function RoutineScreen({ navigation }: Props) {
               </View>
               {o.status === "PENDING" ? (
                 <View style={{ flexDirection: "row", gap: 6 }}>
-                  <Chip small selected label="✓ Done" onPress={() => void setOccurrence(o, "COMPLETED")} />
+                  <Chip small selected label="Done" onPress={() => void setOccurrence(o, "COMPLETED")} />
                   <Chip small label="Skip" onPress={() => void setOccurrence(o, "SKIPPED")} />
                 </View>
               ) : null}
@@ -189,7 +189,7 @@ export function RoutineScreen({ navigation }: Props) {
           right={contexts.length ? <Chip small label={showAll ? "All contexts" : "This context"} onPress={() => setShowAll((v) => !v)} /> : undefined}
         />
         {routines.length === 0 ? (
-          <EmptyState icon="🔁" title="No routines yet" text="Build habits that the assistant protects when it plans your day." />
+          <EmptyState title="No routines yet" text="Build habits that the assistant protects when it plans your day." />
         ) : (
           routines.map((r) => {
             const a = adherence(r);
@@ -200,8 +200,8 @@ export function RoutineScreen({ navigation }: Props) {
               >
                 <Card style={{ gap: 6, opacity: r.active ? 1 : 0.55 }}>
                   <View style={styles.rowBetween}>
-                    <Text style={[ui.body, { fontWeight: "700", flex: 1 }]}>
-                      {r.priority === "MANDATORY" ? "⭐ " : ""}
+                    <Text style={[ui.body, { fontFamily: "Inter_600SemiBold", flex: 1 }]}>
+                      
                       {r.title}
                     </Text>
                     <Switch value={r.active} onValueChange={(active) => void updateRoutine(r.id, { active }).then(load)} />
@@ -209,14 +209,14 @@ export function RoutineScreen({ navigation }: Props) {
                   <Text style={styles.meta}>
                     {freqLabel(r)} · {r.dueTime ?? "flexible time"}
                     {r.durationMinutes ? ` · ${formatDuration(r.durationMinutes)}` : ""}
-                    {r.locationContext ? ` · 📍 ${r.locationContext}` : ""}
-                    {r.timeLocked ? " · 🔒 time-locked" : ""}
+                    {r.locationContext ? ` · ${r.locationContext}` : ""}
+                    {r.timeLocked ? " · Time-locked" : ""}
                   </Text>
                   {a ? (
                     <View style={{ gap: 3 }}>
                       <ProgressBar value={a.pct} color={a.pct >= 80 ? palette.success : a.pct >= 50 ? palette.warning : palette.danger} height={5} />
                       <Text style={styles.meta}>
-                        {a.pct}% kept over the last {a.total} times{a.pct >= 90 && a.total >= 7 ? " · reliable routine 💪" : ""}
+                        {a.pct}% kept over the last {a.total} times{a.pct >= 90 && a.total >= 7 ? " · Reliable" : ""}
                       </Text>
                     </View>
                   ) : null}
@@ -236,7 +236,7 @@ export function RoutineScreen({ navigation }: Props) {
               <Card style={{ gap: 14 }}>
                 <View>
                   <Text style={ui.label}>Name</Text>
-                  <TextInput style={ui.input} value={form.title} onChangeText={(title) => setForm({ ...form, title })} placeholder="e.g. Morning walk" placeholderTextColor="#94a3b8" />
+                  <TextInput style={ui.input} value={form.title} onChangeText={(title) => setForm({ ...form, title })} placeholder="e.g. Morning walk" placeholderTextColor="#646A78" />
                 </View>
                 <View>
                   <Text style={ui.label}>How often?</Text>
@@ -352,13 +352,13 @@ export function RoutineScreen({ navigation }: Props) {
           </View>
         ) : null}
       </Modal>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  meta: { fontSize: 13, color: colors.textMuted },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.textMuted },
   occ: { flexDirection: "row", alignItems: "center", gap: 10 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
 });

@@ -38,7 +38,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
           if (error) return error;
           try {
             const task = await createTask({ ...payload, source: "MANUAL" });
-            navigation.replace("TaskList", { toast: task.pendingSync ? "Saved on this phone — it will sync when you're online." : `✓ Added "${task.title}"` });
+            navigation.replace("TaskList", { toast: task.pendingSync ? "Saved on this phone — it will sync when you're online." : `Added "${task.title}"` });
             return null;
           } catch (e) {
             return getApiErrorMessage(e, "Could not save task.");

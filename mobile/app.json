@@ -4,7 +4,7 @@
     "slug": "life-organizer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/branding/app-launch-icon.png",
+    "icon": "./assets/branding/app-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -16,36 +16,38 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/branding/app-launch-icon.png",
-        "backgroundColor": "#F8FAFC"
+        "foregroundImage": "./assets/branding/adaptive-foreground.png",
+        "backgroundImage": "./assets/branding/adaptive-background.png",
+        "backgroundColor": "#0A6FD6"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
         "android.permission.VIBRATE"
       ],
       "package": "com.anonymous.lifeorganizer"
     },
     "web": {
-      "favicon": "./assets/branding/app-launch-icon.png"
+      "favicon": "./assets/branding/app-icon.png"
     },
     "plugins": [
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F8FAFC",
-          "image": "./assets/branding/app-launch-icon.png",
+          "backgroundColor": "#F6F5F2",
+          "image": "./assets/branding/splash-icon.png",
           "resizeMode": "contain",
           "android": {
-            "backgroundColor": "#F8FAFC",
-            "image": "./assets/branding/app-launch-icon.png",
+            "backgroundColor": "#F6F5F2",
+            "image": "./assets/branding/splash-icon.png",
             "resizeMode": "contain"
           },
           "ios": {
-            "backgroundColor": "#F8FAFC",
-            "image": "./assets/branding/app-launch-icon.png",
+            "backgroundColor": "#F6F5F2",
+            "image": "./assets/branding/splash-icon.png",
             "resizeMode": "contain"
           }
         }
@@ -60,7 +62,8 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-status-bar",
-      "./plugins/withLongPathCMake"
+      "./plugins/withLongPathCMake",
+      "expo-font"
     ]
   }
 }

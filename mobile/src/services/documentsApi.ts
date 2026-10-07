@@ -1,5 +1,7 @@
 import type { Task } from "../types/models";
+import { auth } from "../lib/firebase";
 import { api, apiDelete, apiGet, apiPost } from "./api";
+import { getDeviceId } from "./device";
 import { syncNow } from "./syncEngine";
 import { scheduleReminderSync } from "./reminders";
 
@@ -15,6 +17,7 @@ export type ExtractedDeadline = {
   confidence: number;
   source: string;
   created?: boolean;
+  existing?: boolean;
 };
 
 export type ExtractedSchedule = {
@@ -28,6 +31,7 @@ export type ExtractedSchedule = {
   confidence: number;
   source: string;
   created?: boolean;
+  existing?: boolean;
 };
 
 export type CourseInfo = {
@@ -79,14 +83,42 @@ export async function uploadDocument(
   form.append("docType", docType);
   form.append("language", language);
   form.append("autoCreate", "true");
-  const res = await api.post("/documents", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-    timeout: 180000,
-    onUploadProgress: (e) => {
+  // Plain XMLHttpRequest: it's the only client here that sends React Native's { uri, name, type } file parts.
+  // axios mangles them, and Expo's global fetch throws "Unsupported FormDataPart implementation".
+  // No Content-Type header — the native layer adds the multipart boundary.
+  const token = await auth.currentUser?.getIdToken();
+  const deviceId = await getDeviceId();
+  const send = () => new Promise<{ success: boolean; data: ProcessResult; message?: string }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${api.defaults.baseURL}/documents`);
+    xhr.timeout = 180000;
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("X-Timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+    xhr.setRequestHeader("X-Device-Id", deviceId);
+    xhr.upload.onprogress = (e) => {
       if (onProgress && e.total) onProgress(e.loaded / e.total);
-    },
+    };
+    xhr.onload = () => {
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch {
+        reject(new Error(`Upload failed (HTTP ${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("You're offline or the server can't be reached."));
+    xhr.ontimeout = () => reject(new Error("Upload timed out — please retry."));
+    xhr.send(form);
   });
-  const body = res.data as { success: boolean; data: ProcessResult; message?: string };
+  // A pooled connection the server already dropped (e.g. after a restart) fails instantly with
+  // "Stream Closed" — OkHttp can't replay a file body. One fresh attempt goes through.
+  let body: Awaited<ReturnType<typeof send>>;
+  try {
+    body = await send();
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("Upload timed out")) throw e;
+    onProgress?.(0);
+    body = await send();
+  }
   if (!body.success) throw new Error(body.message ?? "Upload failed");
   void syncNow();
   scheduleReminderSync();

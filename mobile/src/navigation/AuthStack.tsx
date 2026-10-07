@@ -22,7 +22,7 @@ export function AuthStack() {
         headerStyle: { backgroundColor: colors.surface },
         headerShadowVisible: false,
         headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: "700" },
+        headerTitleStyle: { fontFamily: "Inter_600SemiBold" },
         animation: "fade_from_bottom",
         contentStyle: { backgroundColor: colors.bg },
       }}

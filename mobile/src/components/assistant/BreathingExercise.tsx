@@ -42,7 +42,7 @@ export function BreathingExercise({ minutes }: { minutes: number }) {
     <View style={styles.wrap}>
       <View style={styles.stage}>
         <Animated.View style={[styles.circle, { transform: [{ scale }] }]} />
-        <Text style={styles.phase}>{done ? "Well done 🌿" : running ? PHASES[phase].label : "Ready?"}</Text>
+        <Text style={styles.phase}>{done ? "Well done" : running ? PHASES[phase].label : "Ready?"}</Text>
       </View>
       <Text style={styles.meta}>
         {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")} left
@@ -66,9 +66,9 @@ export function BreathingExercise({ minutes }: { minutes: number }) {
 const styles = StyleSheet.create({
   wrap: { alignItems: "center", gap: 8, paddingVertical: 8 },
   stage: { width: 150, height: 150, alignItems: "center", justifyContent: "center" },
-  circle: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "#DDD6FE" },
-  phase: { fontSize: 16, fontWeight: "700", color: palette.aiDark },
-  meta: { fontSize: 12, color: colors.textMuted },
-  button: { backgroundColor: palette.ai, paddingHorizontal: 22, paddingVertical: 9, borderRadius: 999 },
-  buttonText: { color: "#fff", fontWeight: "700" },
+  circle: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: palette.aiSoft },
+  phase: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: palette.aiDark },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
+  button: { backgroundColor: colors.text, paddingHorizontal: 22, paddingVertical: 9, borderRadius: 999 },
+  buttonText: { color: colors.bg, fontFamily: "Inter_600SemiBold" },
 });

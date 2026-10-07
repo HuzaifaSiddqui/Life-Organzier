@@ -2,10 +2,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
 import * as Network from "expo-network";
-import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, ProgressBar, SectionTitle, Toast, TutorialTip, ui } from "../../components/ui";
+import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -37,8 +37,8 @@ const LANGS = [
 const MAX_BYTES = 10 * 1024 * 1024;
 
 type Picked = { uri: string; name: string; mimeType: string; size: number };
-type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; assumedTime: boolean };
-type EditableSchedule = { index: number; title: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean };
+type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; assumedTime: boolean };
+type EditableSchedule = { index: number; title: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
 
 function confColor(c: number): string {
   return c >= 90 ? palette.success : c >= 80 ? palette.warning : palette.danger;
@@ -58,6 +58,16 @@ export function DocumentsScreen({ navigation }: Props) {
   const [usedBytes, setUsedBytes] = useState(0);
   const [applying, setApplying] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const busy = progress !== null;
+  useEffect(() => {
+    if (!busy) return;
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
+  const resultsY = useRef(0);
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +87,14 @@ export function DocumentsScreen({ navigation }: Props) {
 
   const showResult = (r: ProcessResult) => {
     setResult(r);
+    // Fast extractions finish in under a second — say so and scroll to the results, or it looks like nothing happened.
+    const { deadlines: d, schedules: s } = r.extracted;
+    setToast(
+      d.length || s.length
+        ? `Found ${d.length} deadline${d.length === 1 ? "" : "s"} and ${s.length} schedule${s.length === 1 ? "" : "s"}`
+        : "No deadlines or classes found in this file",
+    );
+    setTimeout(() => scrollRef.current?.scrollTo({ y: resultsY.current, animated: true }), 300);
     setDeadlines(
       r.extracted.deadlines.map((d) => ({
         index: d.index,
@@ -86,6 +104,7 @@ export function DocumentsScreen({ navigation }: Props) {
         confidence: d.confidence,
         include: !d.created && d.confidence >= 80 && Boolean(d.date),
         created: Boolean(d.created),
+        existing: Boolean(d.existing),
         assumedTime: d.assumedTime,
       })),
     );
@@ -99,6 +118,7 @@ export function DocumentsScreen({ navigation }: Props) {
         confidence: s.confidence,
         include: !s.created && s.daysOfWeek.length > 0,
         created: Boolean(s.created),
+        existing: Boolean(s.existing),
       })),
     );
     void load();
@@ -165,7 +185,7 @@ export function DocumentsScreen({ navigation }: Props) {
         deadlines: ds.map((d) => ({ title: d.title, date: d.date, time: d.time || null })),
         schedules: ss.filter((s) => s.days.length).map((s) => ({ title: s.title, daysOfWeek: s.days, time: s.time || null, durationMinutes: s.durationMinutes })),
       });
-      setToast(`✓ Created ${r.tasks.length} task${r.tasks.length === 1 ? "" : "s"} and ${r.routines.length} routine${r.routines.length === 1 ? "" : "s"}`);
+      setToast(`Created ${r.tasks.length} task${r.tasks.length === 1 ? "" : "s"} and ${r.routines.length} routine${r.routines.length === 1 ? "" : "s"}`);
       setDeadlines((l) => l.map((d) => (d.include ? { ...d, created: true, include: false } : d)));
       setSchedules((l) => l.map((s) => (s.include ? { ...s, created: true, include: false } : s)));
     } catch (e) {
@@ -181,16 +201,16 @@ export function DocumentsScreen({ navigation }: Props) {
   return (
     <View style={ui.screen}>
       <ScreenHeader title="Documents" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
         <TutorialTip id="documents" title="Upload a syllabus or timetable" text="1. Select a file  2. Choose its type  3. I'll extract deadlines and classes — high-confidence ones are added automatically, the rest you confirm." />
 
         <Card style={{ gap: 12 }}>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Button title={picked ? "Choose another file" : "Select file"} onPress={() => void pick()} style={{ flex: 1 }} />
-            <Button title="Paste text" kind="secondary" onPress={() => setPasteMode((v) => !v)} />
+            <Button title={picked ? "Choose another file" : "Select file"} disabled={busy} onPress={() => void pick()} style={{ flex: 1 }} />
+            <Button title="Paste text" kind="secondary" disabled={busy} onPress={() => setPasteMode((v) => !v)} />
           </View>
           <Text style={styles.meta}>PDF, JPG, PNG or DOCX · up to 10 MB · {(usedBytes / 1024 / 1024).toFixed(1)} MB used</Text>
-          {picked ? <Text style={ui.body}>📄 {picked.name} ({(picked.size / 1024).toFixed(0)} KB)</Text> : null}
+          {picked ? <Text style={ui.body}>{picked.name} ({(picked.size / 1024).toFixed(0)} KB)</Text> : null}
           {pasteMode ? (
             <TextInput
               style={[ui.input, { minHeight: 120, textAlignVertical: "top" }]}
@@ -198,7 +218,7 @@ export function DocumentsScreen({ navigation }: Props) {
               onChangeText={setPasted}
               multiline
               placeholder="Paste syllabus or schedule text here"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#646A78"
             />
           ) : null}
           {picked || pasteMode ? (
@@ -206,7 +226,7 @@ export function DocumentsScreen({ navigation }: Props) {
               <Text style={ui.label}>What type of document is this?</Text>
               <View style={ui.wrap}>
                 {TYPES.map((t) => (
-                  <Chip key={t.key} small label={t.label} selected={docType === t.key} onPress={() => setDocType(t.key)} />
+                  <Chip key={t.key} small label={t.label} selected={docType === t.key} onPress={() => !busy && setDocType(t.key)} />
                 ))}
               </View>
               {picked && /image/.test(picked.mimeType) ? (
@@ -219,13 +239,25 @@ export function DocumentsScreen({ navigation }: Props) {
                   </View>
                 </>
               ) : null}
-              {progress !== null ? (
-                <View style={{ gap: 4 }}>
-                  <ProgressBar value={Math.round(progress * 100)} color={palette.ai} />
-                  <Text style={styles.meta}>{progress < 1 ? `Uploading… ${Math.round(progress * 100)}%` : "Reading the document… (OCR can take a little while)"}</Text>
+              {busy ? (
+                <View style={styles.busy}>
+                  <View style={styles.rowBetween}>
+                    <ActivityIndicator color={palette.ai} />
+                    <Text style={[ui.body, { flex: 1 }]}>
+                      {progress! < 1 ? `Uploading… ${Math.round(progress! * 100)}%` : "Reading and extracting deadlines…"}
+                    </Text>
+                    <Text style={styles.meta}>{elapsed}s</Text>
+                  </View>
+                  {progress! < 1 ? <ProgressBar value={Math.round(progress! * 100)} color={palette.ai} /> : null}
+                  {progress! >= 1 && elapsed >= 10 ? (
+                    <Text style={styles.meta}>Photos are read with OCR, which can take up to a minute. Please keep the app open.</Text>
+                  ) : null}
                 </View>
               ) : (
-                <Button title="Extract" kind="ai" disabled={!docType} onPress={() => void (pasteMode && !picked ? submitPaste() : upload())} />
+                <>
+                  {!docType ? <Text style={styles.meta}>Choose the document type above to enable Extract.</Text> : null}
+                  <Button title="Extract" kind="tonal" disabled={!docType} onPress={() => void (pasteMode && !picked ? submitPaste() : upload())} />
+                </>
               )}
             </>
           ) : null}
@@ -233,9 +265,16 @@ export function DocumentsScreen({ navigation }: Props) {
 
         {result ? (
           <>
+            <View onLayout={(e) => (resultsY.current = e.nativeEvent.layout.y)} />
+            {!result.extracted.deadlines.length && !result.extracted.schedules.length && !result.extracted.warning ? (
+              <Card tone="warning" style={{ gap: 6 }}>
+                <Text style={ui.body}>I couldn't find any dated deadlines or class times in this file.</Text>
+                <Text style={styles.meta}>Make sure it has dates like "Oct 20, 2026" or class times like "Mon 9:00 AM", or try "Paste text".</Text>
+              </Card>
+            ) : null}
             {result.extracted.warning ? (
               <Card tone="warning" style={{ gap: 8 }}>
-                <Text style={ui.body}>⚠️ {result.extracted.warning}</Text>
+                <Text style={ui.body}>{result.extracted.warning}</Text>
                 {result.extracted.needsLanguage ? (
                   <View style={ui.wrap}>
                     {LANGS.filter((l) => l.key !== "eng").map((l) => (
@@ -259,16 +298,16 @@ export function DocumentsScreen({ navigation }: Props) {
                       onPress={() => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, include: !x.include } : x)))}
                       style={[styles.box, (d.include || d.created) && styles.boxOn]}
                     >
-                      <Text style={{ color: "#fff", fontWeight: "800" }}>{d.include || d.created ? "✓" : ""}</Text>
+                      <Text style={{ color: "#fff", fontFamily: "Inter_700Bold" }}>{d.include || d.created ? "✓" : ""}</Text>
                     </Pressable>
                     <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, title } : x)))} />
                   </View>
                   <View style={{ flexDirection: "row", gap: 8 }}>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.date} placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8" editable={!d.created} onChangeText={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date } : x)))} />
-                    <TextInput style={[ui.input, { width: 110, paddingVertical: 8 }]} value={d.time} placeholder="11:59 PM" placeholderTextColor="#94a3b8" editable={!d.created} onChangeText={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
+                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.date} placeholder="YYYY-MM-DD" placeholderTextColor="#646A78" editable={!d.created} onChangeText={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date } : x)))} />
+                    <TextInput style={[ui.input, { width: 110, paddingVertical: 8 }]} value={d.time} placeholder="11:59 PM" placeholderTextColor="#646A78" editable={!d.created} onChangeText={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
                   </View>
                   <Text style={[styles.meta, { color: confColor(d.confidence) }]}>
-                    {d.created ? "✓ Created automatically · " : ""}Confidence {d.confidence}%
+                    {d.existing ? "Already in your tasks · " : d.created ? "Added automatically · " : ""}Confidence {d.confidence}%
                     {d.assumedTime && !d.created ? " · time assumed 11:59 PM — OK?" : ""}
                     {!d.date ? " · too vague — enter a date" : ""}
                   </Text>
@@ -289,7 +328,7 @@ export function DocumentsScreen({ navigation }: Props) {
                       onPress={() => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, include: !x.include } : x)))}
                       style={[styles.box, (s.include || s.created) && styles.boxOn]}
                     >
-                      <Text style={{ color: "#fff", fontWeight: "800" }}>{s.include || s.created ? "✓" : ""}</Text>
+                      <Text style={{ color: "#fff", fontFamily: "Inter_700Bold" }}>{s.include || s.created ? "✓" : ""}</Text>
                     </Pressable>
                     <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={s.title} editable={!s.created} onChangeText={(title) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, title } : x)))} />
                   </View>
@@ -304,9 +343,9 @@ export function DocumentsScreen({ navigation }: Props) {
                       />
                     ))}
                   </View>
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#94a3b8" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
                   <Text style={[styles.meta, { color: confColor(s.confidence) }]}>
-                    {s.created ? "✓ Created automatically · " : ""}Confidence {s.confidence}%{!s.days.length ? " · pick the days" : ""}
+                    {s.existing ? "Already in your routines · " : s.created ? "Added automatically · " : ""}Confidence {s.confidence}%{!s.days.length ? " · pick the days" : ""}
                   </Text>
                 </Card>
               ))
@@ -321,7 +360,7 @@ export function DocumentsScreen({ navigation }: Props) {
                 <SectionTitle title="Course info" />
                 <Card style={{ gap: 6 }}>
                   <Text style={ui.h2}>{[course.code, course.name].filter(Boolean).join(" · ")}</Text>
-                  {course.instructor ? <Text style={ui.body}>👩‍🏫 {course.instructor}</Text> : null}
+                  {course.instructor ? <Text style={ui.body}>Instructor: {course.instructor}</Text> : null}
                   {course.prerequisites.length ? <Text style={ui.body}>Prerequisites: {course.prerequisites.join(", ")}</Text> : null}
                   {course.topics.length ? <Text style={ui.body}>Topics: {course.topics.join(", ")}</Text> : null}
                   {course.objectives.length ? <Text style={ui.body}>Objectives: {course.objectives.slice(0, 4).join("; ")}</Text> : null}
@@ -354,20 +393,21 @@ export function DocumentsScreen({ navigation }: Props) {
                   }
                   hitSlop={8}
                 >
-                  <Text style={{ color: palette.danger, fontWeight: "700" }}>Delete</Text>
+                  <Text style={{ color: palette.danger, fontFamily: "Inter_600SemiBold" }}>Delete</Text>
                 </Pressable>
               </Card>
             ))}
           </>
         ) : null}
       </ScrollView>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  meta: { fontSize: 12, color: colors.textMuted },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
+  busy: { gap: 8, padding: 12, borderRadius: 12, backgroundColor: palette.aiSoft },
   rowBetween: { flexDirection: "row", alignItems: "center", gap: 10 },
   box: { width: 26, height: 26, borderRadius: 7, borderWidth: 2, borderColor: colors.primary, alignItems: "center", justifyContent: "center" },
   boxOn: { backgroundColor: colors.primary },

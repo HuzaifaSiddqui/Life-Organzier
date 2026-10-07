@@ -3,7 +3,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, ConfidenceMeter, EmptyState, HelpButton, SectionTitle, Toast, ui } from "../../components/ui";
+import { Button, Card, Chip, ConfidenceMeter, EmptyState, HelpButton, SectionTitle, Snackbar, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -13,13 +13,13 @@ import { relativeTime } from "../../utils/format";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Memory">;
 
-const KIND_INFO: Record<string, { title: string; icon: string }> = {
-  PREFERENCE: { title: "Preferences", icon: "⭐" },
-  COPING: { title: "What helps you", icon: "🌿" },
-  GOAL: { title: "Goals", icon: "🎯" },
-  FACT: { title: "About you", icon: "👤" },
-  COURSE: { title: "Courses & studies", icon: "📚" },
-  EPISODE: { title: "Past conversations", icon: "💬" },
+const KIND_INFO: Record<string, { title: string }> = {
+  PREFERENCE: { title: "Preferences" },
+  COPING: { title: "What helps you" },
+  GOAL: { title: "Goals" },
+  FACT: { title: "About you" },
+  COURSE: { title: "Courses & studies" },
+  EPISODE: { title: "Past conversations" },
 };
 const ORDER = ["PREFERENCE", "COPING", "GOAL", "FACT", "COURSE", "EPISODE"];
 
@@ -62,14 +62,14 @@ export function MemoryScreen({ navigation }: Props) {
         right={<HelpButton title="Your assistant's memory" text="I remember preferences, what helps you, goals and course details from our conversations and documents, and I learn patterns from your activity. Everything here is used to personalise planning — you can correct or delete any of it." />}
       />
       <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
-        <Card tone="ai" style={{ gap: 10 }}>
+        <Card tone="accent" style={{ gap: 10 }}>
           <Text style={ui.h2}>Teach me something</Text>
           <TextInput
             style={ui.input}
             value={draft}
             onChangeText={setDraft}
             placeholder="e.g. I study best after Isha prayer"
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor="#646A78"
           />
           <View style={ui.wrap}>
             {(["PREFERENCE", "COPING", "GOAL", "FACT"] as const).map((k) => (
@@ -78,7 +78,7 @@ export function MemoryScreen({ navigation }: Props) {
           </View>
           <Button
             title="Remember this"
-            kind="ai"
+            kind="tonal"
             onPress={async () => {
               const text = draft.trim();
               if (text.length < 3) return;
@@ -109,11 +109,11 @@ export function MemoryScreen({ navigation }: Props) {
         {memories === null ? (
           <ActivityIndicator color={palette.ai} />
         ) : grouped.length === 0 ? (
-          <EmptyState icon="🧠" title="I don't know much about you yet" text="Tell me things in the assistant — like what helps when you're stressed or when you work best." />
+          <EmptyState title="I don't know much about you yet" text="Tell me things in the assistant — like what helps when you're stressed or when you work best." />
         ) : (
           grouped.map((g) => (
             <View key={g.kind} style={{ gap: 8 }}>
-              <SectionTitle title={`${KIND_INFO[g.kind]?.icon ?? "•"} ${KIND_INFO[g.kind]?.title ?? g.kind}`} />
+              <SectionTitle title={`${KIND_INFO[g.kind]?.title ?? g.kind}`} />
               {g.items.map((m) => (
                 <Card key={m.id} style={{ gap: 6 }}>
                   {editing?.id === m.id ? (
@@ -188,13 +188,13 @@ export function MemoryScreen({ navigation }: Props) {
           />
         ) : null}
       </ScrollView>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  meta: { fontSize: 12, color: colors.textMuted },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  action: { color: palette.ai, fontWeight: "700", fontSize: 13 },
+  action: { color: palette.ai, fontFamily: "Inter_600SemiBold", fontSize: 13 },
 });

@@ -13,7 +13,7 @@ import {
 import { sendPasswordResetEmail } from "firebase/auth";
 import { LinearGradient } from "expo-linear-gradient";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { colors, radii, shadow } from "../../constants/theme";
+import { colors, radii, shadow, palette } from "../../constants/theme";
 import { auth } from "../../lib/firebase";
 import type { AuthStackParamList } from "../../navigation/AuthStack";
 import { z } from "zod";
@@ -69,7 +69,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
                   keyboardType="email-address"
                   style={styles.input}
                   placeholder="you@example.com"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#646A78"
                 />
                 {fieldState.error ? (
                   <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -85,7 +85,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
             disabled={busy}
           >
             <LinearGradient
-              colors={["#1D99FF", "#47AFFF"]}
+              colors={[colors.text, colors.text]}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
               style={styles.primaryGrad}
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: "Inter_500Medium",
     color: colors.text,
     marginBottom: 8,
   },
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   fieldError: {
-    color: "#b91c1c",
+    color: palette.danger,
     marginTop: 6,
     fontSize: 13,
   },
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: "#fff",
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     fontSize: 16,
   },
   btnPressed: {

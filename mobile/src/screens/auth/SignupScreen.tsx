@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { GradientPrimaryButton } from "../../components/GradientPrimaryButton";
-import { colors, radii, shadow } from "../../constants/theme";
+import { colors, radii, shadow, palette } from "../../constants/theme";
 import { auth } from "../../lib/firebase";
 import type { AuthStackParamList } from "../../navigation/AuthStack";
 import { z } from "zod";
@@ -104,7 +104,7 @@ export function SignupScreen({ navigation }: Props) {
                       keyboardType="email-address"
                       style={styles.input}
                       placeholder="you@example.com"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="#646A78"
                     />
                     {fieldState.error ? (
                       <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -125,7 +125,7 @@ export function SignupScreen({ navigation }: Props) {
                       secureTextEntry
                       style={styles.input}
                       placeholder="At least 8 characters"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="#646A78"
                     />
                     {fieldState.error ? (
                       <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -146,7 +146,7 @@ export function SignupScreen({ navigation }: Props) {
                       secureTextEntry
                       style={styles.input}
                       placeholder="Repeat password"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="#646A78"
                     />
                     {fieldState.error ? (
                       <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(15, 23, 42, 0.52)",
+    backgroundColor: "rgba(15, 18, 24, 0.40)",
   },
   keyboard: {
     flex: 1,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     color: colors.text,
   },
   closeBtn: {
@@ -231,14 +231,14 @@ const styles = StyleSheet.create({
   closeBtnText: {
     fontSize: 18,
     color: colors.textMuted,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
   },
   field: {
     marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: "Inter_500Medium",
     color: colors.text,
     marginBottom: 8,
   },
@@ -253,12 +253,12 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   fieldError: {
-    color: "#b91c1c",
+    color: palette.danger,
     marginTop: 6,
     fontSize: 13,
   },
   error: {
-    color: "#b91c1c",
+    color: palette.danger,
     textAlign: "center",
     marginBottom: 8,
   },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   footerLink: {
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     color: colors.primary,
   },
 });

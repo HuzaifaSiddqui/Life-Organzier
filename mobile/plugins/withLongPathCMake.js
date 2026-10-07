@@ -14,6 +14,8 @@ const CMAKE_VERSION = "4.1.2";
 const MARKER = "// withLongPathCMake";
 
 module.exports = function withLongPathCMake(config) {
+  // The 260-char limit is Windows-only; elsewhere keep the SDK's default CMake.
+  if (process.platform !== "win32") return config;
   return withAppBuildGradle(config, (cfg) => {
     if (!cfg.modResults.contents.includes(MARKER)) {
       cfg.modResults.contents = cfg.modResults.contents.replace(

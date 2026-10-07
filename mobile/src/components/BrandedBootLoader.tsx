@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: colors.textMuted,
-    fontWeight: "500",
+    fontFamily: "Inter_500Medium",
     textAlign: "center",
   },
 });

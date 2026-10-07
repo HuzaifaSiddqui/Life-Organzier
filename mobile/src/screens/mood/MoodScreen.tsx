@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { AssistantCards } from "../../components/assistant/AssistantCards";
 import { BarChart } from "../../components/charts/Charts";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, SectionTitle, Toast, TutorialTip, ui } from "../../components/ui";
+import { Button, Card, Chip, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -14,7 +14,7 @@ import type { ActionPayload, Mood, MoodLog, MoodRecommendation } from "../../typ
 
 type Props = NativeStackScreenProps<MainStackParamList, "Mood">;
 
-const SCALE = ["😫", "😣", "😟", "😕", "😐", "🙂", "😊", "😄", "😁", "🤩"];
+const SCALE = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
 const MOODS: Mood[] = ["stressed", "anxious", "overwhelmed", "tired", "sad", "calm", "focused", "motivated", "happy"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -88,7 +88,7 @@ export function MoodScreen({ navigation }: Props) {
           <View style={styles.scale}>
             {SCALE.map((e, i) => (
               <Pressable key={e} onPress={() => setScore(i + 1)} style={[styles.scaleBtn, score === i + 1 && styles.scaleActive]}>
-                <Text style={{ fontSize: 22 }}>{e}</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 22 }}>{e}</Text>
                 <Text style={styles.scaleNum}>{i + 1}</Text>
               </Pressable>
             ))}
@@ -98,12 +98,12 @@ export function MoodScreen({ navigation }: Props) {
               <Chip key={m} small label={m} selected={mood === m} onPress={() => setMood(mood === m ? null : m)} />
             ))}
           </View>
-          <TextInput style={ui.input} value={note} onChangeText={setNote} placeholder="Anything on your mind? (optional)" placeholderTextColor="#94a3b8" />
-          <Button title="Log mood" kind="ai" onPress={() => void save()} loading={busy} disabled={score === null && !mood} />
+          <TextInput style={ui.input} value={note} onChangeText={setNote} placeholder="Anything on your mind? (optional)" placeholderTextColor="#646A78" />
+          <Button title="Log mood" kind="tonal" onPress={() => void save()} loading={busy} disabled={score === null && !mood} />
         </Card>
 
         {rec ? (
-          <Card tone="ai" style={{ gap: 10 }}>
+          <Card tone="accent" style={{ gap: 10 }}>
             <Text style={ui.body}>{rec.message}</Text>
             <AssistantCards cards={[{ type: "mood_support", recommendation: rec }]} onOpenTask={(id) => navigation.navigate("TaskDetail", { taskId: id })} onAction={onAction} />
             <Button title="Talk it through with the assistant" kind="secondary" onPress={() => navigation.navigate("Assistant", { prefill: "Can we talk about how I'm feeling?", autoSend: true, nonce: Date.now() })} />
@@ -153,7 +153,7 @@ export function MoodScreen({ navigation }: Props) {
           </>
         ) : null}
       </ScrollView>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
   );
 }
@@ -162,11 +162,11 @@ const styles = StyleSheet.create({
   scale: { flexDirection: "row", justifyContent: "space-between" },
   scaleBtn: { alignItems: "center", paddingVertical: 4, borderRadius: 10, width: "9.5%" },
   scaleActive: { backgroundColor: palette.aiSoft },
-  scaleNum: { fontSize: 10, color: colors.textMuted },
-  meta: { fontSize: 12, color: colors.textMuted },
+  scaleNum: { fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textMuted },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
   dayRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dayLabel: { width: 34, fontSize: 12, color: colors.textMuted },
-  dayTrack: { flex: 1, height: 8, backgroundColor: "#EEF2F6", borderRadius: 4, overflow: "hidden" },
+  dayLabel: { width: 34, fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
+  dayTrack: { flex: 1, height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: "hidden" },
   dayFill: { height: 8, borderRadius: 4 },
-  dayValue: { width: 28, textAlign: "right", fontSize: 12, color: colors.text, fontWeight: "700" },
+  dayValue: { width: 28, textAlign: "right", fontSize: 12, color: colors.text, fontFamily: "Inter_600SemiBold" },
 });

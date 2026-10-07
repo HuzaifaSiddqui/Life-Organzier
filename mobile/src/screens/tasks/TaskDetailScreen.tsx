@@ -3,7 +3,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, ProgressBar, Toast, ui } from "../../components/ui";
+import { Button, Card, Chip, ProgressBar, Snackbar, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -101,7 +101,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       <ScrollView contentContainerStyle={styles.content}>
         {parent ? (
           <Pressable onPress={() => navigation.push("TaskDetail", { taskId: parent.id })}>
-            <Text style={styles.parent}>↑ Part of “{parent.title}”</Text>
+            <Text style={styles.parent}>Part of “{parent.title}”</Text>
           </Pressable>
         ) : null}
         <Card style={{ gap: 10 }}>
@@ -113,10 +113,10 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             <Chip small label={task.status.replace("_", " ")} />
             {task.category ? <Chip small label={task.category} /> : null}
             {task.taskType ? <Chip small label={task.taskType.toLowerCase()} /> : null}
-            {task.locationContext ? <Chip small label={`📍 ${task.locationContext}`} /> : null}
+            {task.locationContext ? <Chip small label={task.locationContext} /> : null}
             {task.pendingSync ? <Chip small label="⟳ pending sync" /> : null}
           </View>
-          <Text style={[styles.meta, overdue && { color: palette.danger, fontWeight: "700" }]}>{formatDue(task)}</Text>
+          <Text style={[styles.meta, overdue && { color: palette.danger, fontFamily: "Inter_600SemiBold" }]}>{formatDue(task)}</Text>
           {task.scheduledStart && task.dueAt ? <Text style={styles.meta}>Deadline: {new Date(task.dueAt).toLocaleString()}</Text> : null}
           {task.durationMinutes ? <Text style={styles.meta}>Takes about {formatDuration(task.durationMinutes)}</Text> : null}
           {task.difficulty ? <Text style={styles.meta}>Difficulty {task.difficulty}/5</Text> : null}
@@ -127,7 +127,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
         {overdue ? (
           <Card tone="danger" style={{ gap: 10 }}>
-            <Text style={ui.body}>✗ This is past its deadline and still pending. What would you like to do?</Text>
+            <Text style={ui.body}>This is past its deadline and still pending. What would you like to do?</Text>
             <View style={ui.wrap}>
               <Chip small selected label="Complete now" onPress={() => void viaAssistant("od", { type: "overdue_action", taskId: task.id, choice: "complete_now" }, "Complete now")} />
               <Chip small label="I couldn't finish" onPress={() => void viaAssistant("od", { type: "overdue_action", taskId: task.id, choice: "couldnt" }, "I couldn't finish")} />
@@ -146,7 +146,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
               {[0, 25, 50, 75, 100].map((p) => (
                 <Chip key={p} small label={`${p}%`} selected={progress === p} onPress={() => void run("p", async () => {
                   await updateTask(task.id, { progress: p });
-                  return p === 100 ? `✓ "${task.title}" complete!` : undefined;
+                  return p === 100 ? `"${task.title}" complete` : undefined;
                 })} />
               ))}
             </View>
@@ -157,7 +157,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           <View style={styles.rowBetween}>
             <Text style={ui.h2}>Subtasks</Text>
             {!task.parentTaskId ? (
-              <Chip small tone="ai" label={busy === "split" ? "Thinking…" : "✨ Split with AI"} onPress={() => void run("split", async () => {
+              <Chip small tone="accent" label={busy === "split" ? "Thinking…" : "Split into steps"} onPress={() => void run("split", async () => {
                 const r = await splitTask(task.id);
                 return `Split into ${r.subtasks.length} parts`;
               })} />
@@ -171,7 +171,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                 })}
                 style={[styles.check, s.status === "COMPLETED" && styles.checkDone]}
               >
-                <Text style={{ color: "#fff", fontWeight: "800" }}>{s.status === "COMPLETED" ? "✓" : ""}</Text>
+                <Text style={{ color: colors.bg, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>{s.status === "COMPLETED" ? "✓" : ""}</Text>
               </Pressable>
               <Pressable style={{ flex: 1 }} onPress={() => navigation.push("TaskDetail", { taskId: s.id })}>
                 <Text style={[ui.body, s.status === "COMPLETED" && { textDecorationLine: "line-through", color: colors.textMuted }]}>{s.title}</Text>
@@ -180,7 +180,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             </View>
           ))}
           <View style={styles.subRow}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={newSub} onChangeText={setNewSub} placeholder="Add a subtask" placeholderTextColor="#94a3b8" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={newSub} onChangeText={setNewSub} placeholder="Add a subtask" placeholderTextColor="#646A78" />
             <Chip
               label="Add"
               onPress={() => {
@@ -208,19 +208,19 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             )}
             {slot ? (
               <View style={{ gap: 8 }}>
-                <Text style={ui.body}>✨ {slot.reason}</Text>
+                <Text style={ui.body}>{slot.reason}</Text>
                 <View style={ui.wrap}>
                   <Chip small selected label="Book it" onPress={() => void run("book", async () => {
                     await updateTask(task.id, { scheduledStart: slot.start, scheduledEnd: slot.end });
                     setSlot(null);
-                    return "📅 Scheduled";
+                    return "Scheduled";
                   })} />
                   <Chip small label="Not now" onPress={() => setSlot(null)} />
                 </View>
               </View>
             ) : (
               <View style={ui.wrap}>
-                <Chip small tone="ai" label={busy === "slot" ? "Looking…" : "✨ Find time for it"} onPress={() => void run("slot", async () => {
+                <Chip small tone="accent" label={busy === "slot" ? "Looking…" : "Find time for it"} onPress={() => void run("slot", async () => {
                   const s = await suggestSlot(task.id);
                   if (!s) return "No free slot found before the deadline.";
                   setSlot(s);
@@ -240,16 +240,16 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             loading={busy === "done"}
             onPress={() => void run("done", async () => {
               await updateTask(task.id, { status: done ? "PENDING" : "COMPLETED" });
-              return done ? "Reopened" : `✓ Nice work!`;
+              return done ? "Reopened" : "Marked as done";
             })}
           />
           {canUndo ? (
-            <Button title="↩ Undo last change" kind="secondary" loading={busy === "undo"} onPress={() => void run("undo", async () => {
+            <Button title="Undo last change" kind="secondary" loading={busy === "undo"} onPress={() => void run("undo", async () => {
               await undoTaskEdit(task.id);
               return "Change undone";
             })} />
           ) : null}
-          <Button title="✨ Talk to the assistant about this" kind="ai" onPress={() => navigation.navigate("Assistant", { prefill: `About "${task.title}": `, nonce: Date.now() })} />
+          <Button title="Discuss with the assistant" kind="tonal" onPress={() => navigation.navigate("Assistant", { prefill: `About "${task.title}": `, nonce: Date.now() })} />
           {done ? (
             <Button title="Archive (hide, keep history)" kind="secondary" onPress={() => void run("arch", async () => {
               await updateTask(task.id, { archived: true });
@@ -275,20 +275,20 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           />
         </View>
       </ScrollView>
-      <Toast text={toast} onHide={() => setToast(null)} />
+      <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   content: { padding: 16, gap: 14, paddingBottom: 60 },
-  edit: { color: colors.primary, fontWeight: "700" },
-  parent: { color: palette.ai, fontWeight: "700" },
-  title: { fontSize: 22, fontWeight: "800", color: colors.text },
+  edit: { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+  parent: { color: palette.ai, fontFamily: "Inter_600SemiBold" },
+  title: { fontSize: 22, fontFamily: "Inter_700Bold", color: colors.text },
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  badgeText: { fontSize: 12, fontWeight: "800" },
-  meta: { fontSize: 13, color: colors.textMuted },
-  tags: { color: colors.primaryDark, fontWeight: "600" },
+  badgeText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  meta: { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.textMuted },
+  tags: { color: colors.primaryDark, fontFamily: "Inter_500Medium" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   subRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   check: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: palette.success, alignItems: "center", justifyContent: "center" },

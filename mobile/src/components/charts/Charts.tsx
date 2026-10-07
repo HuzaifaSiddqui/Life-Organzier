@@ -135,16 +135,16 @@ export function Heatmap({ grid }: { grid: number[][] }) {
 }
 
 const styles = StyleSheet.create({
-  readout: { fontSize: 12, color: colors.textMuted, marginBottom: 6 },
+  readout: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, marginBottom: 6 },
   axisRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  axis: { fontSize: 11, color: colors.textMuted },
+  axis: { fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textMuted },
   donutRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   swatch: { width: 10, height: 10, borderRadius: 3 },
-  legendLabel: { flex: 1, fontSize: 13, color: colors.text },
-  legendValue: { fontSize: 13, color: colors.text, fontWeight: "700" },
+  legendLabel: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text },
+  legendValue: { fontSize: 13, color: colors.text, fontFamily: "Inter_600SemiBold" },
   heatRow: { flexDirection: "row", alignItems: "center", gap: 2 },
-  heatDay: { width: 14, fontSize: 10, color: colors.textMuted },
+  heatDay: { width: 14, fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textMuted },
   cell: { flex: 1, aspectRatio: 1, borderRadius: 3 },
   cellActive: { borderWidth: 1.5, borderColor: colors.text },
 });

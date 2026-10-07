@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15,23,42,0.45)",
+    backgroundColor: "rgba(15, 18, 24, 0.40)",
   },
   sheet: {
     backgroundColor: colors.surface,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 16,
-    fontWeight: "700",
+    fontFamily: "Inter_600SemiBold",
     color: colors.text,
     marginBottom: 8,
     textAlign: "center",
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   doneBtnText: {
     color: "#fff",
-    fontWeight: "700",
+    fontFamily: "Inter_600SemiBold",
     fontSize: 16,
   },
   trigger: {
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   triggerPlaceholder: {
-    color: "#94a3b8",
+    color: "#646A78",
   },
   quickRow: {
     marginTop: 8,
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   quickChipText: {
     fontSize: 11,
     color: colors.textMuted,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
   },
   inlineTrigger: {
     height: 44,
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   },
   clearLink: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     color: colors.primary,
   },
 });

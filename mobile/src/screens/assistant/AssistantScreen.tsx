@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AssistantCards } from "../../components/assistant/AssistantCards";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
 import { MicIcon } from "../../components/icons/MicIcon";
+import { Icon } from "../../components/icons/Icon";
 import { SendIcon } from "../../components/icons/SendIcon";
 import { HelpButton, SyncBadge, TutorialTip } from "../../components/ui";
 import { colors, palette, radii } from "../../constants/theme";
@@ -196,14 +197,11 @@ export function AssistantScreen({ navigation, route }: Props) {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-          <Text style={styles.back}>‹</Text>
+          <Icon name="back" size={24} color={colors.text} />
         </Pressable>
-        <View style={styles.avatar}>
-          <Text style={{ fontSize: 18 }}>✨</Text>
-        </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Your assistant</Text>
-          <Text style={styles.subtitle}>{busy ? "thinking…" : "remembers you across chats"}</Text>
+          <Text style={styles.title}>Assistant</Text>
+          <Text style={styles.subtitle}>{busy ? "Thinking…" : "Remembers your context across chats"}</Text>
         </View>
         <Pressable
           onPress={() => {
@@ -213,10 +211,10 @@ export function AssistantScreen({ navigation, route }: Props) {
           style={[styles.iconBtn, speakReplies && { backgroundColor: palette.aiSoft, borderColor: palette.ai }]}
           accessibilityLabel="Toggle spoken replies"
         >
-          <Text>{speakReplies ? "🔊" : "🔈"}</Text>
+          <Icon name="speaker" size={18} color={speakReplies ? colors.primary : colors.textMuted} />
         </Pressable>
         <Pressable onPress={() => void newChat()} style={styles.iconBtn} accessibilityLabel="New conversation">
-          <Text>＋</Text>
+          <Icon name="plus" size={18} color={colors.textMuted} />
         </Pressable>
         <HelpButton
           title="Talking to your assistant"
@@ -235,7 +233,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         <SyncBadge />
         <TutorialTip id="assistant" title="Just talk to me" text="Say things like “Remind me to call Ali tomorrow at 5 PM” or “I'm 50% done with the essay”. I'll ask when something is unclear." />
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 40 }} color={palette.ai} />
+          <ActivityIndicator style={{ marginTop: 40 }} color={palette.muted} />
         ) : messages.length === 0 ? (
           <View style={styles.welcome}>
             <Text style={styles.welcomeTitle}>Hi! How can I help today?</Text>
@@ -252,7 +250,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           messages.map((m) => (
             <View key={m.id} style={[styles.msgRow, m.role === "USER" ? styles.right : styles.left]}>
               <View style={[styles.bubble, m.role === "USER" ? styles.userBubble : styles.aiBubble, m.pending && { opacity: 0.6 }]}>
-                <Text style={[styles.msgText, m.role === "USER" && { color: "#fff" }]}>{m.content}</Text>
+                <Text style={[styles.msgText, m.role === "USER" && { color: colors.bg }]}>{m.content}</Text>
               </View>
               {m.role === "ASSISTANT" && m.cards?.length ? (
                 <View style={styles.cards}>
@@ -265,8 +263,8 @@ export function AssistantScreen({ navigation, route }: Props) {
               ) : null}
               {m.role === "ASSISTANT" && (m.learned?.length || m.memoriesUsed) ? (
                 <View style={styles.memoryRow}>
-                  {m.learned?.length ? <Text style={styles.memoryText}>🧠 Remembered: {m.learned[0].replace(/^User\s+/i, "")}</Text> : null}
-                  {!m.learned?.length && m.memoriesUsed ? <Text style={styles.memoryText}>🧠 Used {m.memoriesUsed} thing{m.memoriesUsed === 1 ? "" : "s"} I know about you</Text> : null}
+                  {m.learned?.length ? <Text style={styles.memoryText}>Remembered: {m.learned[0].replace(/^User\s+/i, "")}</Text> : null}
+                  {!m.learned?.length && m.memoriesUsed ? <Text style={styles.memoryText}>Used {m.memoriesUsed} thing{m.memoriesUsed === 1 ? "" : "s"} I know about you</Text> : null}
                 </View>
               ) : null}
               {m.role === "ASSISTANT" && m.id === last?.id && m.actions?.length ? (
@@ -283,7 +281,7 @@ export function AssistantScreen({ navigation, route }: Props) {
                         pressed && { opacity: 0.8 },
                       ]}
                     >
-                      <Text style={[styles.actionText, (a.style === "primary" || a.style === "danger") && { color: "#fff" }]}>{a.label}</Text>
+                      <Text style={[styles.actionText, (a.style === "primary" || a.style === "danger") && { color: colors.bg }]}>{a.label}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -294,7 +292,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         {busy ? (
           <View style={[styles.msgRow, styles.left]}>
             <View style={[styles.bubble, styles.aiBubble, styles.typing]}>
-              <ActivityIndicator size="small" color={palette.ai} />
+              <ActivityIndicator size="small" color={palette.muted} />
               <Text style={styles.typingText}>Thinking…</Text>
             </View>
           </View>
@@ -308,7 +306,7 @@ export function AssistantScreen({ navigation, route }: Props) {
             <ListeningWaveform />
             <Text style={styles.listeningText}>{draft || "Listening… I'll stop after a short pause"}</Text>
             <Pressable onPress={stop} style={styles.stopBtn}>
-              <Text style={{ color: "#fff", fontWeight: "700" }}>Stop</Text>
+              <Text style={{ color: colors.bg, fontFamily: "Inter_600SemiBold" }}>Stop</Text>
             </Pressable>
           </View>
         ) : (
@@ -318,7 +316,7 @@ export function AssistantScreen({ navigation, route }: Props) {
               value={draft}
               onChangeText={setDraft}
               placeholder="Tell me anything…"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={palette.muted}
               multiline
               maxLength={2000}
               onSubmitEditing={() => {
@@ -331,7 +329,7 @@ export function AssistantScreen({ navigation, route }: Props) {
             />
             {speechSupported ? (
               <Pressable onPress={() => void startVoice()} style={styles.micBtn} accessibilityLabel="Speak">
-                <MicIcon size={20} color={palette.ai} />
+                <MicIcon size={20} color={colors.text} />
               </Pressable>
             ) : null}
             <Pressable
@@ -362,41 +360,39 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingBottom: 10,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
+    backgroundColor: colors.bg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  back: { fontSize: 30, color: colors.text, marginTop: -4 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.aiSoft, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 16, fontWeight: "800", color: colors.text },
-  subtitle: { fontSize: 12, color: palette.ai },
-  iconBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: colors.text },
+  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   thread: { padding: 14, gap: 12, paddingBottom: 24 },
   welcome: { marginTop: 24, gap: 10, alignItems: "center" },
-  welcomeTitle: { fontSize: 22, fontWeight: "800", color: colors.text, textAlign: "center" },
-  welcomeText: { fontSize: 14, color: colors.textMuted, textAlign: "center", lineHeight: 20, paddingHorizontal: 12 },
+  welcomeTitle: { fontSize: 22, fontFamily: "Inter_600SemiBold", color: colors.text, textAlign: "center" },
+  welcomeText: { fontSize: 14, fontFamily: "Inter_400Regular", color: colors.textMuted, textAlign: "center", lineHeight: 20, paddingHorizontal: 12 },
   starters: { width: "100%", gap: 8, marginTop: 8 },
-  starter: { backgroundColor: colors.surface, borderWidth: 1, borderColor: "#DDD6FE", borderRadius: radii.md, padding: 12 },
-  starterText: { color: palette.aiDark, fontWeight: "600" },
+  starter: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, paddingHorizontal: 16, paddingVertical: 14 },
+  starterText: { color: colors.text, fontFamily: "Inter_500Medium", fontSize: 15 },
   msgRow: { gap: 6, maxWidth: "100%" },
   left: { alignItems: "flex-start" },
   right: { alignItems: "flex-end" },
   bubble: { maxWidth: "88%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
-  userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
+  userBubble: { backgroundColor: colors.text, borderBottomRightRadius: 4 },
   aiBubble: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
-  msgText: { fontSize: 15, lineHeight: 21, color: colors.text },
+  msgText: { fontSize: 15, lineHeight: 22, fontFamily: "Inter_400Regular", color: colors.text },
   cards: { width: "92%" },
   memoryRow: { paddingLeft: 4 },
-  memoryText: { fontSize: 12, color: palette.ai, fontWeight: "600" },
+  memoryText: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, maxWidth: "95%" },
-  action: { borderWidth: 1, borderColor: "#C4B5FD", backgroundColor: colors.surface, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
-  actionPrimary: { backgroundColor: palette.ai, borderColor: palette.ai },
+  action: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  actionPrimary: { backgroundColor: colors.text, borderColor: colors.text },
   actionDanger: { backgroundColor: palette.danger, borderColor: palette.danger },
-  actionText: { fontSize: 13, fontWeight: "700", color: palette.aiDark },
+  actionText: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.text },
   typing: { flexDirection: "row", gap: 8, alignItems: "center" },
   typingText: { color: colors.textMuted },
-  notice: { color: palette.warning, textAlign: "center", fontSize: 13, paddingHorizontal: 12 },
-  composer: { backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 12, paddingTop: 10 },
+  notice: { color: palette.warning, textAlign: "center", fontFamily: "Inter_400Regular", fontSize: 13, paddingHorizontal: 12 },
+  composer: { backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: 12, paddingTop: 10 },
   inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
   input: {
     flex: 1,
@@ -409,12 +405,13 @@ const styles = StyleSheet.create({
     paddingTop: 11,
     paddingBottom: 11,
     fontSize: 15,
+    fontFamily: "Inter_400Regular",
     color: colors.text,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surface,
   },
-  micBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.aiSoft, alignItems: "center", justifyContent: "center" },
-  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.ai, alignItems: "center", justifyContent: "center" },
+  micBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.text, alignItems: "center", justifyContent: "center" },
   listening: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
-  listeningText: { flex: 1, color: colors.text, fontSize: 14 },
+  listeningText: { flex: 1, color: colors.text, fontFamily: "Inter_400Regular", fontSize: 14 },
   stopBtn: { backgroundColor: palette.danger, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
 });

@@ -183,7 +183,7 @@ export function TaskForm({
         <Card style={{ gap: 14 }}>
           <View>
             <Text style={ui.label}>Title</Text>
-            <TextInput style={ui.input} value={v.title} onChangeText={(t) => set("title", t)} placeholder="What do you need to do?" placeholderTextColor="#94a3b8" />
+            <TextInput style={ui.input} value={v.title} onChangeText={(t) => set("title", t)} placeholder="What do you need to do?" placeholderTextColor="#646A78" />
           </View>
           <View>
             <Text style={ui.label}>Description</Text>
@@ -192,7 +192,7 @@ export function TaskForm({
               value={v.description}
               onChangeText={(t) => set("description", t)}
               placeholder="Optional details"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#646A78"
               multiline
             />
           </View>
@@ -217,7 +217,7 @@ export function TaskForm({
             </View>
             {suggested.category && suggested.category !== v.category ? (
               <Text style={styles.suggest} onPress={() => set("category", suggested.category)}>
-                ✨ Suggested: {suggested.category} — tap to use
+                Suggested category: {suggested.category} · tap to use
               </Text>
             ) : null}
           </View>
@@ -235,13 +235,13 @@ export function TaskForm({
               onChangeText={setTagDraft}
               onSubmitEditing={() => addTag(tagDraft)}
               placeholder="Add a tag and press enter"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#646A78"
               autoCapitalize="none"
             />
             {tagCompletions.length ? (
               <View style={[ui.wrap, { marginTop: 8 }]}>
                 {tagCompletions.map((t) => (
-                  <Chip key={t} small tone={suggested.tags.includes(t) ? "ai" : undefined} label={`${suggested.tags.includes(t) ? "✨ " : ""}#${t}`} onPress={() => addTag(t)} />
+                  <Chip key={t} small tone={suggested.tags.includes(t) ? "accent" : undefined} label={`#${t}`} onPress={() => addTag(t)} />
                 ))}
               </View>
             ) : null}
@@ -320,6 +320,6 @@ export function TaskForm({
 
 const styles = StyleSheet.create({
   content: { padding: 16, gap: 14, paddingBottom: 48 },
-  suggest: { color: palette.ai, fontWeight: "700", marginTop: 8 },
-  hint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
+  suggest: { color: palette.ai, fontFamily: "Inter_600SemiBold", marginTop: 8 },
+  hint: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, marginTop: 6 },
 });

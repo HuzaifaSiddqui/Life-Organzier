@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from "react-native";
-import { shadow } from "../constants/theme";
+import { shadow, colors } from "../constants/theme";
 
 type Props = {
   title: string;
@@ -30,7 +30,7 @@ export function GradientPrimaryButton({
       ]}
     >
       <LinearGradient
-        colors={["#1D99FF", "#47AFFF"]}
+        colors={[colors.text, colors.text]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={[styles.gradient, { minHeight: height }, style]}
@@ -63,6 +63,6 @@ const styles = StyleSheet.create({
   text: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
   },
 });

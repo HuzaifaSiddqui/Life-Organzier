@@ -14,7 +14,7 @@ import { GradientPrimaryButton } from "../../components/GradientPrimaryButton";
 import { LogoMark } from "../../components/branding/LogoMark";
 import { useAuth } from "../../context/AuthContext";
 import { auth } from "../../lib/firebase";
-import { colors, radii, shadow } from "../../constants/theme";
+import { colors, radii, shadow, palette } from "../../constants/theme";
 
 /** Shown from root when Firebase user exists but email is not verified yet. */
 export function EmailVerificationScreen() {
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: "700",
+    fontFamily: "Inter_600SemiBold",
     color: colors.text,
     textAlign: "center",
     marginBottom: 12,
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   email: {
-    fontWeight: "700",
+    fontFamily: "Inter_600SemiBold",
     color: colors.text,
   },
   card: {
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     color: colors.primary,
   },
   linkBtn: {
@@ -211,13 +211,13 @@ const styles = StyleSheet.create({
   },
   linkBtnText: {
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     color: colors.primaryDark,
   },
   success: {
     marginTop: 16,
     fontSize: 15,
-    color: "#15803d",
+    color: palette.success,
     textAlign: "center",
     lineHeight: 22,
   },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: "Inter_500Medium",
     color: colors.textMuted,
   },
 });
