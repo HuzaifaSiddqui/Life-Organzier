@@ -16,6 +16,23 @@ known gaps in [known-limitations.md](known-limitations.md). This file tracks del
 | 7. UI redesign | Design system (tokens, primitives, Inter), all screens restyled | Restyled; dark mode and Urdu RTL not yet enabled (see docs/design.md flags) |
 | 8. QA and release | Unit tests + CI, smoke script, security review, demo APK | In progress |
 
+## FR-RN-004 check-ins (in progress)
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| A | FR text in the FRD | Done |
+| B | Data model (CheckinLog with slotStart, Task.startedAt/checkinCopy, settings), pure timing rules | Done |
+| C | Message templates, background LLM copy, validator | In progress |
+| D | Plan + respond endpoint, maintenance, style intent | Planned |
+| E | Mobile notifications, Update… sheet, settings, planned-start field | Planned |
+| F | Estimate accuracy, suggestions, evaluation report | Planned |
+| G | Documentation | Planned |
+
+Notes carried into later phases:
+- **Phase D:** when a task's `scheduledStart` changes, mark the old slot's `SCHEDULED` CheckinLog rows `CANCELLED`.
+- **Phase E:** cancel those check-ins' notifications on the phone when the slot changes.
+- **Phase F:** exclude tasks rescheduled after starting (`rescheduledAfterStart`) from the estimate ratio.
+
 ## Open work before release
 
 - Wire up `ConflictSheet` or remove it (sync conflicts currently resolve silently).

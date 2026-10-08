@@ -141,20 +141,23 @@ test("check-ins: rescheduled after starting → completion counts from the new s
   assert.equal(completionBase(normal).getTime(), at(16, 7).getTime());
 });
 
-test("check-ins: user-requested extra time is exempt from caps but limited to 2 per task", () => {
+test("check-ins: user-requested extra time is exempt from caps but limited to 2 per slot", () => {
   const s = settings();
-  const t = { dueAt: at(23, 59, "2026-10-09") };
+  const t = { dueAt: at(23, 59, "2026-10-09"), scheduledStart: at(16) };
   const capped: CheckinHistory[] = ["START", "START_FOLLOWUP", "COMPLETION"].map((kind) => ({ kind, fireAt: at(10), slotStart: at(16), status: "IGNORED", response: null }));
   const r1 = requestExtraCheckin(30, t, s, TZ, at(18, 20), null, capped);
   assert.ok(r1.ok && hm(r1.fireAt) === "18:50" && !r1.passesDeadline);
   const two: CheckinHistory[] = [1, 2].map((i) => ({ kind: "COMPLETION_EXTRA", fireAt: at(18, i), slotStart: at(16), status: "ANSWERED", response: "PLUS_30" }));
   assert.deepEqual(requestExtraCheckin(30, t, s, TZ, at(18, 20), null, two), { ok: false, reason: "limit" });
+  // Rescheduled to a new slot: the two extras from the old slot no longer count.
+  const moved = { ...t, scheduledStart: at(19) };
+  assert.ok(requestExtraCheckin(30, moved, s, TZ, at(20, 30), null, two).ok);
   assert.deepEqual(requestExtraCheckin(60, t, s, TZ, at(21, 30), null, []), { ok: false, reason: "quiet_hours" });
   assert.deepEqual(requestExtraCheckin(15, t, s, TZ, at(18), at(19), []), { ok: false, reason: "dnd" });
 });
 
 test("check-ins: +30 min past the deadline is flagged", () => {
-  const r = requestExtraCheckin(30, { dueAt: at(18, 30) }, settings(), TZ, at(18, 20), null, []);
+  const r = requestExtraCheckin(30, { dueAt: at(18, 30), scheduledStart: at(16) }, settings(), TZ, at(18, 20), null, []);
   assert.ok(r.ok && r.passesDeadline);
 });
 

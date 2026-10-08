@@ -17,8 +17,8 @@ export const FOLLOWUP_DELAY_MIN = 25;
 /** Planned check-ins (START, START_FOLLOWUP, COMPLETION) per task and per user per local day. */
 export const MAX_PLANNED_PER_TASK = 3;
 export const MAX_PLANNED_PER_DAY = 5;
-/** User-requested extra time (+15/+30/+60) is exempt from both caps but limited per task. */
-export const MAX_EXTRAS_PER_TASK = 2;
+/** User-requested extra time (+15/+30/+60) is exempt from both caps but limited per slot. */
+export const MAX_EXTRAS_PER_SLOT = 2;
 const GENTLE_MOODS: ReadonlySet<string> = new Set(["stressed", "anxious", "overwhelmed", "sad"]);
 
 /** `slotStart` = the scheduledStart the check-in was planned for. */
@@ -142,20 +142,21 @@ export type ExtraRequest =
   | { ok: false; reason: "limit" | "quiet_hours" | "dnd" | "past_deadline" };
 
 /**
- * User asked for more time (+15/+30/+60). Exempt from both caps, max 2 per task. Refusals carry a
- * reason so the user always gets a short message instead of nothing.
+ * User asked for more time (+15/+30/+60). Exempt from both caps, max 2 per slot (current
+ * scheduledStart). Refusals carry a reason so the user always gets a short message instead of nothing.
  */
 export function requestExtraCheckin(
   minutes: number,
-  task: Pick<Task, "dueAt">,
+  task: Pick<Task, "dueAt" | "scheduledStart">,
   settings: Pick<UserSettings, "quietStart" | "quietEnd">,
   tz: string,
   now: Date,
   dndUntil: Date | null,
   history: CheckinHistory[],
 ): ExtraRequest {
-  const extras = history.filter((h) => h.kind === "COMPLETION_EXTRA" && h.status !== "CANCELLED").length;
-  if (extras >= MAX_EXTRAS_PER_TASK) return { ok: false, reason: "limit" };
+  const slot = task.scheduledStart?.getTime();
+  const extras = history.filter((h) => h.kind === "COMPLETION_EXTRA" && h.status !== "CANCELLED" && h.slotStart.getTime() === slot).length;
+  if (extras >= MAX_EXTRAS_PER_SLOT) return { ok: false, reason: "limit" };
   const fireAt = addMin(now, minutes);
   if (dndUntil && fireAt < dndUntil) return { ok: false, reason: "dnd" };
   if (isMuted(fireAt, settings, tz, null)) return { ok: false, reason: "quiet_hours" };

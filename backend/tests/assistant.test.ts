@@ -193,6 +193,27 @@ function scheduleCtx(tasks: Task[] = [], s = settings()): ScheduleContext {
   return { tz: TZ, settings: s, tasks, occurrences: [], peak: { windows: [{ start: 9, end: 12 }, { start: 15, end: 17 }], learned: true, confidence: 0.9 } };
 }
 
+test("titles: trailing duration/date clauses are stripped (English and Roman Urdu)", async () => {
+  const cases: Array<[string, string, number | null]> = [
+    ["Finish physics assignment by Friday 3 PM, it will take 3 hours", "Finish physics assignment", 180],
+    ["Write the lab report which takes 2h", "Write the lab report", 120],
+    ["Prepare slides for Monday and it'll take about an hour", "Prepare slides", 60],
+    ["Study chapter 4 tomorrow, should take around 90 minutes", "Study chapter 4", 90],
+    ["Clean my room this evening - takes 30 mins", "Clean my room", 30],
+    ["Physics assignment Friday tak, 3 ghantay lagenge", "Physics assignment", 180],
+    ["Essay likhna hai Friday tak, 2 ghante lagein ge", "Essay likhna hai", 120],
+    ["Report submit karna hai, aadha ghanta lagega", "Report submit karna hai", 30],
+    // real words that look like connectors stay
+    ["Update my will by Friday", "Update my will", null],
+    ["Finish the report that Sara sent", "Finish the report that Sara sent", null],
+  ];
+  for (const [text, title, duration] of cases) {
+    const u = await understand(text, { ...opts, history: [], allowLlm: false });
+    assert.equal(u.title, title, text);
+    assert.equal(u.entities.durationMinutes, duration, text);
+  }
+});
+
 test("auto-schedule: a DEADLINE task with a duration gets a work block that ends before the deadline", () => {
   const draft = { taskType: TaskType.DEADLINE, durationMinutes: 180, priority: Priority.MEDIUM, difficulty: null, dueYmd: "2026-10-09" };
   const deadline = zonedTimeToUtc("2026-10-09", 15, 0, TZ); // Friday 3 PM

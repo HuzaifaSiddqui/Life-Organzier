@@ -289,6 +289,18 @@ function extractDuration(cur: Cursor): number | null {
     const phrase = m[1].toLowerCase();
     return phrase === "half an hour" ? 30 : phrase === "an hour and a half" ? 90 : phrase === "an hour" ? 60 : phrase.includes("couple") ? 120 : 180;
   }
+  // Roman Urdu: "3 ghantay lagenge", "aadha ghanta lagega", "dedh ghanta", "45 minute lagein ge".
+  m = cur.take(
+    /\b(?:taqreeban\s+|lagbhag\s+)?(\d{1,2}(?:\.\d)?|aadha|adha|dedh|derh|ek|do|teen|char|chaar|paanch|panch)\s*(ghant(?:a|ay|ey|e|on)|minat|mint|minute?s?)\b(?:\s*(?:tak|ka kaam))?(?:\s+(?:lag(?:e(?:n|in)?\s*ge|enge|ega|egi|ay?\s*ga|ain\s*ge|\s+jaye?n?\s*ge?)))?/i,
+  );
+  if (m) {
+    const words: Record<string, number> = { aadha: 0.5, adha: 0.5, dedh: 1.5, derh: 1.5, ek: 1, do: 2, teen: 3, char: 4, chaar: 4, paanch: 5, panch: 5 };
+    const raw = m[1].toLowerCase();
+    const n = words[raw] ?? Number(raw); // "aadha ghanta" = 30 min, "dedh ghanta" = 90 min
+    if (!Number.isFinite(n)) return null;
+    const minutes = /^ghant/i.test(m[2]) ? Math.round(n * 60) : Math.round(n);
+    if (minutes > 0 && minutes <= 16 * 60) return minutes;
+  }
   m = cur.take(/\b(?:for\s+|takes?\s+|needs?\s+)?(?:about\s+|around\s+|roughly\s+)?(\d{1,3}(?:\.\d)?|one|two|three|four|five|six|ten|fifteen|twenty|thirty|forty-five|ninety)[\s-]*(hours?|hrs?|h|minutes?|mins?|m)\b(?!\s*(?:before|after|ago|later|left))/i);
   if (m) {
     const n = num(m[1].toLowerCase());
@@ -409,9 +421,20 @@ const FILLER_PREFIX =
   /^(?:(?:hey|hi|ok|okay|so|um|uh|well|please|pls|plz)[,!\s]+)*(?:(?:can|could|would|will) you\s+|i\s+(?:need|have|want|got|must|should|gotta|wanna)\s+(?:to\s+)?|i'?ll\s+|i'?m\s+going\s+to\s+|i\s+am\s+going\s+to\s+|remind\s+me\s+(?:to\s+|about\s+)?|don'?t\s+(?:let\s+me\s+)?forget\s+(?:to\s+|about\s+)?|remember\s+to\s+|add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|reminder)\s*(?:to|for|about|:)?\s*|create\s+(?:a\s+)?(?:new\s+)?(?:task|todo|reminder)\s*(?:to|for|about|:)?\s*|set\s+(?:a\s+)?reminder\s*(?:to|for|about)?\s*|make\s+(?:a\s+)?(?:task|note)\s*(?:to|for|about)?\s*|schedule\s+|plan\s+(?:to\s+)?|task\s*:\s*|todo\s*:\s*)+/i;
 
 /** Turns the residual text into a short actionable title. */
+/**
+ * Clause left dangling after its duration/date was extracted: ", it will take", "which",
+ * "and it'll take about", "- takes", "tak". Only matched after a comma/dash or a connector word,
+ * so real titles ending in "will" or "that" ("Update my will") are kept.
+ */
+const DANGLING_CLAUSE =
+  /(?:\s*[,;:–—-]\s*|\s+(?:and|which|that|it)\s+|\s+(?=(?:which|that)\s*$))(?:(?:and|which|that)\s+)?(?:it\s*(?:'ll|will|should|would|might|may|is going to|is gonna)?|it'll|should|would|will|might|may|which|that)?(?:\s+(?:probably|likely))?(?:\s*(?:take|takes|need|needs|last|lasts|be))?(?:\s+(?:about|around|roughly|approx(?:imately)?))?\s*$/i;
+/** Roman Urdu connectors left after the date/duration: "Friday tak", "… lagenge". */
+const DANGLING_URDU = /\s+(?:tak|lagenge|lagega|lagegi|lagein\s*ge)\s*$/i;
+
 export function cleanTitle(residual: string): string {
   let t = residual.replace(/\s+/g, " ").trim();
   for (let i = 0; i < 3; i += 1) t = t.replace(FILLER_PREFIX, "").replace(/^i\s+(?:to\s+)?/i, "").trim();
+  for (let i = 0; i < 3; i += 1) t = t.replace(/[\s,.;:!?–—-]+$/g, "").replace(DANGLING_CLAUSE, "").replace(DANGLING_URDU, "").trim();
   t = t
     .replace(/\b(?:(?:and|which|that)\s+)?(?:is\s+|it'?s\s+)?(?:due|deadline)\b\s*$/i, "")
     .replace(/\s+(?:by|on|at|for|due|before|until|till|in|from|to|the|this|next|and|of|with|around|it'?s|is)\s*$/i, "")
