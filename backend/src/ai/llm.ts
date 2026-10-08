@@ -14,6 +14,12 @@ export type CompletionOptions = {
    * foreground request is in flight.
    */
   background?: boolean;
+  /**
+   * Per-call provider preference by name (e.g. ["gemini", "ollama"]), tried in order. Uses every
+   * configured provider, not just the global chain, so one job can prefer Gemini without changing
+   * what chat uses. Unknown or unconfigured names are skipped; the circuit breaker still applies.
+   */
+  providers?: string[];
 };
 
 export interface LlmProvider {
@@ -74,7 +80,7 @@ export class GeminiProvider implements LlmProvider {
 
   constructor(
     private readonly apiKey = process.env.GEMINI_API_KEY,
-    private readonly model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    private readonly model = process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
     private readonly timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS ?? 15000),
   ) {}
 
@@ -98,6 +104,8 @@ export class GeminiProvider implements LlmProvider {
             temperature: options.temperature ?? 0.2,
             maxOutputTokens: options.maxTokens ?? 400,
             ...(options.json ? { responseMimeType: "application/json" } : {}),
+            // Flash models "think" by default, which can use the whole output budget on short JSON answers.
+            thinkingConfig: { thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 0) },
           },
         }),
       },
@@ -129,30 +137,44 @@ type ProviderState = { provider: LlmProvider; downUntil: number };
  * stopped Ollama never adds latency to every request — the deterministic pipeline keeps working.
  */
 export class AiService {
+  /** Default chain used when a call names no providers (chat, NLU, memory…). */
   private readonly chain: ProviderState[];
+  /** Every configured provider by name; per-call `providers` pick from here. Shares breaker state with the chain. */
+  private readonly registry = new Map<string, ProviderState>();
 
   constructor(providers?: LlmProvider[]) {
     if (providers) {
       this.chain = providers.map((provider) => ({ provider, downUntil: 0 }));
+      for (const s of this.chain) this.registry.set(s.provider.name, s);
       return;
     }
     if (process.env.AI_ENABLED?.toLowerCase() === "false") {
       this.chain = [];
       return;
     }
+    const ollama: ProviderState = { provider: new OllamaProvider(), downUntil: 0 };
+    const gemini: ProviderState | null = process.env.GEMINI_API_KEY ? { provider: new GeminiProvider(), downUntil: 0 } : null;
+    this.registry.set("ollama", ollama);
+    if (gemini) this.registry.set("gemini", gemini);
     const primary = (process.env.AI_PROVIDER ?? "ollama").toLowerCase();
-    const list: LlmProvider[] = [];
     if (primary === "gemini") {
-      list.push(new GeminiProvider(), new OllamaProvider());
+      this.chain = [{ provider: new GeminiProvider(), downUntil: 0 }, ollama];
+      this.registry.set("gemini", this.chain[0]);
     } else if (primary === "ollama") {
-      list.push(new OllamaProvider());
-      if (process.env.GEMINI_API_KEY && process.env.GEMINI_FALLBACK === "true") list.push(new GeminiProvider());
+      this.chain = [ollama, ...(gemini && process.env.GEMINI_FALLBACK === "true" ? [gemini] : [])];
+    } else {
+      this.chain = [];
     }
-    this.chain = list.map((provider) => ({ provider, downUntil: 0 }));
   }
 
   get enabled(): boolean {
     return this.chain.length > 0;
+  }
+
+  /** True when a provider with this name is configured and not tripped by the circuit breaker. */
+  hasProvider(name: string): boolean {
+    const s = this.registry.get(name);
+    return Boolean(s && s.downUntil <= Date.now());
   }
 
   get available(): boolean {
@@ -186,7 +208,10 @@ export class AiService {
   }
 
   private async run(messages: ChatMessage[], options: CompletionOptions): Promise<string | null> {
-    for (const state of this.chain) {
+    const states = options.providers
+      ? options.providers.map((n) => this.registry.get(n)).filter((s): s is ProviderState => Boolean(s))
+      : this.chain;
+    for (const state of states) {
       if (state.downUntil > Date.now()) continue;
       try {
         return await state.provider.chat(messages, options);

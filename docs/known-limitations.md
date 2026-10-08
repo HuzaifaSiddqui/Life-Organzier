@@ -54,6 +54,15 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
 - WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
 
+## Check-in first steps
+
+- **Task titles go to Google when Gemini is configured.** With `GEMINI_API_KEY` set, the first step for each
+  scheduled task is requested from Gemini. Only the task title and planned duration are sent (no description,
+  notes, mood or user details), but titles can still be personal ("Doctor appointment for …"). Unset the key to
+  keep everything local (Ollama for English, keyword library for Urdu).
+- **Ollama writes English first steps only**; Urdu users get Gemini or the keyword library.
+- The keyword library covers common student tasks; anything else gets a check-in without a first step.
+
 ## Safety
 
 - Crisis detection is a deterministic phrase list (English, Roman Urdu, Urdu script) in

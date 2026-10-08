@@ -26,6 +26,25 @@ memory extraction, sub-task names, topics), while **dates, clarity scoring, sche
 reminders, patterns and safety are deterministic code**. If Ollama is down, a circuit breaker
 skips it and the assistant keeps working on rules.
 
+## Check-in copy (FR-RN-004)
+
+Check-in message text always comes from reviewed templates (`backend/src/modules/checkins/templates.ts`,
+English + Urdu, Funny/Serious/Gentle). Only the **first step** ("Read question 1") is model-written, in the
+background when a task's scheduled start is set or changed — never at notification time:
+
+1. **Gemini** (`GEMINI_MODEL`, a Flash model) when `GEMINI_API_KEY` is set — English and Urdu. Called with a
+   per-call provider preference (`providers: ["gemini"]`), so chat's provider chain is unchanged.
+2. **Ollama** (`qwen2.5:7b`) — English only (its Urdu was unreliable in testing).
+3. **Keyword library** in `templates.ts` (reviewed, English + Urdu).
+4. **None** → templates without a first step.
+
+Every model result passes a strict validator (2–8 words, allowlisted imperative verb, no digits unless in the
+title, no commas/semicolons/emoji, not the title repeated, Urdu script for Urdu). The source used is stored
+on the copy and in `CheckinLog.copySource` (`GEMINI | OLLAMA | LIBRARY | NONE`) for the evaluation.
+
+**Privacy:** the first-step prompt contains only the task title and planned duration. No description, notes,
+mood, memories or user details are sent — to Gemini or to Ollama.
+
 ## Context handling (four memory layers)
 
 | Layer | What | Where |

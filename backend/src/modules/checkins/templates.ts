@@ -190,3 +190,27 @@ export const ACK_TEMPLATES: Record<Lang, { DONE: string[]; DIDNT: string[]; DEAD
     DEADLINE_WARNING: ["اس سے آپ {deadline} سے آگے نکل جائیں گے۔ باقی کام پلان کر لیں؟"],
   },
 };
+
+/**
+ * Keyword library for first steps (FR-RN-004 §5, source "LIBRARY") — used when no LLM first step is
+ * available. Matched against the task title (English and Roman Urdu keywords); first match wins, so
+ * more specific groups come first. HUMAN REVIEW: check every step is safe, concrete and short, and
+ * that the Urdu reads naturally.
+ */
+export const FIRST_STEP_LIBRARY: Array<{ keywords: RegExp; en: string; ur: string }> = [
+  { keywords: /\b(slides?|presentation|deck|ppt|powerpoint)\b/i, en: "Open the slides and outline the first section", ur: "سلائیڈز کھولیں اور پہلے حصے کا خاکہ بنائیں" },
+  { keywords: /\b(lab|experiment|practical)\b/i, en: "Open the lab manual at today's experiment", ur: "لیب مینوئل آج کے تجربے پر کھولیں" },
+  { keywords: /\b(e-?mail|mail|reply|message)\b/i, en: "Open the email and write the first line", ur: "ای میل کھولیں اور پہلی سطر لکھیں" },
+  { keywords: /\b(essay|report|write|writing|article|thesis|paper|draft|likhna|likhni)\b/i, en: "Open the document and write the first heading", ur: "دستاویز کھولیں اور پہلی سرخی لکھیں" },
+  { keywords: /\b(assignment|problems?|homework|worksheet|questions?|exercises?)\b/i, en: "Read question 1", ur: "پہلا سوال پڑھیں" },
+  { keywords: /\b(study|studying|revise|revision|exam|test|quiz|midterm|final|prepare|prep|parhai|parhna)\b/i, en: "Open your notes at the first topic", ur: "اپنے نوٹس پہلے موضوع سے کھولیں" },
+  { keywords: /\b(code|coding|project|app|bug|deploy|program|website)\b/i, en: "Open the project and run it", ur: "پروجیکٹ کھولیں اور اسے چلائیں" },
+  { keywords: /\b(read|reading|chapter|book|novel)\b/i, en: "Read the first page", ur: "پہلا صفحہ پڑھیں" },
+  { keywords: /\b(research|sources?|literature|survey)\b/i, en: "Search for one source and save it", ur: "ایک ماخذ تلاش کریں اور محفوظ کریں" },
+  { keywords: /\b(pay|bill|fee|fees|payment|rent)\b/i, en: "Open the bill and check the amount", ur: "بل کھولیں اور رقم دیکھیں" },
+  { keywords: /\b(form|apply|application|register|registration|admission)\b/i, en: "Open the form and fill in your name", ur: "فارم کھولیں اور اپنا نام بھریں" },
+  { keywords: /\b(call|phone|ring)\b/i, en: "Find the number and dial it", ur: "نمبر نکالیں اور کال ملائیں" },
+  { keywords: /\b(clean|cleaning|tidy|laundry|room|dishes|safai)\b/i, en: "Clear one small surface first", ur: "پہلے ایک چھوٹی جگہ صاف کریں" },
+  { keywords: /\b(gym|workout|exercise|run|running|walk|jog)\b/i, en: "Put on your workout shoes", ur: "ورزش کے جوتے پہن لیں" },
+  { keywords: /\b(groceries|grocery|shopping|buy|sauda)\b/i, en: "Write the shopping list", ur: "خریداری کی فہرست لکھیں" },
+];
