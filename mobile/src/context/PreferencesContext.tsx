@@ -3,6 +3,7 @@ import { useAuth } from "./AuthContext";
 import type { Category, UserSettings } from "../types/models";
 import { getCategories, getSettings, saveSettings } from "../services/settingsApi";
 import { startSyncEngine, syncNow } from "../services/syncEngine";
+import { startCheckinQueue } from "../services/checkins";
 import { configureReminders, startReminderResponses, syncReminders } from "../services/reminders";
 import { openAppScreen } from "../navigation/navigationRef";
 import { trackAppOpen } from "../services/insightsApi";
@@ -61,9 +62,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       if (target.taskId) openAppScreen("TaskDetail", { taskId: target.taskId });
       else if (target.routineOccurrenceId) openAppScreen("Routines");
     });
+    // Check-in answers made offline are sent (with their tap time) after the next successful sync.
+    const stopCheckins = startCheckinQueue(() => void syncReminders());
     return () => {
       stop();
       stopResponses();
+      stopCheckins();
     };
   }, [dbUser, reload]);
 

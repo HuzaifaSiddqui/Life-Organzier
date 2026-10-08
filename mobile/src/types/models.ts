@@ -31,6 +31,8 @@ export type Task = {
   archived?: boolean;
   deletedAt?: string | null;
   completedAt?: string | null;
+  /** FR-RN-004: first time the task moved to IN_PROGRESS. */
+  startedAt?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   tags?: string[] | null;
@@ -103,6 +105,10 @@ export type UserSettings = {
   dismissedInsights: string[];
   ttsEnabled: boolean;
   ttsRate: number;
+  /** FR-RN-004 check-ins */
+  checkinsEnabled: boolean;
+  checkinTone: "FUNNY" | "SERIOUS" | "GENTLE";
+  checkinResearchMode: boolean;
   lastWhatsappMessageAt: string | null;
 };
 

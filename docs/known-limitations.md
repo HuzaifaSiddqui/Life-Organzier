@@ -31,6 +31,21 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   concurrent or repeated taps apply once), then updates the task. If the task update fails (e.g. the database drops
   mid-request), a retry returns `alreadyAnswered` and that answer is lost; the user would change the task by hand.
 
+## Notification actions
+
+- **Every notification button opens the app.** There is no background task handler (`expo-task-manager` isn't
+  installed), so action buttons — reminder Done / Snooze and check-in Started / Not today / Done / +30 min / Update…
+  — briefly open the app and apply the answer there. A tap that launches the app from a cold start is picked up
+  with `getLastNotificationResponseAsync` and handled once (the OS reports the same tap again on later starts, so the
+  handled response is remembered).
+- **Answering offline:** the task changes on the phone straight away and the answer is queued with its tap time; it is
+  sent after the next successful sync (reconnect or app open). Until then the server may still fire a check-in that
+  the answer would have cancelled, and a "next" check-in (e.g. completion after "Started") is only scheduled after
+  the answer reaches the server.
+- **Android shows at most 3 action buttons**; the completion check-in uses exactly 3 (Done / +30 min / Update…). The
+  other options (partly done, +15 / +60, didn't get to it) are in the in-app sheet.
+- **Check-ins in quiet hours or Do Not Disturb are skipped, not moved** (FR-RN-004 §4).
+
 ## Documents and OCR
 
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
