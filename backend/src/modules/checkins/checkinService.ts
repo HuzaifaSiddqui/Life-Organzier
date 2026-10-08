@@ -58,7 +58,7 @@ function copyKindFor(kind: CheckinKind, unconfirmed: boolean): CopyKind {
 }
 
 /** Stable 50/50 for research mode, decided per check-in so re-planning doesn't flip it. */
-function researchIncludesStep(key: string): boolean {
+export function researchIncludesStep(key: string): boolean {
   let h = 2166136261;
   for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return (Math.abs(h) & 1) === 0;

@@ -4,7 +4,7 @@ import test from "node:test";
 import { Priority, TaskSource, TaskStatus, TaskType, type UserSettings } from "@prisma/client";
 import { AiService, ProviderHttpError, setAi, type ChatMessage, type CompletionOptions, type LlmProvider } from "../src/ai/llm.js";
 import { prisma } from "../src/config/db.js";
-import { clampTapTime, expireCheckins, planCheckins, queueFirstStepRetry, remainingMinutes, respondToCheckin, responseAllowed } from "../src/modules/checkins/checkinService.js";
+import { clampTapTime, expireCheckins, researchIncludesStep, planCheckins, queueFirstStepRetry, remainingMinutes, respondToCheckin, responseAllowed } from "../src/modules/checkins/checkinService.js";
 import { parseCheckinStyle } from "../src/modules/checkins/style.js";
 import { templateCopy } from "../src/modules/checkins/copy.js";
 import { understand } from "../src/modules/assistant/nlu.js";
@@ -354,16 +354,27 @@ test("plan: research mode records WITHHELD when it omits an existing first step"
   setAi(new AiService([]));
   await withUser(
     async (ctx, settings) => {
-      // Several tasks so the stable 50/50 lands on both variants.
-      for (let i = 0; i < 6; i += 1) {
-        const start = minute(new Date(Date.now() + (2 + i) * 3600000));
-        await createTask(ctx, { title: `Physics assignment ${i}`, priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 60, scheduledStart: start });
+      // One task per day (stays under the daily cap); pick start minutes so both variants occur.
+      const base = minute(new Date(Date.now() + 26 * 3600000));
+      const wanted = [true, false, true, false];
+      for (const [day, include] of wanted.entries()) {
+        let start = new Date(base.getTime() + day * 86400000);
+        const t = await createTask(ctx, { title: `Physics assignment ${day}`, priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 60, scheduledStart: start });
+        for (let m = 0; m < 120 && researchIncludesStep(`${t.id}:START:${new Date(start.getTime() + 5 * 60000).toISOString()}`) !== include; m += 1) {
+          start = new Date(start.getTime() + 60000);
+        }
+        await prisma.task.update({ where: { id: t.id }, data: { scheduledStart: start } });
       }
       await planCheckins(ctx.userId, settings);
-      const starts = await prisma.checkinLog.findMany({ where: { userId: ctx.userId, kind: { in: ["START", "START_FOLLOWUP"] } } });
-      assert.ok(starts.some((r) => r.copySource === "WITHHELD" && !r.hasFirstStep), "some withheld");
-      assert.ok(starts.some((r) => r.copySource === "LIBRARY" && r.hasFirstStep), "some shown");
-      assert.ok(starts.every((r) => r.copySource !== "NONE"), "a first step existed for all, so none are NONE");
+      const rows = await prisma.checkinLog.findMany({ where: { userId: ctx.userId, kind: { in: ["START", "START_FOLLOWUP"] } } });
+      for (const r of rows) {
+        const shown = researchIncludesStep(`${r.taskId}:${r.kind}:${r.fireAt.toISOString()}`);
+        assert.equal(r.copySource, shown ? "LIBRARY" : "WITHHELD", `${r.kind} ${r.fireAt.toISOString()}`);
+        assert.equal(r.hasFirstStep, shown);
+      }
+      const starts = rows.filter((r) => r.kind === "START");
+      assert.ok(starts.some((r) => r.copySource === "WITHHELD"), "some withheld");
+      assert.ok(starts.some((r) => r.copySource === "LIBRARY"), "some shown");
     },
     { checkinResearchMode: true },
   );
