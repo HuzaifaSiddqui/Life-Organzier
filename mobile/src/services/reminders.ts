@@ -26,6 +26,8 @@ type PlanResponse = {
 };
 
 const PREFIX = "lo:";
+/** Below iOS's 64 pending-notification cap, leaving room for snoozes. */
+const MAX_LOCAL_REMINDERS = 60;
 const CATEGORY_TASK = "lo-task";
 const CATEGORY_ROUTINE = "lo-routine";
 let configured = false;
@@ -101,10 +103,19 @@ export async function syncReminders(): Promise<number | null> {
   await cancelOurs();
   if (plan.settings.devices === "DESKTOP" || plan.settings.devices === "WHATSAPP") return 0;
   const channel = CHANNELS[plan.settings.method] ?? CHANNELS.SOUND_VIBRATION;
+  // iOS keeps at most 64 pending local notifications (and silently drops the rest). Keep the
+  // soonest ones; the plan is re-synced on app open and after every change, so later reminders get
+  // scheduled before they're due.
+  const upcoming = plan.reminders
+    .filter((r) => new Date(r.fireAt).getTime() > Date.now() + 5000)
+    .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime());
+  const batch = upcoming.slice(0, MAX_LOCAL_REMINDERS);
+  if (upcoming.length > batch.length) {
+    console.info(`Reminders: scheduled ${batch.length}, skipped ${upcoming.length - batch.length} later ones (local notification limit)`);
+  }
   let count = 0;
-  for (const r of plan.reminders) {
+  for (const r of batch) {
     const date = new Date(r.fireAt);
-    if (date.getTime() <= Date.now() + 5000) continue;
     try {
       await Notifications.scheduleNotificationAsync({
         identifier: `${PREFIX}${r.id}`,

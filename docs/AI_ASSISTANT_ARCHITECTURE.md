@@ -70,4 +70,4 @@ The same engine serves the app chat, voice, and WhatsApp, so memory is shared ac
 | FR-VF-003 voice conversation (Phase 2) | Not implemented |
 | Future work (out of scope): FR-OB-003 guest mode, FR-LB-001 geofence reminders, calendar integration, collaboration, payments/subscriptions, desktop app | Not planned for this release |
 
-Known gaps and platform restrictions: [known-limitations.md](known-limitations.md).
+Known gaps and platform restrictions (including the Google Play `USE_EXACT_ALARM` restriction, offline-sync scope and OCR languages): [known-limitations.md](known-limitations.md).
