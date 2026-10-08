@@ -233,14 +233,17 @@ export function isCopyStale(copy: unknown, task: Pick<Task, "scheduledStart">, s
 
 /* ---------------------------------------------------------------------------- model first step */
 
-const stepSchema = z.object({ firstStep: z.string() });
+export const stepSchema = z.object({ firstStep: z.string() });
 const STEP_JSON = { type: "object", properties: { firstStep: { type: "string" } }, required: ["firstStep"] };
 
 /**
  * Privacy: only the task title and duration are sent — never the description, notes, mood or any
  * user details (docs/AI_ASSISTANT_ARCHITECTURE.md).
  */
-function stepPrompt(task: TaskForCopy, lang: Lang): string {
+/** Options for the first-step call (also used by scripts/model-benchmark.ts). */
+export const FIRST_STEP_OPTIONS = { json: STEP_JSON, maxTokens: 60, temperature: 0.3, timeoutMs: 30000 };
+
+export function stepPrompt(task: TaskForCopy, lang: Lang): string {
   const language = lang === "ur" ? "Urdu, in Urdu script" : "English, starting with an imperative verb";
   return `Task: "${shortTitle(task.title)}". Planned time: ${durationLabel(task.durationMinutes, "en")}.
 Give the smallest concrete first action to start this task, 2 to 8 words, in ${language}.
@@ -251,12 +254,9 @@ export async function modelFirstStep(provider: "gemini" | "ollama", task: TaskFo
   const ai = getAi();
   if (!ai.hasProvider(provider)) return null;
   const result = await ai.json([{ role: "user", content: stepPrompt(task, lang) }], stepSchema, {
-    json: STEP_JSON,
+    ...FIRST_STEP_OPTIONS,
     providers: [provider],
     background: true,
-    maxTokens: 60,
-    temperature: 0.3,
-    timeoutMs: 30000,
   });
   const step = result?.firstStep.trim().replace(/[.!۔]+$/, "").trim();
   return step && validateFirstStep(step, lang, task.title) ? step : null;
