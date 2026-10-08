@@ -31,6 +31,9 @@ export function settings(overrides: Partial<UserSettings> = {}): UserSettings {
     ttsEnabled: false,
     ttsRate: 1,
     lastWhatsappMessageAt: null,
+    checkinsEnabled: true,
+    checkinTone: "FUNNY",
+    checkinResearchMode: false,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -72,6 +75,8 @@ export function task(overrides: Partial<Task> = {}): Task {
     lastModifiedAt: NOW,
     clientId: null,
     documentId: null,
+    startedAt: null,
+    checkinCopy: null,
     ...overrides,
   };
 }

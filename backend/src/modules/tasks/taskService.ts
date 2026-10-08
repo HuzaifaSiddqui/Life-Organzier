@@ -203,6 +203,7 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
         scheduledStart: input.scheduledStart ?? null,
         scheduledEnd: input.scheduledEnd ?? null,
         completedAt: status === TaskStatus.COMPLETED ? new Date() : null,
+        startedAt: status === TaskStatus.IN_PROGRESS ? new Date() : null,
         deviceId: ctx.deviceId ?? null,
         clientId: input.clientId ?? null,
         documentId: input.documentId ?? null,
@@ -275,6 +276,8 @@ export async function updateTask(
     else (data as Record<string, unknown>)[field] = next;
   }
   if (!changed) return existing;
+  // FR-RN-004: the first move to IN_PROGRESS records when work actually started.
+  if (c.status === TaskStatus.IN_PROGRESS && existing.status !== TaskStatus.IN_PROGRESS && !existing.startedAt) data.startedAt = new Date();
 
   const dueDate = c.dueDate !== undefined ? c.dueDate : existing.dueDate;
   const dueTime = c.dueTime !== undefined ? c.dueTime : existing.dueTime;
