@@ -27,6 +27,25 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - Two simultaneous syncs that create the same offline task can race: one succeeds, the other is reported as
   rejected (no duplicate is created, because `userId + clientId` is unique).
 
+## Documents and OCR
+
+- **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
+  directory. Only `eng.traineddata` is committed (`backend/eng.traineddata`, ~5 MB, used when the server is started
+  from `backend/`). Every other language offered in the app — including Urdu (`urd`) — is downloaded from the
+  jsDelivr CDN at runtime, so OCR in those languages fails without internet.
+  - To bundle Urdu: download `https://cdn.jsdelivr.net/npm/@tesseract.js-data/urd/4.0.0_best_int/urd.traineddata.gz`
+    (~1.0 MB compressed), gunzip it into `backend/` as `urd.traineddata` (a few MB), and commit it — or set
+    `langPath`/`cachePath` in `createWorker` (`documents/textExtraction.ts`) to a dedicated `tessdata/` folder.
+- Scanned PDFs without a text layer must be uploaded as images.
+- Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
+
+## Platform and UI
+
+- Dark mode and Urdu right-to-left layout are built but switched off (`DARK_MODE_READY`, `RTL_READY`); see
+  [design.md](design.md) for the checklist before turning them on.
+- Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
+- WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
+
 ## Safety
 
 - Crisis detection is a deterministic phrase list (English, Roman Urdu, Urdu script) in

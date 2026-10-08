@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { getAi, getModelStatus } from "./ai/llm.js";
 import { setTimezoneChangeHandler } from "./lib/http.js";
@@ -22,9 +22,23 @@ import { userRouter } from "./modules/users/userRoutes.js";
 import { whatsappRouter } from "./modules/whatsapp/whatsappRoutes.js";
 import { sendError } from "./utils/apiResponse.js";
 
+/**
+ * Browser origins allowed to call the API (CORS_ORIGINS, comma-separated). Requests without an
+ * Origin header — the mobile app, curl, Twilio — are never blocked by CORS. With no list set,
+ * development allows every origin and production allows none.
+ */
+export function corsOrigin(env: NodeJS.ProcessEnv = process.env): CorsOptions["origin"] {
+  const allowed = (env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  if (!allowed.length) return env.NODE_ENV !== "production";
+  return (origin, callback) => callback(null, !origin || allowed.includes(origin));
+}
+
 export function createApp() {
   const app = express();
-  app.use(cors());
+  app.use(cors({ origin: corsOrigin() }));
   app.use(express.json({ limit: "2mb" }));
 
   setTimezoneChangeHandler((userId, tz) => {

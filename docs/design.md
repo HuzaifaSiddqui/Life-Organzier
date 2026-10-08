@@ -185,6 +185,11 @@ Legacy prop renames done in Phase 0: Button `kind="ai"` → `"tonal"`, Card/Chip
 | `DARK_MODE_READY` | `theme/ThemeProvider.tsx` | App always renders the light theme | `app.json` `userInterfaceStyle` → `"automatic"` (otherwise native pickers/alerts mismatch). Needs a rebuild |
 | `RTL_READY` | `i18n/LocaleProvider.tsx` | Urdu copy shows, but layout stays LTR | — |
 
+Checklist before flipping a flag:
+
+- [ ] When setting `DARK_MODE_READY = true`, also set `app.json` `userInterfaceStyle` to `"automatic"` and rebuild the app (native change). Don't change `userInterfaceStyle` earlier: native pickers and alerts would render dark inside a light app.
+- [ ] Every screen in the migration log is ✅ and checked in light + dark.
+
 ## Do / Don't
 
 - **Do** take every colour, size, radius, duration and spring from tokens. Raw hex values, font sizes and durations belong only in `tokens.ts`.
