@@ -7,7 +7,7 @@ import { sendSuccess } from "../../utils/apiResponse.js";
 import { buildAssistantContext } from "../memory/contextBuilder.js";
 import { getOrCreateConversation } from "../conversations/conversationService.js";
 import { listActiveTasks } from "../tasks/taskService.js";
-import { detectMood, logMood, moodHistory, MOODS, recommendForMood, type Mood } from "./moodService.js";
+import { crisisForText, detectMood, logMood, moodHistory, MOODS, recommendForMood, type Mood } from "./moodService.js";
 
 export const moodRouter = Router();
 moodRouter.use(requireFirebaseUser, requireUser);
@@ -50,7 +50,9 @@ moodRouter.post(
       listActiveTasks(req.user.id),
       buildAssistantContext({ user: req.user, settings: req.settings, conversation, query: `feeling ${body.mood} ${body.note ?? ""}` }),
     ]);
-    sendSuccess(res, { log, recommendation: recommendForMood(body.mood as Mood, tasks, context.copingMemories) }, "Mood logged", 201);
+    // A note can carry a crisis disclosure even on a "calm" check-in — same deterministic check as chat.
+    const crisis = crisisForText(body.note, req.settings.language);
+    sendSuccess(res, { log, recommendation: recommendForMood(body.mood as Mood, tasks, context.copingMemories), crisis }, "Mood logged", 201);
   }),
 );
 

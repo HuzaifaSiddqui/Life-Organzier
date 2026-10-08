@@ -3,6 +3,8 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AssistantCards } from "../../components/assistant/AssistantCards";
+import { CrisisCard } from "../../components/assistant/CrisisCard";
+import { useLocale } from "../../i18n/LocaleProvider";
 import { BarChart } from "../../components/charts/Charts";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
@@ -10,7 +12,7 @@ import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
 import { getMoodHistory, logMood } from "../../services/insightsApi";
-import type { ActionPayload, Mood, MoodLog, MoodRecommendation } from "../../types/models";
+import type { ActionPayload, CrisisPayload, Mood, MoodLog, MoodRecommendation } from "../../types/models";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Mood">;
 
@@ -28,6 +30,8 @@ export function MoodScreen({ navigation }: Props) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [rec, setRec] = useState<MoodRecommendation | null>(null);
+  const [crisis, setCrisis] = useState<CrisisPayload | null>(null);
+  const { t } = useLocale();
   const [logs, setLogs] = useState<MoodLog[]>([]);
   const [byWeekday, setByWeekday] = useState<Array<{ weekday: number; count: number; avgScore: number | null }>>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -54,7 +58,8 @@ export function MoodScreen({ navigation }: Props) {
     try {
       const m = mood ?? defaultMood(score ?? 5);
       const r = await logMood({ mood: m, score: score ?? undefined, note: note.trim() || undefined, source: "MANUAL" });
-      setRec(r.recommendation);
+      setRec(r.crisis ? null : r.recommendation);
+      setCrisis(r.crisis ?? null);
       setNote("");
       void load();
     } catch (e) {
@@ -101,6 +106,15 @@ export function MoodScreen({ navigation }: Props) {
           <TextInput style={ui.input} value={note} onChangeText={setNote} placeholder="Anything on your mind? (optional)" placeholderTextColor="#646A78" />
           <Button title="Log mood" kind="tonal" onPress={() => void save()} loading={busy} disabled={score === null && !mood} />
         </Card>
+
+        {crisis ? (
+          <>
+            <Card style={{ gap: 10 }}>
+              <Text style={ui.body}>{crisis.message}</Text>
+            </Card>
+            <CrisisCard resources={crisis.resources} onClearTasks={() => onAction({ type: "postpone_nonurgent" }, t("crisis.clearTasks"))} />
+          </>
+        ) : null}
 
         {rec ? (
           <Card tone="accent" style={{ gap: 10 }}>

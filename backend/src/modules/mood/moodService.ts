@@ -46,7 +46,7 @@ const LEXICON: Array<{ mood: Mood; re: RegExp }> = [
   { mood: "calm", re: /\b(calm|relaxed|peaceful|chill|at ease|content)\b/i },
 ];
 
-export { CRISIS_RESOURCES, crisisResponse, detectCrisis } from "./crisis.js";
+export { CRISIS_RESOURCES, crisisForText, crisisPayload, crisisResponse, detectCrisis, type CrisisPayload } from "./crisis.js";
 
 export type MoodDetection = { mood: Mood; confidence: number; explicit: boolean };
 

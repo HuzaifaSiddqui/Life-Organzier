@@ -1,4 +1,4 @@
-import type { MemoryItem, Mood, MoodLog, MoodRecommendation, Pattern, Recommendation } from "../types/models";
+import type { CrisisPayload, MemoryItem, Mood, MoodLog, MoodRecommendation, Pattern, Recommendation } from "../types/models";
 import { apiDelete, apiGet, apiPost, apiPut } from "./api";
 
 /* -------- memory: what the assistant knows about the user */
@@ -39,7 +39,7 @@ export async function dismissInsight(id: string): Promise<void> {
 
 /* -------- mood */
 
-export async function logMood(input: { mood: Mood; score?: number; note?: string; source?: "MANUAL" | "CHECKIN" }): Promise<{ log: MoodLog; recommendation: MoodRecommendation }> {
+export async function logMood(input: { mood: Mood; score?: number; note?: string; source?: "MANUAL" | "CHECKIN" }): Promise<{ log: MoodLog; recommendation: MoodRecommendation; crisis: CrisisPayload | null }> {
   return apiPost("/mood", input);
 }
 

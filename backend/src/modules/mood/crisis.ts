@@ -155,3 +155,26 @@ export function crisisResponse(language = "en"): string {
     "I'm here to keep things light for you — want me to clear today's non-urgent tasks so you can take care of yourself?",
   ].join("\n");
 }
+
+export type CrisisResource = { label: string; phone: string };
+/** What a client needs to render the crisis card: the reply text and call buttons, in the user's language. */
+export type CrisisPayload = { message: string; resources: CrisisResource[] };
+
+/** Single source for crisis resources sent to clients (from CRISIS_RESOURCES). */
+export function crisisPayload(language = "en"): CrisisPayload {
+  const r = CRISIS_RESOURCES;
+  const ur = language === "ur";
+  return {
+    message: crisisResponse(language),
+    resources: [
+      { label: ur ? "ایمرجنسی سروسز" : "Emergency services", phone: r.emergency },
+      { label: ur ? "ایدھی ہیلپ لائن" : "Edhi helpline", phone: r.edhi },
+      ...(r.mentalHealthHelpline ? [{ label: ur ? "ذہنی صحت ہیلپ لائن" : "Mental-health helpline", phone: r.mentalHealthHelpline }] : []),
+    ],
+  };
+}
+
+/** Crisis check for free text attached to other records (e.g. a mood-log note). */
+export function crisisForText(text: string | null | undefined, language = "en"): CrisisPayload | null {
+  return text && detectCrisis(text) ? crisisPayload(language) : null;
+}

@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Conversation, User, UserSettings } from "@prisma/client";
 import { handleText, type Turn } from "../src/modules/assistant/dialogue.js";
 import { emptyState } from "../src/modules/assistant/types.js";
-import { crisisResponse, CRISIS_RESOURCES, detectCrisis, normalizeForCrisis } from "../src/modules/mood/crisis.js";
+import { crisisForText, crisisResponse, CRISIS_RESOURCES, detectCrisis, normalizeForCrisis } from "../src/modules/mood/crisis.js";
 
 const POSITIVE: Record<string, string[]> = {
   english: [
@@ -129,4 +129,15 @@ test("crisis: checked before any open question, NLU or handler in the dialogue",
   assert.equal(turn.state.pending, null);
   assert.equal(out.content, crisisResponse("ur"));
   assert.deepEqual(out.cards, [{ type: "resources" }]);
+});
+
+test("crisis: mood-log notes get the same check and a localised payload", () => {
+  assert.equal(crisisForText(undefined), null);
+  assert.equal(crisisForText("tired after exams, need sleep"), null);
+  const en = crisisForText("feeling calm but honestly I want to end my life", "en");
+  assert.ok(en);
+  assert.equal(en.message, crisisResponse("en"));
+  assert.deepEqual(en.resources.map((r) => r.phone), [CRISIS_RESOURCES.emergency, CRISIS_RESOURCES.edhi]);
+  const ur = crisisForText("jeena nahi chahti", "ur");
+  assert.ok(ur && /[؀-ۿ]/.test(ur.message) && /[؀-ۿ]/.test(ur.resources[0].label));
 });
