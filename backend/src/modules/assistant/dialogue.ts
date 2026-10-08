@@ -241,13 +241,14 @@ async function learnInBackground(turn: Turn, messageId: string | null, text: str
 
 const STRONG_SWITCH = new Set(["query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
 
-async function handleText(turn: Turn, text: string): Promise<Out> {
+/** Text turns. The crisis check is the first step, ahead of open questions, NLU and every handler. */
+export async function handleText(turn: Turn, text: string): Promise<Out> {
   if (!text) return { content: "I'm listening — what would you like to do?", intent: "empty" };
 
   if (detectCrisis(text)) {
     turn.state.pending = null;
     return {
-      content: crisisResponse(),
+      content: crisisResponse(turn.settings.language),
       cards: [{ type: "resources" }],
       actions: [{ label: "Clear today's non-urgent tasks", payload: { type: "postpone_nonurgent" } }],
       intent: "crisis",
