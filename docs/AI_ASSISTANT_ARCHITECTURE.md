@@ -10,10 +10,10 @@ cd backend && npx prisma migrate deploy && npx prisma generate
 
 # every time
 cd backend && npm run dev          # API on :5050
-cd mobile  && npx expo run:android # rebuild needed: expo-document-picker + expo-speech were added
+cd mobile  && npx expo run:android # rebuild after native dependency changes
 
 # checks
-cd backend && npm test             # 24 unit tests (NLU, clarity, scheduling, reminders, extraction)
+cd backend && npm test             # unit tests (NLU, clarity, scheduling, reminders, extraction, crisis, sync)
 cd backend && npm run smoke        # 60 HTTP checks against a temporary DB-only user
 cd backend && npm run e2e          # multi-turn conversation against the real local LLM
 ```
@@ -57,14 +57,17 @@ The same engine serves the app chat, voice, and WhatsApp, so memory is shared ac
 | FR-TM-001..008 tasks (Clarity Index, mandatory clarifications, type classification, chat edits, soft delete 24h, undo, scheduling, overload, splitting, progress, missed/overdue handling) | Implemented |
 | FR-RM-001..004 routines (frequency, priority, mandatory confirm, time-locked vs flexible, contexts) | Implemented |
 | FR-RN-001..003 reminders (escalating, peak-hour critical reminder, quiet hours, DND, adaptive on ignored reminders, per-task overrides, OS notifications with Done/Snooze) | Implemented |
-| FR-DP-001..004 documents (PDF/DOCX/OCR, cleaning, deadlines/schedules/timetables with confidence thresholds, course info, prerequisite question) | Implemented — scanned PDFs need to be uploaded as images |
+| FR-DP-001..004 documents (PDF/DOCX/OCR, cleaning, deadlines/schedules/timetables with confidence thresholds, course info, prerequisite question, grid timetable PDFs, AI action items for other documents with date grounding, re-upload dedupe, CNIC/phone masking) | Implemented — scanned PDFs need to be uploaded as images; only English OCR works offline |
 | FR-MH-001..004 mood (detection + confirmation, check-in, mood→task mapping, stress chunking/postpone, coping memories, crisis safety, Pro conversation) | Implemented |
 | FR-PL-001..002 patterns & recommendations with visible confidence | Implemented |
 | FR-WA-001..002 WhatsApp (webhook, multi-turn, numbered replies, image OCR, Pro reminders, 24h rule, bulk guard) | Implemented — needs Twilio credentials in `.env` |
 | FR-VF-001..002 voice in/out (confidence < 80 % re-ask, 2 s silence, 2 min cap, TTS with rate/language) | Implemented with on-device STT (not Whisper) |
-| FR-MS-001..004 sync (offline queue, idempotent creates, field-level merge, versions/history 90 days, backoff) | Implemented — local store is AsyncStorage, not SQLite |
+| FR-MS-001..004 sync (offline queue, idempotent creates, field-level merge, versions/history 90 days, backoff) | Implemented for tasks only — local store is AsyncStorage, not SQLite; conflicts resolve last-write-wins without UI (see known-limitations.md) |
 | FR-AN-001..002 analytics (ranges, comparison, categories, heatmap, routines, insights, CSV export) | Implemented — PDF export not implemented |
 | FR-CT-001..002 categories & tags | Implemented |
 | FR-AP-001..004 account, preferences, context scheduling | Implemented — UI is English-only (assistant replies follow the language setting; no RTL UI translation) |
 | FR-OB-001..002 onboarding & tutorials | Implemented |
-| FR-OB-003 guest mode, FR-LB-001 geofence reminders, FR-VF-003 voice conversation (Phase 2), payments | Not implemented |
+| FR-VF-003 voice conversation (Phase 2) | Not implemented |
+| Future work (out of scope): FR-OB-003 guest mode, FR-LB-001 geofence reminders, calendar integration, collaboration, payments/subscriptions, desktop app | Not planned for this release |
+
+Known gaps and platform restrictions: [known-limitations.md](known-limitations.md).
