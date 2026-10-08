@@ -14,11 +14,11 @@ This document describes how the REST API is structured, which server and client 
 | Mobile HTTP | **Axios** singleton (`mobile/src/services/api.ts`) |
 
 - **API prefix:** all JSON routes are mounted under `/api` (see `createApp()` in `backend/src/app.ts`).
-- **Mobile base URL:** `EXPO_PUBLIC_API_BASE_URL`, normalized to end with `/api` (`mobile/src/constants/config.ts`). Example: `http://<host>:5000/api` (backend default port is `process.env.PORT ?? 5000` in `server.ts`).
+- **Mobile base URL:** `EXPO_PUBLIC_API_BASE_URL`, normalized to end with `/api` (`mobile/src/constants/config.ts`). Example: `http://<host>:5050/api` (port comes from `PORT` in `backend/.env`, 5050 in this project; code default is 5000).
 
 **Non-prefixed endpoints (no `/api`):**
 
-- `GET /health` → `{ ok: true }`
+- `GET /health` → `{ ok: true, ai: { enabled, available, models: { checked, chat, embeddings, missing } } }`
 - `GET /` → short service banner with links
 
 ---

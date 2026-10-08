@@ -12,6 +12,12 @@ const en = {
   "common.gotIt": "Got it",
   "common.dontShowAgain": "Don't show again",
 
+  "crisis.title": "You're not alone",
+  "crisis.call": "Call {label} · {phone}",
+  "crisis.callA11y": "Call {label} at {phone}",
+  "crisis.footer": "Please also reach out to someone you trust or a licensed professional.",
+  "crisis.clearTasks": "Clear today's non-urgent tasks",
+
   "sync.offline": "Offline",
   "sync.offlinePending.one": "Offline · 1 change saved on this phone",
   "sync.offlinePending.other": "Offline · {count} changes saved on this phone",
@@ -46,6 +52,11 @@ export type StringKey = keyof typeof en;
 
 const ur: Record<StringKey, string> = {
   "common.retry": "دوبارہ کوشش کریں",
+  "crisis.title": "آپ اکیلے نہیں ہیں",
+  "crisis.call": "{label} کو کال کریں · {phone}",
+  "crisis.callA11y": "{label} کو {phone} پر کال کریں",
+  "crisis.footer": "براہِ کرم کسی بھروسہ مند شخص یا مستند ماہر سے بھی رابطہ کریں۔",
+  "crisis.clearTasks": "آج کے غیر ضروری کام ہٹا دیں",
   "common.close": "بند کریں",
   "common.back": "واپس جائیں",
   "common.cancel": "منسوخ کریں",

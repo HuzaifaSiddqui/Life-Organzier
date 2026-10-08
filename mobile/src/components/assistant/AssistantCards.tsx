@@ -1,10 +1,14 @@
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, palette, radii } from "../../constants/theme";
 import type { ActionPayload, AssistantCard, DayPlan, Task } from "../../types/models";
 import { formatDue, formatDuration, formatTime } from "../../utils/format";
 import { priorityColor } from "../../utils/priorityColors";
 import { ProgressBar } from "../ui";
 import { BreathingExercise } from "./BreathingExercise";
+import { CrisisCard } from "./CrisisCard";
+
+/** Draft slot names → words users understand. */
+const MISSING_LABEL: Record<string, string> = { title: "what to do", date: "date", time: "time", duration: "duration" };
 
 type Handlers = {
   onOpenTask: (taskId: string) => void;
@@ -100,14 +104,15 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
             );
           case "draft": {
             const d = card.draft;
-            const color = card.clarity >= 95 ? palette.success : card.clarity >= 50 ? palette.warning : palette.danger;
+            // The clarity score stays internal; users see which details are still missing.
+            const needs = card.missing.map((m) => MISSING_LABEL[m] ?? m);
+            const status = needs.length ? `Needs: ${needs.join(", ")}` : card.clarity < 95 ? "Please confirm" : "Ready to add";
             return (
               <View key={i} style={styles.panel}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.panelTitle}>What I understood</Text>
-                  <Text style={[styles.clarity, { color }]}>Clarity {card.clarity}%</Text>
+                  <Text style={[styles.clarity, { color: needs.length ? palette.warning : colors.textMuted }]}>{status}</Text>
                 </View>
-                <ProgressBar value={card.clarity} color={color} height={4} />
                 <Field label="Task" value={d.title} missing={card.missing.includes("title")} />
                 <Field label="When" value={d.dueYmd ? `${d.dueYmd}${d.dueTime ? ` · ${d.dueTime}` : ""}` : d.dueTime} missing={card.missing.includes("date") || card.missing.includes("time")} />
                 <Field label="Duration" value={d.durationMinutes ? formatDuration(d.durationMinutes) : null} missing={card.missing.includes("duration")} />
@@ -186,18 +191,8 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
               </View>
             );
           case "resources":
-            return (
-              <View key={i} style={[styles.panel, { backgroundColor: palette.dangerSoft, borderColor: "transparent" }]}>
-                <Text style={styles.panelTitle}>You're not alone</Text>
-                <Pressable onPress={() => void Linking.openURL("tel:1122")}>
-                  <Text style={[styles.suggestionText, { color: palette.danger }]}>Call emergency services · 1122</Text>
-                </Pressable>
-                <Pressable onPress={() => void Linking.openURL("tel:115")}>
-                  <Text style={[styles.suggestionText, { color: palette.danger }]}>Edhi helpline · 115</Text>
-                </Pressable>
-                <Text style={styles.meta}>Please also reach out to someone you trust or a licensed professional.</Text>
-              </View>
-            );
+            // Older stored messages have no resources; the card then shows only the guidance text.
+            return <CrisisCard key={i} resources={card.resources ?? []} />;
           default:
             return null;
         }

@@ -46,23 +46,7 @@ const LEXICON: Array<{ mood: Mood; re: RegExp }> = [
   { mood: "calm", re: /\b(calm|relaxed|peaceful|chill|at ease|content)\b/i },
 ];
 
-const CRISIS =
-  /\b(kill myself|end my life|suicid\w*|want to die|wanna die|don'?t want to (?:live|be alive)|self[- ]?harm|hurt myself|no reason to live|better off dead|cut myself)\b/i;
-
-export function detectCrisis(text: string): boolean {
-  return CRISIS.test(text);
-}
-
-export function crisisResponse(): string {
-  return [
-    "I'm really sorry you're going through this. You don't have to handle it alone.",
-    "I'm a productivity assistant, not a counsellor, so please reach out to someone who can help right now:",
-    "• If you're in immediate danger, call your local emergency number (1122 or 115 in Pakistan).",
-    "• Talk to someone you trust — a friend, family member, or teacher.",
-    "• A licensed mental-health professional or your university counselling centre can support you.",
-    "I'm here to keep things light for you — want me to clear today's non-urgent tasks so you can take care of yourself?",
-  ].join("\n");
-}
+export { CRISIS_RESOURCES, crisisForText, crisisPayload, crisisResponse, detectCrisis, type CrisisPayload } from "./crisis.js";
 
 export type MoodDetection = { mood: Mood; confidence: number; explicit: boolean };
 

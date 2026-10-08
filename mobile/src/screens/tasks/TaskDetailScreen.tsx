@@ -122,7 +122,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           {task.difficulty ? <Text style={styles.meta}>Difficulty {task.difficulty}/5</Text> : null}
           {Array.isArray(task.tags) && task.tags.length ? <Text style={styles.tags}>{task.tags.map((t) => `#${t}`).join("  ")}</Text> : null}
           {task.description ? <Text style={ui.body}>{task.description}</Text> : null}
-          {task.source !== "MANUAL" ? <Text style={styles.meta}>Added via {task.source.toLowerCase()}{task.confidence ? ` · clarity ${task.confidence}%` : ""}</Text> : null}
+          {task.source !== "MANUAL" ? <Text style={styles.meta}>Added via {task.source.toLowerCase()}</Text> : null}
         </Card>
 
         {overdue ? (

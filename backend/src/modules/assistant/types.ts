@@ -1,5 +1,5 @@
 import type { Priority, RoutineFrequency, RoutinePriority, TaskType } from "@prisma/client";
-import type { MoodRecommendation, Suggestion } from "../mood/moodService.js";
+import type { CrisisPayload, MoodRecommendation, Suggestion } from "../mood/moodService.js";
 import type { DayPlan } from "../scheduling/schedulingService.js";
 import type { SerializedTask } from "../tasks/taskService.js";
 
@@ -113,7 +113,7 @@ export type Card =
   | { type: "plan"; plan: DayPlan }
   | { type: "breathing"; minutes: number }
   | { type: "insight"; text: string; confidence: number }
-  | { type: "resources" }
+  | { type: "resources"; resources: CrisisPayload["resources"] }
   | { type: "progress"; task: SerializedTask };
 
 export type AssistantMessageMeta = {

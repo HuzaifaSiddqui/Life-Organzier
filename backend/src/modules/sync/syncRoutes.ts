@@ -73,24 +73,54 @@ function pickKnown(changes: Record<string, unknown>): z.infer<typeof updateShape
   return parsed.data;
 }
 
+/**
+ * Field-level merge for an update made on an older version (pure; no I/O).
+ *  - no base snapshot (history purged) → every incoming field applies
+ *  - a field only the client changed → applies
+ *  - a field both sides changed (true conflict) → newer modification time wins (device clocks)
+ */
+export function mergeFields(
+  incoming: Record<string, unknown>,
+  baseSnapshot: Record<string, unknown> | null,
+  current: Record<string, unknown>,
+  clientModifiedAt: Date,
+  serverModifiedAt: Date,
+): { merged: Record<string, unknown>; dropped: string[]; clientWins: boolean } {
+  const serverChanged = new Set(
+    TASK_FIELDS.filter((f) => baseSnapshot && JSON.stringify(baseSnapshot[f] ?? null) !== JSON.stringify(current[f] ?? null)),
+  );
+  const clientWins = clientModifiedAt > serverModifiedAt;
+  const merged: Record<string, unknown> = {};
+  const dropped: string[] = [];
+  for (const [field, value] of Object.entries(incoming)) {
+    if (!baseSnapshot || !serverChanged.has(field as (typeof TASK_FIELDS)[number]) || clientWins) merged[field] = value;
+    else dropped.push(field);
+  }
+  return { merged, dropped, clientWins };
+}
+
+/** What to do with an update/delete mutation given the task's current server state (pure). */
+export function mutationAction(op: "update" | "delete", task: Pick<Task, "status"> | null): "reject" | "delete" | "already_deleted" | "keep_deleted" | "merge" {
+  if (!task) return "reject";
+  if (op === "delete") return task.status === TaskStatus.DELETED ? "already_deleted" : "delete";
+  return task.status === TaskStatus.DELETED ? "keep_deleted" : "merge";
+}
+
 async function mergeUpdate(ctx: TaskContext, task: Task, incoming: TaskChanges, baseVersion: number | undefined, clientModifiedAt: Date): Promise<{ task: Task | null; status: Result["status"] }> {
   if (!baseVersion || baseVersion >= task.version) {
     return { task: await updateTask(ctx, task.id, incoming, { clientModifiedAt }), status: "applied" };
   }
   const base = await prisma.taskVersion.findUnique({ where: { taskId_version: { taskId: task.id, version: baseVersion } } });
-  const baseSnap = (base?.snapshot ?? {}) as Record<string, unknown>;
-  const current = snapshotOf(task);
-  const serverChanged = new Set(TASK_FIELDS.filter((f) => base && JSON.stringify(baseSnap[f] ?? null) !== JSON.stringify(current[f] ?? null)));
-  const clientWins = clientModifiedAt > task.lastModifiedAt;
-  const merged: Record<string, unknown> = {};
-  let dropped = 0;
-  for (const [field, value] of Object.entries(incoming)) {
-    if (!base || !serverChanged.has(field as (typeof TASK_FIELDS)[number]) || clientWins) merged[field] = value;
-    else dropped += 1;
-  }
+  const { merged, dropped, clientWins } = mergeFields(
+    incoming as Record<string, unknown>,
+    base ? ((base.snapshot ?? {}) as Record<string, unknown>) : null,
+    snapshotOf(task),
+    clientModifiedAt,
+    task.lastModifiedAt,
+  );
   if (!Object.keys(merged).length) return { task, status: "conflict_resolved_server" };
   const updated = await updateTask(ctx, task.id, merged as TaskChanges, { clientModifiedAt: clientWins ? clientModifiedAt : task.lastModifiedAt });
-  return { task: updated, status: dropped ? "merged" : "applied" };
+  return { task: updated, status: dropped.length ? "merged" : "applied" };
 }
 
 export const syncRouter = Router();
@@ -128,16 +158,17 @@ syncRouter.post(
         const id = m.taskId ? (localToServer.get(m.taskId) ?? m.taskId) : undefined;
         let task = id ? await prisma.task.findFirst({ where: { id, userId: req.user.id } }) : null;
         if (!task && m.taskId) task = await prisma.task.findFirst({ where: { userId: req.user.id, clientId: m.taskId } });
-        if (!task) {
+        const action = mutationAction(m.op, task);
+        if (action === "reject" || !task) {
           results.push({ mutationId: m.mutationId, status: "rejected", error: "Task not found" });
           continue;
         }
-        if (m.op === "delete") {
-          const deleted = task.status === TaskStatus.DELETED ? task : await softDeleteTask(ctx, task.id);
+        if (action === "delete" || action === "already_deleted") {
+          const deleted = action === "already_deleted" ? task : await softDeleteTask(ctx, task.id);
           results.push({ mutationId: m.mutationId, status: "applied", task: deleted ? serializeTask(deleted) : undefined });
           continue;
         }
-        if (task.status === TaskStatus.DELETED) {
+        if (action === "keep_deleted") {
           results.push({ mutationId: m.mutationId, status: "conflict_resolved_server", task: serializeTask(task) });
           continue;
         }

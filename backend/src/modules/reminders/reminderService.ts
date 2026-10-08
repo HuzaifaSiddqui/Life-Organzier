@@ -30,7 +30,7 @@ export type PlannedReminder = {
 };
 
 /** `onTime`: the reminder at the time the user set — it fires even in quiet hours, like an alarm. */
-type Draft = { at: Date; level: ReminderLevel; body: string; onTime?: boolean };
+export type Draft = { at: Date; level: ReminderLevel; body: string; onTime?: boolean };
 
 const MAX_REMINDERS = 60;
 
@@ -61,13 +61,18 @@ function atLocal(ymd: string, hour: number, minute: number, tz: string): Date {
   return zonedTimeToUtc(ymd, hour, minute, tz);
 }
 
-type Adaptivity = { ignoreRate: number; samples: number; earlyCompleter: boolean };
+export type Adaptivity = { ignoreRate: number; samples: number; earlyCompleter: boolean };
 
 async function adaptivityFor(userId: string): Promise<Map<string, Adaptivity>> {
   const logs = await prisma.reminderLog.findMany({
     where: { userId, status: { in: ["ACTED", "IGNORED"] }, fireAt: { gte: new Date(Date.now() - 60 * 86400000) } },
     select: { category: true, status: true, action: true },
   });
+  return adaptivityFromLogs(logs);
+}
+
+/** Per-category (and "*" overall) ignore rate and early-completion habit from reminder history. */
+export function adaptivityFromLogs(logs: Array<{ category: string | null; status: string; action: string | null }>): Map<string, Adaptivity> {
   const map = new Map<string, { ignored: number; total: number; doneFirst: number }>();
   for (const l of logs) {
     for (const key of [l.category ?? "Uncategorized", "*"]) {
@@ -171,6 +176,25 @@ function deadlineSequence(task: Task, settings: UserSettings, tz: string, peakSt
   return drafts;
 }
 
+/**
+ * Final fire time for one task reminder: quiet hours (except the on-time reminder), Do Not Disturb
+ * (critical reminders may override it), and the planning window. Null when it shouldn't fire.
+ */
+export function placeTaskReminder(
+  draft: Draft,
+  dueAt: Date | null,
+  settings: UserSettings,
+  tz: string,
+  dndUntil: Date | null,
+  now: Date,
+  horizon: Date,
+): Date | null {
+  let at = draft.onTime ? draft.at : respectQuietHours(draft.at, dueAt, settings, tz);
+  if (dndUntil && at < dndUntil && !(draft.level === "critical" && settings.criticalOverridesDnd)) at = dndUntil;
+  if (at <= now || at > horizon || (dueAt && (draft.onTime ? at > dueAt : at >= dueAt))) return null;
+  return at;
+}
+
 export async function planReminders(userId: string, settings: UserSettings, now = new Date(), horizonDays = 7): Promise<PlannedReminder[]> {
   const tz = settings.timezone;
   if (settings.notificationFrequency === "NONE") return [];
@@ -198,9 +222,8 @@ export async function planReminders(userId: string, settings: UserSettings, now 
     const prominent = Boolean(adapt && adapt.samples >= 3 && adapt.ignoreRate >= 0.5);
     const seen = new Set<number>();
     for (const draft of sequenceForTask(task, settings, tz, peakStartHour, adapt, now)) {
-      let at = draft.onTime ? draft.at : respectQuietHours(draft.at, task.dueAt, settings, tz);
-      if (dndUntil && at < dndUntil && !(draft.level === "critical" && settings.criticalOverridesDnd)) at = dndUntil;
-      if (at <= now || at > horizon || (task.dueAt && (draft.onTime ? at > task.dueAt : at >= task.dueAt))) continue;
+      const at = placeTaskReminder(draft, task.dueAt, settings, tz, dndUntil, now, horizon);
+      if (!at) continue;
       const minuteKey = Math.floor(at.getTime() / 60000);
       if (seen.has(minuteKey)) continue;
       seen.add(minuteKey);

@@ -175,37 +175,47 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
   }
   const status = input.status ?? TaskStatus.PENDING;
   const progress = status === TaskStatus.COMPLETED ? 100 : Math.max(0, Math.min(100, input.progress ?? 0));
-  const task = await prisma.task.create({
-    data: {
-      userId: ctx.userId,
-      title: input.title.trim().slice(0, 300),
-      description: input.description ?? null,
-      dueDate: input.dueDate ?? null,
-      dueTime: input.dueTime ?? null,
-      dueAt: computeDueAt(input.dueDate ?? null, input.dueTime ?? null, ctx.tz),
-      priority: input.priority,
-      category: input.category ?? null,
-      status,
-      source: input.source,
-      confidence: input.confidence ?? null,
-      parentTaskId: input.parentTaskId ?? null,
-      progress,
-      durationMinutes: input.durationMinutes ?? null,
-      difficulty: input.difficulty ?? null,
-      taskType: input.taskType ?? TaskType.FLEXIBLE,
-      archived: input.archived ?? false,
-      tags: jsonTags(input.tags),
-      locationContext: input.locationContext ?? null,
-      reminderMinutes: input.reminderMinutes ?? null,
-      reminderMode: input.reminderMode ?? ReminderMode.ADAPTIVE,
-      scheduledStart: input.scheduledStart ?? null,
-      scheduledEnd: input.scheduledEnd ?? null,
-      completedAt: status === TaskStatus.COMPLETED ? new Date() : null,
-      deviceId: ctx.deviceId ?? null,
-      clientId: input.clientId ?? null,
-      documentId: input.documentId ?? null,
-    },
-  });
+  let task: Task;
+  try {
+    task = await prisma.task.create({
+      data: {
+        userId: ctx.userId,
+        title: input.title.trim().slice(0, 300),
+        description: input.description ?? null,
+        dueDate: input.dueDate ?? null,
+        dueTime: input.dueTime ?? null,
+        dueAt: computeDueAt(input.dueDate ?? null, input.dueTime ?? null, ctx.tz),
+        priority: input.priority,
+        category: input.category ?? null,
+        status,
+        source: input.source,
+        confidence: input.confidence ?? null,
+        parentTaskId: input.parentTaskId ?? null,
+        progress,
+        durationMinutes: input.durationMinutes ?? null,
+        difficulty: input.difficulty ?? null,
+        taskType: input.taskType ?? TaskType.FLEXIBLE,
+        archived: input.archived ?? false,
+        tags: jsonTags(input.tags),
+        locationContext: input.locationContext ?? null,
+        reminderMinutes: input.reminderMinutes ?? null,
+        reminderMode: input.reminderMode ?? ReminderMode.ADAPTIVE,
+        scheduledStart: input.scheduledStart ?? null,
+        scheduledEnd: input.scheduledEnd ?? null,
+        completedAt: status === TaskStatus.COMPLETED ? new Date() : null,
+        deviceId: ctx.deviceId ?? null,
+        clientId: input.clientId ?? null,
+        documentId: input.documentId ?? null,
+      },
+    });
+  } catch (error) {
+    // Two syncs racing with the same offline task: the loser returns the winner's task instead of failing.
+    if (input.clientId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await prisma.task.findUnique({ where: { userId_clientId: { userId: ctx.userId, clientId: input.clientId } } });
+      if (existing) return existing;
+    }
+    throw error;
+  }
   await recordVersion(task, ctx.deviceId);
   logEvent(ctx.userId, "TASK_CREATED", task.id, { source: task.source, category: task.category, taskType: task.taskType });
   if (task.parentTaskId) await updateParentProgress(task.parentTaskId);

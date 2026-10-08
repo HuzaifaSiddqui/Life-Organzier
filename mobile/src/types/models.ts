@@ -116,6 +116,9 @@ export type QuickAction = { label: string; text?: string; payload?: ActionPayloa
 
 export type Suggestion = { id: string; label: string; detail?: string; action: ActionPayload };
 
+/** Crisis reply from the server: localised text and call buttons (single source: backend CRISIS_RESOURCES). */
+export type CrisisPayload = { message: string; resources: Array<{ label: string; phone: string }> };
+
 export type MoodRecommendation = {
   mood: Mood;
   message: string;
@@ -166,7 +169,7 @@ export type AssistantCard =
   | { type: "plan"; plan: DayPlan }
   | { type: "breathing"; minutes: number }
   | { type: "insight"; text: string; confidence: number }
-  | { type: "resources" }
+  | { type: "resources"; resources?: CrisisPayload["resources"] }
   | { type: "progress"; task: Task };
 
 export type ChatMessage = {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Priority, ReminderMode, RoutineFrequency, TaskStatus, TaskType, type Task, type UserSettings } from "@prisma/client";
+import { Priority, RoutineFrequency, TaskType, type Task } from "@prisma/client";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { cleanTitle, extractEntities, isVagueTitle } from "../src/modules/assistant/entities.js";
 import { clarityOf, draftFromEntities, fillDraft } from "../src/modules/assistant/draft.js";
@@ -12,84 +12,10 @@ import { findPeakWindows } from "../src/modules/patterns/patternService.js";
 import { respectQuietHours, sequenceForTask } from "../src/modules/reminders/reminderService.js";
 import { chunkPlan, suggestSlot, type ScheduleContext } from "../src/modules/scheduling/schedulingService.js";
 import { computeDueAt, localParts, localYmd, parseClock, zonedTimeToUtc } from "../src/lib/time.js";
+import { NOW, opts, settings, task, TZ } from "./fixtures.js";
 
 // Deterministic tests never reach a real model.
 setAi(new AiService([]));
-
-const TZ = "Asia/Karachi";
-// Monday 2026-10-05 10:00 in Karachi (UTC+5)
-const NOW = new Date("2026-10-05T05:00:00.000Z");
-const opts = { now: NOW, tz: TZ, contexts: ["At Home", "At Work", "At University"] };
-
-function settings(overrides: Partial<UserSettings> = {}): UserSettings {
-  return {
-    userId: "u1",
-    timezone: TZ,
-    language: "en",
-    quietStart: "22:00",
-    quietEnd: "08:00",
-    workStart: "08:00",
-    workEnd: "22:00",
-    dailyCapacityMinutes: 480,
-    notificationFrequency: "ADAPTIVE",
-    notificationMethod: "SOUND_VIBRATION",
-    notificationDevices: "ALL",
-    criticalOverridesDnd: true,
-    dndUntil: null,
-    currentContext: null,
-    contexts: [],
-    tier: "FREE",
-    onboardingCompleted: true,
-    tutorialsEnabled: true,
-    tutorialsSeen: [],
-    dismissedInsights: [],
-    ttsEnabled: false,
-    ttsRate: 1,
-    lastWhatsappMessageAt: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  };
-}
-
-function task(overrides: Partial<Task> = {}): Task {
-  return {
-    id: "t1",
-    userId: "u1",
-    title: "Assignment",
-    description: null,
-    dueDate: null,
-    dueTime: null,
-    dueAt: null,
-    priority: Priority.MEDIUM,
-    category: null,
-    status: TaskStatus.PENDING,
-    source: "CHAT",
-    confidence: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-    parentTaskId: null,
-    progress: 0,
-    durationMinutes: null,
-    difficulty: null,
-    taskType: TaskType.DEADLINE,
-    archived: false,
-    deletedAt: null,
-    completedAt: null,
-    scheduledStart: null,
-    scheduledEnd: null,
-    tags: null,
-    locationContext: null,
-    reminderMinutes: null,
-    reminderMode: ReminderMode.ADAPTIVE,
-    version: 1,
-    deviceId: null,
-    lastModifiedAt: NOW,
-    clientId: null,
-    documentId: null,
-    ...overrides,
-  };
-}
 
 /* ------------------------------------------------------------ time */
 
