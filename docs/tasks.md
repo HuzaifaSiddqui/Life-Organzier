@@ -22,15 +22,15 @@ known gaps in [known-limitations.md](known-limitations.md). This file tracks del
 | --- | --- | --- |
 | A | FR text in the FRD | Done |
 | B | Data model (CheckinLog with slotStart, Task.startedAt/checkinCopy, settings), pure timing rules | Done |
-| C | Message templates, background LLM copy, validator | In progress |
-| D | Plan + respond endpoint, maintenance, style intent | Planned |
+| C | Message templates, LLM/library first step, validator | Done |
+| D | Plan + respond endpoint, Gemini retry/pacing/breaker, maintenance, style intent | Done |
 | E | Mobile notifications, Update… sheet, settings, planned-start field | Planned |
 | F | Estimate accuracy, suggestions, evaluation report | Planned |
 | G | Documentation | Planned |
 
 Notes carried into later phases:
-- **Phase D:** when a task's `scheduledStart` changes, mark the old slot's `SCHEDULED` CheckinLog rows `CANCELLED`.
-- **Phase E:** cancel those check-ins' notifications on the phone when the slot changes.
+- **Phase D (done):** when a task's `scheduledStart` changes, the old slot's `SCHEDULED` CheckinLog rows are marked `CANCELLED` (also on done/skipped/deleted).
+- **Phase E:** cancel those check-ins' notifications on the phone: any scheduled check-in id missing from the latest plan.
 - **Phase F:** exclude tasks rescheduled after starting (`rescheduledAfterStart`) from the estimate ratio.
 
 ## Open work before release

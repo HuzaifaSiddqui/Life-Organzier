@@ -42,6 +42,9 @@ const settingsSchema = z
     dismissedInsights: z.array(z.string().max(120)).max(500),
     ttsEnabled: z.boolean(),
     ttsRate: z.number().min(0.5).max(2),
+    checkinsEnabled: z.boolean(),
+    checkinTone: z.enum(["FUNNY", "SERIOUS", "GENTLE"]),
+    checkinResearchMode: z.boolean(),
   })
   .partial();
 

@@ -5,6 +5,8 @@ import { prisma } from "../../config/db.js";
 export type ActivityType =
   | "APP_OPEN"
   | "TASK_CREATED"
+  | "CHECKIN_RESPONSE"
+  | "CHECKIN_STYLE_CHANGED"
   | "TASK_COMPLETED"
   | "TASK_UPDATED"
   | "TASK_DELETED"

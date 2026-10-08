@@ -2,6 +2,7 @@ import { TaskStatus } from "@prisma/client";
 import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
 import { computeDueAt } from "../lib/time.js";
+import { expireCheckins } from "../modules/checkins/checkinService.js";
 import { sendDueWhatsappReminders } from "../modules/whatsapp/whatsappService.js";
 
 /** Permanent deletion & retention rules from the FRD (FR-TM-005, FR-MS-004, FR-AP-001). */
@@ -9,6 +10,7 @@ export async function runMaintenance(now = new Date()): Promise<void> {
   const purgedTasks = await prisma.task.deleteMany({ where: { status: TaskStatus.DELETED, deletedAt: { lt: new Date(now.getTime() - 86400000) } } });
   const purgedVersions = await prisma.taskVersion.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 90 * 86400000) } } });
   await prisma.reminderLog.deleteMany({ where: { fireAt: { lt: new Date(now.getTime() - 90 * 86400000) } } });
+  await expireCheckins(now);
   await prisma.activityEvent.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 400 * 86400000) } } });
 
   const expired = await prisma.user.findMany({ where: { deletionRequestedAt: { lt: new Date(now.getTime() - 30 * 86400000) } } });

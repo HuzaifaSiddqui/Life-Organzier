@@ -214,3 +214,38 @@ export const FIRST_STEP_LIBRARY: Array<{ keywords: RegExp; en: string; ur: strin
   { keywords: /\b(gym|workout|exercise|run|running|walk|jog)\b/i, en: "Put on your workout shoes", ur: "ورزش کے جوتے پہن لیں" },
   { keywords: /\b(groceries|grocery|shopping|buy|sauda)\b/i, en: "Write the shopping list", ur: "خریداری کی فہرست لکھیں" },
 ];
+
+/** Replies to check-in responses that aren't praise/neutral acks. HUMAN REVIEW (Urdu). */
+export const RESPONSE_TEXT: Record<Lang, Record<string, string>> = {
+  en: {
+    STARTED: "Great start. I'll check in when {task} should be done.",
+    NOT_TODAY: "No problem. Pick a new time for {task}.",
+    EXTRA_OK: "Okay, I'll check back on {task} at {time}.",
+    PARTIAL: "{task} is {progress}% done. About {remaining} left — want to schedule it?",
+    REFUSED_LIMIT: "I've already given {task} extra time twice. Want to plan the rest instead?",
+    REFUSED_QUIET: "That falls in your quiet hours, so I won't check in. Plan the rest of {task}?",
+    REFUSED_DND: "Do Not Disturb is on then, so I won't check in. Plan the rest of {task}?",
+    STYLE_SET: "Done — check-ins will be {style} from now on.",
+    STYLE_ASK: "Which style should check-ins use?",
+    CHECKINS_OFF: "Check-ins are off. Your normal reminders still work.",
+    CHECKINS_ON: "Check-ins are back on.",
+  },
+  ur: {
+    STARTED: "بہترین آغاز۔ {task} کا وقت ختم ہونے پر حال پوچھوں گا۔",
+    NOT_TODAY: "کوئی بات نہیں۔ {task} کے لیے نیا وقت چنیں۔",
+    EXTRA_OK: "ٹھیک ہے، {time} پر {task} کا حال پوچھوں گا۔",
+    PARTIAL: "{task} کا {progress}% کام ہو گیا۔ تقریباً {remaining} باقی ہیں — شیڈول کر دوں؟",
+    REFUSED_LIMIT: "{task} کو پہلے ہی دو بار اضافی وقت مل چکا ہے۔ باقی کام پلان کر لیں؟",
+    REFUSED_QUIET: "یہ آپ کے خاموش اوقات میں آتا ہے، اس لیے حال نہیں پوچھوں گا۔ {task} کا باقی کام پلان کریں؟",
+    REFUSED_DND: "اس وقت ڈو ناٹ ڈسٹرب آن ہے، اس لیے حال نہیں پوچھوں گا۔ {task} کا باقی کام پلان کریں؟",
+    STYLE_SET: "ٹھیک ہے — اب سے چیک اِن {style} ہوں گے۔",
+    STYLE_ASK: "چیک اِن کس انداز میں ہوں؟",
+    CHECKINS_OFF: "چیک اِن بند ہو گئے۔ عام یاد دہانیاں چلتی رہیں گی۔",
+    CHECKINS_ON: "چیک اِن دوبارہ آن ہو گئے۔",
+  },
+};
+
+export const STYLE_NAMES: Record<Lang, Record<"FUNNY" | "SERIOUS" | "GENTLE", string>> = {
+  en: { FUNNY: "funny", SERIOUS: "serious", GENTLE: "gentle" },
+  ur: { FUNNY: "مزاحیہ", SERIOUS: "سنجیدہ", GENTLE: "نرم" },
+};

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getAi, type ChatMessage } from "../../ai/llm.js";
 import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
+import { parseCheckinStyle } from "../checkins/style.js";
 import { cleanTitle, extractEntities, isHabitLike, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -22,6 +23,7 @@ export const INTENTS = [
   "greeting",
   "thanks",
   "help",
+  "set_checkin_style",
   "confirm",
   "deny",
   "provide_info",
@@ -109,6 +111,7 @@ function targetFromText(text: string, intent: Intent): string {
 function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { intent: Intent; confidence: number } {
   const t = text.trim();
   const words = t.split(/\s+/).length;
+  if (parseCheckinStyle(t)) return { intent: "set_checkin_style", confidence: 0.95 };
   if (CONFIRM.test(t)) return { intent: "confirm", confidence: 0.95 };
   if (DENY.test(t) && words <= 4) return { intent: "deny", confidence: 0.9 };
   if (GREETING.test(t)) return { intent: "greeting", confidence: 0.95 };
@@ -167,6 +170,7 @@ const LLM_INTENTS = [
   "log_mood",
   "support",
   "provide_info",
+  "set_checkin_style",
   "smalltalk",
   "unclear",
 ] as const;
@@ -201,6 +205,7 @@ Classify the user's LAST message using the conversation for context. Intents:
 - log_mood: tells how they feel
 - support: wants emotional support or to talk about a problem
 - provide_info: shares a fact or preference about themselves
+- set_checkin_style: wants check-in/reminder messages funnier, more serious or gentler, or check-ins turned off/on
 - smalltalk: chit-chat or a general question
 - unclear: impossible to tell
 task_title: short actionable title (2-6 words) without dates, times or filler like "remind me", or "" if not a task.

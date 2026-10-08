@@ -62,6 +62,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   keep everything local (Ollama for English, keyword library for Urdu).
 - **Ollama writes English first steps only**; Urdu users get Gemini or the keyword library.
 - The keyword library covers common student tasks; anything else gets a check-in without a first step.
+- **Gemini on a free key is often busy.** In testing about half the calls returned 503 (high demand) or 429. Failed
+  calls fall back to the library; for slots more than 30 minutes away the backend retries Gemini up to twice in
+  the background. After a 429 Gemini is skipped for 10 minutes (`GEMINI_RATE_LIMIT_COOLDOWN_MS`); background
+  calls are spaced at least 4 s apart (`GEMINI_MIN_INTERVAL_MS`). `/health` shows the last Gemini error type.
 
 ## Safety
 

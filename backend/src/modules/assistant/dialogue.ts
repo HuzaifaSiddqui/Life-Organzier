@@ -239,7 +239,7 @@ async function learnInBackground(turn: Turn, messageId: string | null, text: str
 
 /* ======================================================================== text turns */
 
-const STRONG_SWITCH = new Set(["query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
+const STRONG_SWITCH = new Set(["set_checkin_style", "query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
 
 /** Text turns. The crisis check is the first step, ahead of open questions, NLU and every handler. */
 export async function handleText(turn: Turn, text: string): Promise<Out> {

@@ -4,6 +4,7 @@ import { handle, parseBody, requireUser } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { logEvent } from "../events/eventService.js";
+import { planCheckins } from "../checkins/checkinService.js";
 import { planReminders, recordReminderAction } from "./reminderService.js";
 
 export const reminderRouter = Router();
@@ -15,8 +16,11 @@ reminderRouter.get(
   handle(async (req, res) => {
     const days = Math.min(14, Math.max(1, Number(req.query.days ?? 7)));
     const reminders = await planReminders(req.user.id, req.settings, new Date(), days);
+    // FR-RN-004: separate list; the phone schedules reminders first, then check-ins, within its cap.
+    const checkins = await planCheckins(req.user.id, req.settings, new Date(), days);
     sendSuccess(res, {
       reminders,
+      checkins,
       settings: {
         method: req.settings.notificationMethod,
         devices: req.settings.notificationDevices,

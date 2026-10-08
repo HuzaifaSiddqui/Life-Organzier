@@ -175,6 +175,47 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 
 ---
 
+### Check-ins (FR-RN-004)
+
+**`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):
+
+```ts
+type PlannedCheckin = {
+  id: string; taskId: string;
+  kind: "START" | "START_FOLLOWUP" | "COMPLETION" | "COMPLETION_EXTRA";
+  category: "START" | "COMPLETION";   // START → Started / Not today · COMPLETION → Done / +30 min / Update…
+  fireAt: string; title: string; body: string;
+  tone: "FUNNY" | "SERIOUS" | "GENTLE"; offerSplit: boolean;
+};
+```
+
+Ids are stable across re-plans. Check-ins that drop out of the plan (rescheduled task, done, cap, quiet hours)
+are marked `CANCELLED`; the phone should cancel any scheduled notification whose id is no longer in the list.
+
+**`POST /api/checkins/:id/respond`** — body `{ response }`:
+
+| Kind | Allowed responses |
+|---|---|
+| START, START_FOLLOWUP | `STARTED`, `NOT_TODAY` |
+| COMPLETION, COMPLETION_EXTRA | `DONE`, `PLUS_30`, `MORE_15`, `MORE_60`, `PARTIAL_25`, `PARTIAL_50`, `PARTIAL_75`, `DIDNT` |
+
+Response `data`: `{ checkin, task, message, next, suggestion, remainingMinutes, deadlineWarning, refused, alreadyAnswered }`.
+`next` is the check-in to schedule immediately (completion after `STARTED`, or the extra-time check-in);
+`suggestion` is a reschedule / plan-the-rest slot the user may accept; `refused` (`limit | quiet_hours | dnd`)
+comes with a user-facing `message`. Answering twice returns `alreadyAnswered: true` and changes nothing.
+Errors: 400 `INVALID_RESPONSE`, 404 `CHECKIN_NOT_FOUND`.
+
+**Settings (`PATCH /api/settings`)**: `checkinsEnabled` (boolean, default `true`), `checkinTone`
+(`FUNNY` default · `SERIOUS` · `GENTLE`), `checkinResearchMode` (boolean, default `false`).
+
+**Assistant intent `set_checkin_style`** (`POST /api/assistant/message`): rules first ("be more serious with
+reminders", "change your tone to gentle", "stop joking", "serious ho jao", "mazaq band karo", "turn off
+check-ins"), LLM only if unsure. Updates the setting and replies in the user's language with chips for the
+other styles (intents in the reply: `checkin_style_set`, `checkin_style_ask`, `checkins_off`, `checkins_on`).
+
+**`GET /health`** also reports `ai.gemini: { configured, model, available, lastError: { type, at } | null }`
+(`type`: `rate_limit | unavailable | timeout | not_found | auth | error`).
+
 ## Domain types (mobile)
 
 Defined in `mobile/src/types/models.ts`:
@@ -238,3 +279,12 @@ These **use** the APIs above but add client-only behavior:
 | `OLLAMA_TIMEOUT_MS` | `30000` | Maximum wait before rule-parser fallback. |
 
 This document is intended for FYP documentation and onboarding; it should be updated if routes or envelopes change.
+
+### Gemini pacing and cooldowns
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Flash model for check-in first steps |
+| `GEMINI_THINKING_BUDGET` | `0` | Thinking tokens (off for short JSON jobs) |
+| `GEMINI_MIN_INTERVAL_MS` | `4000` | Minimum gap between background Gemini calls |
+| `GEMINI_RATE_LIMIT_COOLDOWN_MS` | `600000` | How long Gemini is skipped after a 429 (503/timeouts: 30 s) |

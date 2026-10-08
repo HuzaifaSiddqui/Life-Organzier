@@ -32,6 +32,8 @@ export type CheckinCopy = {
   firstStepSource: FirstStepSource;
   messages: Partial<Record<Tone, Record<CopyKind, CopyMessage>>>;
   generatedAt: string;
+  /** Background Gemini retries used for this slot (max 2) when the step came from the library or none. */
+  retries?: number;
 };
 
 type TaskForCopy = Pick<Task, "id" | "title" | "durationMinutes" | "scheduledStart">;

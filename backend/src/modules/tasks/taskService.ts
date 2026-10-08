@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { computeDueAt, localParts } from "../../lib/time.js";
+import { cancelCheckins } from "../checkins/checkinLog.js";
 import { refreshCheckinCopy } from "../checkins/copy.js";
 import { logEvent } from "../events/eventService.js";
 
@@ -290,7 +291,12 @@ export async function updateTask(
 
   const updated = await prisma.task.update({ where: { id: taskId }, data });
   await recordVersion(updated, ctx.deviceId);
-  if (updated.scheduledStart && updated.scheduledStart.getTime() !== existing.scheduledStart?.getTime()) refreshCheckinCopy(updated);
+  // FR-RN-004: a new slot gets fresh copy and the old slot's check-ins are cancelled; done/skipped tasks lose theirs.
+  if (updated.scheduledStart?.getTime() !== existing.scheduledStart?.getTime()) {
+    await cancelCheckins(updated.id, updated.scheduledStart);
+    if (updated.scheduledStart) refreshCheckinCopy(updated);
+  }
+  if (updated.status !== existing.status && (updated.status === TaskStatus.COMPLETED || updated.status === TaskStatus.SKIPPED)) await cancelCheckins(updated.id);
 
   if (updated.status === TaskStatus.COMPLETED && existing.status !== TaskStatus.COMPLETED) {
     logEvent(ctx.userId, "TASK_COMPLETED", updated.id, completionPayload(updated, ctx.tz));
@@ -369,6 +375,7 @@ export async function softDeleteTask(ctx: TaskContext, taskId: string): Promise<
       lastModifiedAt: new Date(),
     },
   });
+  await cancelCheckins(deleted.id);
   await recordVersion(deleted, ctx.deviceId);
   logEvent(ctx.userId, "TASK_DELETED", taskId, { category: existing.category });
   if (existing.parentTaskId) await updateParentProgress(existing.parentTaskId);

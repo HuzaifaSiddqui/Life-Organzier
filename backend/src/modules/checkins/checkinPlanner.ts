@@ -139,7 +139,7 @@ export function applyDailyCap<T extends { fireAt: Date; kind: string }>(planned:
 
 export type ExtraRequest =
   | { ok: true; fireAt: Date; passesDeadline: boolean }
-  | { ok: false; reason: "limit" | "quiet_hours" | "dnd" | "past_deadline" };
+  | { ok: false; reason: "limit" | "quiet_hours" | "dnd" };
 
 /**
  * User asked for more time (+15/+30/+60). Exempt from both caps, max 2 per slot (current

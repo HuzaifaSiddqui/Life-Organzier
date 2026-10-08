@@ -24,7 +24,41 @@ export type CompletionOptions = {
 
 export interface LlmProvider {
   readonly name: string;
+  /** Model identifier, for status reporting. */
+  readonly model?: string;
+  /** Minimum gap between this provider's background calls (pacing against rate limits). */
+  readonly minIntervalMs?: number;
   chat(messages: ChatMessage[], options: CompletionOptions): Promise<string>;
+}
+
+/** HTTP failure from a provider; `status` drives the circuit-breaker cooldown. */
+export class ProviderHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export type ProviderErrorType = "rate_limit" | "unavailable" | "timeout" | "not_found" | "auth" | "error";
+
+export function classifyProviderError(error: unknown): ProviderErrorType {
+  if (error instanceof ProviderHttpError) {
+    if (error.status === 429) return "rate_limit";
+    if (error.status === 404) return "not_found";
+    if (error.status === 401 || error.status === 403) return "auth";
+    if (error.status >= 500) return "unavailable";
+    return "error";
+  }
+  if (error instanceof Error && (error.name === "AbortError" || /abort|timeout/i.test(error.message))) return "timeout";
+  return "error";
+}
+
+/** Cooldown per error type: 429 waits out the quota window (GEMINI_RATE_LIMIT_COOLDOWN_MS), the rest 30 s. */
+export function cooldownMs(type: ProviderErrorType): number {
+  if (type === "rate_limit") return Number(process.env.GEMINI_RATE_LIMIT_COOLDOWN_MS ?? 600000);
+  return 30000;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -42,7 +76,7 @@ export class OllamaProvider implements LlmProvider {
 
   constructor(
     private readonly baseUrl = process.env.OLLAMA_URL ?? "http://127.0.0.1:11434",
-    private readonly model = process.env.OLLAMA_MODEL ?? "qwen2.5:7b",
+    readonly model = process.env.OLLAMA_MODEL ?? "qwen2.5:7b",
     private readonly timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS ?? 60000),
   ) {}
 
@@ -67,7 +101,7 @@ export class OllamaProvider implements LlmProvider {
       },
       Math.min(options.timeoutMs ?? this.timeoutMs, this.timeoutMs),
     );
-    if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}`);
+    if (!response.ok) throw new ProviderHttpError(response.status, `Ollama returned HTTP ${response.status}`);
     const body = (await response.json()) as { message?: { content?: string } };
     const text = body.message?.content ?? "";
     if (!text.trim()) throw new Error("Ollama returned an empty response");
@@ -80,8 +114,9 @@ export class GeminiProvider implements LlmProvider {
 
   constructor(
     private readonly apiKey = process.env.GEMINI_API_KEY,
-    private readonly model = process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
+    readonly model = process.env.GEMINI_MODEL ?? "gemini-3.8-flash",
     private readonly timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS ?? 15000),
+    readonly minIntervalMs = Number(process.env.GEMINI_MIN_INTERVAL_MS ?? 4000),
   ) {}
 
   async chat(messages: ChatMessage[], options: CompletionOptions): Promise<string> {
@@ -111,7 +146,7 @@ export class GeminiProvider implements LlmProvider {
       },
       options.timeoutMs ?? this.timeoutMs,
     );
-    if (!response.ok) throw new Error(`Gemini API error (HTTP ${response.status})`);
+    if (!response.ok) throw new ProviderHttpError(response.status, `Gemini API error (HTTP ${response.status})`);
     const body = (await response.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
     if (!text.trim()) throw new Error("Gemini returned an empty response");
@@ -130,7 +165,19 @@ export function extractJson(text: string): unknown {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-type ProviderState = { provider: LlmProvider; downUntil: number };
+type ProviderState = {
+  provider: LlmProvider;
+  downUntil: number;
+  lastCallAt?: number;
+  lastError?: { type: ProviderErrorType; at: string; message: string };
+};
+
+export type ProviderStatus = {
+  configured: boolean;
+  model: string | null;
+  available: boolean;
+  lastError: { type: ProviderErrorType; at: string } | null;
+};
 
 /**
  * Provider chain with a short circuit-breaker: when a provider fails it is skipped for 30s so a
@@ -169,6 +216,18 @@ export class AiService {
 
   get enabled(): boolean {
     return this.chain.length > 0;
+  }
+
+  /** Configuration and breaker state of one provider (for /health). */
+  providerStatus(name: string): ProviderStatus {
+    const s = this.registry.get(name);
+    if (!s) return { configured: false, model: null, available: false, lastError: null };
+    return {
+      configured: true,
+      model: s.provider.model ?? null,
+      available: s.downUntil <= Date.now(),
+      lastError: s.lastError ? { type: s.lastError.type, at: s.lastError.at } : null,
+    };
   }
 
   /** True when a provider with this name is configured and not tripped by the circuit breaker. */
@@ -213,11 +272,23 @@ export class AiService {
       : this.chain;
     for (const state of states) {
       if (state.downUntil > Date.now()) continue;
+      // Background jobs (e.g. 20 tasks from one syllabus) are paced so they don't trip rate limits.
+      const gap = state.provider.minIntervalMs ?? 0;
+      if (options.background && gap > 0 && state.lastCallAt) {
+        const wait = state.lastCallAt + gap - Date.now();
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      }
+      state.lastCallAt = Date.now();
       try {
-        return await state.provider.chat(messages, options);
+        const text = await state.provider.chat(messages, options);
+        state.lastError = undefined;
+        return text;
       } catch (error) {
-        state.downUntil = Date.now() + 30000;
-        console.warn(`AI provider ${state.provider.name} unavailable:`, error instanceof Error ? error.message : error);
+        const type = classifyProviderError(error);
+        const message = error instanceof Error ? error.message : String(error);
+        state.downUntil = Date.now() + cooldownMs(type);
+        state.lastError = { type, at: new Date().toISOString(), message };
+        console.warn(`AI provider ${state.provider.name} unavailable (${type}, retry in ${Math.round(cooldownMs(type) / 1000)} s):`, message);
       }
     }
     return null;
