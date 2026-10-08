@@ -15,6 +15,18 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   settings change). If the app isn't opened for days, later reminders may be missing until it is.
 - Reminders are planned 7 days ahead; the WhatsApp reminder job only runs when Twilio is configured.
 
+## Offline sync
+
+- **Only tasks sync offline.** Routines, mood logs, memories, documents and settings call the API directly and
+  need a connection.
+- **Conflicts compare device clocks.** A true conflict (both sides changed the same field) is resolved by the newer
+  `clientModifiedAt`, which comes from the device clock. A phone with a wrong clock can win or lose conflicts
+  incorrectly. Fields changed on only one side always merge correctly.
+- **No conflict UI.** `ConflictSheet` exists in `mobile/src/components/primitives/feedback.tsx` but no screen uses it;
+  conflicts resolve silently on the server.
+- Two simultaneous syncs that create the same offline task can race: one succeeds, the other is reported as
+  rejected (no duplicate is created, because `userId + clientId` is unique).
+
 ## Safety
 
 - Crisis detection is a deterministic phrase list (English, Roman Urdu, Urdu script) in
