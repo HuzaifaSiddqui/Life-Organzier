@@ -38,7 +38,7 @@ import {
   ruleBasedMemories,
 } from "../memory/memoryService.js";
 import {
-  crisisResponse,
+  crisisPayload,
   detectCrisis,
   isMood,
   latestMood,
@@ -247,10 +247,11 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
 
   if (detectCrisis(text)) {
     turn.state.pending = null;
+    const crisis = crisisPayload(turn.settings.language);
     return {
-      content: crisisResponse(turn.settings.language),
-      cards: [{ type: "resources" }],
-      actions: [{ label: "Clear today's non-urgent tasks", payload: { type: "postpone_nonurgent" } }],
+      content: crisis.message,
+      cards: [{ type: "resources", resources: crisis.resources }],
+      actions: [{ label: turn.settings.language === "ur" ? "آج کے غیر ضروری کام ہٹا دیں" : "Clear today's non-urgent tasks", payload: { type: "postpone_nonurgent" } }],
       intent: "crisis",
     };
   }

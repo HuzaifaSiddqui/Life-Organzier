@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Conversation, User, UserSettings } from "@prisma/client";
 import { handleText, type Turn } from "../src/modules/assistant/dialogue.js";
 import { emptyState } from "../src/modules/assistant/types.js";
-import { crisisForText, crisisResponse, CRISIS_RESOURCES, detectCrisis, normalizeForCrisis } from "../src/modules/mood/crisis.js";
+import { crisisForText, crisisPayload, crisisResponse, CRISIS_RESOURCES, detectCrisis, normalizeForCrisis } from "../src/modules/mood/crisis.js";
 
 const POSITIVE: Record<string, string[]> = {
   english: [
@@ -128,7 +128,8 @@ test("crisis: checked before any open question, NLU or handler in the dialogue",
   assert.equal(out.intent, "crisis");
   assert.equal(turn.state.pending, null);
   assert.equal(out.content, crisisResponse("ur"));
-  assert.deepEqual(out.cards, [{ type: "resources" }]);
+  assert.deepEqual(out.cards, [{ type: "resources", resources: crisisPayload("ur").resources }]);
+  assert.match(out.actions?.[0]?.label ?? "", /[\u0600-\u06FF]/);
 });
 
 test("crisis: mood-log notes get the same check and a localised payload", () => {

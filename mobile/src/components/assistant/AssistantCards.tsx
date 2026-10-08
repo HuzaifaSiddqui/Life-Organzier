@@ -1,10 +1,11 @@
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, palette, radii } from "../../constants/theme";
 import type { ActionPayload, AssistantCard, DayPlan, Task } from "../../types/models";
 import { formatDue, formatDuration, formatTime } from "../../utils/format";
 import { priorityColor } from "../../utils/priorityColors";
 import { ProgressBar } from "../ui";
 import { BreathingExercise } from "./BreathingExercise";
+import { CrisisCard } from "./CrisisCard";
 
 type Handlers = {
   onOpenTask: (taskId: string) => void;
@@ -186,18 +187,8 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
               </View>
             );
           case "resources":
-            return (
-              <View key={i} style={[styles.panel, { backgroundColor: palette.dangerSoft, borderColor: "transparent" }]}>
-                <Text style={styles.panelTitle}>You're not alone</Text>
-                <Pressable onPress={() => void Linking.openURL("tel:1122")}>
-                  <Text style={[styles.suggestionText, { color: palette.danger }]}>Call emergency services · 1122</Text>
-                </Pressable>
-                <Pressable onPress={() => void Linking.openURL("tel:115")}>
-                  <Text style={[styles.suggestionText, { color: palette.danger }]}>Edhi helpline · 115</Text>
-                </Pressable>
-                <Text style={styles.meta}>Please also reach out to someone you trust or a licensed professional.</Text>
-              </View>
-            );
+            // Older stored messages have no resources; the card then shows only the guidance text.
+            return <CrisisCard key={i} resources={card.resources ?? []} />;
           default:
             return null;
         }

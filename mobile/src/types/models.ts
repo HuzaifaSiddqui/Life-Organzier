@@ -169,7 +169,7 @@ export type AssistantCard =
   | { type: "plan"; plan: DayPlan }
   | { type: "breathing"; minutes: number }
   | { type: "insight"; text: string; confidence: number }
-  | { type: "resources" }
+  | { type: "resources"; resources?: CrisisPayload["resources"] }
   | { type: "progress"; task: Task };
 
 export type ChatMessage = {
