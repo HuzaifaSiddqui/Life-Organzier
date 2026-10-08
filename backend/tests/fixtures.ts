@@ -1,4 +1,5 @@
 import { Priority, ReminderMode, TaskStatus, TaskType, type Task, type UserSettings } from "@prisma/client";
+import { prisma } from "../src/config/db.js";
 
 /** Shared test fixtures (no database). */
 export const TZ = "Asia/Karachi";
@@ -80,3 +81,10 @@ export function task(overrides: Partial<Task> = {}): Task {
     ...overrides,
   };
 }
+
+/**
+ * DB-backed tests run when a database is reachable and skip otherwise (local runs without
+ * DATABASE_URL). CI sets REQUIRE_DB=true, which turns a missing database into a failure.
+ */
+export const dbAvailable = await prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false);
+if (process.env.REQUIRE_DB === "true" && !dbAvailable) throw new Error("REQUIRE_DB=true but the database is not reachable");

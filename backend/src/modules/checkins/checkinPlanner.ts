@@ -37,12 +37,25 @@ export function completionFireAt(base: Date, durationMinutes: number): Date {
   return addMin(base, durationMinutes + completionBufferMinutes(durationMinutes));
 }
 
+/** True when the task was moved to a later start after work began (excluded from estimate accuracy). */
+export function rescheduledAfterStart(task: Pick<Task, "startedAt" | "scheduledStart">): boolean {
+  return Boolean(task.startedAt && task.scheduledStart && task.scheduledStart > task.startedAt);
+}
+
+/** Start of the work the completion check-in measures: startedAt, unless rescheduled to a later start since. */
+export function completionBase(task: Pick<Task, "startedAt" | "scheduledStart">): Date {
+  if (rescheduledAfterStart(task)) return task.scheduledStart as Date;
+  return (task.startedAt ?? task.scheduledStart) as Date;
+}
+
 /** Which check-ins a task may receive at all (FR-RN-004 §1). */
 export function checkinEligibility(task: TaskLike, settings: SettingsLike, now: Date): { start: boolean; completion: boolean } {
   const none = { start: false, completion: false };
   if (!settings.checkinsEnabled || settings.notificationFrequency === "NONE") return none;
   if (task.archived || (task.status !== TaskStatus.PENDING && task.status !== TaskStatus.IN_PROGRESS)) return none;
-  if (task.taskType !== TaskType.FLEXIBLE && task.taskType !== TaskType.DURATION) return none;
+  // DEADLINE tasks qualify only with a work block (scheduledStart) and a duration; the deadline is separate.
+  const deadlineWithBlock = task.taskType === TaskType.DEADLINE && Boolean(task.durationMinutes);
+  if (task.taskType !== TaskType.FLEXIBLE && task.taskType !== TaskType.DURATION && !deadlineWithBlock) return none;
   if (!task.scheduledStart) return none;
   // A passed deadline belongs to the overdue flow (FR-TM-008), never a check-in.
   if (task.dueAt && task.dueAt <= now) return none;
@@ -82,7 +95,7 @@ export function planTaskCheckins(task: TaskLike, settings: SettingsLike, tz: str
     out.push({ kind: "START_FOLLOWUP", fireAt: addMin(first, FOLLOWUP_DELAY_MIN), unconfirmed: true });
   }
   if (ok.completion) {
-    const base = task.startedAt ?? start;
+    const base = completionBase(task);
     out.push({ kind: "COMPLETION", fireAt: completionFireAt(base, task.durationMinutes as number), unconfirmed: !task.startedAt });
   }
 
@@ -95,20 +108,26 @@ export function planTaskCheckins(task: TaskLike, settings: SettingsLike, tz: str
 }
 
 /**
- * Applies the per-user daily cap (5 per local day) across all tasks, soonest first.
+ * Applies the per-user daily cap (5 per local day) across all tasks. When a day is over the cap,
+ * start follow-ups are dropped first (latest first), then the rest is kept soonest-first.
  * `alreadyByDay` counts planned check-ins that already fired on each local day.
  */
-export function applyDailyCap<T extends { fireAt: Date }>(planned: T[], tz: string, alreadyByDay: Map<string, number> = new Map()): T[] {
-  const counts = new Map(alreadyByDay);
-  return [...planned]
-    .sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime())
-    .filter((c) => {
-      const day = localYmd(c.fireAt, tz);
-      const n = counts.get(day) ?? 0;
-      if (n >= MAX_PLANNED_PER_DAY) return false;
-      counts.set(day, n + 1);
-      return true;
-    });
+export function applyDailyCap<T extends { fireAt: Date; kind: string }>(planned: T[], tz: string, alreadyByDay: Map<string, number> = new Map()): T[] {
+  const byDay = new Map<string, T[]>();
+  for (const c of [...planned].sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime())) {
+    const day = localYmd(c.fireAt, tz);
+    byDay.set(day, [...(byDay.get(day) ?? []), c]);
+  }
+  const out: T[] = [];
+  for (const [day, items] of byDay) {
+    const room = Math.max(0, MAX_PLANNED_PER_DAY - (alreadyByDay.get(day) ?? 0));
+    let keep = items;
+    for (let i = keep.length - 1; keep.length > room && i >= 0; i -= 1) {
+      if (keep[i].kind === "START_FOLLOWUP") keep = keep.filter((_, j) => j !== i);
+    }
+    out.push(...keep.slice(0, room));
+  }
+  return out.sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime());
 }
 
 export type ExtraRequest =

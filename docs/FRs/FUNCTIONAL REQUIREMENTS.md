@@ -901,7 +901,8 @@ This document specifies all functional requirements for Life Organizer. It descr
 
 1. **Eligibility**
    - Tasks of type FLEXIBLE or DURATION with a `scheduledStart` (start check-in) and `durationMinutes` (completion check-in)
-   - Not for FIXED events, DEADLINE tasks without a duration, routines, completed, deleted or archived tasks
+   - DEADLINE tasks qualify when they have both `durationMinutes` and `scheduledStart` (the scheduled start is the work block; the deadline is separate)
+   - Not for FIXED events, DEADLINE tasks without a duration or scheduled start, routines, completed, deleted or archived tasks
    - Disabled when the user turns check-ins off or notification frequency is "None"
    - A deadline that has already passed uses the overdue flow (FR-TM-008), never a check-in
 
@@ -923,7 +924,9 @@ This document specifies all functional requirements for Life Organizer. It descr
    - No response → stop; do not assume done or not done
 
 4. **Limits & Timing Rules**
-   - Max 3 check-ins per task, max 5 check-ins per user per day
+   - Max 3 check-ins per task, max 5 check-ins per user per day. When the daily cap is exceeded, start follow-ups are dropped first, then the soonest check-ins are kept
+   - User-requested extra time (+15 / +30 / +60) is exempt from both caps, limited to 2 per task; a refused request shows the user a short message
+   - If the task is rescheduled to a later start after work began, the completion check-in is calculated from the new `scheduledStart`
    - A check-in that falls in quiet hours or DND is skipped, not moved
    - Check-in messages are pre-generated; nothing is generated at notification time
 

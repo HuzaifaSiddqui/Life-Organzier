@@ -8,13 +8,15 @@ import {
   applyDailyCap,
   checkinEligibility,
   chooseTone,
+  completionBase,
   completionBufferMinutes,
   planTaskCheckins,
   requestExtraCheckin,
+  rescheduledAfterStart,
   type CheckinHistory,
 } from "../src/modules/checkins/checkinPlanner.js";
 import { createTask, updateTask } from "../src/modules/tasks/taskService.js";
-import { settings, task, TZ } from "./fixtures.js";
+import { settings, task, TZ, dbAvailable } from "./fixtures.js";
 
 // Monday 2026-10-05, Karachi. Quiet hours 22:00–08:00 (fixture default).
 const at = (h: number, m = 0, ymd = "2026-10-05") => zonedTimeToUtc(ymd, h, m, TZ);
@@ -51,7 +53,10 @@ test("check-ins: eligibility rules", () => {
   const s = settings();
   const now = at(12);
   assert.deepEqual(checkinEligibility(physics({ taskType: TaskType.FIXED }), s, now), { start: false, completion: false });
-  assert.deepEqual(checkinEligibility(physics({ taskType: TaskType.DEADLINE }), s, now), { start: false, completion: false });
+  // DEADLINE qualifies with a work block (scheduledStart) and a duration; without a duration it doesn't.
+  assert.deepEqual(checkinEligibility(physics({ taskType: TaskType.DEADLINE }), s, now), { start: true, completion: true });
+  assert.deepEqual(checkinEligibility(physics({ taskType: TaskType.DEADLINE, durationMinutes: null }), s, now), { start: false, completion: false });
+  assert.deepEqual(checkinEligibility(physics({ taskType: TaskType.DEADLINE, scheduledStart: null }), s, now), { start: false, completion: false });
   assert.deepEqual(checkinEligibility(physics({ scheduledStart: null }), s, now), { start: false, completion: false });
   assert.deepEqual(checkinEligibility(physics({ status: TaskStatus.COMPLETED }), s, now), { start: false, completion: false });
   assert.deepEqual(checkinEligibility(physics({ archived: true }), s, now), { start: false, completion: false });
@@ -78,11 +83,35 @@ test("check-ins: per-task cap of 3 counts check-ins that already fired", () => {
 });
 
 test("check-ins: daily cap of 5 across tasks, soonest first", () => {
-  const items = [9, 10, 11, 12, 13, 14, 15].map((h) => ({ id: h, fireAt: at(h) }));
+  const items = [9, 10, 11, 12, 13, 14, 15].map((h) => ({ id: h, kind: "START", fireAt: at(h) }));
   assert.deepEqual(applyDailyCap(items, TZ).map((c) => c.id), [9, 10, 11, 12, 13]);
   assert.deepEqual(applyDailyCap(items, TZ, new Map([["2026-10-05", 4]])).map((c) => c.id), [9]);
-  const twoDays = [...items.slice(0, 5), { id: 99, fireAt: at(9, 0, "2026-10-06") }];
+  const twoDays = [...items.slice(0, 5), { id: 99, kind: "START", fireAt: at(9, 0, "2026-10-06") }];
   assert.ok(applyDailyCap(twoDays, TZ, new Map([["2026-10-05", 5]])).some((c) => c.id === 99));
+});
+
+test("check-ins: over the daily cap, start follow-ups are dropped before a later completion", () => {
+  const items = [
+    { id: "a-start", kind: "START", fireAt: at(9, 5) },
+    { id: "a-follow", kind: "START_FOLLOWUP", fireAt: at(9, 30) },
+    { id: "b-start", kind: "START", fireAt: at(10, 5) },
+    { id: "b-follow", kind: "START_FOLLOWUP", fireAt: at(10, 30) },
+    { id: "c-start", kind: "START", fireAt: at(11, 5) },
+    { id: "a-done", kind: "COMPLETION", fireAt: at(17, 0) },
+  ];
+  // Soonest-first alone would keep both follow-ups and push out the 17:00 completion.
+  assert.deepEqual(applyDailyCap(items, TZ).map((c) => c.id), ["a-start", "a-follow", "b-start", "c-start", "a-done"]);
+  assert.deepEqual(applyDailyCap(items, TZ, new Map([["2026-10-05", 1]])).map((c) => c.id), ["a-start", "b-start", "c-start", "a-done"]);
+});
+
+test("check-ins: rescheduled after starting → completion counts from the new start", () => {
+  const moved = physics({ status: TaskStatus.IN_PROGRESS, startedAt: at(10), scheduledStart: at(16) });
+  assert.equal(rescheduledAfterStart(moved), true);
+  assert.equal(completionBase(moved).getTime(), at(16).getTime());
+  assert.deepEqual(plan(moved, at(12)), ["COMPLETION 18:12"]);
+  const normal = physics({ status: TaskStatus.IN_PROGRESS, startedAt: at(16, 7) });
+  assert.equal(rescheduledAfterStart(normal), false);
+  assert.equal(completionBase(normal).getTime(), at(16, 7).getTime());
 });
 
 test("check-ins: user-requested extra time is exempt from caps but limited to 2 per task", () => {
@@ -112,11 +141,6 @@ test("check-ins: tone is the saved style (Funny by default) except Gentle after 
   assert.deepEqual(chooseTone("FUNNY", { mood: "sad", createdAt: at(15, 0, "2026-10-04") }, now), { tone: "FUNNY", offerSplit: false }, "older than 24 h");
   assert.deepEqual(chooseTone("SERIOUS", { mood: "happy", createdAt: at(15) }, now), { tone: "SERIOUS", offerSplit: false });
 });
-
-const dbAvailable = await prisma
-  .$queryRaw`SELECT 1`
-  .then(() => true)
-  .catch(() => false);
 
 test("check-ins: startedAt is recorded on the first move to IN_PROGRESS only", { skip: !dbAvailable && "no database" }, async () => {
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `checkin-${randomUUID()}@example.test` } });
