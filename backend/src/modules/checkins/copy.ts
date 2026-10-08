@@ -107,6 +107,7 @@ export const FIRST_STEP_VERBS = new Set([
   "send", "fill", "book", "pay", "print", "highlight", "summarize", "summarise", "label", "measure", "prepare",
   "practice", "practise", "revise", "memorize", "define", "compare", "calculate", "reproduce", "debug",
   "research", "identify", "locate", "explore", "brainstorm", "recall", "organize", "organise",
+  "remove", "log", "sign", "wash", "fold", "tidy", "wipe", "empty", "pack", "charge", "scan", "submit", "upload", "rewrite", "edit", "proofread", "underline", "mark", "circle", "count", "ask",
 ]);
 
 /**

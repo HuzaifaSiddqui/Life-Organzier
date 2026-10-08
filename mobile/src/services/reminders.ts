@@ -230,6 +230,25 @@ export function scheduleReminderSync(delayMs = 1500): void {
 
 export type ReminderOpenTarget = { taskId: string | null; routineOccurrenceId: string | null };
 
+/**
+ * After any answer: drop this task's other scheduled check-ins on the phone (they're stale), keep the
+ * returned `next`, then re-sync the plan from the server.
+ */
+export async function afterCheckinAnswer(taskId: string, next: PlannedCheckin | null | undefined): Promise<void> {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter((n) => n.identifier.startsWith(`${PREFIX}c:`) && (n.content.data as { taskId?: string } | null)?.taskId === taskId)
+        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+    );
+  } catch (error) {
+    console.warn("Could not clear old check-ins", error);
+  }
+  if (next) await scheduleCheckin(next);
+  scheduleReminderSync();
+}
+
 /** Answers a check-in from a notification action and shows the result in the app. */
 async function handleCheckinAction(data: { checkinId?: string; taskId?: string | null; category?: string }, action: string, title: string, body: string): Promise<void> {
   const checkinId = data.checkinId;
@@ -244,7 +263,7 @@ async function handleCheckinAction(data: { checkinId?: string; taskId?: string |
   const response = action as CheckinResponse;
   try {
     const result = await answerCheckin(checkinId, taskId, response);
-    if (result?.next) await scheduleCheckin(result.next);
+    await afterCheckinAnswer(taskId, result?.next);
     showCheckinSheet({ mode: "result", taskId, title, result, response });
   } catch (error) {
     console.warn("Could not answer check-in", error);
@@ -256,8 +275,11 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   const content = response.notification.request.content;
   const data = (content.data ?? {}) as { taskId?: string | null; routineOccurrenceId?: string | null; fireAt?: string; kind?: string; checkinId?: string; category?: string };
   const action = response.actionIdentifier;
+  // Remove the notification from the tray once its action is handled.
+  const dismiss = () => Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => undefined);
   if (data.kind === "lo-checkin") {
     await handleCheckinAction(data, action, content.title ?? "", content.body ?? "");
+    await dismiss();
     return;
   }
   if (data.kind !== "lo-reminder") return;
@@ -282,6 +304,7 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   } else {
     onOpen(target);
   }
+  await dismiss();
   const mapped = action === "DONE" ? "DONE" : action === "SNOOZE" ? "SNOOZE" : "OPEN";
   apiPost("/reminders/action", { taskId: target.taskId, fireAt: data.fireAt ?? null, action: mapped }).catch(() => undefined);
 }

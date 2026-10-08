@@ -130,6 +130,8 @@ test("first step: strict validation of model output (incl. the bad qwen examples
   assert.equal(ok("Physics assignment کی فائل کھولیں", "ur"), true, "English title inside Urdu is fine");
   assert.equal(ok("Reproduce the login error locally", "en", "Fix the login bug in the FYP app"), true, "real Gemini output");
   assert.equal(ok("فزکس کی کتاب اور کاپی کھولیں", "ur"), true, "real Gemini Urdu output");
+  assert.equal(ok("Remove clothes from floor", "en", "Clean my room"), true);
+  assert.equal(ok("log in to LeetCode", "en", "Practice DSA problems"), true);
 
   assert.equal(ok("for physics success, 2 hours"), false, "qwen: comma, digit, no verb");
   assert.equal(ok("Let's into smaller steps"), false, "qwen: not an imperative from the allowlist");

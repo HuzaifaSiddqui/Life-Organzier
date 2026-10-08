@@ -4,7 +4,7 @@ import { usePreferences } from "../context/PreferencesContext";
 import { useLocale } from "../i18n/LocaleProvider";
 import { openAppScreen } from "../navigation/navigationRef";
 import { answerCheckin, showCheckinSheet, subscribeCheckinSheet, type CheckinResponse, type CheckinSheetState, type RespondResult } from "../services/checkins";
-import { scheduleCheckin } from "../services/reminders";
+import { afterCheckinAnswer } from "../services/reminders";
 import { updateTask } from "../services/tasksApi";
 import { useTheme } from "../theme/ThemeProvider";
 import { Button, Card, Chip, Sheet, Text } from "./ui";
@@ -57,7 +57,7 @@ export function CheckinSheet() {
     setBusy(response);
     try {
       const result = await answerCheckin(state.checkinId, state.taskId, response);
-      if (result?.next) await scheduleCheckin(result.next);
+      await afterCheckinAnswer(state.taskId, result?.next);
       showCheckinSheet({ mode: "result", taskId: state.taskId, title: state.title, result, response });
     } catch {
       setNote(t("checkin.error"));

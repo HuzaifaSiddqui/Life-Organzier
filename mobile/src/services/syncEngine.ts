@@ -165,8 +165,20 @@ type SyncResponse = {
   full: boolean;
 };
 
+const prePullHooks = new Set<() => Promise<unknown>>();
+
+/**
+ * Work that must reach the server before tasks are pulled (e.g. check-in answers made offline), so
+ * the pulled state already includes it and the list doesn't flicker back.
+ */
+export function addPrePullHook(fn: () => Promise<unknown>): () => void {
+  prePullHooks.add(fn);
+  return () => prePullHooks.delete(fn);
+}
+
 async function runSync(): Promise<boolean> {
   if (!auth.currentUser) return false;
+  for (const hook of prePullHooks) await hook().catch(() => undefined);
   const queue = await readQueue();
   const since = await readJson<string | null>(K.since(), null);
   setStatus({ syncing: true, error: null });

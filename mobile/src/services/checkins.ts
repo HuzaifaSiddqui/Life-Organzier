@@ -1,8 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth } from "../lib/firebase";
 import type { Task } from "../types/models";
+import axios from "axios";
 import { api, isNetworkError } from "./api";
-import { readTasks, subscribeSync, writeTasks } from "./syncEngine";
+import { addPrePullHook, readTasks, writeTasks } from "./syncEngine";
 
 /**
  * FR-RN-004 check-ins on the phone. The server's respond endpoint is the source of truth: it records
@@ -51,7 +52,15 @@ export type RespondResult = {
   alreadyAnswered: boolean;
 };
 
-type QueuedAnswer = { checkinId: string; taskId: string | null; response: CheckinResponse; respondedAt: string };
+/** `before`: the task's fields before the optimistic patch, restored if the server rejects the answer. */
+type QueuedAnswer = { checkinId: string; taskId: string | null; response: CheckinResponse; respondedAt: string; before?: Partial<Task> | null };
+
+/** Retry on network errors, timeouts and 5xx; only a 4xx (bad/unknown check-in) is final. */
+export function isRetryable(error: unknown): boolean {
+  if (isNetworkError(error)) return true;
+  if (axios.isAxiosError(error)) return (error.response?.status ?? 0) >= 500;
+  return true;
+}
 
 const queueKey = () => `life-organizer:checkin-answers:v1:${auth.currentUser?.uid ?? "guest"}`;
 
@@ -73,18 +82,37 @@ async function writeQueue(q: QueuedAnswer[]): Promise<void> {
   }
 }
 
-/** Optimistic local change so the app reflects the answer at once; the server result replaces it. */
-async function patchLocalTask(taskId: string | null, response: CheckinResponse, at: string, server?: Task | null): Promise<void> {
-  if (!taskId) return;
+const PATCHED_FIELDS = ["status", "startedAt", "completedAt", "progress"] as const;
+
+/** Optimistic local change so the app reflects the answer at once; the server result replaces it. Returns the prior fields. */
+async function patchLocalTask(taskId: string | null, response: CheckinResponse, at: string, server?: Task | null): Promise<Partial<Task> | null> {
+  if (!taskId) return null;
   const tasks = await readTasks();
   const i = tasks.findIndex((t) => t.id === taskId);
-  if (i < 0) return;
+  if (i < 0) return null;
+  const before = Object.fromEntries(PATCHED_FIELDS.map((f) => [f, tasks[i][f] ?? null])) as Partial<Task>;
   if (server) tasks[i] = server;
   else if (response === "STARTED" && tasks[i].status === "PENDING") tasks[i] = { ...tasks[i], status: "IN_PROGRESS", startedAt: tasks[i].startedAt ?? at };
   else if (response === "DONE") tasks[i] = { ...tasks[i], status: "COMPLETED", progress: 100, completedAt: at };
   else if (response.startsWith("PARTIAL_")) tasks[i] = { ...tasks[i], progress: Math.max(tasks[i].progress ?? 0, Number(response.split("_")[1])) };
-  else return;
+  else return before;
   await writeTasks(tasks);
+  return before;
+}
+
+/** Undo the optimistic patch after the server rejected the answer (4xx). */
+async function revertLocalTask(taskId: string | null, before: Partial<Task> | null | undefined): Promise<void> {
+  if (!taskId || !before) return;
+  const tasks = await readTasks();
+  const i = tasks.findIndex((t) => t.id === taskId);
+  if (i < 0) return;
+  tasks[i] = { ...tasks[i], ...before };
+  await writeTasks(tasks);
+}
+
+async function enqueueAnswer(a: QueuedAnswer): Promise<void> {
+  const q = await readQueue();
+  if (!q.some((x) => x.checkinId === a.checkinId)) await writeQueue([...q, a]);
 }
 
 async function send(a: QueuedAnswer): Promise<RespondResult> {
@@ -100,15 +128,17 @@ async function send(a: QueuedAnswer): Promise<RespondResult> {
  */
 export async function answerCheckin(checkinId: string, taskId: string | null, response: CheckinResponse, tappedAt = new Date()): Promise<RespondResult | null> {
   const answer: QueuedAnswer = { checkinId, taskId, response, respondedAt: tappedAt.toISOString() };
-  await patchLocalTask(taskId, response, answer.respondedAt);
+  answer.before = await patchLocalTask(taskId, response, answer.respondedAt);
   try {
     const result = await send(answer);
     await patchLocalTask(taskId, response, answer.respondedAt, result.task);
     return result;
   } catch (error) {
-    if (!isNetworkError(error)) throw error;
-    const q = await readQueue();
-    if (!q.some((x) => x.checkinId === checkinId)) await writeQueue([...q, answer]);
+    if (!isRetryable(error)) {
+      await revertLocalTask(taskId, answer.before);
+      throw error;
+    }
+    await enqueueAnswer(answer); // network error, timeout or 5xx: send again later
     return null;
   }
 }
@@ -125,8 +155,8 @@ export async function flushCheckinAnswers(): Promise<number> {
         const r = await send(a);
         await patchLocalTask(a.taskId, a.response, a.respondedAt, r.task);
       } catch (error) {
-        if (isNetworkError(error)) break; // still offline: keep the rest
-        // 4xx (deleted check-in, invalid answer): drop it rather than retry forever.
+        if (isRetryable(error)) break; // offline, timeout or server error: keep this and the rest
+        await revertLocalTask(a.taskId, a.before); // 4xx is final: drop it and undo the local change
       }
       await writeQueue((await readQueue()).filter((x) => x.checkinId !== a.checkinId));
       sent += 1;
@@ -137,16 +167,13 @@ export async function flushCheckinAnswers(): Promise<number> {
   return sent;
 }
 
-/** Flush whenever the sync engine reports a successful sync (it runs on reconnect and app foreground). */
+/**
+ * Sends queued answers at the start of every sync (reconnect, app foreground), before tasks are
+ * pulled, so the pull already includes them.
+ */
 export function startCheckinQueue(onFlushed?: () => void): () => void {
-  let last: string | null = null;
-  return subscribeSync((s) => {
-    if (s.online && !s.syncing && s.lastSyncAt && s.lastSyncAt !== last) {
-      last = s.lastSyncAt;
-      void flushCheckinAnswers().then((n) => {
-        if (n) onFlushed?.();
-      });
-    }
+  return addPrePullHook(async () => {
+    if (await flushCheckinAnswers()) onFlushed?.();
   });
 }
 
