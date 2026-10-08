@@ -24,8 +24,6 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   incorrectly. Fields changed on only one side always merge correctly.
 - **No conflict UI.** `ConflictSheet` exists in `mobile/src/components/primitives/feedback.tsx` but no screen uses it;
   conflicts resolve silently on the server.
-- Two simultaneous syncs that create the same offline task can race: one succeeds, the other is reported as
-  rejected (no duplicate is created, because `userId + clientId` is unique).
 
 ## Documents and OCR
 

@@ -64,4 +64,20 @@ test("sync: creating with the same clientId twice yields one task", { skip: !dbA
   }
 });
 
+test("sync: two concurrent creates with the same clientId both succeed with one task", { skip: !dbAvailable && "no database" }, async () => {
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `sync-race-${randomUUID()}@example.test` } });
+  try {
+    const ctx = { userId: user.id, tz: "Asia/Karachi" };
+    const input = { title: "Raced offline task", priority: Priority.MEDIUM, source: TaskSource.MANUAL, clientId: "local-race" };
+    // Both pass the "already exists?" check before either inserts; the loser hits the unique constraint.
+    const results = await Promise.allSettled(Array.from({ length: 5 }, () => createTask(ctx, input)));
+    assert.ok(results.every((r) => r.status === "fulfilled"), JSON.stringify(results.filter((r) => r.status === "rejected")));
+    const ids = new Set(results.map((r) => (r as PromiseFulfilledResult<{ id: string }>).value.id));
+    assert.equal(ids.size, 1);
+    assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
 test.after(() => prisma.$disconnect());
