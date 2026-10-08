@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { computeDueAt, localParts } from "../../lib/time.js";
+import { refreshCheckinCopy } from "../checkins/copy.js";
 import { logEvent } from "../events/eventService.js";
 
 export type TaskContext = { userId: string; tz: string; deviceId?: string | null };
@@ -218,6 +219,7 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
     throw error;
   }
   await recordVersion(task, ctx.deviceId);
+  if (task.scheduledStart) refreshCheckinCopy(task); // FR-RN-004: pre-write check-in messages
   logEvent(ctx.userId, "TASK_CREATED", task.id, { source: task.source, category: task.category, taskType: task.taskType });
   if (task.parentTaskId) await updateParentProgress(task.parentTaskId);
   return task;
@@ -288,6 +290,7 @@ export async function updateTask(
 
   const updated = await prisma.task.update({ where: { id: taskId }, data });
   await recordVersion(updated, ctx.deviceId);
+  if (updated.scheduledStart && updated.scheduledStart.getTime() !== existing.scheduledStart?.getTime()) refreshCheckinCopy(updated);
 
   if (updated.status === TaskStatus.COMPLETED && existing.status !== TaskStatus.COMPLETED) {
     logEvent(ctx.userId, "TASK_COMPLETED", updated.id, completionPayload(updated, ctx.tz));
