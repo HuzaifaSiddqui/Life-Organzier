@@ -145,9 +145,10 @@ export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
       intent: checkinsEnabled ? "checkins_on" : "checkins_off",
     };
   }
+  const wasOff = !turn.settings.checkinsEnabled;
   turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinTone: req.tone, checkinsEnabled: true } });
-  logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinTone: req.tone });
-  return { content: t.STYLE_SET.replace("{style}", STYLE_NAMES[lang][req.tone]), actions: others(req.tone), intent: "checkin_style_set" };
+  logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinTone: req.tone, reenabled: wasOff });
+  return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: others(req.tone), intent: "checkin_style_set" };
 }
 
 function help(): Out {

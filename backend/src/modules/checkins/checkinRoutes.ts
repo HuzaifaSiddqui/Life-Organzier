@@ -12,13 +12,14 @@ checkinRouter.use(requireFirebaseUser, requireUser);
 checkinRouter.post(
   "/:id/respond",
   handle(async (req, res) => {
-    const body = parseBody(z.object({ response: z.enum(CHECKIN_RESPONSES) }), req.body);
+    // respondedAt: when the user tapped (the offline queue may deliver later); clamped to [fireAt, now].
+    const body = parseBody(z.object({ response: z.enum(CHECKIN_RESPONSES), respondedAt: z.string().datetime().optional() }), req.body);
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) {
       res.status(404).json({ success: false, message: "Check-in not found", error: "CHECKIN_NOT_FOUND" });
       return;
     }
-    const result = await respondToCheckin(req.user.id, req.settings, { userId: req.user.id, tz: req.settings.timezone, deviceId: req.deviceId }, id.data, body.response);
+    const result = await respondToCheckin(req.user.id, req.settings, { userId: req.user.id, tz: req.settings.timezone, deviceId: req.deviceId }, id.data, body.response, new Date(), body.respondedAt ? new Date(body.respondedAt) : null);
     sendSuccess(res, result);
   }),
 );

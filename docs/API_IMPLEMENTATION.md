@@ -192,7 +192,7 @@ type PlannedCheckin = {
 Ids are stable across re-plans. Check-ins that drop out of the plan (rescheduled task, done, cap, quiet hours)
 are marked `CANCELLED`; the phone should cancel any scheduled notification whose id is no longer in the list.
 
-**`POST /api/checkins/:id/respond`** — body `{ response }`:
+**`POST /api/checkins/:id/respond`** — body `{ response, respondedAt? }` (`respondedAt` = ISO tap time from the offline queue, clamped to [fireAt, now]; used for respondedAt, startedAt/completedAt and the extra-time base):
 
 | Kind | Allowed responses |
 |---|---|
@@ -202,7 +202,8 @@ are marked `CANCELLED`; the phone should cancel any scheduled notification whose
 Response `data`: `{ checkin, task, message, next, suggestion, remainingMinutes, deadlineWarning, refused, alreadyAnswered }`.
 `next` is the check-in to schedule immediately (completion after `STARTED`, or the extra-time check-in);
 `suggestion` is a reschedule / plan-the-rest slot the user may accept; `refused` (`limit | quiet_hours | dnd`)
-comes with a user-facing `message`. Answering twice returns `alreadyAnswered: true` and changes nothing.
+comes with a user-facing `message`. Answers are claimed atomically: answering twice (or concurrently) returns `alreadyAnswered: true` and changes nothing. Answers to a `CANCELLED` check-in, or for a task already `COMPLETED`/`SKIPPED`, are recorded but don't change the task (short message, no `next`).
+CheckinLog `copySource`: `GEMINI | OLLAMA | LIBRARY | NONE | WITHHELD` (research mode omitted an existing first step).
 Errors: 400 `INVALID_RESPONSE`, 404 `CHECKIN_NOT_FOUND`.
 
 **Settings (`PATCH /api/settings`)**: `checkinsEnabled` (boolean, default `true`), `checkinTone`

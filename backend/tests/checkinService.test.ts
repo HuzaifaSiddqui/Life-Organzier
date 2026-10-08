@@ -4,7 +4,7 @@ import test from "node:test";
 import { Priority, TaskSource, TaskStatus, TaskType, type UserSettings } from "@prisma/client";
 import { AiService, ProviderHttpError, setAi, type ChatMessage, type CompletionOptions, type LlmProvider } from "../src/ai/llm.js";
 import { prisma } from "../src/config/db.js";
-import { expireCheckins, planCheckins, queueFirstStepRetry, remainingMinutes, respondToCheckin, responseAllowed } from "../src/modules/checkins/checkinService.js";
+import { clampTapTime, expireCheckins, planCheckins, queueFirstStepRetry, remainingMinutes, respondToCheckin, responseAllowed } from "../src/modules/checkins/checkinService.js";
 import { parseCheckinStyle } from "../src/modules/checkins/style.js";
 import { templateCopy } from "../src/modules/checkins/copy.js";
 import { understand } from "../src/modules/assistant/nlu.js";
@@ -282,6 +282,104 @@ test("chat: style requests update the setting and confirm with chips for the oth
     assert.equal(r.message.intent, "checkins_off");
     assert.equal((await prisma.userSettings.findUnique({ where: { userId: user.id } }))?.checkinsEnabled, false);
   });
+});
+
+test("respond: tap time is clamped to [fireAt, now]", () => {
+  const fire = new Date("2026-10-09T11:05:00Z");
+  const now = new Date("2026-10-09T13:00:00Z");
+  assert.equal(clampTapTime(null, fire, now).getTime(), now.getTime());
+  assert.equal(clampTapTime(new Date("2026-10-09T11:07:00Z"), fire, now).toISOString(), "2026-10-09T11:07:00.000Z");
+  assert.equal(clampTapTime(new Date("2026-10-09T10:00:00Z"), fire, now).getTime(), fire.getTime(), "before it fired");
+  assert.equal(clampTapTime(new Date("2026-10-10T00:00:00Z"), fire, now).getTime(), now.getTime(), "in the future");
+});
+
+const startRow = (userId: string, taskId: string, start: Date, o: Record<string, unknown> = {}) =>
+  prisma.checkinLog.create({ data: { userId, taskId, slotStart: start, kind: "START", fireAt: new Date(start.getTime() + 5 * 60000), tone: "FUNNY", copySource: "LIBRARY", message: "Started?", ...o } });
+
+test("respond: answering an old check-in for a task already completed in the app changes nothing", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(async (ctx, settings) => {
+    const start = minute(new Date(Date.now() - 30 * 60000));
+    const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
+    const row = await startRow(ctx.userId, t.id, start);
+    await updateTask(ctx, t.id, { status: TaskStatus.COMPLETED });
+    const r = await respondToCheckin(ctx.userId, settings, ctx, row.id, "STARTED");
+    assert.equal(r.task?.status, TaskStatus.COMPLETED);
+    assert.equal(r.next, null);
+    assert.equal(r.message, "Already done ✓");
+    assert.equal((await prisma.checkinLog.findUnique({ where: { id: row.id } }))?.response, "STARTED", "the answer is still recorded");
+  });
+});
+
+test("respond: answering a cancelled (rescheduled) check-in changes nothing", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(async (ctx, settings) => {
+    const start = minute(new Date(Date.now() - 30 * 60000));
+    const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
+    const row = await startRow(ctx.userId, t.id, start, { status: "CANCELLED" });
+    const r = await respondToCheckin(ctx.userId, settings, ctx, row.id, "STARTED");
+    assert.equal(r.task?.status, TaskStatus.PENDING);
+    assert.equal(r.next, null);
+    assert.match(r.message ?? "", /no longer current/);
+  });
+});
+
+test("respond: two concurrent +30 answers create exactly one extra check-in", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(async (ctx, settings) => {
+    const start = minute(new Date(Date.now() - 2 * 3600000));
+    const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
+    const row = await prisma.checkinLog.create({ data: { userId: ctx.userId, taskId: t.id, slotStart: start, kind: "COMPLETION", fireAt: new Date(Date.now() - 60000), tone: "FUNNY", copySource: "NONE", message: "Done?" } });
+    const [a, b] = await Promise.all([respondToCheckin(ctx.userId, settings, ctx, row.id, "PLUS_30"), respondToCheckin(ctx.userId, settings, ctx, row.id, "PLUS_30")]);
+    assert.deepEqual([a.alreadyAnswered, b.alreadyAnswered].sort(), [false, true]);
+    assert.equal(await prisma.checkinLog.count({ where: { taskId: t.id, kind: "COMPLETION_EXTRA" } }), 1);
+  });
+});
+
+test("respond: a STARTED delivered late uses the tap time for startedAt and the completion check-in", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(async (ctx, settings) => {
+    const start = minute(new Date(Date.now() - 50 * 60000));
+    const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
+    const row = await startRow(ctx.userId, t.id, start);
+    const tapped = new Date(start.getTime() + 7 * 60000); // tapped offline 43 min ago
+    const r = await respondToCheckin(ctx.userId, settings, ctx, row.id, "STARTED", new Date(), tapped);
+    assert.equal(new Date(r.task!.startedAt!).getTime(), tapped.getTime());
+    assert.equal(new Date(r.next!.fireAt).getTime(), tapped.getTime() + (120 + 12) * 60000);
+    assert.equal((await prisma.checkinLog.findUnique({ where: { id: row.id } }))?.respondedAt?.getTime(), tapped.getTime());
+  });
+});
+
+test("plan: research mode records WITHHELD when it omits an existing first step", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(
+    async (ctx, settings) => {
+      // Several tasks so the stable 50/50 lands on both variants.
+      for (let i = 0; i < 6; i += 1) {
+        const start = minute(new Date(Date.now() + (2 + i) * 3600000));
+        await createTask(ctx, { title: `Physics assignment ${i}`, priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 60, scheduledStart: start });
+      }
+      await planCheckins(ctx.userId, settings);
+      const starts = await prisma.checkinLog.findMany({ where: { userId: ctx.userId, kind: { in: ["START", "START_FOLLOWUP"] } } });
+      assert.ok(starts.some((r) => r.copySource === "WITHHELD" && !r.hasFirstStep), "some withheld");
+      assert.ok(starts.some((r) => r.copySource === "LIBRARY" && r.hasFirstStep), "some shown");
+      assert.ok(starts.every((r) => r.copySource !== "NONE"), "a first step existed for all, so none are NONE");
+    },
+    { checkinResearchMode: true },
+  );
+});
+
+test("chat: choosing a style while check-ins are off turns them back on and says so", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(
+    async (_ctx, settings) => {
+      const user = (await prisma.user.findUnique({ where: { id: settings.userId } }))!;
+      const r = await handleAssistantMessage({ user, settings, deviceId: null, text: "be more serious with reminders", channel: "APP" });
+      assert.match(r.message.content, /back on/);
+      assert.equal((await prisma.userSettings.findUnique({ where: { userId: user.id } }))?.checkinsEnabled, true);
+    },
+    { checkinsEnabled: false },
+  );
 });
 
 test.after(() => prisma.$disconnect());

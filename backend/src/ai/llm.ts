@@ -92,10 +92,12 @@ export class OllamaProvider implements LlmProvider {
           stream: false,
           ...(options.json ? { format: options.json === true ? "json" : options.json } : {}),
           keep_alive: "30m",
+          // Reasoning models (qwen3.x) think by default; that's slow and can eat the token budget on short JSON jobs.
+          think: false,
           options: {
             temperature: options.temperature ?? 0.2,
             num_predict: options.maxTokens ?? 400,
-            num_ctx: 4096,
+            num_ctx: Number(process.env.OLLAMA_NUM_CTX ?? 4096),
           },
         }),
       },

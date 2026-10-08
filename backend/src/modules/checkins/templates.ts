@@ -229,6 +229,9 @@ export const RESPONSE_TEXT: Record<Lang, Record<string, string>> = {
     STYLE_ASK: "Which style should check-ins use?",
     CHECKINS_OFF: "Check-ins are off. Your normal reminders still work.",
     CHECKINS_ON: "Check-ins are back on.",
+    STYLE_SET_AND_ON: "Done — check-ins are back on and will be {style} from now on.",
+    STALE_DONE: "Already done ✓",
+    STALE: "That check-in is no longer current — {task} was rescheduled.",
   },
   ur: {
     STARTED: "بہترین آغاز۔ {task} کا وقت ختم ہونے پر حال پوچھوں گا۔",
@@ -242,6 +245,9 @@ export const RESPONSE_TEXT: Record<Lang, Record<string, string>> = {
     STYLE_ASK: "چیک اِن کس انداز میں ہوں؟",
     CHECKINS_OFF: "چیک اِن بند ہو گئے۔ عام یاد دہانیاں چلتی رہیں گی۔",
     CHECKINS_ON: "چیک اِن دوبارہ آن ہو گئے۔",
+    STYLE_SET_AND_ON: "ٹھیک ہے — چیک اِن دوبارہ آن ہو گئے اور اب سے {style} ہوں گے۔",
+    STALE_DONE: "یہ پہلے ہی مکمل ہے ✓",
+    STALE: "یہ چیک اِن اب پرانا ہے — {task} کا وقت بدل دیا گیا تھا۔",
   },
 };
 

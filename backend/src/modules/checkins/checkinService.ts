@@ -116,8 +116,17 @@ async function upsertRow(
   data: Omit<Prisma.CheckinLogUncheckedCreateInput, "id" | "status">,
 ): Promise<CheckinLog> {
   const where = { taskId_kind_fireAt: { taskId: data.taskId as string, kind: data.kind, fireAt: data.fireAt as Date } };
-  const existing = await prisma.checkinLog.findUnique({ where });
-  if (!existing) return prisma.checkinLog.create({ data: { ...data, status: "SCHEDULED" } });
+  let existing = await prisma.checkinLog.findUnique({ where });
+  if (!existing) {
+    try {
+      return await prisma.checkinLog.create({ data: { ...data, status: "SCHEDULED" } });
+    } catch (error) {
+      // Two plan requests at once: the other one created it first.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      existing = await prisma.checkinLog.findUnique({ where });
+      if (!existing) throw error;
+    }
+  }
   if (existing.status === "ANSWERED" || existing.status === "IGNORED") return existing;
   return prisma.checkinLog.update({
     where: { id: existing.id },
@@ -185,7 +194,8 @@ export async function planCheckins(userId: string, settings: UserSettings, now =
       fireAt: c.fireAt,
       tone: tone.tone,
       hasFirstStep: msg.hasFirstStep,
-      copySource: msg.hasFirstStep ? copy.firstStepSource : "NONE",
+      // Research mode: a first step existed but this message deliberately omits it.
+      copySource: msg.hasFirstStep ? copy.firstStepSource : copy.firstStep && !include && (copyKind === "START" || copyKind === "START_FOLLOWUP") ? "WITHHELD" : "NONE",
       moodAtPlan: mood?.mood ?? null,
       message: msg.text,
     });
@@ -260,11 +270,26 @@ async function slotFor(userId: string, settings: UserSettings, task: Task, minut
   return suggestSlot(ctx, { durationMinutes: minutes, priority: task.priority, difficulty: task.difficulty, deadline: task.dueAt, excludeTaskId: task.id }, now);
 }
 
-export async function respondToCheckin(userId: string, settings: UserSettings, ctx: TaskContext, checkinId: string, response: CheckinResponse, now = new Date()): Promise<RespondResult> {
+/** Tap time from the phone (offline queue may deliver late), clamped to [fireAt, now]. */
+export function clampTapTime(respondedAt: Date | null | undefined, fireAt: Date, now: Date): Date {
+  if (!respondedAt || Number.isNaN(respondedAt.getTime())) return now;
+  return new Date(Math.min(now.getTime(), Math.max(fireAt.getTime(), respondedAt.getTime())));
+}
+
+export async function respondToCheckin(
+  userId: string,
+  settings: UserSettings,
+  ctx: TaskContext,
+  checkinId: string,
+  response: CheckinResponse,
+  now = new Date(),
+  respondedAt?: Date | null,
+): Promise<RespondResult> {
   const row = await prisma.checkinLog.findFirst({ where: { id: checkinId, userId } });
   if (!row) throw new HttpError(404, "CHECKIN_NOT_FOUND", "Check-in not found");
   if (!responseAllowed(row.kind, response)) throw new HttpError(400, "INVALID_RESPONSE", `${response} is not a valid answer to a ${row.kind} check-in`);
   const lang = copyLanguage(settings.language);
+  const at = clampTapTime(respondedAt, row.fireAt, now);
   const base: RespondResult = {
     checkin: { id: row.id, status: row.status, response: row.response },
     task: null,
@@ -277,20 +302,33 @@ export async function respondToCheckin(userId: string, settings: UserSettings, c
     alreadyAnswered: false,
   };
   let task = row.taskId ? await getTaskForUser(userId, row.taskId) : null;
-  // A repeated tap (or a late duplicate from the offline queue) is answered once.
-  if (row.status === "ANSWERED") return { ...base, task: task ? serializeTask(task, now) : null, alreadyAnswered: true };
 
-  await prisma.checkinLog.update({ where: { id: row.id }, data: { status: "ANSWERED", response, respondedAt: now } });
+  // Atomic claim: concurrent or repeated answers (offline queue retries) are applied exactly once.
+  const claimed = await prisma.checkinLog.updateMany({ where: { id: row.id, userId, status: { not: "ANSWERED" } }, data: { status: "ANSWERED", response, respondedAt: at } });
+  if (claimed.count === 0) {
+    const current = await prisma.checkinLog.findUnique({ where: { id: row.id } });
+    return { ...base, checkin: { id: row.id, status: "ANSWERED", response: current?.response ?? null }, task: task ? serializeTask(task, now) : null, alreadyAnswered: true };
+  }
   const answered = { id: row.id, status: "ANSWERED", response };
-  logEvent(userId, "CHECKIN_RESPONSE", row.taskId, { kind: row.kind, response, tone: row.tone, hasFirstStep: row.hasFirstStep, copySource: row.copySource, minutes: Math.round((now.getTime() - row.fireAt.getTime()) / 60000) });
+  logEvent(userId, "CHECKIN_RESPONSE", row.taskId, { kind: row.kind, response, tone: row.tone, hasFirstStep: row.hasFirstStep, copySource: row.copySource, minutes: Math.round((at.getTime() - row.fireAt.getTime()) / 60000), stale: row.status === "CANCELLED" });
   if (!task || task.status === TaskStatus.DELETED) return { ...base, checkin: answered };
+
+  // Stale answers (old slot, or the task was already finished in the app) are recorded but change nothing.
+  if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.SKIPPED) {
+    return { ...base, checkin: answered, task: serializeTask(task, now), message: RESPONSE_TEXT[lang].STALE_DONE };
+  }
+  if (row.status === "CANCELLED") {
+    return { ...base, checkin: answered, task: serializeTask(task, now), message: responseText(lang, "STALE", task) };
+  }
 
   const result: RespondResult = { ...base, checkin: answered };
   const extra = extraMinutes(response);
   const partial = partialPercent(response);
 
   if (response === "STARTED") {
+    const hadStarted = Boolean(task.startedAt);
     task = (await updateTask(ctx, task.id, { status: TaskStatus.IN_PROGRESS })) ?? task;
+    if (!hadStarted) task = await prisma.task.update({ where: { id: task.id }, data: { startedAt: at } });
     const plan = await planCheckins(userId, settings, now);
     result.next = plan.find((c) => c.taskId === task!.id && c.kind === "COMPLETION") ?? null;
     result.message = responseText(lang, "STARTED", task);
@@ -299,6 +337,7 @@ export async function respondToCheckin(userId: string, settings: UserSettings, c
     result.message = responseText(lang, "NOT_TODAY", task);
   } else if (response === "DONE") {
     task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED })) ?? task;
+    if (task.status === TaskStatus.COMPLETED) task = await prisma.task.update({ where: { id: task.id }, data: { completedAt: at } });
     result.message = renderAck("DONE", lang, task);
   } else if (response === "DIDNT") {
     result.suggestion = await slotFor(userId, settings, task, task.durationMinutes ?? 60, now);
@@ -311,7 +350,7 @@ export async function respondToCheckin(userId: string, settings: UserSettings, c
   } else if (extra !== null) {
     const history = toHistory(await prisma.checkinLog.findMany({ where: { taskId: task.id } }));
     const dnd = settings.dndUntil && settings.dndUntil > now ? settings.dndUntil : null;
-    const r = requestExtraCheckin(extra, task, settings, settings.timezone, now, dnd, history);
+    const r = requestExtraCheckin(extra, task, settings, settings.timezone, at, dnd, history);
     if (!r.ok) {
       result.refused = r.reason;
       result.remainingMinutes = remainingMinutes(task.durationMinutes, task.progress);
@@ -337,7 +376,7 @@ export async function respondToCheckin(userId: string, settings: UserSettings, c
       result.deadlineWarning = r.passesDeadline;
       const p = localParts(r.fireAt, settings.timezone);
       result.message = r.passesDeadline && task.dueAt
-        ? renderAck("DEADLINE_WARNING", lang, task, instantLabel(task.dueAt, settings.timezone, now))
+        ? renderAck("DEADLINE_WARNING", lang, task, instantLabel(task.dueAt, settings.timezone, at))
         : responseText(lang, "EXTRA_OK", task, { time: formatClock(p.h, p.mi) });
       if (r.passesDeadline) {
         result.remainingMinutes = remainingMinutes(task.durationMinutes, task.progress);

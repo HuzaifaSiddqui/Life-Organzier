@@ -291,7 +291,7 @@ model CheckinLog {
   /// FUNNY | SERIOUS | GENTLE (tone actually used)
   tone         String
   hasFirstStep Boolean   @default(false)
-  /// Source of the first step available for this check-in: GEMINI | OLLAMA | LIBRARY | NONE
+  /// Source of the first step shown: GEMINI | OLLAMA | LIBRARY | NONE, or WITHHELD (research mode omitted an existing step)
   /// (message text is always a reviewed template; hasFirstStep says whether the step was shown)
   copySource   String
   /// Latest mood (24 h) when planned, if any
