@@ -324,6 +324,18 @@ test("respond: answering a cancelled (rescheduled) check-in changes nothing", { 
   });
 });
 
+test("respond: DONE on a cancelled check-in still completes the task", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(async (ctx, settings) => {
+    const start = minute(new Date(Date.now() - 3 * 3600000));
+    const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
+    const row = await prisma.checkinLog.create({ data: { userId: ctx.userId, taskId: t.id, slotStart: start, kind: "COMPLETION", fireAt: new Date(Date.now() - 60000), tone: "FUNNY", copySource: "NONE", message: "Done?", status: "CANCELLED" } });
+    const r = await respondToCheckin(ctx.userId, settings, ctx, row.id, "DONE");
+    assert.equal(r.task?.status, TaskStatus.COMPLETED);
+    assert.equal(r.next, null);
+  });
+});
+
 test("respond: two concurrent +30 answers create exactly one extra check-in", { skip }, async () => {
   setAi(new AiService([]));
   await withUser(async (ctx, settings) => {
@@ -347,6 +359,9 @@ test("respond: a STARTED delivered late uses the tap time for startedAt and the 
     assert.equal(new Date(r.task!.startedAt!).getTime(), tapped.getTime());
     assert.equal(new Date(r.next!.fireAt).getTime(), tapped.getTime() + (120 + 12) * 60000);
     assert.equal((await prisma.checkinLog.findUnique({ where: { id: row.id } }))?.respondedAt?.getTime(), tapped.getTime());
+    // One versioned write (sync-safe): the version goes up exactly once and history records it.
+    assert.equal(r.task?.version, t.version + 1);
+    assert.equal(await prisma.taskVersion.count({ where: { taskId: t.id } }), 2);
   });
 });
 

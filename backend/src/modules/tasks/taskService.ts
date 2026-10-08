@@ -234,7 +234,8 @@ export async function updateTask(
   ctx: TaskContext,
   taskId: string,
   changes: TaskChanges,
-  opts: { clientModifiedAt?: Date; skipChildren?: boolean } = {},
+  /** startedAt / completedAt: when it really happened (e.g. a check-in tap delivered late); default now. */
+  opts: { clientModifiedAt?: Date; skipChildren?: boolean; startedAt?: Date; completedAt?: Date } = {},
 ): Promise<Task | null> {
   const existing = await prisma.task.findFirst({ where: { id: taskId, userId: ctx.userId, status: { not: TaskStatus.DELETED } } });
   if (!existing) return null;
@@ -257,7 +258,7 @@ export async function updateTask(
   }
   if (c.status === TaskStatus.COMPLETED) {
     c.progress = 100;
-    if (existing.status !== TaskStatus.COMPLETED) data.completedAt = new Date();
+    if (existing.status !== TaskStatus.COMPLETED) data.completedAt = opts.completedAt ?? new Date();
   } else if (c.status && existing.status === TaskStatus.COMPLETED) {
     data.completedAt = null;
     if (c.progress === undefined) c.progress = Math.min(existing.progress, 75);
@@ -280,7 +281,7 @@ export async function updateTask(
   }
   if (!changed) return existing;
   // FR-RN-004: the first move to IN_PROGRESS records when work actually started.
-  if (c.status === TaskStatus.IN_PROGRESS && existing.status !== TaskStatus.IN_PROGRESS && !existing.startedAt) data.startedAt = new Date();
+  if (c.status === TaskStatus.IN_PROGRESS && existing.status !== TaskStatus.IN_PROGRESS && !existing.startedAt) data.startedAt = opts.startedAt ?? new Date();
 
   const dueDate = c.dueDate !== undefined ? c.dueDate : existing.dueDate;
   const dueTime = c.dueTime !== undefined ? c.dueTime : existing.dueTime;

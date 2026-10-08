@@ -317,6 +317,11 @@ export async function respondToCheckin(
   if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.SKIPPED) {
     return { ...base, checkin: answered, task: serializeTask(task, now), message: RESPONSE_TEXT[lang].STALE_DONE };
   }
+  // "Done" is about the task, not the slot: it still completes the task from a cancelled check-in.
+  if (row.status === "CANCELLED" && response === "DONE") {
+    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at })) ?? task;
+    return { ...base, checkin: answered, task: serializeTask(task, now), message: renderAck("DONE", lang, task) };
+  }
   if (row.status === "CANCELLED") {
     return { ...base, checkin: answered, task: serializeTask(task, now), message: responseText(lang, "STALE", task) };
   }
@@ -326,9 +331,7 @@ export async function respondToCheckin(
   const partial = partialPercent(response);
 
   if (response === "STARTED") {
-    const hadStarted = Boolean(task.startedAt);
-    task = (await updateTask(ctx, task.id, { status: TaskStatus.IN_PROGRESS })) ?? task;
-    if (!hadStarted) task = await prisma.task.update({ where: { id: task.id }, data: { startedAt: at } });
+    task = (await updateTask(ctx, task.id, { status: TaskStatus.IN_PROGRESS }, { startedAt: at })) ?? task;
     const plan = await planCheckins(userId, settings, now);
     result.next = plan.find((c) => c.taskId === task!.id && c.kind === "COMPLETION") ?? null;
     result.message = responseText(lang, "STARTED", task);
@@ -336,8 +339,7 @@ export async function respondToCheckin(
     result.suggestion = await slotFor(userId, settings, task, task.durationMinutes ?? 60, now);
     result.message = responseText(lang, "NOT_TODAY", task);
   } else if (response === "DONE") {
-    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED })) ?? task;
-    if (task.status === TaskStatus.COMPLETED) task = await prisma.task.update({ where: { id: task.id }, data: { completedAt: at } });
+    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at })) ?? task;
     result.message = renderAck("DONE", lang, task);
   } else if (response === "DIDNT") {
     result.suggestion = await slotFor(userId, settings, task, task.durationMinutes ?? 60, now);

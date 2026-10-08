@@ -25,6 +25,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **No conflict UI.** `ConflictSheet` exists in `mobile/src/components/primitives/feedback.tsx` but no screen uses it;
   conflicts resolve silently on the server.
 
+## Check-in answers
+
+- **An answer is claimed before the task is updated.** The respond endpoint marks the check-in ANSWERED first (so
+  concurrent or repeated taps apply once), then updates the task. If the task update fails (e.g. the database drops
+  mid-request), a retry returns `alreadyAnswered` and that answer is lost; the user would change the task by hand.
+
 ## Documents and OCR
 
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
