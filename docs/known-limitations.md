@@ -42,11 +42,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Study sessions for an exam become fixed events.** "Study for exam tomorrow 5 PM for 2 hours" is classified
   FIXED, because `FIXED_RE` in `assistant/entities.ts` matches "exam" together with a time. The study session is then
   treated as an unmovable event (not auto-scheduled, not offered for moving) and gets no start/completion check-ins.
-- **Tasks classified DEADLINE are not auto-scheduled at creation.** `classifyTaskType` marks "assignment", "submit",
-  "due", "by …" as DEADLINE before looking at duration, and chat creation only auto-schedules DURATION/FLEXIBLE tasks
-  and only offers "Find time for it" when there is no duration. A DEADLINE task with a duration therefore has no
-  `scheduledStart` (and no check-ins) until the user books a slot ("Find time for it" in task detail) or sets a
-  planned start.
+- **Most student tasks are classified DEADLINE.** `classifyTaskType` marks "assignment", "submit", "due", "by …" as
+  DEADLINE before looking at duration. In chat, a DEADLINE task with a duration is auto-scheduled only when a free
+  slot ends before its deadline; otherwise it is created without a work block (no check-ins) and the reply offers
+  "Find time for it". Tasks added through the task form get a work block only if the user sets a planned start.
 
 ## Platform and UI
 

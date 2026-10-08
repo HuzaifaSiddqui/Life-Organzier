@@ -10,7 +10,7 @@ import { ruleBasedMemories } from "../src/modules/memory/memoryService.js";
 import { detectCrisis, detectMood, recommendForMood } from "../src/modules/mood/moodService.js";
 import { findPeakWindows } from "../src/modules/patterns/patternService.js";
 import { respectQuietHours, sequenceForTask } from "../src/modules/reminders/reminderService.js";
-import { chunkPlan, suggestSlot, type ScheduleContext } from "../src/modules/scheduling/schedulingService.js";
+import { autoScheduleSlot, chunkPlan, suggestSlot, type ScheduleContext } from "../src/modules/scheduling/schedulingService.js";
 import { computeDueAt, localParts, localYmd, parseClock, zonedTimeToUtc } from "../src/lib/time.js";
 import { NOW, opts, settings, task, TZ } from "./fixtures.js";
 
@@ -192,6 +192,28 @@ test("peak window detection groups contiguous productive hours", () => {
 function scheduleCtx(tasks: Task[] = [], s = settings()): ScheduleContext {
   return { tz: TZ, settings: s, tasks, occurrences: [], peak: { windows: [{ start: 9, end: 12 }, { start: 15, end: 17 }], learned: true, confidence: 0.9 } };
 }
+
+test("auto-schedule: a DEADLINE task with a duration gets a work block that ends before the deadline", () => {
+  const draft = { taskType: TaskType.DEADLINE, durationMinutes: 180, priority: Priority.MEDIUM, difficulty: null, dueYmd: "2026-10-09" };
+  const deadline = zonedTimeToUtc("2026-10-09", 15, 0, TZ); // Friday 3 PM
+  const { slot, attempted } = autoScheduleSlot(scheduleCtx(), draft, deadline, NOW);
+  assert.equal(attempted, true);
+  assert.ok(slot && slot.end <= deadline);
+});
+
+test("auto-schedule: no slot before the deadline → nothing is booked", () => {
+  const draft = { taskType: TaskType.DEADLINE, durationMinutes: 180, priority: Priority.MEDIUM, difficulty: null, dueYmd: "2026-10-05" };
+  const deadline = zonedTimeToUtc("2026-10-05", 11, 0, TZ); // due in 1 hour, needs 3
+  assert.deepEqual(autoScheduleSlot(scheduleCtx(), draft, deadline, NOW), { slot: null, attempted: true });
+});
+
+test("auto-schedule: only duration work is placed; FIXED and duration-less tasks are left alone", () => {
+  const base = { durationMinutes: 60, priority: Priority.MEDIUM, difficulty: null, dueYmd: null };
+  assert.deepEqual(autoScheduleSlot(scheduleCtx(), { ...base, taskType: TaskType.FIXED }, null, NOW), { slot: null, attempted: false });
+  assert.deepEqual(autoScheduleSlot(scheduleCtx(), { ...base, taskType: TaskType.DEADLINE, durationMinutes: null }, null, NOW), { slot: null, attempted: false });
+  assert.ok(autoScheduleSlot(scheduleCtx(), { ...base, taskType: TaskType.FLEXIBLE }, null, NOW).slot);
+  assert.ok(autoScheduleSlot(scheduleCtx(), { ...base, taskType: TaskType.DURATION }, null, NOW).slot);
+});
 
 test("FR-TM-006: a hard 3-hour task lands in the next peak window", () => {
   const slot = suggestSlot(scheduleCtx(), { durationMinutes: 180, priority: Priority.MEDIUM, difficulty: 4 }, NOW);

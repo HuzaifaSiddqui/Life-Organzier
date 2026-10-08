@@ -927,6 +927,10 @@ This document specifies all functional requirements for Life Organizer. It descr
    - Max 3 check-ins per task, max 5 check-ins per user per day. When the daily cap is exceeded, start follow-ups are dropped first, then the soonest check-ins are kept
    - User-requested extra time (+15 / +30 / +60) is exempt from both caps, limited to 2 per task; a refused request shows the user a short message
    - If the task is rescheduled to a later start after work began, the completion check-in is calculated from the new `scheduledStart`
+   - Check-in history counts per scheduled slot: after "Not today" or a partial completion, a task rescheduled to a new start gets a fresh set of check-ins for that slot
+   - Short tasks: if the completion check-in would fire within 10 min of the start follow-up (or before it), the follow-up is dropped
+   - Planned check-ins that would fire after the task's deadline are dropped (the overdue flow takes over); user-requested extra time still warns and is allowed
+   - Check-in logs are kept for evaluation when a task is deleted (the task link is cleared); they are removed with the user's account
    - A check-in that falls in quiet hours or DND is skipped, not moved
    - Check-in messages are pre-generated; nothing is generated at notification time
 

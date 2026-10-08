@@ -21,7 +21,8 @@ export const MAX_PLANNED_PER_DAY = 5;
 export const MAX_EXTRAS_PER_TASK = 2;
 const GENTLE_MOODS: ReadonlySet<string> = new Set(["stressed", "anxious", "overwhelmed", "sad"]);
 
-export type CheckinHistory = { kind: CheckinKind | string; fireAt: Date; status: string; response: string | null };
+/** `slotStart` = the scheduledStart the check-in was planned for. */
+export type CheckinHistory = { kind: CheckinKind | string; fireAt: Date; slotStart: Date; status: string; response: string | null };
 export type PlannedCheckin = { kind: CheckinKind; fireAt: Date; unconfirmed: boolean };
 type TaskLike = Pick<Task, "status" | "archived" | "taskType" | "scheduledStart" | "durationMinutes" | "startedAt" | "dueAt">;
 type SettingsLike = Pick<UserSettings, "checkinsEnabled" | "notificationFrequency" | "quietStart" | "quietEnd">;
@@ -77,18 +78,19 @@ export function isMuted(at: Date, settings: Pick<UserSettings, "quietStart" | "q
 
 /**
  * Upcoming planned check-ins for one task, before the daily cap. `history` holds this task's
- * already logged check-ins (any status) so answered/fired ones aren't planned again.
+ * logged check-ins; only those for the current slot (same scheduledStart) count, so a task
+ * rescheduled after "Not today" or a partial completion gets a fresh set for its new slot.
  */
 export function planTaskCheckins(task: TaskLike, settings: SettingsLike, tz: string, now: Date, dndUntil: Date | null, history: CheckinHistory[] = []): PlannedCheckin[] {
   const ok = checkinEligibility(task, settings, now);
   if (!ok.start && !ok.completion) return [];
-  const live = history.filter((h) => h.status !== "CANCELLED");
+  const start = task.scheduledStart as Date;
+  const live = history.filter((h) => h.status !== "CANCELLED" && h.slotStart.getTime() === start.getTime());
   const answered = (kind: string) => live.find((h) => h.kind === kind && h.status === "ANSWERED");
   // "Not today" ends check-ins for this slot; the user reschedules if they want.
   if (live.some((h) => h.response === "NOT_TODAY") || answered("COMPLETION")) return [];
 
   const out: PlannedCheckin[] = [];
-  const start = task.scheduledStart as Date;
   if (ok.start && !answered("START") && !answered("START_FOLLOWUP")) {
     const first = addMin(start, START_DELAY_MIN);
     out.push({ kind: "START", fireAt: first, unconfirmed: true });
@@ -98,11 +100,16 @@ export function planTaskCheckins(task: TaskLike, settings: SettingsLike, tz: str
     const base = completionBase(task);
     out.push({ kind: "COMPLETION", fireAt: completionFireAt(base, task.durationMinutes as number), unconfirmed: !task.startedAt });
   }
+  // Short tasks: a follow-up that lands at (or within 10 min of) the completion check-in is noise.
+  const followup = out.find((c) => c.kind === "START_FOLLOWUP");
+  const completion = out.find((c) => c.kind === "COMPLETION");
+  const planned = followup && completion && completion.fireAt.getTime() <= followup.fireAt.getTime() + 10 * 60000 ? out.filter((c) => c !== followup) : out;
 
   // Per-task cap counts check-ins that already fired plus the ones still to come.
   const firedPlanned = live.filter((h) => h.kind !== "COMPLETION_EXTRA" && h.fireAt <= now).length;
-  return out
-    .filter((c) => c.fireAt > now && !isMuted(c.fireAt, settings, tz, dndUntil))
+  return planned
+    // After the deadline the overdue flow (FR-TM-008) takes over.
+    .filter((c) => c.fireAt > now && !(task.dueAt && c.fireAt > task.dueAt) && !isMuted(c.fireAt, settings, tz, dndUntil))
     .filter((c) => !live.some((h) => h.kind === c.kind && h.fireAt.getTime() === c.fireAt.getTime() && h.status !== "SCHEDULED"))
     .slice(0, Math.max(0, MAX_PLANNED_PER_TASK - firedPlanned));
 }

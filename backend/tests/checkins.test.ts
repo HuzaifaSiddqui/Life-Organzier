@@ -36,8 +36,8 @@ test("check-ins: flexible task gets start at +5 and completion after duration + 
 
 test("check-ins: one follow-up when the start goes unanswered, then no more start check-ins", () => {
   const fired: CheckinHistory[] = [
-    { kind: "START", fireAt: at(16, 5), status: "IGNORED", response: null },
-    { kind: "START_FOLLOWUP", fireAt: at(16, 30), status: "SCHEDULED", response: null },
+    { kind: "START", fireAt: at(16, 5), slotStart: at(16), status: "IGNORED", response: null },
+    { kind: "START_FOLLOWUP", fireAt: at(16, 30), slotStart: at(16), status: "SCHEDULED", response: null },
   ];
   assert.deepEqual(plan(physics(), at(16, 31), fired), ["COMPLETION 18:12 ?"]);
 });
@@ -68,18 +68,45 @@ test("check-ins: eligibility rules", () => {
 });
 
 test("check-ins: answered or declined check-ins end the sequence", () => {
-  assert.deepEqual(plan(physics(), at(16, 6), [{ kind: "START", fireAt: at(16, 5), status: "ANSWERED", response: "NOT_TODAY" }]), []);
-  assert.deepEqual(plan(physics({ status: TaskStatus.IN_PROGRESS, startedAt: at(16, 7) }), at(18, 20), [{ kind: "COMPLETION", fireAt: at(18, 19), status: "ANSWERED", response: "DONE" }]), []);
+  assert.deepEqual(plan(physics(), at(16, 6), [{ kind: "START", fireAt: at(16, 5), slotStart: at(16), status: "ANSWERED", response: "NOT_TODAY" }]), []);
+  assert.deepEqual(plan(physics({ status: TaskStatus.IN_PROGRESS, startedAt: at(16, 7) }), at(18, 20), [{ kind: "COMPLETION", fireAt: at(18, 19), slotStart: at(16), status: "ANSWERED", response: "DONE" }]), []);
 });
 
-test("check-ins: per-task cap of 3 counts check-ins that already fired", () => {
+test("check-ins: per-task cap of 3 counts check-ins that already fired for the slot", () => {
   const fired: CheckinHistory[] = [
-    { kind: "START", fireAt: at(10, 5), status: "IGNORED", response: null },
-    { kind: "START_FOLLOWUP", fireAt: at(10, 30), status: "IGNORED", response: null },
-    { kind: "COMPLETION", fireAt: at(11, 0), status: "IGNORED", response: null },
+    { kind: "START", fireAt: at(16, 5), slotStart: at(16), status: "IGNORED", response: null },
+    { kind: "START_FOLLOWUP", fireAt: at(16, 30), slotStart: at(16), status: "IGNORED", response: null },
+    { kind: "COMPLETION_EXTRA", fireAt: at(16, 40), slotStart: at(16), status: "ANSWERED", response: "PLUS_30" },
   ];
-  // Rescheduled to 16:00 after three check-ins already fired → nothing more.
-  assert.deepEqual(plan(physics(), at(12), fired), []);
+  // Two planned ones fired (the extra doesn't count) → only the completion is left.
+  assert.deepEqual(plan(physics(), at(16, 41), fired), ["COMPLETION 18:12 ?"]);
+  const three: CheckinHistory[] = [...fired.slice(0, 2), { kind: "COMPLETION", fireAt: at(16, 35), slotStart: at(16), status: "IGNORED", response: null }];
+  assert.deepEqual(plan(physics({ durationMinutes: 180 }), at(16, 41), three), []);
+});
+
+test("check-ins: history only counts for the current slot (rescheduled tasks start fresh)", () => {
+  // "Not today" on Monday's 16:00 slot, then rescheduled to Tuesday 16:00.
+  const notToday: CheckinHistory[] = [{ kind: "START", fireAt: at(16, 5), slotStart: at(16), status: "ANSWERED", response: "NOT_TODAY" }];
+  assert.deepEqual(plan(physics(), at(16, 6), notToday), []);
+  const tuesday = physics({ scheduledStart: at(16, 0, "2026-10-06") });
+  assert.deepEqual(plan(tuesday, at(16, 6), notToday), ["START 16:05 ?", "START_FOLLOWUP 16:30 ?", "COMPLETION 18:12 ?"]);
+
+  // Partly done at the completion check-in, then the rest is booked for 19:00 the same day.
+  const partly: CheckinHistory[] = [{ kind: "COMPLETION", fireAt: at(18, 19), slotStart: at(16), status: "ANSWERED", response: "PARTIAL_50" }];
+  const started = { status: TaskStatus.IN_PROGRESS, startedAt: at(16, 7), progress: 50 };
+  assert.deepEqual(plan(physics({ ...started }), at(18, 20), partly), []);
+  assert.deepEqual(plan(physics({ ...started, scheduledStart: at(19), durationMinutes: 60 }), at(18, 20), partly), ["COMPLETION 20:10"]);
+});
+
+test("check-ins: short tasks drop the follow-up when it would land at or near completion", () => {
+  assert.deepEqual(plan(physics({ durationMinutes: 15 })), ["START 16:05 ?", "COMPLETION 16:25 ?"]);
+  assert.deepEqual(plan(physics({ durationMinutes: 20 })), ["START 16:05 ?", "COMPLETION 16:30 ?"]);
+  assert.deepEqual(plan(physics({ durationMinutes: 30 })), ["START 16:05 ?", "COMPLETION 16:40 ?"]);
+  assert.deepEqual(plan(physics({ durationMinutes: 45 })), ["START 16:05 ?", "START_FOLLOWUP 16:30 ?", "COMPLETION 16:55 ?"]);
+});
+
+test("check-ins: planned check-ins after the deadline are dropped", () => {
+  assert.deepEqual(plan(physics({ dueAt: at(17), dueTime: "5 PM" })), ["START 16:05 ?", "START_FOLLOWUP 16:30 ?"]);
 });
 
 test("check-ins: daily cap of 5 across tasks, soonest first", () => {
@@ -117,10 +144,10 @@ test("check-ins: rescheduled after starting → completion counts from the new s
 test("check-ins: user-requested extra time is exempt from caps but limited to 2 per task", () => {
   const s = settings();
   const t = { dueAt: at(23, 59, "2026-10-09") };
-  const capped: CheckinHistory[] = ["START", "START_FOLLOWUP", "COMPLETION"].map((kind) => ({ kind, fireAt: at(10), status: "IGNORED", response: null }));
+  const capped: CheckinHistory[] = ["START", "START_FOLLOWUP", "COMPLETION"].map((kind) => ({ kind, fireAt: at(10), slotStart: at(16), status: "IGNORED", response: null }));
   const r1 = requestExtraCheckin(30, t, s, TZ, at(18, 20), null, capped);
   assert.ok(r1.ok && hm(r1.fireAt) === "18:50" && !r1.passesDeadline);
-  const two: CheckinHistory[] = [1, 2].map((i) => ({ kind: "COMPLETION_EXTRA", fireAt: at(18, i), status: "ANSWERED", response: "PLUS_30" }));
+  const two: CheckinHistory[] = [1, 2].map((i) => ({ kind: "COMPLETION_EXTRA", fireAt: at(18, i), slotStart: at(16), status: "ANSWERED", response: "PLUS_30" }));
   assert.deepEqual(requestExtraCheckin(30, t, s, TZ, at(18, 20), null, two), { ok: false, reason: "limit" });
   assert.deepEqual(requestExtraCheckin(60, t, s, TZ, at(21, 30), null, []), { ok: false, reason: "quiet_hours" });
   assert.deepEqual(requestExtraCheckin(15, t, s, TZ, at(18), at(19), []), { ok: false, reason: "dnd" });
@@ -158,6 +185,25 @@ test("check-ins: startedAt is recorded on the first move to IN_PROGRESS only", {
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
   }
+});
+
+test("check-ins: logs survive task deletion (taskId → null) and go with the user", { skip: !dbAvailable && "no database" }, async () => {
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `checkin-log-${randomUUID()}@example.test` } });
+  let logId = "";
+  try {
+    const t = await createTask({ userId: user.id, tz: TZ }, { title: "Essay", priority: Priority.MEDIUM, source: TaskSource.MANUAL });
+    const log = await prisma.checkinLog.create({
+      data: { userId: user.id, taskId: t.id, slotStart: at(16), kind: "START", fireAt: at(16, 5), tone: "FUNNY", copySource: "TEMPLATE", message: "Started?" },
+    });
+    logId = log.id;
+    await prisma.task.delete({ where: { id: t.id } });
+    const kept = await prisma.checkinLog.findUnique({ where: { id: logId } });
+    assert.ok(kept);
+    assert.equal(kept.taskId, null);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+  assert.equal(await prisma.checkinLog.findUnique({ where: { id: logId } }), null);
 });
 
 test.after(() => prisma.$disconnect());

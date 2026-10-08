@@ -50,7 +50,7 @@ import {
 } from "../mood/moodService.js";
 import { getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
-import { dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
+import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   createTask,
   getTaskForUser,
@@ -623,30 +623,24 @@ export async function proceedWithDraft(
     }
   }
 
-  // Auto-schedule flexible / duration work into a free slot (FR-TM-006).
+  // Auto-schedule duration work into a free slot (FR-TM-006); DEADLINE tasks only if it ends before the deadline.
   let scheduleNote = "";
-  if (draft.durationMinutes && !draft.scheduledStart && (draft.taskType === TaskType.DURATION || draft.taskType === TaskType.FLEXIBLE)) {
+  let noSlot = false;
+  if (draft.durationMinutes && !draft.scheduledStart) {
     const dueClock = parseClock(draft.dueTime);
     const deadline = draft.dueYmd
       ? dueClock
         ? zonedTimeToUtc(draft.dueYmd, dueClock.h, dueClock.m, turn.tz)
         : dueDateFromYmd(addDaysYmd(draft.dueYmd, 1), turn.tz)
       : null;
-    const slot = suggestSlot(
-      ctx,
-      {
-        durationMinutes: draft.durationMinutes,
-        priority: draft.priority,
-        difficulty: draft.difficulty,
-        deadline,
-        preferredYmd: draft.taskType === TaskType.DURATION && draft.dueYmd ? draft.dueYmd : null,
-      },
-      turn.now,
-    );
+    const { slot, attempted } = autoScheduleSlot(ctx, draft, deadline, turn.now);
     if (slot) {
       draft.scheduledStart = slot.start.toISOString();
       draft.scheduledEnd = slot.end.toISOString();
       scheduleNote = `Scheduled ${slot.reason}.`;
+    } else if (attempted && draft.taskType === TaskType.DEADLINE) {
+      noSlot = true;
+      scheduleNote = `I couldn't find a free ${formatDuration(draft.durationMinutes)} slot before the deadline. Want to extend capacity or move something?`;
     }
   }
 
@@ -661,7 +655,8 @@ export async function proceedWithDraft(
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
   ];
-  if (!draft.durationMinutes && task.taskType !== TaskType.FIXED) actions.push({ label: "Find time for it", payload: { type: "suggest_slot", taskId: task.id } });
+  if (draft.scheduledStart) actions.splice(1, 0, { label: "Change", payload: { type: "open_task", taskId: task.id } });
+  if ((!draft.durationMinutes || noSlot) && task.taskType !== TaskType.FIXED) actions.push({ label: "Find time for it", payload: { type: "suggest_slot", taskId: task.id } });
 
   // Stress-aware follow-up (FR-MH-003 §2).
   const mood = await latestMood(turn.user.id, 8);

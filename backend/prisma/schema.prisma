@@ -277,10 +277,14 @@ model ActivityEvent {
 }
 
 /// FR-RN-004 check-ins. Separate from ReminderLog so it never affects reminder adaptivity.
+/// Survives task deletion (taskId set to null); removed with the user account.
 model CheckinLog {
   id           String    @id @default(uuid())
   userId       String
-  taskId       String
+  /// Null once the task is purged — the log row is kept for evaluation.
+  taskId       String?
+  /// The task's scheduledStart this check-in was planned for; history only counts within one slot.
+  slotStart    DateTime
   /// START | START_FOLLOWUP | COMPLETION | COMPLETION_EXTRA
   kind         String
   fireAt       DateTime
@@ -299,7 +303,7 @@ model CheckinLog {
   createdAt    DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@unique([taskId, kind, fireAt])
   @@index([userId, fireAt])
