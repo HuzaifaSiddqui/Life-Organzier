@@ -7,6 +7,9 @@ import { ProgressBar } from "../ui";
 import { BreathingExercise } from "./BreathingExercise";
 import { CrisisCard } from "./CrisisCard";
 
+/** Draft slot names → words users understand. */
+const MISSING_LABEL: Record<string, string> = { title: "what to do", date: "date", time: "time", duration: "duration" };
+
 type Handlers = {
   onOpenTask: (taskId: string) => void;
   onAction: (payload: ActionPayload, label: string) => void;
@@ -101,14 +104,15 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
             );
           case "draft": {
             const d = card.draft;
-            const color = card.clarity >= 95 ? palette.success : card.clarity >= 50 ? palette.warning : palette.danger;
+            // The clarity score stays internal; users see which details are still missing.
+            const needs = card.missing.map((m) => MISSING_LABEL[m] ?? m);
+            const status = needs.length ? `Needs: ${needs.join(", ")}` : card.clarity < 95 ? "Please confirm" : "Ready to add";
             return (
               <View key={i} style={styles.panel}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.panelTitle}>What I understood</Text>
-                  <Text style={[styles.clarity, { color }]}>Clarity {card.clarity}%</Text>
+                  <Text style={[styles.clarity, { color: needs.length ? palette.warning : colors.textMuted }]}>{status}</Text>
                 </View>
-                <ProgressBar value={card.clarity} color={color} height={4} />
                 <Field label="Task" value={d.title} missing={card.missing.includes("title")} />
                 <Field label="When" value={d.dueYmd ? `${d.dueYmd}${d.dueTime ? ` · ${d.dueTime}` : ""}` : d.dueTime} missing={card.missing.includes("date") || card.missing.includes("time")} />
                 <Field label="Duration" value={d.durationMinutes ? formatDuration(d.durationMinutes) : null} missing={card.missing.includes("duration")} />

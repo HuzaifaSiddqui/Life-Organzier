@@ -104,8 +104,10 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
   limitations in `docs/known-limitations.md` when behaviour changes.
 - Stay in the TypeScript / React Native ecosystem (no Flutter or other rewrites); keep modules separated
   by area; reuse existing components and helpers before adding new ones.
-- Never show technical AI details to users (model names, raw errors, internal scores except the
-  user-facing confidence values the FRs require).
+- Never show technical AI details to users (model names, raw errors). The only scores shown are the
+  confidence values the FRs require (pattern recommendations, document extraction).
+- **Clarity score is internal only.** It drives auto-create vs review and is logged/stored, but users
+  see which details are missing ("Needs: time, duration"), never a clarity percentage.
 - Don't commit secrets (`.env` is git-ignored; document new variables in `backend/.env.example`).
 - Database changes go through Prisma migrations, never `db push`.
 - Low-spec machines can set `OLLAMA_MODEL=qwen2.5:1.5b` locally; the default stays `qwen2.5:7b`.

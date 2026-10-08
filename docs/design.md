@@ -199,6 +199,7 @@ Checklist before flipping a flag:
 - **Don't** use pure black or flat greys (`#000`, `#333`, `#666`), or a second accent colour. The old assistant purple now maps to the accent.
 - **Don't** show raw API or error text. Use `ErrorState` or `friendlyError`.
 - **Don't** use red for overdue states. Use the `warning` tone and offer actions.
+- **Don't** show the clarity score. Draft cards show what's missing ("Needs: time, duration"), or "Please confirm" / "Ready to add". The score stays internal (auto-create vs review, logging). Confidence is shown only where the FRs require it (recommendations, document extraction).
 
 ## Dependencies added for UI
 
