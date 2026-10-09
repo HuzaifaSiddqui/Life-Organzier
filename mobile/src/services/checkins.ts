@@ -1,0 +1,228 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { auth } from "../lib/firebase";
+import type { Task } from "../types/models";
+import axios from "axios";
+import { api, isNetworkError } from "./api";
+import { decideAfterFailure, type DeliveryFailure } from "../utils/answerQueue";
+import { addPrePullHook, readTasks, writeTasks } from "./syncEngine";
+
+/**
+ * FR-RN-004 check-ins on the phone. The server's respond endpoint is the source of truth: it records
+ * the answer with the tap time and applies the task change in one versioned write. The phone only
+ * patches its local task cache optimistically (no extra sync mutation, which would double-write and
+ * lose the tap time) and queues answers made offline, sending them with their original tap time.
+ */
+
+export type CheckinKind = "START" | "START_FOLLOWUP" | "COMPLETION" | "COMPLETION_EXTRA";
+export type CheckinCategory = "START" | "COMPLETION";
+export type CheckinResponse =
+  | "STARTED"
+  | "NOT_TODAY"
+  | "DONE"
+  | "PLUS_30"
+  | "MORE_15"
+  | "MORE_60"
+  | "PARTIAL_25"
+  | "PARTIAL_50"
+  | "PARTIAL_75"
+  | "DIDNT";
+
+export type PlannedCheckin = {
+  id: string;
+  taskId: string;
+  kind: CheckinKind;
+  category: CheckinCategory;
+  fireAt: string;
+  title: string;
+  body: string;
+  tone: "FUNNY" | "SERIOUS" | "GENTLE";
+  offerSplit: boolean;
+};
+
+export type SlotSuggestion = { start: string; end: string; ymd: string; reason: string };
+
+export type RespondResult = {
+  checkin: { id: string; status: string; response: string | null };
+  task: Task | null;
+  message: string | null;
+  next: PlannedCheckin | null;
+  suggestion: SlotSuggestion | null;
+  remainingMinutes: number | null;
+  deadlineWarning: boolean;
+  refused: "limit" | "quiet_hours" | "dnd" | null;
+  alreadyAnswered: boolean;
+};
+
+/** `before`: the task's fields before the optimistic patch, restored if the server rejects the answer. */
+type QueuedAnswer = {
+  checkinId: string;
+  taskId: string | null;
+  response: CheckinResponse;
+  respondedAt: string;
+  before?: Partial<Task> | null;
+  /** Failed deliveries that counted (timeouts, 5xx) and when delivery was first tried; see utils/answerQueue. */
+  attempts?: number;
+  firstTriedAt?: string;
+};
+
+/** How a failed delivery should be treated: 4xx is final; everything else is retried (with limits). */
+export function classifyFailure(error: unknown): DeliveryFailure {
+  if (axios.isAxiosError(error)) {
+    if (!error.response) return error.code === "ECONNABORTED" || error.code === "ETIMEDOUT" ? "timeout" : "offline";
+    return error.response.status >= 500 ? "server" : "client";
+  }
+  return "server";
+}
+
+export function isRetryable(error: unknown): boolean {
+  return classifyFailure(error) !== "client";
+}
+
+const queueKey = () => `life-organizer:checkin-answers:v1:${auth.currentUser?.uid ?? "guest"}`;
+
+async function readQueue(): Promise<QueuedAnswer[]> {
+  try {
+    const raw = await AsyncStorage.getItem(queueKey());
+    const q = raw ? (JSON.parse(raw) as QueuedAnswer[]) : [];
+    return Array.isArray(q) ? q : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeQueue(q: QueuedAnswer[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(queueKey(), JSON.stringify(q));
+  } catch {
+    // keep going from memory
+  }
+}
+
+const PATCHED_FIELDS = ["status", "startedAt", "completedAt", "progress"] as const;
+
+/** Optimistic local change so the app reflects the answer at once; the server result replaces it. Returns the prior fields. */
+async function patchLocalTask(taskId: string | null, response: CheckinResponse, at: string, server?: Task | null): Promise<Partial<Task> | null> {
+  if (!taskId) return null;
+  const tasks = await readTasks();
+  const i = tasks.findIndex((t) => t.id === taskId);
+  if (i < 0) return null;
+  const before = Object.fromEntries(PATCHED_FIELDS.map((f) => [f, tasks[i][f] ?? null])) as Partial<Task>;
+  if (server) tasks[i] = server;
+  else if (response === "STARTED" && tasks[i].status === "PENDING") tasks[i] = { ...tasks[i], status: "IN_PROGRESS", startedAt: tasks[i].startedAt ?? at };
+  else if (response === "DONE") tasks[i] = { ...tasks[i], status: "COMPLETED", progress: 100, completedAt: at };
+  else if (response.startsWith("PARTIAL_")) tasks[i] = { ...tasks[i], progress: Math.max(tasks[i].progress ?? 0, Number(response.split("_")[1])) };
+  else return before;
+  await writeTasks(tasks);
+  return before;
+}
+
+/** Undo the optimistic patch after the server rejected the answer (4xx). */
+async function revertLocalTask(taskId: string | null, before: Partial<Task> | null | undefined): Promise<void> {
+  if (!taskId || !before) return;
+  const tasks = await readTasks();
+  const i = tasks.findIndex((t) => t.id === taskId);
+  if (i < 0) return;
+  tasks[i] = { ...tasks[i], ...before };
+  await writeTasks(tasks);
+}
+
+async function enqueueAnswer(a: QueuedAnswer): Promise<void> {
+  const q = await readQueue();
+  if (!q.some((x) => x.checkinId === a.checkinId)) await writeQueue([...q, a]);
+}
+
+async function send(a: QueuedAnswer): Promise<RespondResult> {
+  const res = await api.post(`/checkins/${a.checkinId}/respond`, { response: a.response, respondedAt: a.respondedAt }, { timeout: 30000 });
+  const body = res.data as { success: boolean; data: RespondResult; message?: string };
+  if (!body.success) throw new Error(body.message ?? "Couldn't save your answer");
+  return body.data;
+}
+
+/**
+ * Answers a check-in. Online → the server result (with any next check-in to schedule). Offline →
+ * null after queueing; the answer is sent with its tap time when the connection returns.
+ */
+export async function answerCheckin(checkinId: string, taskId: string | null, response: CheckinResponse, tappedAt = new Date()): Promise<RespondResult | null> {
+  const answer: QueuedAnswer = { checkinId, taskId, response, respondedAt: tappedAt.toISOString(), firstTriedAt: new Date().toISOString() };
+  answer.before = await patchLocalTask(taskId, response, answer.respondedAt);
+  try {
+    const result = await send(answer);
+    await patchLocalTask(taskId, response, answer.respondedAt, result.task);
+    return result;
+  } catch (error) {
+    if (!isRetryable(error)) {
+      await revertLocalTask(taskId, answer.before);
+      throw error;
+    }
+    await enqueueAnswer(answer); // network error, timeout or 5xx: send again later
+    return null;
+  }
+}
+
+let flushing = false;
+/**
+ * Sends queued answers. Offline stops the pass (the rest would fail too); timeouts and 5xx count as
+ * attempts and the pass continues; an answer that exceeds the attempt or age limit, or is rejected
+ * with a 4xx, is dropped and its optimistic change reverted, so it can never block the queue.
+ */
+export async function flushCheckinAnswers(): Promise<number> {
+  if (flushing || !auth.currentUser) return 0;
+  flushing = true;
+  let sent = 0;
+  try {
+    for (const a of await readQueue()) {
+      let done = false;
+      try {
+        const r = await send(a);
+        await patchLocalTask(a.taskId, a.response, a.respondedAt, r.task);
+        sent += 1;
+        done = true;
+      } catch (error) {
+        const decision = decideAfterFailure(a, classifyFailure(error), new Date());
+        if (decision.action === "keep") {
+          await writeQueue((await readQueue()).map((x) => (x.checkinId === a.checkinId ? decision.answer : x)));
+          if (decision.stopQueue) break;
+          continue;
+        }
+        if (decision.reason !== "client_error") console.warn(`Dropping check-in answer ${a.checkinId} (${decision.reason})`);
+        await revertLocalTask(a.taskId, a.before);
+        done = true;
+      }
+      if (done) await writeQueue((await readQueue()).filter((x) => x.checkinId !== a.checkinId));
+    }
+  } finally {
+    flushing = false;
+  }
+  return sent;
+}
+
+/**
+ * Sends queued answers at the start of every sync (reconnect, app foreground), before tasks are
+ * pulled, so the pull already includes them.
+ */
+export function startCheckinQueue(onFlushed?: () => void): () => void {
+  return addPrePullHook(async () => {
+    if (await flushCheckinAnswers()) onFlushed?.();
+  });
+}
+
+/* ---------------------------------------------------------------------------- in-app sheet bus */
+
+export type CheckinSheetState =
+  | { mode: "start"; checkinId: string; taskId: string; title: string; body: string }
+  | { mode: "update"; checkinId: string; taskId: string; title: string; body: string }
+  | { mode: "result"; taskId: string | null; title: string; result: RespondResult | null; response: CheckinResponse };
+
+const sheetListeners = new Set<(s: CheckinSheetState | null) => void>();
+let sheetState: CheckinSheetState | null = null;
+
+export function showCheckinSheet(state: CheckinSheetState | null): void {
+  sheetState = state;
+  sheetListeners.forEach((l) => l(state));
+}
+
+export function subscribeCheckinSheet(listener: (s: CheckinSheetState | null) => void): () => void {
+  sheetListeners.add(listener);
+  listener(sheetState);
+  return () => sheetListeners.delete(listener);
+}

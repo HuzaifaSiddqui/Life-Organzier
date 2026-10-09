@@ -212,6 +212,35 @@ export function suggestSlot(ctx: ScheduleContext, req: SlotRequest, now = new Da
   return suggestion;
 }
 
+/**
+ * Auto-scheduling at task creation (FR-TM-006, FR-RN-004). DURATION and FLEXIBLE work is placed
+ * in a free slot; a DEADLINE task with a duration gets a work block only if the slot ends before
+ * its deadline — otherwise nothing is booked and the caller offers "Find time for it".
+ */
+export function autoScheduleSlot(
+  ctx: ScheduleContext,
+  draft: { taskType: TaskType; durationMinutes: number | null; priority: Priority; difficulty: number | null; dueYmd: string | null },
+  deadline: Date | null,
+  now: Date,
+): { slot: SlotSuggestion | null; attempted: boolean } {
+  const schedulable = draft.taskType === TaskType.DURATION || draft.taskType === TaskType.FLEXIBLE || draft.taskType === TaskType.DEADLINE;
+  if (!draft.durationMinutes || !schedulable) return { slot: null, attempted: false };
+  const slot = suggestSlot(
+    ctx,
+    {
+      durationMinutes: draft.durationMinutes,
+      priority: draft.priority,
+      difficulty: draft.difficulty,
+      deadline,
+      preferredYmd: draft.taskType === TaskType.DURATION && draft.dueYmd ? draft.dueYmd : null,
+    },
+    now,
+  );
+  // suggestSlot already stops at the deadline; checked again so a deadline task is never booked past it.
+  if (slot && deadline && slot.end > deadline) return { slot: null, attempted: true };
+  return { slot, attempted: true };
+}
+
 /** Flexible tasks on a day that could be moved to relieve an overloaded day (FR-TM-006 §4). */
 export function movableTasksOn(ctx: ScheduleContext, ymd: string): Task[] {
   return ctx.tasks.filter((t) => {

@@ -48,9 +48,9 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
-import { getPatterns } from "../patterns/patternService.js";
+import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
-import { dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
+import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   createTask,
   getTaskForUser,
@@ -239,7 +239,7 @@ async function learnInBackground(turn: Turn, messageId: string | null, text: str
 
 /* ======================================================================== text turns */
 
-const STRONG_SWITCH = new Set(["query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
+const STRONG_SWITCH = new Set(["set_checkin_style", "query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
 
 /** Text turns. The crisis check is the first step, ahead of open questions, NLU and every handler. */
 export async function handleText(turn: Turn, text: string): Promise<Out> {
@@ -480,6 +480,14 @@ function pastDateCheck(turn: Turn, draft: TaskDraft, source: "CHAT" | "VOICE" | 
   return null;
 }
 
+/** Draft card; carries the learned-estimate suggestion (FR-RN-004 §6) when the category has a reliable ratio. */
+async function draftCard(turn: Turn, draft: TaskDraft, clarity: number, missing: string[]): Promise<Card> {
+  const s = draft.estimateHandled || !draft.durationMinutes ? null : await getEstimateSuggestion(turn.user.id, turn.tz, draft.category, draft.durationMinutes).catch(() => null);
+  if (!s) return { type: "draft", draft, clarity, missing };
+  logEvent(turn.user.id, "ESTIMATE_SUGGESTION_SHOWN", null, { category: s.category, original: s.original, suggested: s.suggested, surface: "CHAT" });
+  return { type: "draft", draft, clarity, missing, estimate: s };
+}
+
 /**
  * Validates and enriches a draft through every check required by the FRD, asking at most one
  * question per turn, then creates and auto-schedules the task.
@@ -505,7 +513,7 @@ export async function proceedWithDraft(
         { label: "Add a routine", text: `Add a daily routine: ${draft.title ?? ""}`.trim() },
         { label: "Something else", payload: { type: "cancel_pending" } },
       ],
-      cards: [{ type: "draft", draft, clarity, missing }],
+      cards: [await draftCard(turn, draft, clarity, missing)],
       intent: "clarify_intent",
     };
   }
@@ -518,7 +526,7 @@ export async function proceedWithDraft(
     const priorityHint = !draft.priorityExplicit && missing.includes("date") && missing.includes("duration") ? " How urgent is it?" : "";
     return {
       content: `${clarificationQuestion(draft, missing)}${priorityHint}`,
-      cards: [{ type: "draft", draft, clarity, missing }],
+      cards: [await draftCard(turn, draft, clarity, missing)],
       actions: [
         ...slotChips(missing),
         ...(priorityHint ? (["Urgent", "High", "Low"] as const).map((p) => ({ label: p, text: `${p} priority` })) : []),
@@ -566,7 +574,7 @@ export async function proceedWithDraft(
     turn.state.pending = { kind: "task_review", draft, source, clarity: confidence };
     return {
       content: `Here's what I understood: ${draftSummary(draft, turn.todayYmd)}. Shall I add it?`,
-      cards: [{ type: "draft", draft, clarity: confidence, missing: [] }],
+      cards: [await draftCard(turn, draft, confidence, [])],
       actions: [
         { label: "Add it", payload: { type: "confirm_pending" }, style: "primary" },
         { label: "Edit details", payload: { type: "navigate", screen: "AddTask" } },
@@ -623,30 +631,24 @@ export async function proceedWithDraft(
     }
   }
 
-  // Auto-schedule flexible / duration work into a free slot (FR-TM-006).
+  // Auto-schedule duration work into a free slot (FR-TM-006); DEADLINE tasks only if it ends before the deadline.
   let scheduleNote = "";
-  if (draft.durationMinutes && !draft.scheduledStart && (draft.taskType === TaskType.DURATION || draft.taskType === TaskType.FLEXIBLE)) {
+  let noSlot = false;
+  if (draft.durationMinutes && !draft.scheduledStart) {
     const dueClock = parseClock(draft.dueTime);
     const deadline = draft.dueYmd
       ? dueClock
         ? zonedTimeToUtc(draft.dueYmd, dueClock.h, dueClock.m, turn.tz)
         : dueDateFromYmd(addDaysYmd(draft.dueYmd, 1), turn.tz)
       : null;
-    const slot = suggestSlot(
-      ctx,
-      {
-        durationMinutes: draft.durationMinutes,
-        priority: draft.priority,
-        difficulty: draft.difficulty,
-        deadline,
-        preferredYmd: draft.taskType === TaskType.DURATION && draft.dueYmd ? draft.dueYmd : null,
-      },
-      turn.now,
-    );
+    const { slot, attempted } = autoScheduleSlot(ctx, draft, deadline, turn.now);
     if (slot) {
       draft.scheduledStart = slot.start.toISOString();
       draft.scheduledEnd = slot.end.toISOString();
       scheduleNote = `Scheduled ${slot.reason}.`;
+    } else if (attempted && draft.taskType === TaskType.DEADLINE) {
+      noSlot = true;
+      scheduleNote = `I couldn't find a free ${formatDuration(draft.durationMinutes)} slot before the deadline. Want to extend capacity or move something?`;
     }
   }
 
@@ -661,7 +663,8 @@ export async function proceedWithDraft(
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
   ];
-  if (!draft.durationMinutes && task.taskType !== TaskType.FIXED) actions.push({ label: "Find time for it", payload: { type: "suggest_slot", taskId: task.id } });
+  if (draft.scheduledStart) actions.splice(1, 0, { label: "Change", payload: { type: "open_task", taskId: task.id } });
+  if ((!draft.durationMinutes || noSlot) && task.taskType !== TaskType.FIXED) actions.push({ label: "Find time for it", payload: { type: "suggest_slot", taskId: task.id } });
 
   // Stress-aware follow-up (FR-MH-003 §2).
   const mood = await latestMood(turn.user.id, 8);

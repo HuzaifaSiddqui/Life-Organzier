@@ -31,6 +31,8 @@ export type Task = {
   archived?: boolean;
   deletedAt?: string | null;
   completedAt?: string | null;
+  /** FR-RN-004: first time the task moved to IN_PROGRESS. */
+  startedAt?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   tags?: string[] | null;
@@ -103,6 +105,10 @@ export type UserSettings = {
   dismissedInsights: string[];
   ttsEnabled: boolean;
   ttsRate: number;
+  /** FR-RN-004 check-ins */
+  checkinsEnabled: boolean;
+  checkinTone: "FUNNY" | "SERIOUS" | "GENTLE";
+  checkinResearchMode: boolean;
   lastWhatsappMessageAt: string | null;
 };
 
@@ -162,7 +168,7 @@ export type DayPlan = {
 export type AssistantCard =
   | { type: "task"; task: Task; note?: string; undoable?: boolean }
   | { type: "task_list"; title: string; tasks: Task[]; emptyText?: string }
-  | { type: "draft"; draft: TaskDraft; clarity: number; missing: string[] }
+  | { type: "draft"; draft: TaskDraft; clarity: number; missing: string[]; estimate?: { original: number; suggested: number; ratio: number; n: number; category: string } }
   | { type: "routine"; routine: Routine }
   | { type: "suggestions"; title: string; items: Suggestion[] }
   | { type: "mood_support"; recommendation: MoodRecommendation }

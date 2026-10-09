@@ -120,6 +120,13 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
                 <Field label="Type" value={d.taskType.toLowerCase()} />
                 {d.category ? <Field label="Category" value={d.category} /> : null}
                 {d.tags?.length ? <Field label="Tags" value={d.tags.map((t) => `#${t}`).join(" ")} /> : null}
+                {card.estimate ? (
+                  <Pressable style={styles.suggestion} onPress={() => onAction({ type: "accept_estimate", minutes: card.estimate!.suggested }, `Use ${formatDuration(card.estimate!.suggested)}`)}>
+                    <Text style={styles.suggestionText}>
+                      Your {card.estimate.category} tasks usually take ~{card.estimate.ratio}× your estimate. Use {formatDuration(card.estimate.suggested)}?
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             );
           }

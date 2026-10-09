@@ -1,7 +1,10 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { dictionaries, type Language, type StringKey } from "../i18n/strings";
 import { auth } from "../lib/firebase";
 import { apiGet, apiPatch, apiPost } from "./api";
+import { answerCheckin, showCheckinSheet, type CheckinResponse, type PlannedCheckin } from "./checkins";
 
 /**
  * Offline-first reminders (FR-RN-001/002): the server computes an escalating, quiet-hours-aware
@@ -22,6 +25,8 @@ type PlannedReminder = {
 
 type PlanResponse = {
   reminders: PlannedReminder[];
+  /** FR-RN-004 start & completion check-ins (scheduled after reminders, within the same cap). */
+  checkins?: PlannedCheckin[];
   settings: { method: "APP" | "SOUND" | "VIBRATION" | "SOUND_VIBRATION"; devices: string; dndUntil: string | null; frequency: string };
 };
 
@@ -30,6 +35,9 @@ const PREFIX = "lo:";
 const MAX_LOCAL_REMINDERS = 60;
 const CATEGORY_TASK = "lo-task";
 const CATEGORY_ROUTINE = "lo-routine";
+const CATEGORY_CHECKIN_START = "lo-checkin-start";
+const CATEGORY_CHECKIN_DONE = "lo-checkin-done";
+const HANDLED_KEY = "life-organizer:handled-notification-response";
 let configured = false;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -64,15 +72,74 @@ export async function configureReminders(): Promise<void> {
       });
     }
   }
+  await registerCategories();
+}
+
+async function uiLanguage(): Promise<Language> {
+  try {
+    return (await AsyncStorage.getItem("ui.language")) === "ur" ? "ur" : "en";
+  } catch {
+    return "en";
+  }
+}
+
+/**
+ * Action buttons. Every action opens the app, so its JS runs even when the app was closed (no
+ * background task handler). Check-in labels follow the UI language and are re-registered on each plan sync.
+ */
+async function registerCategories(): Promise<void> {
+  const lang = await uiLanguage();
+  const t = (k: StringKey) => dictionaries[lang][k] ?? dictionaries.en[k];
+  const open = { opensAppToForeground: true };
   await Notifications.setNotificationCategoryAsync(CATEGORY_TASK, [
-    { identifier: "DONE", buttonTitle: "Mark done", options: { opensAppToForeground: true } },
-    { identifier: "SNOOZE", buttonTitle: "Snooze 15 min", options: { opensAppToForeground: false } },
-    { identifier: "OPEN", buttonTitle: "View details", options: { opensAppToForeground: true } },
+    { identifier: "DONE", buttonTitle: "Mark done", options: open },
+    { identifier: "SNOOZE", buttonTitle: "Snooze 15 min", options: open },
+    { identifier: "OPEN", buttonTitle: "View details", options: open },
   ]);
   await Notifications.setNotificationCategoryAsync(CATEGORY_ROUTINE, [
-    { identifier: "DONE", buttonTitle: "Done", options: { opensAppToForeground: true } },
-    { identifier: "OPEN", buttonTitle: "Open", options: { opensAppToForeground: true } },
+    { identifier: "DONE", buttonTitle: "Done", options: open },
+    { identifier: "OPEN", buttonTitle: "Open", options: open },
   ]);
+  await Notifications.setNotificationCategoryAsync(CATEGORY_CHECKIN_START, [
+    { identifier: "STARTED", buttonTitle: t("checkin.started"), options: open },
+    { identifier: "NOT_TODAY", buttonTitle: t("checkin.notToday"), options: open },
+  ]);
+  // Android shows at most 3 actions; completion uses exactly 3.
+  await Notifications.setNotificationCategoryAsync(CATEGORY_CHECKIN_DONE, [
+    { identifier: "DONE", buttonTitle: t("checkin.done"), options: open },
+    { identifier: "PLUS_30", buttonTitle: t("checkin.plus30"), options: open },
+    { identifier: "UPDATE", buttonTitle: t("checkin.update"), options: open },
+  ]);
+}
+
+type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
+let lastChannel: Channel = CHANNELS.SOUND_VIBRATION;
+
+/** Schedules one check-in notification (from the plan, or the "next" returned by the respond endpoint). */
+export async function scheduleCheckin(c: PlannedCheckin, channel: Channel = lastChannel): Promise<boolean> {
+  const date = new Date(c.fireAt);
+  if (date.getTime() <= Date.now() + 5000) return false;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${PREFIX}c:${c.id}`,
+      content: {
+        title: c.title,
+        body: c.body,
+        sound: channel.sound,
+        categoryIdentifier: c.category === "START" ? CATEGORY_CHECKIN_START : CATEGORY_CHECKIN_DONE,
+        data: { kind: "lo-checkin", checkinId: c.id, taskId: c.taskId, category: c.category },
+        ...(Platform.OS === "android" ? { priority: Notifications.AndroidNotificationPriority.HIGH } : {}),
+      },
+      trigger:
+        Platform.OS === "android"
+          ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: channel.id }
+          : { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+    });
+    return true;
+  } catch (error) {
+    console.warn("Could not schedule check-in", error);
+    return false;
+  }
 }
 
 export async function ensureNotificationPermissions(): Promise<boolean> {
@@ -103,6 +170,8 @@ export async function syncReminders(): Promise<number | null> {
   await cancelOurs();
   if (plan.settings.devices === "DESKTOP" || plan.settings.devices === "WHATSAPP") return 0;
   const channel = CHANNELS[plan.settings.method] ?? CHANNELS.SOUND_VIBRATION;
+  lastChannel = channel;
+  await registerCategories();
   // iOS keeps at most 64 pending local notifications (and silently drops the rest). Keep the
   // soonest ones; the plan is re-synced on app open and after every change, so later reminders get
   // scheduled before they're due.
@@ -139,6 +208,14 @@ export async function syncReminders(): Promise<number | null> {
       console.warn("Could not schedule reminder", error);
     }
   }
+  // Check-ins fill the remaining slots, soonest first. Re-scheduling everything from the plan also drops
+  // check-ins the server cancelled (rescheduled or finished tasks).
+  const checkins = (plan.checkins ?? [])
+    .filter((c) => new Date(c.fireAt).getTime() > Date.now() + 5000)
+    .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime());
+  const room = Math.max(0, MAX_LOCAL_REMINDERS - count);
+  for (const c of checkins.slice(0, room)) if (await scheduleCheckin(c, channel)) count += 1;
+  if (checkins.length > room) console.info(`Check-ins: skipped ${checkins.length - room} later ones (local notification limit)`);
   return count;
 }
 
@@ -153,12 +230,60 @@ export function scheduleReminderSync(delayMs = 1500): void {
 
 export type ReminderOpenTarget = { taskId: string | null; routineOccurrenceId: string | null };
 
+/**
+ * After any answer: drop this task's other scheduled check-ins on the phone (they're stale), keep the
+ * returned `next`, then re-sync the plan from the server.
+ */
+export async function afterCheckinAnswer(taskId: string, next: PlannedCheckin | null | undefined): Promise<void> {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(
+      scheduled
+        .filter((n) => n.identifier.startsWith(`${PREFIX}c:`) && (n.content.data as { taskId?: string } | null)?.taskId === taskId)
+        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+    );
+  } catch (error) {
+    console.warn("Could not clear old check-ins", error);
+  }
+  if (next) await scheduleCheckin(next);
+  scheduleReminderSync();
+}
+
+/** Answers a check-in from a notification action and shows the result in the app. */
+async function handleCheckinAction(data: { checkinId?: string; taskId?: string | null; category?: string }, action: string, title: string, body: string): Promise<void> {
+  const checkinId = data.checkinId;
+  const taskId = data.taskId ?? null;
+  if (!checkinId || !taskId) return;
+  const direct = ["STARTED", "NOT_TODAY", "DONE", "PLUS_30"];
+  if (!direct.includes(action)) {
+    // Plain tap or "Update…": open the sheet; the user answers there.
+    showCheckinSheet({ mode: data.category === "START" ? "start" : "update", checkinId, taskId, title, body });
+    return;
+  }
+  const response = action as CheckinResponse;
+  try {
+    const result = await answerCheckin(checkinId, taskId, response);
+    await afterCheckinAnswer(taskId, result?.next);
+    showCheckinSheet({ mode: "result", taskId, title, result, response });
+  } catch (error) {
+    console.warn("Could not answer check-in", error);
+    showCheckinSheet({ mode: "result", taskId, title, result: null, response });
+  }
+}
+
 async function handleResponse(response: Notifications.NotificationResponse, onOpen: (target: ReminderOpenTarget) => void): Promise<void> {
   const content = response.notification.request.content;
-  const data = (content.data ?? {}) as { taskId?: string | null; routineOccurrenceId?: string | null; fireAt?: string; kind?: string };
+  const data = (content.data ?? {}) as { taskId?: string | null; routineOccurrenceId?: string | null; fireAt?: string; kind?: string; checkinId?: string; category?: string };
+  const action = response.actionIdentifier;
+  // Remove the notification from the tray once its action is handled.
+  const dismiss = () => Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => undefined);
+  if (data.kind === "lo-checkin") {
+    await handleCheckinAction(data, action, content.title ?? "", content.body ?? "");
+    await dismiss();
+    return;
+  }
   if (data.kind !== "lo-reminder") return;
   const target = { taskId: data.taskId ?? null, routineOccurrenceId: data.routineOccurrenceId ?? null };
-  const action = response.actionIdentifier;
   if (action === "DONE") {
     try {
       if (target.taskId) {
@@ -179,17 +304,37 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   } else {
     onOpen(target);
   }
+  await dismiss();
   const mapped = action === "DONE" ? "DONE" : action === "SNOOZE" ? "SNOOZE" : "OPEN";
   apiPost("/reminders/action", { taskId: target.taskId, fireAt: data.fireAt ?? null, action: mapped }).catch(() => undefined);
 }
 
-/** Listens for notification taps/actions; also handles the tap that launched the app. */
+/** A response is handled once, even though the OS reports the launching tap again on every later start. */
+async function claimResponse(r: Notifications.NotificationResponse): Promise<boolean> {
+  const key = `${r.notification.request.identifier}|${r.actionIdentifier}|${r.notification.date}`;
+  try {
+    if ((await AsyncStorage.getItem(HANDLED_KEY)) === key) return false;
+    await AsyncStorage.setItem(HANDLED_KEY, key);
+  } catch {
+    // storage unavailable: handle it rather than risk losing the tap
+  }
+  return true;
+}
+
+/**
+ * Listens for notification taps/actions, including the one that launched the app from a cold start
+ * (getLastNotificationResponseAsync), so a tap that opens the app is never lost.
+ */
 export function startReminderResponses(onOpen: (target: ReminderOpenTarget) => void): () => void {
   const sub = Notifications.addNotificationResponseReceivedListener((r) => {
-    void handleResponse(r, onOpen);
+    void claimResponse(r).then(async (fresh) => {
+      if (fresh) await handleResponse(r, onOpen);
+    });
   });
   void Notifications.getLastNotificationResponseAsync().then((r) => {
-    if (r) void handleResponse(r, onOpen);
+    if (r) void claimResponse(r).then(async (fresh) => {
+      if (fresh) await handleResponse(r, onOpen);
+    });
   });
   return () => sub.remove();
 }

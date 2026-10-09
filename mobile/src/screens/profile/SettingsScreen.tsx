@@ -8,6 +8,7 @@ import { Button, Card, Chip, SectionTitle, Snackbar, ui } from "../../components
 import { colors, palette } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
+import { useLocale } from "../../i18n/LocaleProvider";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -52,6 +53,7 @@ function to12h(hhmm: string): string {
 export function SettingsScreen({ navigation }: Props) {
   const { refreshProfile, firebaseUser } = useAuth();
   const { settings, update, categories, setCategories, phoneNumber, reload } = usePreferences();
+  const { t } = useLocale();
   const [toast, setToast] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [name, setName] = useState("");
@@ -212,6 +214,43 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={[ui.body, { flex: 1 }]}>Critical reminders break through DND</Text>
             <Switch value={settings.criticalOverridesDnd} onValueChange={(criticalOverridesDnd) => void save({ criticalOverridesDnd })} />
           </View>
+          <View style={styles.rowBetween}>
+            <Text style={[ui.body, { flex: 1 }]}>{t("settings.checkins")}</Text>
+            <Switch
+              value={settings.checkinsEnabled}
+              onValueChange={(checkinsEnabled) => {
+                void save({ checkinsEnabled });
+                void syncReminders();
+              }}
+              accessibilityLabel={t("settings.checkins")}
+            />
+          </View>
+          <Text style={ui.meta}>{t("settings.checkinsHint")}</Text>
+          {settings.checkinsEnabled ? (
+            <>
+              <Text style={ui.label}>{t("settings.checkinStyle")}</Text>
+              <View style={ui.wrap}>
+                {(["FUNNY", "SERIOUS", "GENTLE"] as const).map((tone) => (
+                  <Chip
+                    key={tone}
+                    small
+                    label={t(tone === "FUNNY" ? "settings.styleFunny" : tone === "SERIOUS" ? "settings.styleSerious" : "settings.styleGentle")}
+                    selected={settings.checkinTone === tone}
+                    onPress={() => {
+                      void save({ checkinTone: tone });
+                      void syncReminders();
+                    }}
+                  />
+                ))}
+              </View>
+            </>
+          ) : null}
+          {__DEV__ ? (
+            <View style={styles.rowBetween}>
+              <Text style={[ui.meta, { flex: 1 }]}>{t("settings.researchMode")}</Text>
+              <Switch value={settings.checkinResearchMode} onValueChange={(checkinResearchMode) => void save({ checkinResearchMode })} />
+            </View>
+          ) : null}
           <Button
             title="Refresh reminders now"
             kind="secondary"

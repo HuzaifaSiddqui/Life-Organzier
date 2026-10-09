@@ -5,6 +5,7 @@ import { Priority, TaskSource, TaskStatus } from "@prisma/client";
 import { prisma } from "../src/config/db.js";
 import { mergeFields, mutationAction } from "../src/modules/sync/syncRoutes.js";
 import { createTask } from "../src/modules/tasks/taskService.js";
+import { dbAvailable } from "./fixtures.js";
 
 const base = { title: "Essay", priority: "MEDIUM", dueTime: "5 PM", category: "Academic" };
 const t = (iso: string) => new Date(iso);
@@ -43,12 +44,6 @@ test("sync: delete vs update", () => {
   assert.equal(mutationAction("update", pending), "merge");
   assert.equal(mutationAction("update", null), "reject");
 });
-
-// Idempotent create needs the database (unique userId + clientId); skipped when none is reachable (CI).
-const dbAvailable = await prisma
-  .$queryRaw`SELECT 1`
-  .then(() => true)
-  .catch(() => false);
 
 test("sync: creating with the same clientId twice yields one task", { skip: !dbAvailable && "no database" }, async () => {
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `sync-test-${randomUUID()}@example.test` } });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getAi, type ChatMessage } from "../../ai/llm.js";
 import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
+import { parseCheckinStyle } from "../checkins/style.js";
 import { cleanTitle, extractEntities, isHabitLike, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -22,6 +23,7 @@ export const INTENTS = [
   "greeting",
   "thanks",
   "help",
+  "set_checkin_style",
   "confirm",
   "deny",
   "provide_info",
@@ -109,6 +111,7 @@ function targetFromText(text: string, intent: Intent): string {
 function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { intent: Intent; confidence: number } {
   const t = text.trim();
   const words = t.split(/\s+/).length;
+  if (parseCheckinStyle(t)) return { intent: "set_checkin_style", confidence: 0.95 };
   if (CONFIRM.test(t)) return { intent: "confirm", confidence: 0.95 };
   if (DENY.test(t) && words <= 4) return { intent: "deny", confidence: 0.9 };
   if (GREETING.test(t)) return { intent: "greeting", confidence: 0.95 };
@@ -167,6 +170,7 @@ const LLM_INTENTS = [
   "log_mood",
   "support",
   "provide_info",
+  "set_checkin_style",
   "smalltalk",
   "unclear",
 ] as const;
@@ -201,6 +205,7 @@ Classify the user's LAST message using the conversation for context. Intents:
 - log_mood: tells how they feel
 - support: wants emotional support or to talk about a problem
 - provide_info: shares a fact or preference about themselves
+- set_checkin_style: wants check-in/reminder messages funnier, more serious or gentler, or check-ins turned off/on
 - smalltalk: chit-chat or a general question
 - unclear: impossible to tell
 task_title: short actionable title (2-6 words) without dates, times or filler like "remind me", or "" if not a task.
@@ -215,6 +220,23 @@ const FEW_SHOT: ChatMessage[] = [
   { role: "user", content: "Last message: I need to do math" },
   { role: "assistant", content: '{"intent":"unclear","task_title":"Do math","target_task":"","mood":"none"}' },
 ];
+
+/** Exact messages the LLM intent step sends (also used by scripts/model-benchmark.ts). */
+export function nluMessages(text: string, opts: { history: ChatMessage[]; pendingHint?: string | null; memoryHint?: string | null }): ChatMessage[] {
+  const history = opts.history.slice(-4).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 160)}`).join("\n");
+  return [
+    { role: "system", content: SYSTEM },
+    ...FEW_SHOT,
+    {
+      role: "user",
+      content: `${history ? `Conversation so far:\n${history}\n\n` : ""}${opts.pendingHint ? `Assistant is waiting for: ${opts.pendingHint}\n` : ""}${opts.memoryHint ? `Known about user: ${opts.memoryHint}\n` : ""}Last message: ${text}`,
+    },
+  ];
+}
+
+/** Options for the intent call; AiService.json adds temperature 0.1. */
+export const NLU_LLM_OPTIONS = { json: LLM_JSON_SCHEMA, maxTokens: 80, timeoutMs: 20000 };
+export { llmSchema as NLU_LLM_SCHEMA, LLM_INTENTS };
 
 export async function understand(
   text: string,
@@ -233,19 +255,7 @@ export async function understand(
   const needsLlm = rule.confidence < 0.75 || ((intent === "create_task" || intent === "create_routine") && title.split(/\s+/).length > 7);
   const ai = getAi();
   if (needsLlm && opts.allowLlm && ai.enabled && ai.available) {
-    const history = opts.history.slice(-4).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 160)}`).join("\n");
-    const result = await ai.json(
-      [
-        { role: "system", content: SYSTEM },
-        ...FEW_SHOT,
-        {
-          role: "user",
-          content: `${history ? `Conversation so far:\n${history}\n\n` : ""}${opts.pendingHint ? `Assistant is waiting for: ${opts.pendingHint}\n` : ""}${opts.memoryHint ? `Known about user: ${opts.memoryHint}\n` : ""}Last message: ${text}`,
-        },
-      ],
-      llmSchema,
-      { json: LLM_JSON_SCHEMA, maxTokens: 80, timeoutMs: 20000 },
-    );
+    const result = await ai.json(nluMessages(text, opts), llmSchema, NLU_LLM_OPTIONS);
     if (result) {
       source = "llm";
       const llmIntent = result.intent as Intent;

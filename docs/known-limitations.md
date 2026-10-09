@@ -25,6 +25,27 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **No conflict UI.** `ConflictSheet` exists in `mobile/src/components/primitives/feedback.tsx` but no screen uses it;
   conflicts resolve silently on the server.
 
+## Check-in answers
+
+- **An answer is claimed before the task is updated.** The respond endpoint marks the check-in ANSWERED first (so
+  concurrent or repeated taps apply once), then updates the task. If the task update fails (e.g. the database drops
+  mid-request), a retry returns `alreadyAnswered` and that answer is lost; the user would change the task by hand.
+
+## Notification actions
+
+- **Every notification button opens the app.** There is no background task handler (`expo-task-manager` isn't
+  installed), so action buttons — reminder Done / Snooze and check-in Started / Not today / Done / +30 min / Update…
+  — briefly open the app and apply the answer there. A tap that launches the app from a cold start is picked up
+  with `getLastNotificationResponseAsync` and handled once (the OS reports the same tap again on later starts, so the
+  handled response is remembered).
+- **Answering offline:** the task changes on the phone straight away and the answer is queued with its tap time; it is
+  sent after the next successful sync (reconnect or app open). Until then the server may still fire a check-in that
+  the answer would have cancelled, and a "next" check-in (e.g. completion after "Started") is only scheduled after
+  the answer reaches the server.
+- **Android shows at most 3 action buttons**; the completion check-in uses exactly 3 (Done / +30 min / Update…). The
+  other options (partly done, +15 / +60, didn't get to it) are in the in-app sheet.
+- **Check-ins in quiet hours or Do Not Disturb are skipped, not moved** (FR-RN-004 §4).
+
 ## Documents and OCR
 
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
@@ -37,12 +58,47 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - Scanned PDFs without a text layer must be uploaded as images.
 - Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
 
+## Task classification
+
+- **Study sessions for an exam become fixed events.** "Study for exam tomorrow 5 PM for 2 hours" is classified
+  FIXED, because `FIXED_RE` in `assistant/entities.ts` matches "exam" together with a time. The study session is then
+  treated as an unmovable event (not auto-scheduled, not offered for moving) and gets no start/completion check-ins.
+- **Most student tasks are classified DEADLINE.** `classifyTaskType` marks "assignment", "submit", "due", "by …" as
+  DEADLINE before looking at duration. In chat, a DEADLINE task with a duration is auto-scheduled only when a free
+  slot ends before its deadline; otherwise it is created without a work block (no check-ins) and the reply offers
+  "Find time for it". Tasks added through the task form get a work block only if the user sets a planned start.
+
 ## Platform and UI
 
 - Dark mode and Urdu right-to-left layout are built but switched off (`DARK_MODE_READY`, `RTL_READY`); see
   [design.md](design.md) for the checklist before turning them on.
 - Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
 - WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
+
+## Check-in first steps
+
+- **Task titles go to Google when Gemini is configured.** With `GEMINI_API_KEY` set, the first step for each
+  scheduled task is requested from Gemini. Only the task title and planned duration are sent (no description,
+  notes, mood or user details), but titles can still be personal ("Doctor appointment for …"). Unset the key to
+  keep everything local (Ollama for English, keyword library for Urdu).
+- **Ollama writes English first steps only**; Urdu users get Gemini or the keyword library.
+- The keyword library covers common student tasks; anything else gets a check-in without a first step.
+- **Gemini on a free key is often busy.** In testing about half the calls returned 503 (high demand) or 429. Failed
+  calls fall back to the library; for slots more than 30 minutes away the backend retries Gemini up to twice in
+  the background. After a 429 Gemini is skipped for 10 minutes (`GEMINI_RATE_LIMIT_COOLDOWN_MS`); background
+  calls are spaced at least 4 s apart (`GEMINI_MIN_INTERVAL_MS`). `/health` shows the last Gemini error type.
+
+## Estimate accuracy and evaluation
+
+- **Estimate ratios need history.** A category gets a ratio after 5 usable tasks (started and completed the same local day, no partial-progress answers, not rescheduled after starting, ratio between 0.2 and 4). Until then no suggestion is shown. "Actual" time is `completedAt − startedAt`, i.e. when the user told the app, so it is biased towards check-in times.
+- **A suggestion shown on the task form is logged once per category and duration per form session**, so reopening the form can log it again; the report dedupes displays per user, category, duration and day.
+- **Estimate ratios are biased by check-in-anchored times.** "Actual" is `completedAt − startedAt`, and both are often the moment the user tapped a check-in, so tasks finished through a check-in drift towards the check-in schedule. The report splits ratios by completion method (check-in vs manual); the in-app pattern uses both.
+- **Wilson intervals assume independent check-ins.** Check-ins cluster by user, so the intervals are too narrow. The report shows distinct users and a per-user average beside every rate; trust those first when few users take part.
+- **Section (d) of the report (estimate accuracy before/after suggestions) is descriptive, not causal** — practice and novelty effects cannot be separated from the suggestion.
+- **Gemini availability changes the first-step source mix and is not randomised.** Comparisons by source (Gemini / Ollama / library) are descriptive; only the research-mode shown-vs-withheld comparison is randomised.
+- **Evaluation numbers are small-sample**; see `docs/checkins-evaluation-method.md`.
+- **The Roman Urdu held-out set must be filled before the report is written** (it is empty now): a teammate who hasn't read `entities.ts` adds messages (`backend/tests/eval/README.md`); the extractor's Roman Urdu scores on the development set are optimistic.
+- **Roman Urdu dates:** "kal" always means tomorrow (never yesterday); "hafta/haftay" is only read as "week" next to "agle/is"; daily-routine phrases like "har roz" are not detected by the rules (the LLM may catch them).
 
 ## Safety
 

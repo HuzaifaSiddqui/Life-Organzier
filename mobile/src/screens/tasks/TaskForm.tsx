@@ -5,9 +5,20 @@ import { Button, Card, Chip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getTags } from "../../services/settingsApi";
+import { apiGet, apiPost } from "../../services/api";
 import { suggestForTitle, type TaskInput } from "../../services/tasksApi";
+import { useLocale } from "../../i18n/LocaleProvider";
+import { formatDuration } from "../../utils/format";
 import type { Priority, ReminderMode, Task, TaskStatus, TaskType } from "../../types/models";
-import { dueDateAndTimeForSave, validateDueDateNotPast, ymdFromLocalDate } from "../../utils/datetimeValidation";
+import {
+  combineYmdAndTimeStrings,
+  dueDateAndTimeForSave,
+  dueDateTimeToDate,
+  formatDueTime12h,
+  parseDueTimeToHoursMinutes,
+  validateDueDateNotPast,
+  ymdFromLocalDate,
+} from "../../utils/datetimeValidation";
 
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const TYPES: Array<{ key: TaskType; label: string; hint: string }> = [
@@ -40,6 +51,9 @@ export type TaskFormValues = {
   tags: string[];
   taskType: TaskType;
   durationMinutes: number | null;
+  /** FR-RN-004 planned start (work block); local YYYY-MM-DD + clock text, both or neither. */
+  plannedYmd: string;
+  plannedTime: string;
   difficulty: number | null;
   locationContext: string | null;
   reminderMode: ReminderMode;
@@ -58,6 +72,8 @@ export function valuesFromTask(t: Task): TaskFormValues {
     tags: Array.isArray(t.tags) ? t.tags : [],
     taskType: t.taskType && t.taskType !== "ROUTINE" ? t.taskType : "FLEXIBLE",
     durationMinutes: t.durationMinutes ?? null,
+    plannedYmd: t.scheduledStart ? ymdFromLocalDate(new Date(t.scheduledStart)) : "",
+    plannedTime: t.scheduledStart ? formatDueTime12h(new Date(t.scheduledStart)) : "",
     difficulty: t.difficulty ?? null,
     locationContext: t.locationContext ?? null,
     reminderMode: t.reminderMode ?? "ADAPTIVE",
@@ -76,6 +92,8 @@ export const EMPTY_VALUES: TaskFormValues = {
   tags: [],
   taskType: "FLEXIBLE",
   durationMinutes: null,
+  plannedYmd: "",
+  plannedTime: "",
   difficulty: null,
   locationContext: null,
   reminderMode: "ADAPTIVE",
@@ -83,11 +101,19 @@ export const EMPTY_VALUES: TaskFormValues = {
   status: "PENDING",
 };
 
+export function plannedStartFromValues(v: Pick<TaskFormValues, "plannedYmd" | "plannedTime">): Date | null {
+  if (!v.plannedYmd || !v.plannedTime.trim() || !parseDueTimeToHoursMinutes(v.plannedTime)) return null;
+  return combineYmdAndTimeStrings(v.plannedYmd, v.plannedTime);
+}
+
 /** Converts form values into the API payload; returns an error message when invalid. */
 export function toPayload(v: TaskFormValues, opts: { allowPast?: boolean } = {}): { payload: Omit<TaskInput, "source">; error: string | null } {
   const { dueDateIso, dueTime } = dueDateAndTimeForSave({ pickerYmd: v.dueYmd, rawDueTime: v.dueTime });
+  const planned = plannedStartFromValues(v);
   const error = !v.title.trim()
     ? "Title is required"
+    : (v.plannedYmd || v.plannedTime) && !planned
+      ? "Set both a date and a time for the planned start, or clear it."
     : dueTime && !dueDateIso
       ? "Couldn't read that time. Use the picker or a format like 3 PM."
       : opts.allowPast
@@ -105,6 +131,13 @@ export function toPayload(v: TaskFormValues, opts: { allowPast?: boolean } = {})
       tags: v.tags.length ? v.tags : null,
       taskType: v.taskType,
       durationMinutes: v.durationMinutes,
+      // The field is only shown with a duration; without one, an existing start (e.g. set by the assistant) is left alone.
+      ...(v.durationMinutes
+        ? {
+            scheduledStart: planned ? planned.toISOString() : null,
+            scheduledEnd: planned ? new Date(planned.getTime() + v.durationMinutes * 60000).toISOString() : null,
+          }
+        : {}),
       difficulty: v.difficulty,
       locationContext: v.locationContext,
       reminderMode: v.reminderMode,
@@ -134,6 +167,61 @@ export function TaskForm({
   const [suggested, setSuggested] = useState<{ category: string | null; tags: string[] }>({ category: null, tags: [] });
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const set = <K extends keyof TaskFormValues>(k: K, value: TaskFormValues[K]) => setV((prev) => ({ ...prev, [k]: value }));
+  const { t } = useLocale();
+  const [estimate, setEstimate] = useState<{ category: string; original: number; suggested: number; ratio: number } | null>(null);
+  const shownKeys = useRef(new Set<string>());
+  const acceptedMinutes = useRef<number | null>(null);
+  const logEstimate = (action: "SHOWN" | "ACCEPTED", e: { category: string; original: number; suggested: number }) =>
+    void apiPost("/events/estimate-suggestion", { action, category: e.category, original: e.original, suggested: e.suggested }).catch(() => undefined);
+  // FR-RN-004 §6: offer the learned-estimate duration (one tap, never automatic).
+  useEffect(() => {
+    setEstimate(null);
+    if (!v.category || !v.durationMinutes || v.durationMinutes === acceptedMinutes.current) return;
+    let live = true;
+    apiGet<{ suggestion: { category: string; original: number; suggested: number; ratio: number } | null }>("/events/estimate-suggestion", { params: { category: v.category, minutes: v.durationMinutes } })
+      .then((r) => {
+        if (!live || !r.suggestion) return;
+        setEstimate(r.suggestion);
+        const key = `${r.suggestion.category}:${r.suggestion.original}`;
+        if (!shownKeys.current.has(key)) {
+          shownKeys.current.add(key);
+          logEstimate("SHOWN", r.suggestion);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.category, v.durationMinutes]);
+  const [slotBusy, setSlotBusy] = useState(false);
+  const [slotNote, setSlotNote] = useState<string | null>(null);
+  /** "Find time for it": a free slot that ends before the deadline (existing scheduler); fills the planned start. */
+  const findTime = async () => {
+    if (!v.durationMinutes) return;
+    setSlotBusy(true);
+    setSlotNote(null);
+    try {
+      const { dueDateIso, dueTime } = dueDateAndTimeForSave({ pickerYmd: v.dueYmd, rawDueTime: v.dueTime });
+      const deadline = dueDateIso ? dueDateTimeToDate(dueDateIso, dueTime) : null;
+      const r = await apiPost<{ slot: { start: string; reason: string } | null }>("/scheduling/suggest", {
+        durationMinutes: v.durationMinutes,
+        priority: v.priority,
+        difficulty: v.difficulty,
+        deadline: deadline ? deadline.toISOString() : null,
+      });
+      if (!r.slot) setSlotNote(t("task.noSlot"));
+      else {
+        const start = new Date(r.slot.start);
+        setV((p) => ({ ...p, plannedYmd: ymdFromLocalDate(start), plannedTime: formatDueTime12h(start) }));
+        setSlotNote(r.slot.reason);
+      }
+    } catch {
+      setSlotNote(t("checkin.error"));
+    } finally {
+      setSlotBusy(false);
+    }
+  };
 
   useEffect(() => setV(initial), [initial]);
 
@@ -266,6 +354,34 @@ export function TaskForm({
               ))}
             </View>
           </View>
+          {estimate ? (
+            <View>
+              <Text style={styles.hint}>{t("task.estimateHint", { category: estimate.category, ratio: String(estimate.ratio), time: formatDuration(estimate.suggested) })}</Text>
+              <Button
+                title={t("task.estimateUse", { time: formatDuration(estimate.suggested) })}
+                kind="secondary"
+                size="sm"
+                style={{ alignSelf: "flex-start", marginTop: 6 }}
+                onPress={() => {
+                  logEstimate("ACCEPTED", estimate);
+                  acceptedMinutes.current = estimate.suggested;
+                  set("durationMinutes", estimate.suggested);
+                }}
+              />
+            </View>
+          ) : null}
+          {v.durationMinutes ? (
+            <View>
+              <Text style={ui.label}>{t("task.plannedStart")}</Text>
+              <Text style={styles.hint}>{t("task.plannedStartHint")}</Text>
+              <TaskFormDueDateRow label={t("task.plannedStart")} valueYmd={v.plannedYmd} onChangeYmd={(ymd) => set("plannedYmd", ymd)} onClear={() => setV((p) => ({ ...p, plannedYmd: "", plannedTime: "" }))} />
+              <TaskFormDueTimeRow label=" " valueTime={v.plannedTime} onChangeTime={(time) => set("plannedTime", time)} baseYmd={v.plannedYmd || undefined} quickTimes={["9:00 AM", "2:00 PM", "4:00 PM", "7:00 PM", "9:00 PM"]} />
+              {!v.plannedYmd && !v.plannedTime ? (
+                <Button title={slotBusy ? t("task.findingTime") : t("task.findTime")} kind="secondary" size="sm" loading={slotBusy} onPress={() => void findTime()} style={{ alignSelf: "flex-start", marginTop: 6 }} />
+              ) : null}
+              {slotNote ? <Text style={styles.hint}>{slotNote}</Text> : null}
+            </View>
+          ) : null}
           <View>
             <Text style={ui.label}>Difficulty</Text>
             <View style={ui.wrap}>

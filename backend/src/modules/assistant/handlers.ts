@@ -39,6 +39,8 @@ import {
   type Turn,
 } from "./dialogue.js";
 import { resolveTaskRef } from "./draft.js";
+import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
+import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
@@ -94,6 +96,8 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       return { content: "Anytime! I'm here whenever you need me.", intent: "thanks" };
     case "help":
       return help();
+    case "set_checkin_style":
+      return setCheckinStyle(turn, text);
     case "confirm":
     case "deny":
       return { content: u.intent === "confirm" ? "Great." : "Okay.", intent: u.intent };
@@ -113,6 +117,38 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       };
     }
   }
+}
+
+const STYLE_CHIP_TEXT: Record<"FUNNY" | "SERIOUS" | "GENTLE", string> = {
+  FUNNY: "Make check-ins funny",
+  SERIOUS: "Make check-ins serious",
+  GENTLE: "Make check-ins gentle",
+};
+
+/** FR-RN-004 §6: change the check-in style or turn check-ins off/on from chat. */
+export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
+  const lang = turn.settings.language === "ur" ? "ur" : "en";
+  const t = RESPONSE_TEXT[lang];
+  const req = parseCheckinStyle(text) ?? { kind: "ask" as const };
+  const others = (current: string) =>
+    (["FUNNY", "SERIOUS", "GENTLE"] as const).filter((s) => s !== current).map((s) => ({ label: STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), text: STYLE_CHIP_TEXT[s] }));
+  if (req.kind === "ask") {
+    return { content: t.STYLE_ASK, actions: (["FUNNY", "SERIOUS", "GENTLE"] as const).map((s) => ({ label: STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), text: STYLE_CHIP_TEXT[s] })), intent: "checkin_style_ask" };
+  }
+  if (req.kind === "off" || req.kind === "on") {
+    const checkinsEnabled = req.kind === "on";
+    turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinsEnabled } });
+    logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinsEnabled });
+    return {
+      content: checkinsEnabled ? t.CHECKINS_ON : t.CHECKINS_OFF,
+      actions: checkinsEnabled ? others(turn.settings.checkinTone) : [{ label: lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", text: "Turn check-ins back on" }],
+      intent: checkinsEnabled ? "checkins_on" : "checkins_off",
+    };
+  }
+  const wasOff = !turn.settings.checkinsEnabled;
+  turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinTone: req.tone, checkinsEnabled: true } });
+  logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinTone: req.tone, reenabled: wasOff });
+  return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: others(req.tone), intent: "checkin_style_set" };
 }
 
 function help(): Out {
@@ -561,6 +597,14 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
         return (await resolvePending(turn, "yes", u)) ?? { content: "Okay.", intent: "noop" };
       }
       return { content: "Okay.", intent: "noop" };
+    }
+    case "accept_estimate": {
+      const p = turn.state.pending;
+      if (!p || (p.kind !== "task_review" && p.kind !== "task_draft")) return { content: "That suggestion has expired.", intent: "noop" };
+      const minutes = Math.round(Number(payload.minutes));
+      if (!(minutes >= 15 && minutes <= 1440)) return { content: "That duration doesn't look right.", intent: "noop" };
+      logEvent(turn.user.id, "ESTIMATE_SUGGESTION_ACCEPTED", null, { category: p.draft.category, original: p.draft.durationMinutes, suggested: minutes, surface: "CHAT" });
+      return proceedWithDraft(turn, { ...p.draft, durationMinutes: minutes, estimateHandled: true }, p.source, { clarified: p.kind === "task_review" });
     }
     case "cancel_pending":
       turn.state.pending = null;

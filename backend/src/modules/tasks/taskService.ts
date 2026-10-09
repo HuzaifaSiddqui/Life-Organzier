@@ -9,6 +9,8 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { computeDueAt, localParts } from "../../lib/time.js";
+import { cancelCheckins } from "../checkins/checkinLog.js";
+import { refreshCheckinCopy } from "../checkins/copy.js";
 import { logEvent } from "../events/eventService.js";
 
 export type TaskContext = { userId: string; tz: string; deviceId?: string | null };
@@ -203,6 +205,7 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
         scheduledStart: input.scheduledStart ?? null,
         scheduledEnd: input.scheduledEnd ?? null,
         completedAt: status === TaskStatus.COMPLETED ? new Date() : null,
+        startedAt: status === TaskStatus.IN_PROGRESS ? new Date() : null,
         deviceId: ctx.deviceId ?? null,
         clientId: input.clientId ?? null,
         documentId: input.documentId ?? null,
@@ -217,6 +220,7 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
     throw error;
   }
   await recordVersion(task, ctx.deviceId);
+  if (task.scheduledStart) refreshCheckinCopy(task); // FR-RN-004: pre-write check-in messages
   logEvent(ctx.userId, "TASK_CREATED", task.id, { source: task.source, category: task.category, taskType: task.taskType });
   if (task.parentTaskId) await updateParentProgress(task.parentTaskId);
   return task;
@@ -230,7 +234,8 @@ export async function updateTask(
   ctx: TaskContext,
   taskId: string,
   changes: TaskChanges,
-  opts: { clientModifiedAt?: Date; skipChildren?: boolean } = {},
+  /** startedAt / completedAt: when it really happened (e.g. a check-in tap delivered late); default now. */
+  opts: { clientModifiedAt?: Date; skipChildren?: boolean; startedAt?: Date; completedAt?: Date; completedVia?: "CHECKIN" | "MANUAL" } = {},
 ): Promise<Task | null> {
   const existing = await prisma.task.findFirst({ where: { id: taskId, userId: ctx.userId, status: { not: TaskStatus.DELETED } } });
   if (!existing) return null;
@@ -253,9 +258,13 @@ export async function updateTask(
   }
   if (c.status === TaskStatus.COMPLETED) {
     c.progress = 100;
-    if (existing.status !== TaskStatus.COMPLETED) data.completedAt = new Date();
+    if (existing.status !== TaskStatus.COMPLETED) {
+      data.completedAt = opts.completedAt ?? new Date();
+      data.completedVia = opts.completedVia ?? "MANUAL";
+    }
   } else if (c.status && existing.status === TaskStatus.COMPLETED) {
     data.completedAt = null;
+    data.completedVia = null;
     if (c.progress === undefined) c.progress = Math.min(existing.progress, 75);
   }
 
@@ -275,6 +284,8 @@ export async function updateTask(
     else (data as Record<string, unknown>)[field] = next;
   }
   if (!changed) return existing;
+  // FR-RN-004: the first move to IN_PROGRESS records when work actually started.
+  if (c.status === TaskStatus.IN_PROGRESS && existing.status !== TaskStatus.IN_PROGRESS && !existing.startedAt) data.startedAt = opts.startedAt ?? new Date();
 
   const dueDate = c.dueDate !== undefined ? c.dueDate : existing.dueDate;
   const dueTime = c.dueTime !== undefined ? c.dueTime : existing.dueTime;
@@ -285,6 +296,12 @@ export async function updateTask(
 
   const updated = await prisma.task.update({ where: { id: taskId }, data });
   await recordVersion(updated, ctx.deviceId);
+  // FR-RN-004: a new slot gets fresh copy and the old slot's check-ins are cancelled; done/skipped tasks lose theirs.
+  if (updated.scheduledStart?.getTime() !== existing.scheduledStart?.getTime()) {
+    await cancelCheckins(updated.id, updated.scheduledStart);
+    if (updated.scheduledStart) refreshCheckinCopy(updated);
+  }
+  if (updated.status !== existing.status && (updated.status === TaskStatus.COMPLETED || updated.status === TaskStatus.SKIPPED)) await cancelCheckins(updated.id);
 
   if (updated.status === TaskStatus.COMPLETED && existing.status !== TaskStatus.COMPLETED) {
     logEvent(ctx.userId, "TASK_COMPLETED", updated.id, completionPayload(updated, ctx.tz));
@@ -363,6 +380,7 @@ export async function softDeleteTask(ctx: TaskContext, taskId: string): Promise<
       lastModifiedAt: new Date(),
     },
   });
+  await cancelCheckins(deleted.id);
   await recordVersion(deleted, ctx.deviceId);
   logEvent(ctx.userId, "TASK_DELETED", taskId, { category: existing.category });
   if (existing.parentTaskId) await updateParentProgress(existing.parentTaskId);

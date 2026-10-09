@@ -33,6 +33,7 @@ model User {
   documents            Document[]
   taskVersions         TaskVersion[]
   reminderLogs         ReminderLog[]
+  checkinLogs          CheckinLog[]
 }
 
 model Task {
@@ -73,11 +74,18 @@ model Task {
   /// Client-generated id used to make offline creates idempotent.
   clientId        String?
   documentId      String?
+  /// FR-RN-004: first time the task moved to IN_PROGRESS (check-in "Started" or status change).
+  startedAt       DateTime?
+  /// CHECKIN when completed through a check-in answer, MANUAL otherwise (null = not completed / older rows).
+  completedVia    String?
+  /// FR-RN-004: pre-generated check-in messages + the scheduledStart they were written for.
+  checkinCopy     Json?
 
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   parentTask Task?         @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks   Task[]        @relation("TaskSubtasks")
   versions   TaskVersion[]
+  checkinLogs CheckinLog[]
 
   @@unique([userId, clientId])
   @@index([userId, dueDate])
@@ -175,6 +183,12 @@ model UserSettings {
   ttsEnabled            Boolean   @default(false)
   ttsRate               Float     @default(1.0)
   lastWhatsappMessageAt DateTime?
+  /// FR-RN-004 start & completion check-ins
+  checkinsEnabled       Boolean   @default(true)
+  /// FUNNY | SERIOUS | GENTLE — changes only when the user changes it
+  checkinTone           String    @default("FUNNY")
+  /// Research mode: randomly include/omit the first step (50/50)
+  checkinResearchMode   Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -262,6 +276,44 @@ model ActivityEvent {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type, createdAt])
+}
+
+/// FR-RN-004 check-ins. Separate from ReminderLog so it never affects reminder adaptivity.
+/// Survives task deletion (taskId set to null); removed with the user account.
+model CheckinLog {
+  id           String    @id @default(uuid())
+  userId       String
+  /// Null once the task is purged — the log row is kept for evaluation.
+  taskId       String?
+  /// The task's scheduledStart this check-in was planned for; history only counts within one slot.
+  slotStart    DateTime
+  /// START | START_FOLLOWUP | COMPLETION | COMPLETION_EXTRA
+  kind         String
+  fireAt       DateTime
+  /// FUNNY | SERIOUS | GENTLE (tone actually used)
+  tone         String
+  hasFirstStep Boolean   @default(false)
+  /// Source of the first step shown: GEMINI | OLLAMA | LIBRARY | NONE, or WITHHELD (research mode omitted an existing step)
+  /// (message text is always a reviewed template; hasFirstStep says whether the step was shown)
+  copySource   String
+  /// Latest mood (24 h) when planned, if any
+  moodAtPlan   String?
+  message      String
+  /// SCHEDULED | ANSWERED | IGNORED | CANCELLED
+  status       String    @default("SCHEDULED")
+  response     String?
+  respondedAt  DateTime?
+  /// Answered after the check-in had been cancelled (old slot); recorded but excluded from evaluation.
+  stale        Boolean   @default(false)
+  /// User's checkinResearchMode setting when this check-in was planned (only these rows are randomised).
+  researchMode Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, kind, fireAt])
+  @@index([userId, fireAt])
 }
 
 model ReminderLog {

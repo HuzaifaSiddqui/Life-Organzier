@@ -14,6 +14,7 @@ import { preferenceRouter } from "./modules/preferences/preferenceRoutes.js";
 import { reminderRouter } from "./modules/reminders/reminderRoutes.js";
 import { routineRouter } from "./modules/routines/routineRoutes.js";
 import { schedulingRouter } from "./modules/scheduling/schedulingRoutes.js";
+import { checkinRouter } from "./modules/checkins/checkinRoutes.js";
 import { categoryRouter, settingsRouter, tagRouter } from "./modules/settings/settingsRoutes.js";
 import { syncRouter } from "./modules/sync/syncRoutes.js";
 import { recomputeDueAts } from "./modules/tasks/taskService.js";
@@ -48,7 +49,7 @@ export function createApp() {
   app.get("/health", (_req, res) => {
     const models = getModelStatus();
     const available = getAi().available && models.chat !== false;
-    res.json({ ok: true, ai: { enabled: getAi().enabled, available, models } });
+    res.json({ ok: true, ai: { enabled: getAi().enabled, available, models, gemini: getAi().providerStatus("gemini") } });
   });
 
   app.get("/", (_req, res) => {
@@ -65,6 +66,7 @@ export function createApp() {
   app.use("/api/memory", memoryRouter);
   app.use("/api/insights", insightRouter);
   app.use("/api/reminders", reminderRouter);
+  app.use("/api/checkins", checkinRouter);
   app.use("/api/scheduling", schedulingRouter);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/settings", settingsRouter);

@@ -23,9 +23,10 @@ import {
   saveHostIp,
 } from "../services/apiResolver";
 import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen";
+import { CheckinSheet } from "../components/CheckinSheet";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
-import { navigationRef } from "./navigationRef";
+import { flushPendingNavigation, navigationRef } from "./navigationRef";
 
 /** Explicit `fonts` avoids incomplete theme objects that break navigation internals on some setups. */
 const theme: Theme = {
@@ -147,7 +148,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={theme} ref={navigationRef}>
+    <NavigationContainer theme={theme} ref={navigationRef} onReady={flushPendingNavigation}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!firebaseUser ? (
           <Stack.Screen name="Auth" component={AuthStack} />
@@ -165,6 +166,7 @@ export function RootNavigator() {
           <Stack.Screen name="App" component={MainStack} />
         )}
       </Stack.Navigator>
+      {firebaseUser?.emailVerified && !bootstrapping ? <CheckinSheet /> : null}
     </NavigationContainer>
   );
 }

@@ -1,3 +1,4 @@
+import { computeEstimateRatios, suggestDuration } from "./estimateRatio.js";
 import { Prisma, RoutineOccurrenceStatus, TaskStatus } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { dayName, formatClock, localParts, localYmd } from "../../lib/time.js";
@@ -64,7 +65,7 @@ export async function computePatterns(userId: string, tz: string, now = new Date
   const [tasks, occurrences, moods, opens] = await Promise.all([
     prisma.task.findMany({
       where: { userId, createdAt: { gte: since }, parentTaskId: null },
-      select: { status: true, category: true, dueAt: true, completedAt: true, createdAt: true, deletedAt: true },
+      select: { id: true, completedVia: true, status: true, category: true, dueAt: true, completedAt: true, createdAt: true, deletedAt: true, durationMinutes: true, startedAt: true, scheduledStart: true },
     }),
     prisma.routineOccurrence.findMany({
       where: { userId, occurrenceDate: { gte: new Date(now.getTime() - 30 * 86400000), lte: now } },
@@ -258,6 +259,22 @@ export async function computePatterns(userId: string, tz: string, now = new Date
     });
   }
 
+  // 8. Estimate accuracy per category: median of actual ÷ estimated duration (FR-RN-004 §6)
+  const partial = await prisma.checkinLog.findMany({
+    where: { userId, response: { startsWith: "PARTIAL_" }, taskId: { in: completed.map((t) => t.id) } },
+    select: { taskId: true },
+  });
+  const partialIds = new Set(partial.map((p) => p.taskId));
+  for (const r of computeEstimateRatios(completed.map((t) => ({ ...t, tz, hadPartialProgress: partialIds.has(t.id) })))) {
+    patterns.push({
+      key: `estimate_ratio:${r.category}`,
+      description: `${r.category} tasks take about ${r.ratio}× your estimate (${r.n} tasks)`,
+      value: { category: r.category, ratio: r.ratio },
+      confidence: round2(sampleConfidence(r.n, 10)),
+      sampleSize: r.n,
+    });
+  }
+
   return patterns;
 }
 
@@ -294,4 +311,16 @@ export function peakWindowsFrom(patterns: Pattern[]): { windows: PeakWindow[]; l
   const windows = (p?.value.windows as PeakWindow[] | undefined) ?? [];
   if (p && windows.length && p.confidence >= RECOMMEND_THRESHOLD) return { windows, learned: true, confidence: p.confidence };
   return { windows: [{ start: 9, end: 12 }, { start: 15, end: 17 }], learned: false, confidence: p?.confidence ?? 0 };
+}
+
+export type EstimateSuggestion = { category: string; original: number; suggested: number; ratio: number; n: number };
+
+/** Adjusted duration for a category with a reliable ratio, or null (never applied automatically). */
+export async function getEstimateSuggestion(userId: string, tz: string, category: string | null, minutes: number): Promise<EstimateSuggestion | null> {
+  if (!category || !(minutes > 0)) return null;
+  const p = (await getPatterns(userId, tz)).find((x) => x.key === `estimate_ratio:${category}`);
+  const ratio = Number(p?.value.ratio);
+  if (!p || !(ratio > 0)) return null;
+  const suggested = suggestDuration(minutes, ratio);
+  return suggested ? { category, original: minutes, suggested, ratio, n: p.sampleSize } : null;
 }

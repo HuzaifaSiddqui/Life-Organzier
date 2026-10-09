@@ -893,6 +893,124 @@ This document specifies all functional requirements for Life Organizer. It descr
 
 ---
 
+### 5.4 FR-RN-004: Start & Completion Check-ins
+
+**Description:** After a task's planned start time, the system asks whether the user has started, using a short motivating message that includes a concrete first step. After the expected duration, it asks whether the task is done. Responses feed progress tracking, pattern learning and time-estimate correction.
+
+**Key Requirements:**
+
+1. **Eligibility**
+   - Tasks of type FLEXIBLE or DURATION with a `scheduledStart` (start check-in) and `durationMinutes` (completion check-in)
+   - DEADLINE tasks qualify when they have both `durationMinutes` and `scheduledStart` (the scheduled start is the work block; the deadline is separate)
+   - Not for FIXED events, DEADLINE tasks without a duration or scheduled start, routines, completed, deleted or archived tasks
+   - Disabled when the user turns check-ins off or notification frequency is "None"
+   - A deadline that has already passed uses the overdue flow (FR-TM-008), never a check-in
+
+2. **Start Check-in**
+   - Fires at `scheduledStart` + 5 min if the task is not started or completed
+   - Buttons: "Started" / "Not today"
+     - Started → status IN_PROGRESS, `startedAt` recorded, completion check-in scheduled
+     - Not today → opens the app with reschedule suggestions (user decides, no auto-reschedule)
+   - No response → one follow-up 25 min after the first, then stop
+
+3. **Completion Check-in**
+   - Fires at (`startedAt`, or `scheduledStart` if never confirmed) + duration + max(10 min, 10% of duration)
+   - Softer wording when the start was never confirmed ("How did it go?")
+   - Buttons: "Done" / "+30 min" / "Update…"
+     - Done → COMPLETED, `completedAt` recorded
+     - +30 min → one more completion check-in after 30 minutes
+     - Update… → in-app sheet: Partly done (25/50/75%, updates progress per FR-TM-007, offers to schedule the rest), Need more time (+15/+60), Didn't get to it (reschedule suggestions)
+   - If extra time would pass the deadline, say so: "That would take you past Friday 3 PM. Plan the rest?"
+   - No response → stop; do not assume done or not done
+
+4. **Limits & Timing Rules**
+   - Max 3 check-ins per task, max 5 check-ins per user per day. When the daily cap is exceeded, start follow-ups are dropped first, then the soonest check-ins are kept
+   - User-requested extra time (+15 / +30 / +60) is exempt from both caps, limited to 2 per scheduled slot; a refused request shows the user a short message
+   - If the task is rescheduled to a later start after work began, the completion check-in is calculated from the new `scheduledStart`
+   - Check-in history counts per scheduled slot: after "Not today" or a partial completion, a task rescheduled to a new start gets a fresh set of check-ins for that slot
+   - Short tasks: if the completion check-in would fire within 10 min of the start follow-up (or before it), the follow-up is dropped
+   - Planned check-ins that would fire after the task's deadline are dropped (the overdue flow takes over); user-requested extra time still warns and is allowed
+   - Check-in logs are kept for evaluation when a task is deleted (the task link is cleared); they are removed with the user's account
+   - A check-in that falls in quiet hours or DND is skipped, not moved
+   - Check-in messages are pre-generated; nothing is generated at notification time
+
+5. **Message Content & Tone**
+   - First step from LLM or keyword library; message text from reviewed templates. Written in the background when a task's scheduled start is set or changed
+   - First-step sources in order: Gemini (English and Urdu, when configured), Ollama (English only), a reviewed keyword library, otherwise a template without a first step. Model output is strictly validated (2–8 words, imperative verb in English, no digits unless in the title, no commas/semicolons/emoji, not the title repeated, Urdu in Urdu script). The source used is logged
+   - Only the task title and duration are sent to the model — never the description, notes, mood or user details
+   - Includes the smallest concrete first step for that task where possible
+   - Check-in style setting: Funny (default) / Serious / Gentle. The style only changes when the user changes it, in Settings or by asking in chat
+   - Exception, per message only: if the user's latest mood in the last 24 h is stressed, anxious, overwhelmed or sad, that check-in uses Gentle wording, no jokes, and offers to split the task. The saved setting does not change
+   - Humour is about the task, never the user. No guilt, shaming or comparisons
+   - Body ≤ 120 characters, in the user's language (English or Urdu)
+   - On completion: brief positive reinforcement. On "Didn't get to it": neutral, no guilt
+
+6. **Changing the Style**
+   - Settings → Notifications: "Check-in style" (Funny / Serious / Gentle) and a check-ins on/off switch
+   - Chat: the assistant recognises requests like "be more serious with reminders", "change your tone to gentle", "stop joking", "serious ho jao", "mazaq band karo", updates the setting, and confirms with chips for the other styles. "Turn off check-ins" disables them
+   - One-time hint the first time the user sees a check-in in the app: "Prefer a different style? Change it in Settings or just tell me."
+
+7. **Learning & Evaluation**
+   - Every check-in is logged: kind, tone, whether it had a first step, message source (LLM/template), mood, response, response time
+   - Estimate-accuracy ratio per category (`estimate_ratio:<category>` pattern): the median of actual ÷ estimated duration over tasks with `startedAt`, `completedAt` and a duration, excluding tasks with partial-progress answers, tasks rescheduled after starting, work that ends on a different local day than it started, and ratios below 0.2 or above 4; minimum 5 samples
+   - When a ratio is reliable, suggest an adjusted duration on new tasks in that category ("Your Academic tasks usually take ~1.4× your estimate. Use 2h 45m?") on the task form and the chat draft card, only when the adjusted duration (rounded to 15 min) differs by at least 15 min; one tap to accept, never automatic; shown and accepted events are logged
+   - Optional research mode randomly includes or omits the first step (50/50) for comparison
+   - Evaluation report (`backend/scripts/checkin-report.ts`) and method: `docs/checkins-evaluation-method.md`
+
+**Acceptance Criteria:**
+```
+✓ Flexible task "Physics assignment", scheduledStart 4:00 PM, duration 2h
+  → 4:05 PM: start check-in with a concrete first step, buttons "Started" / "Not today" only
+  → User taps "Started" at 4:07 PM → IN_PROGRESS, startedAt = 4:07 PM
+  → ~6:19 PM: completion check-in (4:07 + 2h + 12 min)
+  Verified by: backend/tests/checkins.test.ts — "check-ins: flexible task gets start at +5 and completion after duration + buffer"; backend/tests/checkinService.test.ts — "respond: allowed answers per kind; remaining time after a partial" (only Started / Not today), "respond: Started → IN_PROGRESS + startedAt + the completion check-in to schedule", "respond: a STARTED delivered late uses the tap time for startedAt and the completion check-in".
+  Manual, device test: the notification shows exactly the two buttons and the first step appears in the notification text.
+
+✓ No response to start check-in at 4:05 PM
+  → 4:30 PM: one follow-up
+  → No further start check-ins
+  Verified by: backend/tests/checkins.test.ts — "check-ins: one follow-up when the start goes unanswered, then no more start check-ins".
+
+✓ scheduledStart 10:30 PM, quiet hours 10 PM–8 AM
+  → No start check-in
+  Verified by: backend/tests/checkins.test.ts — "check-ins: a start inside quiet hours or DND is skipped, not moved".
+
+✓ New user, no style chosen
+  → Check-ins use Funny tone
+  Verified by: backend/tests/checkins.test.ts — "check-ins: tone is the saved style (Funny by default) except Gentle after a hard mood".
+
+✓ User says "be more serious with reminders" in chat
+  → Style = Serious, assistant confirms, next check-ins are serious
+  Verified by: backend/tests/checkinService.test.ts — "style: English and Roman Urdu requests map to the right style", "style: the NLU routes style requests by rules, before task creation", "chat: style requests update the setting and confirm with chips for the other styles"; the next check-ins use the saved style (backend/tests/checkins.test.ts — "tone is the saved style …").
+
+✓ Style Funny, user logged "overwhelmed" 3 hours ago
+  → That check-in is Gentle and offers to split the task
+  → Saved style stays Funny
+  Verified by: backend/tests/checkinService.test.ts — "plan: a hard mood in the last 24 h makes the check-in Gentle with a split offer; saved style stays Funny"; backend/tests/checkinCopy.test.ts — "templates: Gentle start/follow-up offers to split the task and never jokes".
+
+✓ Completion check-in → "Update…" → Partly done 50%
+  → Progress 50%, offer to schedule the remaining ~1h
+  Verified by: backend/tests/checkinService.test.ts — "respond: Done, partly done, +30 within and past the deadline, refused after two extras" (progress 50%, remaining time), "respond: allowed answers per kind; remaining time after a partial".
+  Manual, device test: the Update… sheet (25/50/75%, "Plan the rest" button) in the app.
+
+✓ "+30 min" would pass the deadline
+  → Message warns about the deadline and offers to plan the rest
+  Verified by: backend/tests/checkins.test.ts — "check-ins: +30 min past the deadline is flagged"; backend/tests/checkinService.test.ts — "respond: Done, partly done, +30 within and past the deadline, refused after two extras".
+
+✓ Fixed event "Physics class 10 AM"
+  → No check-ins
+  Verified by: backend/tests/checkins.test.ts — "check-ins: eligibility rules".
+
+✓ AI unavailable when the task is scheduled
+  → Template message used; check-in still fires on time
+```
+  Verified by: backend/tests/checkinCopy.test.ts — "copy: AI unavailable → template messages with the library step; check-in still has a message", "first step: a failing provider trips the circuit breaker and the next source is used".
+  Manual, device test: the check-in notification fires on time while the AI is off.
+
+**Tier:** Free
+
+---
+
 ## 6. Document Processing Features
 
 ### 6.1 FR-DP-001: Upload & Process Document
@@ -2399,6 +2517,7 @@ This document specifies all functional requirements for Life Organizer. It descr
 - ✅ Routine prioritization (mandatory/important/normal)
 - ✅ Location-based routines (context switching)
 - ✅ Smart escalating reminders
+- ✅ Start & completion check-ins (FR-RN-004)
 - ✅ OS-level notifications (offline-friendly)
 - ✅ Notification preferences (quiet hours, frequency, method)
 - ✅ Document upload & processing (OCR)
@@ -2873,6 +2992,7 @@ This document specifies all functional requirements for Life Organizer. It descr
 - ✅ WhatsApp reminders (Pro tier)
 - ✅ User preference customization
 - ✅ Quiet hours respect
+- ✅ Start & completion check-ins with first step and user-chosen style
 
 ### Documents & OCR
 - ✅ Upload and OCR text extraction
