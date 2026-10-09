@@ -1,4 +1,4 @@
-import { computeEstimateRatios } from "./estimateRatio.js";
+import { computeEstimateRatios, suggestDuration } from "./estimateRatio.js";
 import { Prisma, RoutineOccurrenceStatus, TaskStatus } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { dayName, formatClock, localParts, localYmd } from "../../lib/time.js";
@@ -311,4 +311,16 @@ export function peakWindowsFrom(patterns: Pattern[]): { windows: PeakWindow[]; l
   const windows = (p?.value.windows as PeakWindow[] | undefined) ?? [];
   if (p && windows.length && p.confidence >= RECOMMEND_THRESHOLD) return { windows, learned: true, confidence: p.confidence };
   return { windows: [{ start: 9, end: 12 }, { start: 15, end: 17 }], learned: false, confidence: p?.confidence ?? 0 };
+}
+
+export type EstimateSuggestion = { category: string; original: number; suggested: number; ratio: number; n: number };
+
+/** Adjusted duration for a category with a reliable ratio, or null (never applied automatically). */
+export async function getEstimateSuggestion(userId: string, tz: string, category: string | null, minutes: number): Promise<EstimateSuggestion | null> {
+  if (!category || !(minutes > 0)) return null;
+  const p = (await getPatterns(userId, tz)).find((x) => x.key === `estimate_ratio:${category}`);
+  const ratio = Number(p?.value.ratio);
+  if (!p || !(ratio > 0)) return null;
+  const suggested = suggestDuration(minutes, ratio);
+  return suggested ? { category, original: minutes, suggested, ratio, n: p.sampleSize } : null;
 }

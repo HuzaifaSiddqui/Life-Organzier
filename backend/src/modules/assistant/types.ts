@@ -25,6 +25,8 @@ export type TaskDraft = {
   overrideCapacity?: boolean;
   overrideConflict?: boolean;
   prereqChecked?: boolean;
+  /** The user took (or declined) the learned-estimate suggestion; don't offer it again for this draft. */
+  estimateHandled?: boolean;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
 };
@@ -71,6 +73,7 @@ export type DialogueState = {
 
 export type ActionPayload =
   | { type: "confirm_pending" }
+  | { type: "accept_estimate"; minutes: number }
   | { type: "cancel_pending" }
   | { type: "complete_task"; taskId: string }
   | { type: "undo_task"; taskId: string }
@@ -106,7 +109,7 @@ export type QuickAction = {
 export type Card =
   | { type: "task"; task: SerializedTask; note?: string; undoable?: boolean }
   | { type: "task_list"; title: string; tasks: SerializedTask[]; emptyText?: string }
-  | { type: "draft"; draft: TaskDraft; clarity: number; missing: string[] }
+  | { type: "draft"; draft: TaskDraft; clarity: number; missing: string[]; estimate?: { original: number; suggested: number; ratio: number; n: number; category: string } }
   | { type: "routine"; routine: Record<string, unknown> }
   | { type: "suggestions"; title: string; items: Suggestion[] }
   | { type: "mood_support"; recommendation: MoodRecommendation }

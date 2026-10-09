@@ -48,6 +48,8 @@ const en = {
   "task.findTime": "Find time for it",
   "task.findingTime": "Looking for a free slot…",
   "task.noSlot": "No free slot before the deadline.",
+  "task.estimateHint": "Your {category} tasks usually take ~{ratio}× your estimate. Use {time}?",
+  "task.estimateUse": "Use {time}",
   "task.clearPlannedStart": "Clear planned start",
 
   "crisis.title": "You're not alone",
@@ -127,6 +129,8 @@ const ur: Record<StringKey, string> = {
   "task.findTime": "وقت تلاش کریں",
   "task.findingTime": "خالی وقت تلاش ہو رہا ہے…",
   "task.noSlot": "آخری تاریخ سے پہلے کوئی خالی وقت نہیں۔",
+  "task.estimateHint": "آپ کے {category} کام عموماً آپ کے اندازے سے ~{ratio}× زیادہ لیتے ہیں۔ {time} رکھیں؟",
+  "task.estimateUse": "{time} رکھیں",
   "task.clearPlannedStart": "طے شدہ آغاز ہٹائیں",
   "crisis.title": "آپ اکیلے نہیں ہیں",
   "crisis.call": "{label} کو کال کریں · {phone}",

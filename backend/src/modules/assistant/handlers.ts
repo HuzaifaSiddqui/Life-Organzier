@@ -598,6 +598,14 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       }
       return { content: "Okay.", intent: "noop" };
     }
+    case "accept_estimate": {
+      const p = turn.state.pending;
+      if (!p || (p.kind !== "task_review" && p.kind !== "task_draft")) return { content: "That suggestion has expired.", intent: "noop" };
+      const minutes = Math.round(Number(payload.minutes));
+      if (!(minutes >= 15 && minutes <= 1440)) return { content: "That duration doesn't look right.", intent: "noop" };
+      logEvent(turn.user.id, "ESTIMATE_SUGGESTION_ACCEPTED", null, { category: p.draft.category, original: p.draft.durationMinutes, suggested: minutes, surface: "CHAT" });
+      return proceedWithDraft(turn, { ...p.draft, durationMinutes: minutes, estimateHandled: true }, p.source, { clarified: p.kind === "task_review" });
+    }
     case "cancel_pending":
       turn.state.pending = null;
       return { content: "Okay, cancelled.", intent: "cancel" };

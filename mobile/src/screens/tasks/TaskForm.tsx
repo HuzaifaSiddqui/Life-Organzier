@@ -5,9 +5,10 @@ import { Button, Card, Chip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getTags } from "../../services/settingsApi";
-import { apiPost } from "../../services/api";
+import { apiGet, apiPost } from "../../services/api";
 import { suggestForTitle, type TaskInput } from "../../services/tasksApi";
 import { useLocale } from "../../i18n/LocaleProvider";
+import { formatDuration } from "../../utils/format";
 import type { Priority, ReminderMode, Task, TaskStatus, TaskType } from "../../types/models";
 import {
   combineYmdAndTimeStrings,
@@ -167,6 +168,32 @@ export function TaskForm({
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const set = <K extends keyof TaskFormValues>(k: K, value: TaskFormValues[K]) => setV((prev) => ({ ...prev, [k]: value }));
   const { t } = useLocale();
+  const [estimate, setEstimate] = useState<{ category: string; original: number; suggested: number; ratio: number } | null>(null);
+  const shownKeys = useRef(new Set<string>());
+  const acceptedMinutes = useRef<number | null>(null);
+  const logEstimate = (action: "SHOWN" | "ACCEPTED", e: { category: string; original: number; suggested: number }) =>
+    void apiPost("/events/estimate-suggestion", { action, category: e.category, original: e.original, suggested: e.suggested }).catch(() => undefined);
+  // FR-RN-004 §6: offer the learned-estimate duration (one tap, never automatic).
+  useEffect(() => {
+    setEstimate(null);
+    if (!v.category || !v.durationMinutes || v.durationMinutes === acceptedMinutes.current) return;
+    let live = true;
+    apiGet<{ suggestion: { category: string; original: number; suggested: number; ratio: number } | null }>("/events/estimate-suggestion", { params: { category: v.category, minutes: v.durationMinutes } })
+      .then((r) => {
+        if (!live || !r.suggestion) return;
+        setEstimate(r.suggestion);
+        const key = `${r.suggestion.category}:${r.suggestion.original}`;
+        if (!shownKeys.current.has(key)) {
+          shownKeys.current.add(key);
+          logEstimate("SHOWN", r.suggestion);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.category, v.durationMinutes]);
   const [slotBusy, setSlotBusy] = useState(false);
   const [slotNote, setSlotNote] = useState<string | null>(null);
   /** "Find time for it": a free slot that ends before the deadline (existing scheduler); fills the planned start. */
@@ -327,6 +354,22 @@ export function TaskForm({
               ))}
             </View>
           </View>
+          {estimate ? (
+            <View>
+              <Text style={styles.hint}>{t("task.estimateHint", { category: estimate.category, ratio: String(estimate.ratio), time: formatDuration(estimate.suggested) })}</Text>
+              <Button
+                title={t("task.estimateUse", { time: formatDuration(estimate.suggested) })}
+                kind="secondary"
+                size="sm"
+                style={{ alignSelf: "flex-start", marginTop: 6 }}
+                onPress={() => {
+                  logEstimate("ACCEPTED", estimate);
+                  acceptedMinutes.current = estimate.suggested;
+                  set("durationMinutes", estimate.suggested);
+                }}
+              />
+            </View>
+          ) : null}
           {v.durationMinutes ? (
             <View>
               <Text style={ui.label}>{t("task.plannedStart")}</Text>

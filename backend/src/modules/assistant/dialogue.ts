@@ -48,7 +48,7 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
-import { getPatterns } from "../patterns/patternService.js";
+import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
 import {
@@ -480,6 +480,14 @@ function pastDateCheck(turn: Turn, draft: TaskDraft, source: "CHAT" | "VOICE" | 
   return null;
 }
 
+/** Draft card; carries the learned-estimate suggestion (FR-RN-004 §6) when the category has a reliable ratio. */
+async function draftCard(turn: Turn, draft: TaskDraft, clarity: number, missing: string[]): Promise<Card> {
+  const s = draft.estimateHandled || !draft.durationMinutes ? null : await getEstimateSuggestion(turn.user.id, turn.tz, draft.category, draft.durationMinutes).catch(() => null);
+  if (!s) return { type: "draft", draft, clarity, missing };
+  logEvent(turn.user.id, "ESTIMATE_SUGGESTION_SHOWN", null, { category: s.category, original: s.original, suggested: s.suggested, surface: "CHAT" });
+  return { type: "draft", draft, clarity, missing, estimate: s };
+}
+
 /**
  * Validates and enriches a draft through every check required by the FRD, asking at most one
  * question per turn, then creates and auto-schedules the task.
@@ -505,7 +513,7 @@ export async function proceedWithDraft(
         { label: "Add a routine", text: `Add a daily routine: ${draft.title ?? ""}`.trim() },
         { label: "Something else", payload: { type: "cancel_pending" } },
       ],
-      cards: [{ type: "draft", draft, clarity, missing }],
+      cards: [await draftCard(turn, draft, clarity, missing)],
       intent: "clarify_intent",
     };
   }
@@ -518,7 +526,7 @@ export async function proceedWithDraft(
     const priorityHint = !draft.priorityExplicit && missing.includes("date") && missing.includes("duration") ? " How urgent is it?" : "";
     return {
       content: `${clarificationQuestion(draft, missing)}${priorityHint}`,
-      cards: [{ type: "draft", draft, clarity, missing }],
+      cards: [await draftCard(turn, draft, clarity, missing)],
       actions: [
         ...slotChips(missing),
         ...(priorityHint ? (["Urgent", "High", "Low"] as const).map((p) => ({ label: p, text: `${p} priority` })) : []),
@@ -566,7 +574,7 @@ export async function proceedWithDraft(
     turn.state.pending = { kind: "task_review", draft, source, clarity: confidence };
     return {
       content: `Here's what I understood: ${draftSummary(draft, turn.todayYmd)}. Shall I add it?`,
-      cards: [{ type: "draft", draft, clarity: confidence, missing: [] }],
+      cards: [await draftCard(turn, draft, confidence, [])],
       actions: [
         { label: "Add it", payload: { type: "confirm_pending" }, style: "primary" },
         { label: "Edit details", payload: { type: "navigate", screen: "AddTask" } },

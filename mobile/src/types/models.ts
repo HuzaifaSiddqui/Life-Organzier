@@ -168,7 +168,7 @@ export type DayPlan = {
 export type AssistantCard =
   | { type: "task"; task: Task; note?: string; undoable?: boolean }
   | { type: "task_list"; title: string; tasks: Task[]; emptyText?: string }
-  | { type: "draft"; draft: TaskDraft; clarity: number; missing: string[] }
+  | { type: "draft"; draft: TaskDraft; clarity: number; missing: string[]; estimate?: { original: number; suggested: number; ratio: number; n: number; category: string } }
   | { type: "routine"; routine: Routine }
   | { type: "suggestions"; title: string; items: Suggestion[] }
   | { type: "mood_support"; recommendation: MoodRecommendation }
