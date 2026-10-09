@@ -3,6 +3,7 @@ import { auth } from "../lib/firebase";
 import type { Task } from "../types/models";
 import axios from "axios";
 import { api, isNetworkError } from "./api";
+import { decideAfterFailure, type DeliveryFailure } from "../utils/answerQueue";
 import { addPrePullHook, readTasks, writeTasks } from "./syncEngine";
 
 /**
@@ -53,13 +54,28 @@ export type RespondResult = {
 };
 
 /** `before`: the task's fields before the optimistic patch, restored if the server rejects the answer. */
-type QueuedAnswer = { checkinId: string; taskId: string | null; response: CheckinResponse; respondedAt: string; before?: Partial<Task> | null };
+type QueuedAnswer = {
+  checkinId: string;
+  taskId: string | null;
+  response: CheckinResponse;
+  respondedAt: string;
+  before?: Partial<Task> | null;
+  /** Failed deliveries that counted (timeouts, 5xx) and when delivery was first tried; see utils/answerQueue. */
+  attempts?: number;
+  firstTriedAt?: string;
+};
 
-/** Retry on network errors, timeouts and 5xx; only a 4xx (bad/unknown check-in) is final. */
+/** How a failed delivery should be treated: 4xx is final; everything else is retried (with limits). */
+export function classifyFailure(error: unknown): DeliveryFailure {
+  if (axios.isAxiosError(error)) {
+    if (!error.response) return error.code === "ECONNABORTED" || error.code === "ETIMEDOUT" ? "timeout" : "offline";
+    return error.response.status >= 500 ? "server" : "client";
+  }
+  return "server";
+}
+
 export function isRetryable(error: unknown): boolean {
-  if (isNetworkError(error)) return true;
-  if (axios.isAxiosError(error)) return (error.response?.status ?? 0) >= 500;
-  return true;
+  return classifyFailure(error) !== "client";
 }
 
 const queueKey = () => `life-organizer:checkin-answers:v1:${auth.currentUser?.uid ?? "guest"}`;
@@ -127,7 +143,7 @@ async function send(a: QueuedAnswer): Promise<RespondResult> {
  * null after queueing; the answer is sent with its tap time when the connection returns.
  */
 export async function answerCheckin(checkinId: string, taskId: string | null, response: CheckinResponse, tappedAt = new Date()): Promise<RespondResult | null> {
-  const answer: QueuedAnswer = { checkinId, taskId, response, respondedAt: tappedAt.toISOString() };
+  const answer: QueuedAnswer = { checkinId, taskId, response, respondedAt: tappedAt.toISOString(), firstTriedAt: new Date().toISOString() };
   answer.before = await patchLocalTask(taskId, response, answer.respondedAt);
   try {
     const result = await send(answer);
@@ -144,22 +160,35 @@ export async function answerCheckin(checkinId: string, taskId: string | null, re
 }
 
 let flushing = false;
-/** Sends answers queued offline. Next check-ins they return are scheduled by the reminder re-sync. */
+/**
+ * Sends queued answers. Offline stops the pass (the rest would fail too); timeouts and 5xx count as
+ * attempts and the pass continues; an answer that exceeds the attempt or age limit, or is rejected
+ * with a 4xx, is dropped and its optimistic change reverted, so it can never block the queue.
+ */
 export async function flushCheckinAnswers(): Promise<number> {
   if (flushing || !auth.currentUser) return 0;
   flushing = true;
   let sent = 0;
   try {
     for (const a of await readQueue()) {
+      let done = false;
       try {
         const r = await send(a);
         await patchLocalTask(a.taskId, a.response, a.respondedAt, r.task);
+        sent += 1;
+        done = true;
       } catch (error) {
-        if (isRetryable(error)) break; // offline, timeout or server error: keep this and the rest
-        await revertLocalTask(a.taskId, a.before); // 4xx is final: drop it and undo the local change
+        const decision = decideAfterFailure(a, classifyFailure(error), new Date());
+        if (decision.action === "keep") {
+          await writeQueue((await readQueue()).map((x) => (x.checkinId === a.checkinId ? decision.answer : x)));
+          if (decision.stopQueue) break;
+          continue;
+        }
+        if (decision.reason !== "client_error") console.warn(`Dropping check-in answer ${a.checkinId} (${decision.reason})`);
+        await revertLocalTask(a.taskId, a.before);
+        done = true;
       }
-      await writeQueue((await readQueue()).filter((x) => x.checkinId !== a.checkinId));
-      sent += 1;
+      if (done) await writeQueue((await readQueue()).filter((x) => x.checkinId !== a.checkinId));
     }
   } finally {
     flushing = false;
