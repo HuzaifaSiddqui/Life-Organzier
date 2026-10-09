@@ -3,6 +3,7 @@
  *
  *   cd backend && npx tsx scripts/model-benchmark.ts [model ...]
  *   default models: qwen2.5:7b qwen3.5:9b qwen3.5:4b
+ *   cd backend && npx tsx scripts/model-benchmark.ts --deterministic   # only the code-based date/time/duration part
  *
  * Uses the exact prompts and options the app sends (nluMessages / NLU_LLM_OPTIONS,
  * stepPrompt / FIRST_STEP_OPTIONS) through OllamaProvider (think:false, OLLAMA_NUM_CTX),
@@ -22,7 +23,9 @@ import type { Lang } from "../src/modules/checkins/templates.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const BASE = (process.env.OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\/$/, "");
-const MODELS = process.argv.slice(2).length ? process.argv.slice(2) : ["qwen2.5:7b", "qwen3.5:9b", "qwen3.5:4b"];
+const args = process.argv.slice(2);
+const DETERMINISTIC_ONLY = args.includes("--deterministic");
+const MODELS = args.filter((a) => !a.startsWith("--")).length ? args.filter((a) => !a.startsWith("--")) : ["qwen2.5:7b", "qwen3.5:9b", "qwen3.5:4b"];
 
 type Msg = { id: string; lang: string; text: string; intent: string; alsoOk?: string[]; title?: string; titleAlt?: string[]; date?: string; time?: string; duration?: number };
 type Step = { id: string; title: string; durationMinutes: number };
@@ -139,7 +142,35 @@ function deterministicFields() {
   return out;
 }
 
+/** Scores recorded on 2026-10-09 before Roman Urdu dates and times were added (entities.ts). */
+const BEFORE_ROMAN_URDU = { date: [8, 11], time: [3, 4], duration: [4, 4] } as const;
+
+function deterministicSection(): string[] {
+  const det = deterministicFields();
+  const lines: string[] = ["## Deterministic fields (same for every model)", ""];
+  lines.push("Dates, times and durations are extracted by code (`assistant/entities.ts`), never by the LLM, so they are measured once:", "");
+  lines.push("| Field | Before Roman Urdu support | After | Still missed |", "|---|---|---|---|");
+  for (const field of ["date", "time", "duration"] as const) {
+    const xs = det.filter((d) => d.field === field);
+    const ok = xs.filter((d) => d.ok).length;
+    const [bn, bd] = BEFORE_ROMAN_URDU[field];
+    const missed = xs.filter((d) => !d.ok).map((d) => `${d.id} (expected ${d.expected}, got ${d.got || "none"})`).join(", ") || "—";
+    lines.push(`| ${field} | ${pct(bn, bd)} (${bn}/${bd}) | ${pct(ok, xs.length)} (${ok}/${xs.length}) | ${missed} |`);
+  }
+  return lines;
+}
+
 async function main() {
+  if (DETERMINISTIC_ONLY) {
+    // Replace only the deterministic section of the existing report; no model is called.
+    const file = join(root, "../docs/model-benchmark.md");
+    const doc = readFileSync(file, "utf8");
+    const section = deterministicSection().join("\n");
+    const next = /## Deterministic fields[^\n]*\n[\s\S]*?(?=\n## )/.test(doc) ? doc.replace(/## Deterministic fields[^\n]*\n[\s\S]*?(?=\n## )/, `${section}\n`) : `${doc}\n${section}\n`;
+    writeFileSync(file, next);
+    console.log(section);
+    return;
+  }
   const installed = new Set(((await ollama("/api/tags")).models ?? []).map((m: { name: string }) => m.name));
   const results: Array<{ model: string; rows: Row[]; peakBytes: number; peakVram: number }> = [];
   for (const model of MODELS) {
@@ -164,7 +195,6 @@ async function main() {
   const csvPath = join(resultsDir, `model-benchmark-${stamp}.csv`);
   writeFileSync(csvPath, `${lines.join("\n")}\n`);
 
-  const det = deterministicFields();
   const md: string[] = [];
   md.push("# Local model benchmark", "");
   md.push(`Run: ${new Date().toISOString()} · Ollama ${(await ollama("/api/version")).version} · think:false · num_ctx ${process.env.OLLAMA_NUM_CTX ?? 4096} · one run per item, warm model (load time excluded).`, "");
@@ -183,12 +213,7 @@ async function main() {
       `| ${r.model} | ${pct(n.filter((x) => x.correct.includes("intent=true")).length, n.length)} | ${pct(titled.filter((x) => x.correct.includes("title=true")).length, titled.length)} | ${pct(r.rows.filter((x) => x.jsonValid).length, r.rows.length)} | ${pct(fl("en").filter((x) => x.correct === "valid=true").length, fl("en").length)} | ${pct(fl("ur").filter((x) => x.correct === "valid=true").length, fl("ur").length)} | ${median(ms(n))} / ${p90(ms(n))} ms | ${median(ms(f))} / ${p90(ms(f))} ms | ${(r.peakBytes / 1e9).toFixed(1)} GB (${(r.peakVram / 1e9).toFixed(1)} GB) | ${r.rows.filter((x) => x.error === "timeout").length} |`,
     );
   }
-  md.push("", "## Deterministic fields (same for every model)", "");
-  md.push("Dates, times and durations are extracted by code (`assistant/entities.ts`), never by the LLM, so they are measured once:", "");
-  for (const field of ["date", "time", "duration"]) {
-    const xs = det.filter((d) => d.field === field);
-    md.push(`- **${field}:** ${pct(xs.filter((d) => d.ok).length, xs.length)} (${xs.filter((d) => d.ok).length}/${xs.length})${xs.some((d) => !d.ok) ? ` — missed: ${xs.filter((d) => !d.ok).map((d) => `${d.id} (expected ${d.expected}, got ${d.got || "none"})`).join(", ")}` : ""}`);
-  }
+  md.push("", ...deterministicSection());
   md.push("", "## Intent errors", "");
   md.push("| Model | Message | Expected | Got |", "|---|---|---|---|");
   for (const r of results) for (const x of r.rows.filter((y) => y.type === "nlu" && !y.correct.includes("intent=true"))) md.push(`| ${r.model} | ${x.input} | ${x.expected.split(" | ")[0]} | ${x.got.split(" | ")[0] || (x.error ? `error: ${x.error}` : "invalid JSON")} |`);

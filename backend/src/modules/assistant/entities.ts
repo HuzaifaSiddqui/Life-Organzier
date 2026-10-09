@@ -48,6 +48,88 @@ const WEEKDAY_NAMES: Record<string, number> = {
   thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6, sat: 6,
 };
 const WEEKDAY_RE = "(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tues?|wed|thu(?:rs?)?|fri|sat)";
+/* ---- Roman Urdu (Urdu typed in Latin script): days, parts of the day and clock times -------------- */
+
+/** Weekday words; Saturday is "hafta" (guarded below, since "hafta/hafte" also means "week"). */
+const UR_WEEKDAYS: Array<{ re: string; day: number }> = [
+  { re: "(?:a?i|e)tt?waa?r", day: 0 },
+  { re: "peer(?!\\s+(?:review|pressure|group|feedback|mentor\\w*|tutor\\w*|learning))|pir|somwaa?r|somvaa?r|sombar", day: 1 },
+  { re: "mangal(?:waa?r|vaa?r)?", day: 2 },
+  { re: "budh(?:waa?r|vaa?r)?", day: 3 },
+  { re: "jum[ea]ra{1,2}t", day: 4 },
+  { re: "jumm?(?:a|e|ey)h?", day: 5 },
+  { re: "haftah?|hafte|haftay", day: 6 },
+];
+const UR_WEEKDAY_RE = `(${UR_WEEKDAYS.map((w) => w.re).join("|")})`;
+const UR_WEEKDAY_TESTS = UR_WEEKDAYS.map((w) => ({ re: new RegExp(`^(?:${w.re})$`, "i"), day: w.day }));
+const UR_PART_RE = "subah|sawere|dopahar|dupahar|shaam|raat";
+/** Trailing particle that belongs to a date: "kal ko", "Friday tak", "kal pe", "jumme se pehle". */
+const UR_FOLLOW = "(?:\\s+(?:ko|tak|pe|par|se\\s+pehle|se\\s+pahle))?";
+const UR_HOUR_WORDS: Record<string, number> = {
+  ek: 1, do: 2, teen: 3, char: 4, chaar: 4, paanch: 5, panch: 5, chhe: 6, che: 6, chhay: 6, chay: 6,
+  saat: 7, aath: 8, ath: 8, nau: 9, das: 10, gyarah: 11, gyara: 11, giyarah: 11, barah: 12, baarah: 12, bara: 12,
+};
+const UR_HOUR_RE = `\\d{1,2}|${Object.keys(UR_HOUR_WORDS).join("|")}`;
+
+function urduPart(word: string | undefined): "subah" | "dopahar" | "shaam" | "raat" | null {
+  const w = word?.toLowerCase();
+  if (!w) return null;
+  return w === "sawere" ? "subah" : w === "dupahar" ? "dopahar" : (w as "subah" | "dopahar" | "shaam" | "raat");
+}
+
+/**
+ * Hour (0–23) for a Roman Urdu clock reading. "subah/shaam/raat" decide AM/PM; without one the
+ * existing default applies (1–7 → PM, 8–11 → AM, 12 → noon). "raat" is PM from 6, midnight at 12, AM after.
+ */
+function urduHour(h: number, part: ReturnType<typeof urduPart>): number | null {
+  if (h >= 13 && h <= 23) return h;
+  if (h < 1 || h > 12) return null;
+  switch (part) {
+    case "subah":
+      return h;
+    case "shaam":
+      return h === 12 ? 12 : h + 12;
+    case "raat":
+      return h === 12 ? 0 : h >= 6 ? h + 12 : h;
+    default: // dopahar and no part of day: 12 noon, 1–7 PM, 8–11 AM
+      return h === 12 ? 12 : h >= 8 ? h : h + 12;
+  }
+}
+
+/** "9 baje", "subah 9 baje", "shaam 5:30 baje", "saarhe teen baje", "sawa do baje", "pone char baje", "dhai baje". */
+function extractUrduClock(cur: Cursor): string | null {
+  const before = `(?:(${UR_PART_RE})\\s+(?:(?:ke|ko|mein|me)\\s+)?)?`;
+  const after = `(?:\\s+(${UR_PART_RE})\\b)?`;
+  const hour = `(${UR_HOUR_RE})`;
+  const num = (w: string) => UR_HOUR_WORDS[w.toLowerCase()] ?? Number(w);
+
+  // saarhe/sawa/pone X: X:30, X:15, (X-1):45
+  let m = cur.take(new RegExp(`\\b${before}(saa?rhe|saa?de|sadhe|sawa|sava|pone|paune)\\s+${hour}\\s*(?:baje|bje|tak|pe|par)\\b${after}`, "i"));
+  if (m) {
+    const base = urduHour(num(m[3]), urduPart(m[1] ?? m[4]));
+    if (base !== null) {
+      const kind = m[2].toLowerCase();
+      const total = base * 60 + (/^sa(?:a?rhe|a?de|dhe)$/.test(kind) ? 30 : /^sa(?:wa|va)$/.test(kind) ? 15 : -15);
+      const t = (total + 1440) % 1440;
+      return formatClock(Math.floor(t / 60), t % 60);
+    }
+  }
+  // dhai baje (2:30), dedh/derh baje (1:30)
+  m = cur.take(new RegExp(`\\b${before}(dhai|dhaai|dedh|derh)\\s+(?:baje|bje)\\b${after}`, "i"));
+  if (m) {
+    const h = urduHour(/^dha/i.test(m[2]) ? 2 : 1, urduPart(m[1] ?? m[3]));
+    if (h !== null) return formatClock(h, 30);
+  }
+  // X baje, X:MM baje
+  m = cur.take(new RegExp(`\\b${before}${hour}(?::(\\d{2}))?\\s*(?:baje|bje)\\b${after}`, "i"));
+  if (m) {
+    const h = urduHour(num(m[2]), urduPart(m[1] ?? m[4]));
+    const min = m[3] ? Number(m[3]) : 0;
+    if (h !== null && min < 60) return formatClock(h, min);
+  }
+  return null;
+}
+
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const MONTH_RE = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
 const NUMBER_WORDS: Record<string, number> = {
@@ -220,6 +302,34 @@ function extractDate(cur: Cursor, todayYmd: string, now: Date, tz: string): { da
     if (ymd) return { date: mk(ymd, m[0]), time: null };
   }
 
+  // Roman Urdu: "aaj", "kal" (tomorrow), "parson" (day after tomorrow), "agle hafte" (next week), "is hafte"
+  m = cur.take(new RegExp(`\\bparson${UR_FOLLOW}\\b`, "i"));
+  if (m) return { date: mk(addDaysYmd(todayYmd, 2), m[0]), time: null };
+  m = cur.take(new RegExp(`\\baaj${UR_FOLLOW}\\b`, "i"));
+  if (m) return { date: mk(todayYmd, m[0]), time: null };
+  m = cur.take(new RegExp(`\\bkal${UR_FOLLOW}\\b`, "i")); // "kal" can mean yesterday too; tomorrow is the default
+  if (m) return { date: mk(addDaysYmd(todayYmd, 1), m[0]), time: null };
+  m = cur.take(new RegExp(`\\b(?:(agla|agle|agli)\\s+(?:hafta|hafte|haftay|week)|(is)\\s+(?:hafta|hafte|haftay))${UR_FOLLOW}\\b`, "i"));
+  if (m) {
+    const ymd = m[1] ? nextWeekday(todayYmd, 1, false) : nextWeekday(todayYmd, 5, true);
+    return { date: mk(ymd, m[0].trim(), true), time: null };
+  }
+  // Roman Urdu weekdays: "peer", "agle jumme ko", "is itwar", "mangal tak". "hafta/hafte" is Saturday unless
+  // it is part of "har hafte" (every week), "ek hafte" (one week)…
+  m = cur.take(
+    new RegExp(
+      `\\b(?:(agla|agle|agli|is|aane\\s+wala|aane\\s+wale|aane\\s+wali)\\s+)?(?<!\\b(?:a|my|the|your|his|her|our|their|har|pichla|pichle|poore|puray|ek|do|teen|char|chaar)\\s)${UR_WEEKDAY_RE}${UR_FOLLOW}\\b`,
+      "i",
+    ),
+  );
+  if (m) {
+    const target = UR_WEEKDAY_TESTS.find((w) => w.re.test(m![2]))?.day;
+    if (target !== undefined) {
+      const next = /^(agla|agle|agli|aane)/i.test(m[1] ?? "");
+      return { date: mk(next ? nextWeekday(todayYmd, target, false) : nextWeekday(todayYmd, target, true), m[0].trim()), time: null };
+    }
+  }
+
   // Weekdays: "next Friday", "on Monday", "by Fri", "this Thursday"
   m = cur.take(new RegExp(`\\b(next|this|coming|on|by|before|until|till)?\\s*${WEEKDAY_RE}\\b(?!\\s*(?:and|&|,|\\/)\\s*${WEEKDAY_RE})`, "i"));
   if (m) {
@@ -239,6 +349,8 @@ function formatFromWord(word: string): string | null {
 }
 
 function extractTime(cur: Cursor): { time: string | null; explicit: boolean; rangeMinutes: number | null } {
+  const urdu = extractUrduClock(cur);
+  if (urdu) return { time: urdu, explicit: true, rangeMinutes: null };
   // Ranges: "10-11:30 AM", "2:30 - 4:00 PM", "from 9 to 11 am"
   let m = cur.take(/\b(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to|till|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
   if (m) {
@@ -278,6 +390,12 @@ function extractTime(cur: Cursor): { time: string | null; explicit: boolean; ran
   }
   m = cur.take(/\b(?:in the\s+)?(morning|afternoon|evening|night)\b/i);
   if (m) return { time: formatFromWord(m[1].toLowerCase()), explicit: false, rangeMinutes: null };
+  // Roman Urdu parts of the day without a clock time: subah 9 AM · dopahar 3 PM · shaam 6 PM · raat 9 PM
+  m = cur.take(new RegExp(`\\b(${UR_PART_RE})\\b`, "i"));
+  if (m) {
+    const part = urduPart(m[1]);
+    return { time: formatFromWord(part === "subah" ? "morning" : part === "dopahar" ? "afternoon" : part === "shaam" ? "evening" : "night"), explicit: false, rangeMinutes: null };
+  }
   return { time: null, explicit: false, rangeMinutes: null };
 }
 

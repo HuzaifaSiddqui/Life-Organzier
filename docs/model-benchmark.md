@@ -17,9 +17,11 @@ The LLM intent step is called **directly** (rules bypassed). In the app, rules a
 
 Dates, times and durations are extracted by code (`assistant/entities.ts`), never by the LLM, so they are measured once:
 
-- **date:** 73% (8/11) — missed: m03 (expected 2026-10-06, got none), m10 (expected 2026-10-06, got none), m19 (expected 2026-10-06, got none)
-- **time:** 75% (3/4) — missed: m03 (expected 9 AM, got none)
-- **duration:** 100% (4/4)
+| Field | Before Roman Urdu support | After | Still missed |
+|---|---|---|---|
+| date | 73% (8/11) | 100% (11/11) | — |
+| time | 75% (3/4) | 100% (4/4) | — |
+| duration | 100% (4/4) | 100% (4/4) | — |
 
 ## Intent errors
 
