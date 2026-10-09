@@ -54,23 +54,23 @@ mood, memories or user details are sent — to Gemini or to Ollama.
 
 ### FR-RN-004 acceptance criteria → tests
 
-Full wording and test names are in `docs/FRs/FUNCTIONAL REQUIREMENTS.md` §5.4. Criteria marked *device* also need the manual device test.
+Full wording and exact test names per criterion are in `docs/FRs/FUNCTIONAL REQUIREMENTS.md` §5.4. "Device" = also needs the manual device test (mobile code is typechecked, not unit-tested).
 
-| Criterion | Automated test (file) | Manual |
+| Area | Automated tests | Manual |
 |---|---|---|
-| Start at +5, completion after duration + buffer, Started → IN_PROGRESS | `checkins.test.ts`, `checkinService.test.ts` | device: buttons and first step shown |
-| One follow-up, then stop | `checkins.test.ts` | — |
-| Quiet hours / DND skip | `checkins.test.ts` | — |
-| Funny by default | `checkins.test.ts` | — |
-| Style change in chat | `checkinService.test.ts` | — |
-| Gentle after a hard mood, saved style unchanged | `checkinService.test.ts`, `checkinCopy.test.ts` | — |
-| Update… → partly done | `checkinService.test.ts` | device: Update… sheet |
-| +30 min past the deadline | `checkins.test.ts`, `checkinService.test.ts` | — |
-| Fixed events get none | `checkins.test.ts` | — |
-| AI unavailable → template | `checkinCopy.test.ts` | device: fires on time |
-| Offline answers, poison answers | `answerQueue.test.ts` | device: airplane mode, backend stopped |
-| Estimate ratio and suggestions | `estimateRatio.test.ts` | device: suggestion UI |
-| Evaluation aggregation | `checkinEvaluation.test.ts` | — |
+| Eligibility (type, duration, fixed/routine/done, off switch, overdue) | `checkins.test.ts` "eligibility rules" | — |
+| Timing rules (start +5, one follow-up, completion after duration + buffer, quiet hours/DND skip, short tasks, after-deadline drop, per-slot history, rescheduled after start) | `checkins.test.ts` (timing, follow-up, quiet hours, short tasks, deadline, slot history, rescheduled-after-start) | — |
+| Caps: 3 per task, 5 per day, follow-ups dropped first | `checkins.test.ts` "per-task cap…", "daily cap…", "over the daily cap…" | — |
+| Extra check-ins (+15/+30/+60): exempt from caps, max 2 per slot, past-deadline warning, concurrent taps create one | `checkins.test.ts` "user-requested extra time…", "+30 min past the deadline…"; `checkinService.test.ts` "two concurrent +30 answers…" | — |
+| Tone: Funny default, saved style, Gentle after a hard mood without changing the setting, style requests in chat | `checkins.test.ts` "tone is the saved style…"; `checkinService.test.ts` "style: …", "plan: a hard mood…", "chat: style requests…", "choosing a style while check-ins are off…" | — |
+| Copy generation: templates fit 120 chars, validator, Gemini → Ollama → library → none, breaker, AI unavailable, stale copy, privacy of the prompt | `checkinCopy.test.ts` (all), `checkinService.test.ts` "AI breaker…", "AI pacing…", "retry: Gemini…" | — |
+| Research mode: stable 50/50, WITHHELD logged, only research rows compared | `checkinCopy.test.ts` "research mode can omit the first step"; `checkinService.test.ts` "plan: research mode records WITHHELD…"; `checkinEvaluation.test.ts` "research comparison…" | — |
+| Response handling, every path: Started, Done, partial, +30, more time, Didn't, stale, cancelled, late tap, Urdu, atomic claim | `checkinService.test.ts` "respond: …" (allowed answers, Started, Done/partly/+30/refused, tap time clamp, old check-in, cancelled, DONE on cancelled, concurrent, late STARTED, Urdu), "maintenance: unanswered…", "plan: rows are persisted…" | device: Update… sheet |
+| Offline queue and poison answers | `answerQueue.test.ts` (4xx, timeouts/5xx, offline, 10 attempts, 48 h, age from first try) | device: airplane mode, backend stopped |
+| Notification scheduling (local notifications, actions, cold start, stale taps, cancel on re-plan) | server side: `checkinService.test.ts` "plan: rows are persisted with stable ids…" | device: all four device cases |
+| Estimate ratio and suggestions (median, outliers, partial, rescheduled, <5 samples, same-day, by completion, 15-min rounding) | `estimateRatio.test.ts` | device: task form and chat card |
+| Evaluation report (response rates, start rate + Wilson, per-user averages, acceptance dedupe, accuracy grouping, salted ids, CSV has no free text) | `checkinEvaluation.test.ts` | — |
+| Logs survive task deletion; `startedAt` only on first IN_PROGRESS | `checkins.test.ts` (DB-backed) | — |
 
 ## Context handling (four memory layers)
 
@@ -106,7 +106,7 @@ The same engine serves the app chat, voice, and WhatsApp, so memory is shared ac
 | FR-DP-001..004 documents (PDF/DOCX/OCR, cleaning, deadlines/schedules/timetables with confidence thresholds, course info, prerequisite question, grid timetable PDFs, AI action items for other documents with date grounding, re-upload dedupe, CNIC/phone masking) | Implemented — scanned PDFs need to be uploaded as images; only English OCR works offline |
 | FR-MH-001..004 mood (detection + confirmation, check-in, mood→task mapping, stress chunking/postpone, coping memories, crisis safety, Pro conversation) | Implemented |
 | FR-PL-001..002 patterns & recommendations with visible confidence | Implemented |
-| FR-RN-004 start & completion check-ins (planner, templates + first step, respond endpoint, mobile notifications and sheet, estimate-ratio suggestions, evaluation report) | Implemented — device test pending |
+| FR-RN-004 start & completion check-ins (planner, templates + first step, respond endpoint, mobile notifications and sheet, estimate-ratio suggestions, evaluation report) | **COMPLETE** (device test pending) |
 | FR-WA-001..002 WhatsApp (webhook, multi-turn, numbered replies, image OCR, Pro reminders, 24h rule, bulk guard) | Implemented — needs Twilio credentials in `.env` |
 | FR-VF-001..002 voice in/out (confidence < 80 % re-ask, 2 s silence, 2 min cap, TTS with rate/language) | Implemented with on-device STT (not Whisper) |
 | FR-MS-001..004 sync (offline queue, idempotent creates, field-level merge, versions/history 90 days, backoff) | Implemented for tasks only — local store is AsyncStorage, not SQLite; conflicts resolve last-write-wins without UI (see known-limitations.md) |

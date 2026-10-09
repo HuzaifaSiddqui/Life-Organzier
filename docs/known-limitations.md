@@ -92,8 +92,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 - **Estimate ratios need history.** A category gets a ratio after 5 usable tasks (started and completed the same local day, no partial-progress answers, not rescheduled after starting, ratio between 0.2 and 4). Until then no suggestion is shown. "Actual" time is `completedAt − startedAt`, i.e. when the user told the app, so it is biased towards check-in times.
 - **A suggestion shown on the task form is logged once per category and duration per form session**, so reopening the form can log it again; the report dedupes displays per user, category, duration and day.
-- **Evaluation numbers are small-sample and clustered by user**; see `docs/checkins-evaluation-method.md` for what they can and cannot show. Section (d) of the report is descriptive, not causal.
-- **The Roman Urdu held-out set is empty** until a teammate who hasn't read `entities.ts` adds messages (`backend/tests/eval/README.md`); the extractor's Roman Urdu scores on the development set are optimistic.
+- **Estimate ratios are biased by check-in-anchored times.** "Actual" is `completedAt − startedAt`, and both are often the moment the user tapped a check-in, so tasks finished through a check-in drift towards the check-in schedule. The report splits ratios by completion method (check-in vs manual); the in-app pattern uses both.
+- **Wilson intervals assume independent check-ins.** Check-ins cluster by user, so the intervals are too narrow. The report shows distinct users and a per-user average beside every rate; trust those first when few users take part.
+- **Section (d) of the report (estimate accuracy before/after suggestions) is descriptive, not causal** — practice and novelty effects cannot be separated from the suggestion.
+- **Gemini availability changes the first-step source mix and is not randomised.** Comparisons by source (Gemini / Ollama / library) are descriptive; only the research-mode shown-vs-withheld comparison is randomised.
+- **Evaluation numbers are small-sample**; see `docs/checkins-evaluation-method.md`.
+- **The Roman Urdu held-out set must be filled before the report is written** (it is empty now): a teammate who hasn't read `entities.ts` adds messages (`backend/tests/eval/README.md`); the extractor's Roman Urdu scores on the development set are optimistic.
 - **Roman Urdu dates:** "kal" always means tomorrow (never yesterday); "hafta/haftay" is only read as "week" next to "agle/is"; daily-routine phrases like "har roz" are not detected by the rules (the LLM may catch them).
 
 ## Safety
