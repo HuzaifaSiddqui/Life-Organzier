@@ -1,3 +1,4 @@
+import { computeEstimateRatios } from "./estimateRatio.js";
 import { Prisma, RoutineOccurrenceStatus, TaskStatus } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { dayName, formatClock, localParts, localYmd } from "../../lib/time.js";
@@ -64,7 +65,7 @@ export async function computePatterns(userId: string, tz: string, now = new Date
   const [tasks, occurrences, moods, opens] = await Promise.all([
     prisma.task.findMany({
       where: { userId, createdAt: { gte: since }, parentTaskId: null },
-      select: { status: true, category: true, dueAt: true, completedAt: true, createdAt: true, deletedAt: true },
+      select: { id: true, status: true, category: true, dueAt: true, completedAt: true, createdAt: true, deletedAt: true, durationMinutes: true, startedAt: true, scheduledStart: true },
     }),
     prisma.routineOccurrence.findMany({
       where: { userId, occurrenceDate: { gte: new Date(now.getTime() - 30 * 86400000), lte: now } },
@@ -255,6 +256,22 @@ export async function computePatterns(userId: string, tz: string, now = new Date
       value: { categories: preferred },
       confidence: round2(sampleConfidence(Math.min(...preferred.map((p) => p.n)), 10)),
       sampleSize: preferred.reduce((s, p) => s + p.n, 0),
+    });
+  }
+
+  // 8. Estimate accuracy per category: median of actual ÷ estimated duration (FR-RN-004 §6)
+  const partial = await prisma.checkinLog.findMany({
+    where: { userId, response: { startsWith: "PARTIAL_" }, taskId: { in: completed.map((t) => t.id) } },
+    select: { taskId: true },
+  });
+  const partialIds = new Set(partial.map((p) => p.taskId));
+  for (const r of computeEstimateRatios(completed.map((t) => ({ ...t, hadPartialProgress: partialIds.has(t.id) })))) {
+    patterns.push({
+      key: `estimate_ratio:${r.category}`,
+      description: `${r.category} tasks take about ${r.ratio}× your estimate (${r.n} tasks)`,
+      value: { category: r.category, ratio: r.ratio },
+      confidence: round2(sampleConfidence(r.n, 10)),
+      sampleSize: r.n,
     });
   }
 
