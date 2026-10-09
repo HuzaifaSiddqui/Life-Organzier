@@ -23,6 +23,11 @@ Dates, times and durations are extracted by code (`assistant/entities.ts`), neve
 | time | 75% (3/4) | 100% (4/4) | — |
 | duration | 100% (4/4) | 100% (4/4) | — |
 
+### Held-out Roman Urdu (deterministic, not used for tuning)
+
+No held-out messages yet (n=0) — see `backend/tests/eval/README.md`.
+
+
 ## Intent errors
 
 | Model | Message | Expected | Got |

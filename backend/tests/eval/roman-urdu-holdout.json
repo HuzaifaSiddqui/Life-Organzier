@@ -1,0 +1,9 @@
+{
+  "description": "HELD-OUT Roman Urdu set for the deterministic date/time/duration extractor (assistant/entities.ts). Messages must be written by someone who has NOT read entities.ts. Rows with \"example\": true only show the schema and are NOT scored. Dates are relative to 'now'. Absent fields are not scored. date = YYYY-MM-DD in the timezone; time = '5 PM' / '9:30 AM' style; duration = minutes.",
+  "now": "2026-10-05T05:00:00.000Z",
+  "timezone": "Asia/Karachi",
+  "messages": [
+    { "id": "h-example-1", "example": true, "text": "parson shaam 5 baje meeting hai", "date": "2026-10-07", "time": "5 PM" },
+    { "id": "h-example-2", "example": true, "text": "agle hafte peer ko assignment jama karwani hai", "date": "2026-10-12" }
+  ]
+}

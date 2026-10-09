@@ -142,6 +142,31 @@ function deterministicFields() {
   return out;
 }
 
+/** Held-out Roman Urdu messages (tests/eval/roman-urdu-holdout.json): written by someone who hasn't seen entities.ts. */
+function heldOutSection(): string[] {
+  const set = JSON.parse(readFileSync(join(root, "tests/eval/roman-urdu-holdout.json"), "utf8")) as { now: string; timezone: string; messages: Array<Msg & { example?: boolean }> };
+  const msgs = set.messages.filter((m) => !m.example);
+  const lines = ["", "### Held-out Roman Urdu (deterministic, not used for tuning)", ""];
+  if (!msgs.length) return [...lines, "No held-out messages yet (n=0) — see `backend/tests/eval/README.md`.", ""];
+  const now = new Date(set.now);
+  const miss: string[] = [];
+  const score = { date: [0, 0], time: [0, 0], duration: [0, 0] } as Record<string, number[]>;
+  for (const m of msgs) {
+    const e = extractEntities(m.text, { now, tz: set.timezone, contexts: [] });
+    const checks: Array<[string, string | number | undefined, string | number | undefined]> = [["date", m.date, e.date?.ymd], ["time", m.time, e.time ?? undefined], ["duration", m.duration, e.durationMinutes ?? undefined]];
+    for (const [f, want, got] of checks) {
+      if (want === undefined) continue;
+      score[f][1] += 1;
+      if (want === got) score[f][0] += 1;
+      else miss.push(`${m.id} ${f} (expected ${want}, got ${got ?? "none"})`);
+    }
+  }
+  lines.push(`${msgs.length} held-out messages.`, "", "| Field | Accuracy | n |", "|---|---|---|");
+  for (const f of ["date", "time", "duration"]) lines.push(`| ${f} | ${score[f][1] ? pct(score[f][0], score[f][1]) : "–"} | ${score[f][1]} |`);
+  lines.push("", `Missed: ${miss.join("; ") || "—"}`, "");
+  return lines;
+}
+
 /** Scores recorded on 2026-10-09 before Roman Urdu dates and times were added (entities.ts). */
 const BEFORE_ROMAN_URDU = { date: [8, 11], time: [3, 4], duration: [4, 4] } as const;
 
@@ -157,7 +182,7 @@ function deterministicSection(): string[] {
     const missed = xs.filter((d) => !d.ok).map((d) => `${d.id} (expected ${d.expected}, got ${d.got || "none"})`).join(", ") || "—";
     lines.push(`| ${field} | ${pct(bn, bd)} (${bn}/${bd}) | ${pct(ok, xs.length)} (${ok}/${xs.length}) | ${missed} |`);
   }
-  return lines;
+  return [...lines, ...heldOutSection()];
 }
 
 async function main() {
