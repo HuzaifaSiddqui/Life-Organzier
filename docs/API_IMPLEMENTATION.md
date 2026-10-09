@@ -175,6 +175,12 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 
 ---
 
+### Estimate suggestions (FR-RN-004 §7)
+
+- **`GET /api/events/estimate-suggestion?category=Academic&minutes=120`** → `data.suggestion`: `{ category, original, suggested, ratio, n }` or `null` (no reliable ratio for the category, or the rounded-to-15-min adjustment differs by less than 15 min). Never applied automatically.
+- **`POST /api/events/estimate-suggestion`** — body `{ action: "SHOWN" | "ACCEPTED", category, original, suggested, taskId? }` logs `ESTIMATE_SUGGESTION_SHOWN` / `ESTIMATE_SUGGESTION_ACCEPTED` (the chat draft card logs its own server-side; accepting it sends `{ type: "accept_estimate", minutes }` to `POST /api/assistant/message`).
+- Insights lists the `estimate_ratio:<category>` patterns returned by `GET /api/insights`.
+
 ### Check-ins (FR-RN-004)
 
 **`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):

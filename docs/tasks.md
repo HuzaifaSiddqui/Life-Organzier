@@ -16,7 +16,7 @@ known gaps in [known-limitations.md](known-limitations.md). This file tracks del
 | 7. UI redesign | Design system (tokens, primitives, Inter), all screens restyled | Restyled; dark mode and Urdu RTL not yet enabled (see docs/design.md flags) |
 | 8. QA and release | Unit tests + CI, smoke script, security review, demo APK | In progress |
 
-## FR-RN-004 check-ins (in progress)
+## FR-RN-004 check-ins (complete; device test pending)
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -25,13 +25,14 @@ known gaps in [known-limitations.md](known-limitations.md). This file tracks del
 | C | Message templates, LLM/library first step, validator | Done |
 | D | Plan + respond endpoint, Gemini retry/pacing/breaker, maintenance, style intent | Done |
 | E | Mobile notifications, Update… sheet, settings, planned-start field | Done (device test pending) |
-| F | Estimate accuracy, suggestions, evaluation report | Planned |
-| G | Documentation | Planned |
+| F0 | Poison answers can't block the queue; Roman Urdu dates and times | Done |
+| F | Estimate accuracy, suggestions, evaluation report (research mode, completedVia, salted export) | Done |
+| G | Documentation, evaluation method, acceptance-criteria → test map, pull request | Done (device test pending) |
 
 Notes carried into later phases:
 - **Phase D (done):** when a task's `scheduledStart` changes, the old slot's `SCHEDULED` CheckinLog rows are marked `CANCELLED` (also on done/skipped/deleted).
 - **Phase E (done):** the phone re-schedules all `lo:` notifications from each plan, so check-ins the server cancelled are dropped.
-- **Phase F:** exclude tasks rescheduled after starting (`rescheduledAfterStart`) from the estimate ratio.
+- **Phase F (done):** estimate ratio excludes tasks rescheduled after starting, partial-progress tasks, work that crosses local midnight and ratios outside 0.2–4.
 
 ## Open work before release
 

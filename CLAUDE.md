@@ -25,10 +25,12 @@ backend/
   src/modules/<area>/          Routes + services per area:
     assistant/  (dialogue.ts = turn pipeline, nlu.ts, entities.ts, draft.ts, handlers.ts, responder.ts, briefing.ts)
     tasks/ routines/ reminders/ scheduling/ sync/ documents/ memory/ mood/ patterns/
+    checkins/   (FR-RN-004: checkinPlanner.ts pure rules, copy/templates first steps, checkinService.ts plan+respond, evaluation.ts report aggregation)
     analytics/ conversations/ settings/ account/ auth/ users/ events/ preferences/ whatsapp/
   prisma/schema.prisma, migrations/
-  tests/*.test.ts              node:test unit tests (no DB / Firebase needed)
-  scripts/http-smoke.ts, e2e-conversation.ts
+  tests/*.test.ts              node:test unit tests (DB-backed ones skip without Postgres; CI sets REQUIRE_DB=true)
+  tests/eval/                  Fixed evaluation sets (assistant-eval.json, Roman Urdu held-out set — see its README)
+  scripts/http-smoke.ts, e2e-conversation.ts, model-benchmark.ts, checkin-report.ts (needs REPORT_ID_SALT)
 mobile/
   src/screens/<area>/          Screens (dashboard, assistant, tasks, routines, documents, insights, mood, profile, auth, onboarding)
   src/components/primitives/   Design-system primitives (Text, Button, Card, Chip, Sheet, Snackbar, …)
@@ -84,6 +86,7 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 - `docs/API_IMPLEMENTATION.md` — REST API reference.
 - `docs/FRs/FUNCTIONAL REQUIREMENTS.md` — functional requirements (FR-xx-nnn codes).
 - `docs/known-limitations.md` — known gaps and platform restrictions.
+- `docs/checkins-evaluation-method.md` — how check-ins are evaluated (research mode, measures, privacy, validity).
 
 ## Out of scope (future work — do not implement)
 

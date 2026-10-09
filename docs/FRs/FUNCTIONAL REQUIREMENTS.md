@@ -952,9 +952,10 @@ This document specifies all functional requirements for Life Organizer. It descr
 
 7. **Learning & Evaluation**
    - Every check-in is logged: kind, tone, whether it had a first step, message source (LLM/template), mood, response, response time
-   - Estimate-accuracy ratio (actual ÷ estimated duration) per category, from tasks with `startedAt` and `completedAt`, minimum 5 samples
-   - When a ratio is reliable, suggest an adjusted duration on new tasks in that category ("Your Academic tasks usually take ~1.4× your estimate. Block 2h 45m?"); user decides
+   - Estimate-accuracy ratio per category (`estimate_ratio:<category>` pattern): the median of actual ÷ estimated duration over tasks with `startedAt`, `completedAt` and a duration, excluding tasks with partial-progress answers, tasks rescheduled after starting, work that ends on a different local day than it started, and ratios below 0.2 or above 4; minimum 5 samples
+   - When a ratio is reliable, suggest an adjusted duration on new tasks in that category ("Your Academic tasks usually take ~1.4× your estimate. Use 2h 45m?") on the task form and the chat draft card, only when the adjusted duration (rounded to 15 min) differs by at least 15 min; one tap to accept, never automatic; shown and accepted events are logged
    - Optional research mode randomly includes or omits the first step (50/50) for comparison
+   - Evaluation report (`backend/scripts/checkin-report.ts`) and method: `docs/checkins-evaluation-method.md`
 
 **Acceptance Criteria:**
 ```
@@ -962,36 +963,49 @@ This document specifies all functional requirements for Life Organizer. It descr
   → 4:05 PM: start check-in with a concrete first step, buttons "Started" / "Not today" only
   → User taps "Started" at 4:07 PM → IN_PROGRESS, startedAt = 4:07 PM
   → ~6:19 PM: completion check-in (4:07 + 2h + 12 min)
+  Verified by: backend/tests/checkins.test.ts — "check-ins: flexible task gets start at +5 and completion after duration + buffer"; backend/tests/checkinService.test.ts — "respond: allowed answers per kind; remaining time after a partial" (only Started / Not today), "respond: Started → IN_PROGRESS + startedAt + the completion check-in to schedule", "respond: a STARTED delivered late uses the tap time for startedAt and the completion check-in".
+  Manual, device test: the notification shows exactly the two buttons and the first step appears in the notification text.
 
 ✓ No response to start check-in at 4:05 PM
   → 4:30 PM: one follow-up
   → No further start check-ins
+  Verified by: backend/tests/checkins.test.ts — "check-ins: one follow-up when the start goes unanswered, then no more start check-ins".
 
 ✓ scheduledStart 10:30 PM, quiet hours 10 PM–8 AM
   → No start check-in
+  Verified by: backend/tests/checkins.test.ts — "check-ins: a start inside quiet hours or DND is skipped, not moved".
 
 ✓ New user, no style chosen
   → Check-ins use Funny tone
+  Verified by: backend/tests/checkins.test.ts — "check-ins: tone is the saved style (Funny by default) except Gentle after a hard mood".
 
 ✓ User says "be more serious with reminders" in chat
   → Style = Serious, assistant confirms, next check-ins are serious
+  Verified by: backend/tests/checkinService.test.ts — "style: English and Roman Urdu requests map to the right style", "style: the NLU routes style requests by rules, before task creation", "chat: style requests update the setting and confirm with chips for the other styles"; the next check-ins use the saved style (backend/tests/checkins.test.ts — "tone is the saved style …").
 
 ✓ Style Funny, user logged "overwhelmed" 3 hours ago
   → That check-in is Gentle and offers to split the task
   → Saved style stays Funny
+  Verified by: backend/tests/checkinService.test.ts — "plan: a hard mood in the last 24 h makes the check-in Gentle with a split offer; saved style stays Funny"; backend/tests/checkinCopy.test.ts — "templates: Gentle start/follow-up offers to split the task and never jokes".
 
 ✓ Completion check-in → "Update…" → Partly done 50%
   → Progress 50%, offer to schedule the remaining ~1h
+  Verified by: backend/tests/checkinService.test.ts — "respond: Done, partly done, +30 within and past the deadline, refused after two extras" (progress 50%, remaining time), "respond: allowed answers per kind; remaining time after a partial".
+  Manual, device test: the Update… sheet (25/50/75%, "Plan the rest" button) in the app.
 
 ✓ "+30 min" would pass the deadline
   → Message warns about the deadline and offers to plan the rest
+  Verified by: backend/tests/checkins.test.ts — "check-ins: +30 min past the deadline is flagged"; backend/tests/checkinService.test.ts — "respond: Done, partly done, +30 within and past the deadline, refused after two extras".
 
 ✓ Fixed event "Physics class 10 AM"
   → No check-ins
+  Verified by: backend/tests/checkins.test.ts — "check-ins: eligibility rules".
 
 ✓ AI unavailable when the task is scheduled
   → Template message used; check-in still fires on time
 ```
+  Verified by: backend/tests/checkinCopy.test.ts — "copy: AI unavailable → template messages with the library step; check-in still has a message", "first step: a failing provider trips the circuit breaker and the next source is used".
+  Manual, device test: the check-in notification fires on time while the AI is off.
 
 **Tier:** Free
 
