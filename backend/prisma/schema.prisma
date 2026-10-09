@@ -301,6 +301,8 @@ model CheckinLog {
   status       String    @default("SCHEDULED")
   response     String?
   respondedAt  DateTime?
+  /// Answered after the check-in had been cancelled (old slot); recorded but excluded from evaluation.
+  stale        Boolean   @default(false)
   createdAt    DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -304,7 +304,7 @@ export async function respondToCheckin(
   let task = row.taskId ? await getTaskForUser(userId, row.taskId) : null;
 
   // Atomic claim: concurrent or repeated answers (offline queue retries) are applied exactly once.
-  const claimed = await prisma.checkinLog.updateMany({ where: { id: row.id, userId, status: { not: "ANSWERED" } }, data: { status: "ANSWERED", response, respondedAt: at } });
+  const claimed = await prisma.checkinLog.updateMany({ where: { id: row.id, userId, status: { not: "ANSWERED" } }, data: { status: "ANSWERED", response, respondedAt: at, stale: row.status === "CANCELLED" } });
   if (claimed.count === 0) {
     const current = await prisma.checkinLog.findUnique({ where: { id: row.id } });
     return { ...base, checkin: { id: row.id, status: "ANSWERED", response: current?.response ?? null }, task: task ? serializeTask(task, now) : null, alreadyAnswered: true };
