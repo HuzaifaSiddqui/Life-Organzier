@@ -76,6 +76,8 @@ model Task {
   documentId      String?
   /// FR-RN-004: first time the task moved to IN_PROGRESS (check-in "Started" or status change).
   startedAt       DateTime?
+  /// CHECKIN when completed through a check-in answer, MANUAL otherwise (null = not completed / older rows).
+  completedVia    String?
   /// FR-RN-004: pre-generated check-in messages + the scheduledStart they were written for.
   checkinCopy     Json?
 
@@ -303,6 +305,8 @@ model CheckinLog {
   respondedAt  DateTime?
   /// Answered after the check-in had been cancelled (old slot); recorded but excluded from evaluation.
   stale        Boolean   @default(false)
+  /// User's checkinResearchMode setting when this check-in was planned (only these rows are randomised).
+  researchMode Boolean   @default(false)
   createdAt    DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -197,6 +197,7 @@ export async function planCheckins(userId: string, settings: UserSettings, now =
       // Research mode: a first step existed but this message deliberately omits it.
       copySource: msg.hasFirstStep ? copy.firstStepSource : copy.firstStep && !include && (copyKind === "START" || copyKind === "START_FOLLOWUP") ? "WITHHELD" : "NONE",
       moodAtPlan: mood?.mood ?? null,
+      researchMode: settings.checkinResearchMode,
       message: msg.text,
     });
     keepIds.add(row.id);
@@ -319,7 +320,7 @@ export async function respondToCheckin(
   }
   // "Done" is about the task, not the slot: it still completes the task from a cancelled check-in.
   if (row.status === "CANCELLED" && response === "DONE") {
-    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at })) ?? task;
+    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at, completedVia: "CHECKIN" })) ?? task;
     return { ...base, checkin: answered, task: serializeTask(task, now), message: renderAck("DONE", lang, task) };
   }
   if (row.status === "CANCELLED") {
@@ -339,7 +340,7 @@ export async function respondToCheckin(
     result.suggestion = await slotFor(userId, settings, task, task.durationMinutes ?? 60, now);
     result.message = responseText(lang, "NOT_TODAY", task);
   } else if (response === "DONE") {
-    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at })) ?? task;
+    task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at, completedVia: "CHECKIN" })) ?? task;
     result.message = renderAck("DONE", lang, task);
   } else if (response === "DIDNT") {
     result.suggestion = await slotFor(userId, settings, task, task.durationMinutes ?? 60, now);

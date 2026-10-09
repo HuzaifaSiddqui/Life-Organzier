@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeEstimateRatios, suggestDuration, type RatioTask } from "../src/modules/patterns/estimateRatio";
+import { computeEstimateRatios, ratiosByCompletion, suggestDuration, type RatioTask } from "../src/modules/patterns/estimateRatio";
 
 const t0 = new Date("2026-10-01T10:00:00Z");
 const task = (actualMin: number, est = 60, o: Partial<RatioTask> = {}): RatioTask => ({
@@ -10,6 +10,7 @@ const task = (actualMin: number, est = 60, o: Partial<RatioTask> = {}): RatioTas
   completedAt: new Date(t0.getTime() + actualMin * 60000),
   scheduledStart: t0,
   hadPartialProgress: false,
+  tz: "UTC",
   ...o,
 });
 const five = (m: number) => Array.from({ length: 5 }, () => task(m));
@@ -41,4 +42,18 @@ test("suggestDuration rounds to 15 min and needs a ≥15 min difference", () => 
   assert.equal(suggestDuration(120, 1.4), 165);
   assert.equal(suggestDuration(60, 1.1), null);
   assert.equal(suggestDuration(60, 1.25), 75);
+});
+
+test("tasks completed on a different local day than they started are excluded", () => {
+  const night = new Date("2026-10-01T23:00:00Z");
+  const overnight = (o: Partial<RatioTask> = {}) => task(120, 120, { startedAt: night, completedAt: new Date(night.getTime() + 120 * 60000), scheduledStart: night, ...o });
+  assert.deepEqual(computeEstimateRatios(Array.from({ length: 5 }, () => overnight())), []); // 23:00 → 01:00 UTC
+  // the same instants are one local day in Karachi (UTC+5: 04:00 → 06:00)
+  assert.equal(computeEstimateRatios(Array.from({ length: 5 }, () => overnight({ tz: "Asia/Karachi" })))[0].ratio, 1);
+});
+
+test("ratios are reported separately for check-in and manual completions", () => {
+  const r = ratiosByCompletion([...five(60).map((x) => ({ ...x, completedVia: "CHECKIN" })), ...Array.from({ length: 5 }, () => task(120))]);
+  assert.deepEqual(r.map((x) => [x.via, x.ratio]), [["CHECKIN", 1], ["MANUAL", 2]]);
+  assert.equal(computeEstimateRatios([...five(60), ...five(120)])[0].n, 10); // the user-facing pattern uses both
 });

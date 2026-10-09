@@ -235,7 +235,7 @@ export async function updateTask(
   taskId: string,
   changes: TaskChanges,
   /** startedAt / completedAt: when it really happened (e.g. a check-in tap delivered late); default now. */
-  opts: { clientModifiedAt?: Date; skipChildren?: boolean; startedAt?: Date; completedAt?: Date } = {},
+  opts: { clientModifiedAt?: Date; skipChildren?: boolean; startedAt?: Date; completedAt?: Date; completedVia?: "CHECKIN" | "MANUAL" } = {},
 ): Promise<Task | null> {
   const existing = await prisma.task.findFirst({ where: { id: taskId, userId: ctx.userId, status: { not: TaskStatus.DELETED } } });
   if (!existing) return null;
@@ -258,9 +258,13 @@ export async function updateTask(
   }
   if (c.status === TaskStatus.COMPLETED) {
     c.progress = 100;
-    if (existing.status !== TaskStatus.COMPLETED) data.completedAt = opts.completedAt ?? new Date();
+    if (existing.status !== TaskStatus.COMPLETED) {
+      data.completedAt = opts.completedAt ?? new Date();
+      data.completedVia = opts.completedVia ?? "MANUAL";
+    }
   } else if (c.status && existing.status === TaskStatus.COMPLETED) {
     data.completedAt = null;
+    data.completedVia = null;
     if (c.progress === undefined) c.progress = Math.min(existing.progress, 75);
   }
 

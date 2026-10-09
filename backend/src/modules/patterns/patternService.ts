@@ -65,7 +65,7 @@ export async function computePatterns(userId: string, tz: string, now = new Date
   const [tasks, occurrences, moods, opens] = await Promise.all([
     prisma.task.findMany({
       where: { userId, createdAt: { gte: since }, parentTaskId: null },
-      select: { id: true, status: true, category: true, dueAt: true, completedAt: true, createdAt: true, deletedAt: true, durationMinutes: true, startedAt: true, scheduledStart: true },
+      select: { id: true, completedVia: true, status: true, category: true, dueAt: true, completedAt: true, createdAt: true, deletedAt: true, durationMinutes: true, startedAt: true, scheduledStart: true },
     }),
     prisma.routineOccurrence.findMany({
       where: { userId, occurrenceDate: { gte: new Date(now.getTime() - 30 * 86400000), lte: now } },
@@ -265,7 +265,7 @@ export async function computePatterns(userId: string, tz: string, now = new Date
     select: { taskId: true },
   });
   const partialIds = new Set(partial.map((p) => p.taskId));
-  for (const r of computeEstimateRatios(completed.map((t) => ({ ...t, hadPartialProgress: partialIds.has(t.id) })))) {
+  for (const r of computeEstimateRatios(completed.map((t) => ({ ...t, tz, hadPartialProgress: partialIds.has(t.id) })))) {
     patterns.push({
       key: `estimate_ratio:${r.category}`,
       description: `${r.category} tasks take about ${r.ratio}× your estimate (${r.n} tasks)`,

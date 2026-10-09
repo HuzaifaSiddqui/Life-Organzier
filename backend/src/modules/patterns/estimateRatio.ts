@@ -1,3 +1,4 @@
+import { localYmd } from "../../lib/time.js";
 import { rescheduledAfterStart } from "../checkins/checkinPlanner.js";
 
 /** FR-RN-004 §6: how long tasks really take compared with the user's estimate, per category. */
@@ -13,6 +14,10 @@ export type RatioTask = {
   scheduledStart: Date | null;
   /** True when the user reported partial progress (PARTIAL_x check-in answer) on this task. */
   hadPartialProgress: boolean;
+  /** How it was completed; null (older rows) counts as MANUAL. */
+  completedVia?: string | null;
+  /** The user's timezone: work that crosses local midnight is not a measurement of effort. */
+  tz: string;
 };
 
 export type EstimateRatio = { category: string; ratio: number; n: number };
@@ -27,6 +32,7 @@ export function median(xs: number[]): number {
 export function taskRatio(t: RatioTask): number | null {
   if (!t.startedAt || !t.completedAt || !t.durationMinutes || t.durationMinutes <= 0) return null;
   if (t.hadPartialProgress || rescheduledAfterStart(t)) return null;
+  if (localYmd(t.startedAt, t.tz) !== localYmd(t.completedAt, t.tz)) return null; // left running overnight
   const actual = (t.completedAt.getTime() - t.startedAt.getTime()) / 60000;
   const ratio = actual / t.durationMinutes;
   return ratio < MIN_RATIO || ratio > MAX_RATIO ? null : ratio;
@@ -50,4 +56,11 @@ export function computeEstimateRatios(tasks: RatioTask[]): EstimateRatio[] {
 export function suggestDuration(minutes: number, ratio: number): number | null {
   const adjusted = Math.round((minutes * ratio) / 15) * 15;
   return adjusted >= 15 && Math.abs(adjusted - minutes) >= 15 ? adjusted : null;
+}
+
+/** Ratios split by how the task was completed (check-in answer vs manual), for the evaluation report. */
+export function ratiosByCompletion(tasks: RatioTask[]): Array<EstimateRatio & { via: "CHECKIN" | "MANUAL" }> {
+  return (["CHECKIN", "MANUAL"] as const).flatMap((via) =>
+    computeEstimateRatios(tasks.filter((t) => (t.completedVia === "CHECKIN" ? "CHECKIN" : "MANUAL") === via)).map((r) => ({ ...r, via })),
+  );
 }
