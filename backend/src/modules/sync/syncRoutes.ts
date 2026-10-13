@@ -1,3 +1,4 @@
+import { withLocations } from "../locations/locationService.js";
 import { Priority, TaskSource, TaskStatus, type Task } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
@@ -186,6 +187,6 @@ syncRouter.post(
       take: 2000,
     });
     const now = new Date();
-    sendSuccess(res, { results, changes: changed.map((t) => serializeTask(t, now)), serverTime: now.toISOString(), full: !since });
+    sendSuccess(res, { results, changes: await withLocations(changed.map((t) => serializeTask(t, now))), serverTime: now.toISOString(), full: !since });
   }),
 );

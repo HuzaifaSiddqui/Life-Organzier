@@ -8,6 +8,7 @@ import { assistantRouter } from "./modules/assistant/assistantRoutes.js";
 import { authRouter } from "./modules/auth/authRoutes.js";
 import { documentRouter } from "./modules/documents/documentRoutes.js";
 import { eventRouter } from "./modules/events/eventRoutes.js";
+import { geocodeRouter, locationRouter } from "./modules/locations/locationRoutes.js";
 import { insightRouter, memoryRouter } from "./modules/memory/memoryRoutes.js";
 import { moodRouter } from "./modules/mood/moodRoutes.js";
 import { preferenceRouter } from "./modules/preferences/preferenceRoutes.js";
@@ -74,6 +75,8 @@ export function createApp() {
   app.use("/api/tags", tagRouter);
   app.use("/api/documents", documentRouter);
   app.use("/api/events", eventRouter);
+  app.use("/api/locations", locationRouter);
+  app.use("/api/geocode", geocodeRouter);
   app.use("/api/account", accountRouter);
   app.use("/api/preferences", preferenceRouter);
   app.use("/api/whatsapp", whatsappRouter);

@@ -11,6 +11,7 @@ import { prisma } from "../../config/db.js";
 import { computeDueAt, localParts } from "../../lib/time.js";
 import { cancelCheckins } from "../checkins/checkinLog.js";
 import { refreshCheckinCopy } from "../checkins/copy.js";
+import { setTaskLocationsActive } from "../locations/locationService.js";
 import { logEvent } from "../events/eventService.js";
 
 export type TaskContext = { userId: string; tz: string; deviceId?: string | null };
@@ -302,6 +303,7 @@ export async function updateTask(
     if (updated.scheduledStart) refreshCheckinCopy(updated);
   }
   if (updated.status !== existing.status && (updated.status === TaskStatus.COMPLETED || updated.status === TaskStatus.SKIPPED)) await cancelCheckins(updated.id);
+  if (updated.status !== existing.status) await setTaskLocationsActive(updated.id, updated.status); // FR-LB-001
 
   if (updated.status === TaskStatus.COMPLETED && existing.status !== TaskStatus.COMPLETED) {
     logEvent(ctx.userId, "TASK_COMPLETED", updated.id, completionPayload(updated, ctx.tz));
@@ -381,6 +383,7 @@ export async function softDeleteTask(ctx: TaskContext, taskId: string): Promise<
     },
   });
   await cancelCheckins(deleted.id);
+  await setTaskLocationsActive(deleted.id, deleted.status);
   await recordVersion(deleted, ctx.deviceId);
   logEvent(ctx.userId, "TASK_DELETED", taskId, { category: existing.category });
   if (existing.parentTaskId) await updateParentProgress(existing.parentTaskId);
@@ -406,6 +409,7 @@ export async function restoreTask(ctx: TaskContext, taskId: string): Promise<Tas
     data: { status, deletedAt: null, version: task.version + 1, deviceId: ctx.deviceId ?? null, lastModifiedAt: new Date() },
   });
   await recordVersion(restored, ctx.deviceId);
+  await setTaskLocationsActive(restored.id, restored.status);
   if (restored.parentTaskId) await updateParentProgress(restored.parentTaskId);
   return restored;
 }

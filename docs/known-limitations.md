@@ -100,6 +100,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **The Roman Urdu held-out set must be filled before the report is written** (it is empty now): a teammate who hasn't read `entities.ts` adds messages (`backend/tests/eval/README.md`); the extractor's Roman Urdu scores on the development set are optimistic.
 - **Roman Urdu dates:** "kal" always means tomorrow (never yesterday); "hafta/haftay" is only read as "week" next to "agle/is"; daily-routine phrases like "har roz" are not detected by the rules (the LLM may catch them).
 
+## Location reminders (FR-LB-001, in progress)
+
+- **Geocoding uses the public Nominatim server**: at most 1 request per second for the whole backend and an in-memory 24 h cache (lost on restart, per server process). Small shops and informal place names in Pakistan are often missing from OpenStreetMap; the app then offers "Use current location". Search results can be in English only.
+
 ## Safety
 
 - Crisis detection is a deterministic phrase list (English, Roman Urdu, Urdu script) in

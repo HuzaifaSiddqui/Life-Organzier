@@ -33,7 +33,7 @@ their habits and wellbeing.
 
 ## Future work (out of scope)
 
-Calendar integration · collaboration · location-based reminders (FR-LB-001) · guest mode
+Calendar integration · collaboration · guest mode
 (FR-OB-003) · payments / subscriptions · desktop app.
 
 ## Constraints

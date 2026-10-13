@@ -181,6 +181,17 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 - **`POST /api/events/estimate-suggestion`** — body `{ action: "SHOWN" | "ACCEPTED", category, original, suggested, taskId? }` logs `ESTIMATE_SUGGESTION_SHOWN` / `ESTIMATE_SUGGESTION_ACCEPTED` (the chat draft card logs its own server-side; accepting it sends `{ type: "accept_estimate", minutes }` to `POST /api/assistant/message`).
 - Insights lists the `estimate_ratio:<category>` patterns returned by `GET /api/insights`.
 
+### Location reminders (FR-LB-001)
+
+Saved places are reusable; tasks link to them. The phone monitors geofences; the server never tracks location. Create/update/attach need `tier: "PRO"` (403 `PRO_REQUIRED`); list, delete and detach always work.
+
+- **`GET /api/locations`** → `{ locations: SavedLocation[] }` (most used first). `SavedLocation = { id, name, latitude, longitude, radiusM, preset: "PRECISE"|"NEARBY"|"AREA", usageCount, createdAt, updatedAt }`.
+- **`POST /api/locations`** — `{ name, latitude, longitude, radiusM?, preset? }`. Returns the existing place when the name matches (case-insensitive): `{ location, created }`. Radius: explicit value, else the preset's (200 / 350 / 750), else 350. Bounds: lat ±90, lng ±180, radius 100–2000, name 1–100 chars.
+- **`PUT /api/locations/:id`** — any of the fields above (409 `LOCATION_NAME_TAKEN` on a duplicate name). **`DELETE /api/locations/:id`** — also removes its task links.
+- **`POST /api/tasks/:id/locations`** — `{ savedLocationId }`; increments `usageCount` (attaching twice is a no-op). **`DELETE /api/tasks/:id/locations/:taskLocationId`**. Both return `{ task }`.
+- Tasks from `GET /api/tasks`, `GET /api/tasks/:id` and `POST /api/sync` (`changes`) include `locations: [{ id, savedLocationId, name, latitude, longitude, radiusM, preset, active, lastTriggeredAt }]`. `active` is false while the task is completed, skipped or deleted. Changing a place or a link bumps the task's `updatedAt` so incremental sync re-sends it.
+- **`GET /api/geocode?q=…&near_lat=…&near_lng=…`** → `{ results: [{ name, displayName, latitude, longitude }] }` (max 5, biased to ~25 km around `near`; empty on no match or Nominatim error). **`GET /api/geocode/reverse?lat=…&lng=…`** → `{ result }` or `null`. Nominatim is called at most once per second with User-Agent `LifeOrganizer/1.0 (FYP)`; results are cached in memory for 24 h.
+
 ### Check-ins (FR-RN-004)
 
 **`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):

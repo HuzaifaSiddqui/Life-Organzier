@@ -92,7 +92,6 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 
 - Calendar integration (Google/Outlook)
 - Collaboration / shared tasks
-- FR-LB-001 location-based (geofence) reminders
 - FR-OB-003 guest mode
 - Payments / subscriptions (the Pro tier is a settings flag, no billing)
 - Desktop app
