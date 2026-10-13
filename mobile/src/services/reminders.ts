@@ -37,6 +37,9 @@ const CATEGORY_TASK = "lo-task";
 const CATEGORY_ROUTINE = "lo-routine";
 const CATEGORY_CHECKIN_START = "lo-checkin-start";
 const CATEGORY_CHECKIN_DONE = "lo-checkin-done";
+/** FR-LB-001 arrival notifications (shown by services/locationReminders). */
+export const CATEGORY_LOCATION = "lo-location";
+export const DEFAULT_CHANNEL_ID = "lo-sound-vibrate";
 const HANDLED_KEY = "life-organizer:handled-notification-response";
 let configured = false;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +113,16 @@ async function registerCategories(): Promise<void> {
     { identifier: "PLUS_30", buttonTitle: t("checkin.plus30"), options: open },
     { identifier: "UPDATE", buttonTitle: t("checkin.update"), options: open },
   ]);
+  // "Dismiss" needs no app: the 4 h once-per-visit mark is already set when the notification is shown.
+  await Notifications.setNotificationCategoryAsync(CATEGORY_LOCATION, [
+    { identifier: "LOCATION_DONE", buttonTitle: t("location.done"), options: open },
+    { identifier: "LOCATION_DISMISS", buttonTitle: t("location.dismiss"), options: { opensAppToForeground: false } },
+  ]);
+}
+
+/** Registers action buttons without the rest of configureReminders (headless geofence launches). */
+export async function ensureNotificationCategories(): Promise<void> {
+  await registerCategories();
 }
 
 type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
@@ -279,6 +292,17 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   const dismiss = () => Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => undefined);
   if (data.kind === "lo-checkin") {
     await handleCheckinAction(data, action, content.title ?? "", content.body ?? "");
+    await dismiss();
+    return;
+  }
+  if (data.kind === "lo-location") {
+    const taskIds = ((content.data as { taskIds?: string[] }).taskIds ?? []).filter(Boolean);
+    if (action === "LOCATION_DONE") {
+      const { updateTask } = await import("./tasksApi");
+      for (const id of taskIds) await updateTask(id, { status: "COMPLETED" }).catch((error) => console.warn("Could not complete from location reminder", error));
+    } else if (action !== "LOCATION_DISMISS") {
+      onOpen({ taskId: taskIds.length === 1 ? taskIds[0] : null, routineOccurrenceId: null });
+    }
     await dismiss();
     return;
   }

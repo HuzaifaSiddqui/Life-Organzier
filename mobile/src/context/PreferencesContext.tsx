@@ -4,6 +4,7 @@ import type { Category, UserSettings } from "../types/models";
 import { getCategories, getSettings, saveSettings } from "../services/settingsApi";
 import { startSyncEngine, syncNow } from "../services/syncEngine";
 import { startCheckinQueue } from "../services/checkins";
+import { startLocationReminders } from "../services/locationReminders";
 import { configureReminders, startReminderResponses, syncReminders } from "../services/reminders";
 import { openAppScreen } from "../navigation/navigationRef";
 import { trackAppOpen } from "../services/insightsApi";
@@ -70,6 +71,13 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       stopCheckins();
     };
   }, [dbUser, reload]);
+
+  // FR-LB-001: geofences follow the task cache while a Pro user is signed in.
+  const tier = settings?.tier;
+  useEffect(() => {
+    if (!dbUser || !tier) return;
+    return startLocationReminders({ isPro: tier === "PRO" });
+  }, [dbUser, tier]);
 
   const update = useCallback(async (patch: Partial<UserSettings>) => {
     try {

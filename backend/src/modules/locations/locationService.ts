@@ -35,6 +35,7 @@ export type TaskLocationOut = {
   longitude: number;
   radiusM: number;
   preset: string;
+  usageCount: number;
   active: boolean;
   lastTriggeredAt: string | null;
 };
@@ -58,6 +59,7 @@ export async function locationsForTasks(tasks: Pick<Task, "id" | "status">[]): P
       longitude: s.longitude,
       radiusM: s.radiusM,
       preset: s.preset,
+      usageCount: s.usageCount,
       // the task's own status wins, so paths that change status without the hook below still read correctly
       active: r.active && ACTIVE_STATUSES.includes(status.get(r.taskId) as TaskStatus),
       lastTriggeredAt: r.lastTriggeredAt?.toISOString() ?? null,

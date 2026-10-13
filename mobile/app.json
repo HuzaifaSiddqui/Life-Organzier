@@ -63,7 +63,16 @@
       "@react-native-community/datetimepicker",
       "expo-status-bar",
       "./plugins/withLongPathCMake",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Life Organizer uses your location only to remind you about tasks when you arrive at a place you chose. Your location stays on your phone.",
+          "locationWhenInUsePermission": "Life Organizer uses your location to remind you about tasks at places you chose and to fill in your current location.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ]
     ]
   }
 }

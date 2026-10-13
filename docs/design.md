@@ -213,6 +213,9 @@ All installed with `npx expo install`. The native ones need a **new development 
 | `expo-font` | Font loading (config plugin added to `app.json`) | yes |
 | `expo-navigation-bar` | Android nav-bar button style per theme (edge-to-edge: the bar is transparent over `canvas`) | yes |
 | `@expo-google-fonts/inter`, `@expo-google-fonts/noto-nastaliq-urdu` | Font files | no |
+| `expo-location`, `expo-task-manager` | FR-LB-001 geofence reminders (config plugin in `app.json` adds fine/coarse/background location) | yes |
+
+App-level transient messages with no screen of their own (e.g. the one-time location-permission hint, `components/LocationPermissionHint.tsx`) use the same `Snackbar`, mounted once next to `CheckinSheet` in `RootNavigator` and fed by a small listener in the service.
 
 Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), a charts library (`react-native-svg` + `components/charts` are enough), and a keyboard library (`KeyboardAvoidingView` first).
 

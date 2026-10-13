@@ -155,7 +155,7 @@ test("locations: completing or deleting a task deactivates its geofence; reopeni
   });
 });
 
-test("locations: a parent completed through its sub-tasks deactivates its geofence", { skip }, async () => {
+test("auto-completed parent task deactivates its location links", { skip }, async () => {
   await withUser(async (userId) => {
     const ctx = { userId, tz: "Asia/Karachi" };
     const { location } = await createOrFindLocation(userId, { name: "Market", latitude: 31.5, longitude: 74.3 });

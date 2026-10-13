@@ -103,6 +103,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 ## Location reminders (FR-LB-001, in progress)
 
 - **Geocoding uses the public Nominatim server**: at most 1 request per second for the whole backend and an in-memory 24 h cache (lost on restart, per server process). Small shops and informal place names in Pakistan are often missing from OpenStreetMap; the app then offers "Use current location". Search results can be in English only.
+- **"Allow all the time" is needed for arrival reminders with the app closed.** Android only geofences with background location. With "While using the app" the phone checks its last known position once each time the app comes to the foreground; there is no departure tracking then, so the 4-hour once-per-visit window is what prevents repeats.
+- **At most 20 places are watched** (iOS limit, applied on Android too): the most-used places with open tasks. Others are skipped until fewer are active.
+- **The phone's copy of tasks decides what an arrival announces.** A task completed on another device is still announced until this phone syncs. "Done" on the notification opens the app to complete the tasks (no background handler).
+- **Geofence accuracy depends on the phone**: Android may report entering late (minutes) or miss very small radii; Precise (200 m) is the smallest preset for that reason.
 
 ## Safety
 

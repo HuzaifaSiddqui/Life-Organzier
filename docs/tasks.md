@@ -39,7 +39,7 @@ Notes carried into later phases:
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | SavedLocation / TaskLocation, location + geocode endpoints, task responses include locations | Done |
-| 2 | Mobile geofencing service (expo-location + expo-task-manager) | Planned |
+| 2 | Mobile geofencing service (expo-location + expo-task-manager), arrival notifications with Done / Dismiss | Done (needs app rebuild; device test pending) |
 | 3 | Location picker sheet, task form/detail, settings | Planned |
 | 4 | Chat: place extraction and attach | Planned |
 | 5 | Onboarding: Home / University | Planned |

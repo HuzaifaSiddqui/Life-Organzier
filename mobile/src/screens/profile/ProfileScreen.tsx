@@ -9,6 +9,7 @@ import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
+import { clearGeofenceData } from "../../services/locationReminders";
 import { clearAllReminders } from "../../services/reminders";
 import { useTheme } from "../../theme/ThemeProvider";
 
@@ -112,7 +113,7 @@ export function ProfileScreen({ navigation }: Props) {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              void clearAllReminders().finally(() => {
+              void Promise.all([clearAllReminders(), clearGeofenceData()]).finally(() => {
                 void signOut(auth);
               });
             }}
