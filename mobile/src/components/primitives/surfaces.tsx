@@ -94,20 +94,23 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <Pressable style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t("common.close")} />
-      <Animated.View
-        entering={SlideInDown.springify().damping(motion.spring.gentle.damping).stiffness(motion.spring.gentle.stiffness)}
-        accessibilityViewIsModal
-        style={[styles.sheet, elevation(2), { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.sm }]}
-      >
-        <View style={[styles.handle, { backgroundColor: colors.hairline }]} />
-        {title ? (
-          <Text variant="title2" accessibilityRole="header">
-            {title}
-          </Text>
-        ) : null}
-        {children}
-      </Animated.View>
+      {/* Bottom-anchored flex child (not position: absolute) so the sheet re-measures when its content changes. */}
+      <View style={styles.sheetRoot}>
+        <Pressable style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t("common.close")} />
+        <Animated.View
+          entering={SlideInDown.springify().damping(motion.spring.gentle.damping).stiffness(motion.spring.gentle.stiffness)}
+          accessibilityViewIsModal
+          style={[styles.sheet, elevation(2), { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.sm }]}
+        >
+          <View style={[styles.handle, { backgroundColor: colors.hairline }]} />
+          {title ? (
+            <Text variant="title2" accessibilityRole="header">
+              {title}
+            </Text>
+          ) : null}
+          {children}
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -129,11 +132,8 @@ const styles = StyleSheet.create({
   listItem: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   listText: { flex: 1, gap: 2 },
   scrim: StyleSheet.absoluteFill,
+  sheetRoot: { flex: 1, justifyContent: "flex-end" },
   sheet: {
-    position: "absolute",
-    start: 0,
-    end: 0,
-    bottom: 0,
     borderTopStartRadius: radii.lg,
     borderTopEndRadius: radii.lg,
     borderBottomWidth: 0,

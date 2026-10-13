@@ -180,6 +180,8 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 
 Icon added: `pin` (map pin, same 1.8 stroke line style).
 
+`Sheet` is a bottom-anchored flex child inside the modal (not `position: absolute`), so it re-measures when its content changes after opening (the picker grows from search to results to the radius step).
+
 Legacy prop renames done in Phase 0: Button `kind="ai"` → `"tonal"`, Card/Chip `tone="ai" | "primary"` → `"accent"`, `Toast` → `Snackbar`.
 
 ## Language, i18n & RTL

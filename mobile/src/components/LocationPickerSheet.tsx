@@ -116,10 +116,17 @@ export function LocationPickerSheet({
     if (!hasAccess && !(await grant())) return null;
     setLocating(true);
     try {
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      return pos.coords;
+      // A fix from the last 2 minutes is instant; otherwise ask for a fresh one, but don't spin forever indoors.
+      const recent = await Location.getLastKnownPositionAsync({ maxAge: 120000, requiredAccuracy: 200 }).catch(() => null);
+      if (recent) return recent.coords;
+      const fresh = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
+      ]);
+      if (!fresh) setError(t("location.noFix"));
+      return fresh?.coords ?? null;
     } catch {
-      setError(t("location.error"));
+      setError(t("location.noFix"));
       return null;
     } finally {
       setLocating(false);
