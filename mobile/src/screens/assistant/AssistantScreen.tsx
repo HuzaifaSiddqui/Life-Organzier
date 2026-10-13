@@ -1,9 +1,9 @@
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Keyboard,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AssistantCards } from "../../components/assistant/AssistantCards";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
@@ -70,6 +71,29 @@ export function AssistantScreen({ navigation, route }: Props) {
   const scrollToEnd = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
   }, []);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // The real keyboard height (window insets), so the composer sits on top of it. Android 15+ draws
+  // edge-to-edge and no longer resizes the window, and KeyboardAvoidingView doesn't see the keyboard there.
+  const keyboard = useAnimatedKeyboard();
+  const keyboardPad = useAnimatedStyle(() => ({ paddingBottom: keyboard.height.value }));
+
+  // Keep the newest message in view when the keyboard opens and whenever the screen is shown again.
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => {
+      setKeyboardOpen(true);
+      scrollToEnd();
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [scrollToEnd]);
+  useFocusEffect(
+    useCallback(() => {
+      scrollToEnd();
+    }, [scrollToEnd]),
+  );
 
   useEffect(() => {
     let alive = true;
@@ -194,7 +218,7 @@ export function AssistantScreen({ navigation, route }: Props) {
   const last = messages[messages.length - 1];
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <Animated.View style={[styles.root, keyboardPad]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Icon name="back" size={24} color={colors.text} />
@@ -300,7 +324,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       </ScrollView>
 
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.composer, { paddingBottom: keyboardOpen ? 10 : Math.max(insets.bottom, 10) }]}>
         {listening ? (
           <View style={styles.listening}>
             <ListeningWaveform />
@@ -348,7 +372,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           </View>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 
