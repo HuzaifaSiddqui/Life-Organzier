@@ -40,8 +40,8 @@ Notes carried into later phases:
 | --- | --- | --- |
 | 1 | SavedLocation / TaskLocation, location + geocode endpoints, task responses include locations | Done |
 | 2 | Mobile geofencing service (expo-location + expo-task-manager), arrival notifications with Done / Dismiss | Done (needs app rebuild; device test pending) |
-| 3 | Location picker sheet, task form/detail, settings | Planned |
-| 4 | Chat: place extraction and attach | Planned |
+| 3 | Location picker sheet, task form/detail, Settings toggle (default off) and Saved places | Done (device test pending) |
+| 4 | Chat: place extraction, attach saved/geocoded place, remove/change by chat | Done |
 | 5 | Onboarding: Home / University | Planned |
 
 ## Open work before release

@@ -28,6 +28,7 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
     difficulty: e.difficulty,
     tags: [...new Set([...e.tags, ...suggestTags(text)])].slice(0, 5),
     context: e.context,
+    location: e.location,
   };
 }
 

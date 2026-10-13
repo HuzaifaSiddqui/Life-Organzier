@@ -169,6 +169,17 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 | `ConflictSheet` | "Keep mine / Use cloud version" | `visible`, `mine`, `cloud`, `onKeepMine`, `onUseCloud`, `onClose` | **Not wired up:** `syncEngine` has no conflict detection yet |
 | `SectionTitle`, `ProgressBar`, `ConfidenceMeter`, `HighlightText`, `TutorialTip`, `HelpButton` | Composites in `ui.tsx` | as before | Token-styled. `ProgressBar` has a progressbar role/value and is never width-animated. `HelpButton` opens a `Sheet` |
 
+**Feature components (FR-LB-001 location reminders)** — built from the primitives above, `useTheme()` and `t()` only:
+
+| Component | Use | Notes |
+|---|---|---|
+| `LocationPickerSheet` | Add / edit a place for a task, or edit a saved place | `Sheet` with search (500 ms debounce, 3+ letters, results divided by `hairline`), "Use current location" (`pin` icon), saved-place `Chip`s (most used first, one tap selects), "Not found?" fallback, editable name, radius `Chip`s (Precise 200m / Nearby 350m / Area 750m) and "Save location". No map |
+| `TaskLocationsField` | Location chips on the task form and task detail (Pro only) | `Chip` with a leading `pin` + `IconButton` close to remove; "Add location" secondary button; "Grant" hint when reminders are off; detail shows "· 1.2 km away" |
+| `LocationPermissionHint` | One-time "Allow all the time" hint | `Snackbar` mounted next to `CheckinSheet` |
+| `SavedPlacesScreen` | Settings → Saved places | `ListItem` rows (name, radius, use count), trash `IconButton` with confirm, skeleton / empty / error states |
+
+Icon added: `pin` (map pin, same 1.8 stroke line style).
+
 Legacy prop renames done in Phase 0: Button `kind="ai"` → `"tonal"`, Card/Chip `tone="ai" | "primary"` → `"accent"`, `Toast` → `Snackbar`.
 
 ## Language, i18n & RTL

@@ -25,7 +25,9 @@ import {
   confirmMood,
   conversationalReply,
   focusOn,
+  isPro,
   moodChips,
+  placeLine,
   proceedWithDraft,
   proceedWithRoutine,
   resolvePending,
@@ -39,6 +41,8 @@ import {
   type Turn,
 } from "./dialogue.js";
 import { resolveTaskRef } from "./draft.js";
+import { parseLocationCommand } from "./entities.js";
+import { detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
@@ -98,6 +102,8 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       return help();
     case "set_checkin_style":
       return setCheckinStyle(turn, text);
+    case "manage_location":
+      return manageLocation(turn, text);
     case "confirm":
     case "deny":
       return { content: u.intent === "confirm" ? "Great." : "Okay.", intent: u.intent };
@@ -117,6 +123,32 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       };
     }
   }
+}
+
+/** FR-LB-001 §4: remove or change a task's arrival location from chat. */
+async function manageLocation(turn: Turn, text: string): Promise<Out> {
+  const cmd = parseLocationCommand(text);
+  if (!cmd) return { content: "Okay.", intent: "noop" };
+  if (!isPro(turn.settings)) return { content: "Location reminders are part of Pro.", intent: "location_pro" };
+  const r = await resolveTaskRef(turn.user.id, cmd.taskRef, turn.state.focus);
+  if (!r.task) {
+    return {
+      content: "Which task do you mean? Try \"remove location from <task name>\".",
+      actions: r.candidates.slice(0, 3).map((t) => ({ label: truncate(t.title, 32), text: cmd.kind === "remove" ? `remove location from ${t.title}` : `change the location of ${t.title} to ` })),
+      intent: "choose_task",
+    };
+  }
+  const task = r.task;
+  focusOn(turn, task.id);
+  if (cmd.kind === "change" && !cmd.place) {
+    return { content: `Where should "${task.title}" remind you? Say "change the location to <place>", or pick it in the task.`, actions: [{ label: "Open task", payload: { type: "open_task", taskId: task.id } }], intent: "location_ask" };
+  }
+  const links = await prisma.taskLocation.findMany({ where: { taskId: task.id } });
+  for (const l of links) await detachLocation(turn.user.id, task.id, l.id);
+  if (cmd.kind === "remove") {
+    return { content: links.length ? `Location removed from '${task.title}'.` : `'${task.title}' doesn't have a location.`, intent: "location_removed" };
+  }
+  return { content: await placeLine(turn.user.id, task.id, cmd.place as string), intent: "location_changed" };
 }
 
 const STYLE_CHIP_TEXT: Record<"FUNNY" | "SERIOUS" | "GENTLE", string> = {

@@ -28,6 +28,8 @@ import {
   type AccountInfo,
 } from "../../services/settingsApi";
 import { resetLocalData, syncNow } from "../../services/syncEngine";
+import { isLocationRemindersEnabled, setLocationRemindersEnabled } from "../../services/locationReminders";
+import { listPlaces } from "../../services/locationsApi";
 import { syncReminders } from "../../services/reminders";
 import type { UserSettings } from "../../types/models";
 
@@ -63,6 +65,9 @@ export function SettingsScreen({ navigation }: Props) {
   const [catColor, setCatColor] = useState(COLORS[0]);
   const [tags, setTags] = useState<Array<{ tag: string; count: number }>>([]);
   const [pw, setPw] = useState({ current: "", next: "" });
+  const [locationOn, setLocationOn] = useState(false);
+  const [placeCount, setPlaceCount] = useState(0);
+  const isPro = settings?.tier === "PRO";
 
   useEffect(() => {
     getAccount()
@@ -72,7 +77,19 @@ export function SettingsScreen({ navigation }: Props) {
       })
       .catch(() => undefined);
     getTags().then(setTags).catch(() => undefined);
+    void isLocationRemindersEnabled().then(setLocationOn);
+    listPlaces().then((p) => setPlaceCount(p.length), () => undefined);
   }, []);
+
+  // FR-LB-001: on → ask for location; refused → stays off. Off → stop watching places.
+  const toggleLocation = async (on: boolean) => {
+    setLocationOn(on);
+    const level = await setLocationRemindersEnabled(on);
+    if (on && level === "denied") {
+      setLocationOn(false);
+      setToast(t("settings.locationDenied"));
+    }
+  };
   useEffect(() => setPhone(phoneNumber ?? ""), [phoneNumber]);
 
   if (!settings) {
@@ -244,6 +261,14 @@ export function SettingsScreen({ navigation }: Props) {
                 ))}
               </View>
             </>
+          ) : null}
+          <View style={styles.rowBetween}>
+            <Text style={[ui.body, { flex: 1 }]}>{t("settings.locationReminders")}</Text>
+            <Switch value={isPro && locationOn} disabled={!isPro} onValueChange={(on) => void toggleLocation(on)} accessibilityLabel={t("settings.locationReminders")} />
+          </View>
+          <Text style={ui.meta}>{isPro ? t("settings.locationRemindersHint") : t("settings.proFeature")}</Text>
+          {isPro && (locationOn || placeCount > 0) ? (
+            <Button title={t("settings.savedPlaces")} kind="ghost" onPress={() => navigation.navigate("SavedPlaces")} />
           ) : null}
           {__DEV__ ? (
             <View style={styles.rowBetween}>

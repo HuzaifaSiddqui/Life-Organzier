@@ -8,6 +8,17 @@ export type RoutinePriority = "MANDATORY" | "IMPORTANT" | "NORMAL";
 export type RoutineOccurrenceStatus = "PENDING" | "COMPLETED" | "SKIPPED" | "MISSED";
 export type Mood = "stressed" | "anxious" | "happy" | "tired" | "motivated" | "sad" | "overwhelmed" | "focused" | "calm";
 
+/** FR-LB-001: a reusable place (GPS + radius). */
+export type SavedLocation = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radiusM: number;
+  preset: "PRECISE" | "NEARBY" | "AREA";
+  usageCount: number;
+};
+
 /** FR-LB-001: a task's link to a saved place (from the server; geofences run on the phone). */
 export type TaskLocation = {
   id: string;

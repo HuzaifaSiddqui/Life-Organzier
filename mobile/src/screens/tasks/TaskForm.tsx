@@ -9,7 +9,8 @@ import { apiGet, apiPost } from "../../services/api";
 import { suggestForTitle, type TaskInput } from "../../services/tasksApi";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { formatDuration } from "../../utils/format";
-import type { Priority, ReminderMode, Task, TaskStatus, TaskType } from "../../types/models";
+import { TaskLocationsField } from "../../components/TaskLocationsField";
+import type { Priority, ReminderMode, SavedLocation, Task, TaskLocation, TaskStatus, TaskType } from "../../types/models";
 import {
   combineYmdAndTimeStrings,
   dueDateAndTimeForSave,
@@ -152,13 +153,21 @@ export function TaskForm({
   submitLabel,
   onSubmit,
   editing,
+  taskId,
+  initialLocations,
+  onPendingPlaces,
 }: {
   initial: TaskFormValues;
   submitLabel: string;
   onSubmit: (values: TaskFormValues) => Promise<string | null>;
   editing?: boolean;
+  /** FR-LB-001: a synced task's id (links change at once); omit for a new task. */
+  taskId?: string | null;
+  initialLocations?: TaskLocation[];
+  /** New task: places chosen in the form, attached by the caller after the task is created. */
+  onPendingPlaces?: (places: SavedLocation[]) => void;
 }) {
-  const { categories, settings } = usePreferences();
+  const { categories, settings, isPro } = usePreferences();
   const [v, setV] = useState<TaskFormValues>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -415,6 +424,12 @@ export function TaskForm({
               ))}
             </View>
           </View>
+          {isPro ? (
+            <View>
+              <Text style={ui.label}>{t("location.sectionTitle")}</Text>
+              <TaskLocationsField taskId={taskId ?? null} initial={initialLocations ?? []} onPendingChange={onPendingPlaces} />
+            </View>
+          ) : null}
           {editing ? (
             <View>
               <Text style={ui.label}>Status</Text>

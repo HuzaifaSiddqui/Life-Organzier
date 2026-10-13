@@ -12,6 +12,7 @@ import { SettingsScreen } from "../screens/profile/SettingsScreen";
 import { RoutineScreen } from "../screens/routines/RoutineScreen";
 import { AddTaskScreen } from "../screens/tasks/AddTaskScreen";
 import { EditTaskScreen } from "../screens/tasks/EditTaskScreen";
+import { SavedPlacesScreen } from "../screens/places/SavedPlacesScreen";
 import { TaskDetailScreen } from "../screens/tasks/TaskDetailScreen";
 import { TaskListScreen } from "../screens/tasks/TaskListScreen";
 import type { ActionPayload, Priority, TaskType } from "../types/models";
@@ -30,7 +31,7 @@ export type TaskFormPrefill = {
 export type MainStackParamList = {
   Dashboard: undefined;
   Assistant: { voice?: boolean; prefill?: string; autoSend?: boolean; payload?: ActionPayload; label?: string; nonce?: number } | undefined;
-  TaskList: { toast?: string; toastTone?: "success" | "warning"; filter?: "overdue" | "today" } | undefined;
+  TaskList: { toast?: string; toastTone?: "success" | "warning"; filter?: "overdue" | "today"; /** Only these tasks (e.g. from a location reminder). */ ids?: string[] } | undefined;
   TaskDetail: { taskId: string };
   AddTask: { prefill?: TaskFormPrefill } | undefined;
   EditTask: { taskId: string };
@@ -40,6 +41,7 @@ export type MainStackParamList = {
   Mood: undefined;
   Documents: undefined;
   Settings: undefined;
+  SavedPlaces: undefined;
   Onboarding: undefined;
   Profile: undefined;
 };
@@ -67,6 +69,7 @@ export function MainStack() {
       <Stack.Screen name="Mood" component={MoodScreen} />
       <Stack.Screen name="Documents" component={DocumentsScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="SavedPlaces" component={SavedPlacesScreen} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
     </Stack.Navigator>

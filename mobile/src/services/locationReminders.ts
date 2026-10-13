@@ -5,8 +5,9 @@ import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
 import { dictionaries, type Language, type StringKey } from "../i18n/strings";
 import type { Task } from "../types/models";
-import { arrivalMessage, distanceM, placesFromTasks, tasksToAnnounce, type GeofencePlace } from "../utils/geofence";
+import { buildNotificationBody, distanceM, groupTasksByLocation, selectTopLocations, tasksToAnnounce, type GeofencePlace } from "../utils/geofence";
 import { CATEGORY_LOCATION, DEFAULT_CHANNEL_ID, ensureNotificationCategories } from "./reminders";
+import { auth } from "../lib/firebase";
 import { readTasks, subscribeTasks } from "./syncEngine";
 
 /**
@@ -24,8 +25,9 @@ import { readTasks, subscribeTasks } from "./syncEngine";
 export const GEOFENCE_TASK_NAME = "LIFE_ORGANIZER_GEOFENCE";
 const DEDUP_PREFIX = "geofence_triggered_";
 const SNAPSHOT_KEY = "life-organizer:geofence-places";
-const PERMISSION_ASKED_KEY = "location_permission_asked";
 const BG_HINT_KEY = "location_background_hint_shown";
+/** Per user and device: the Settings toggle (default off). */
+const enabledKey = () => `location_reminders_enabled:${auth.currentUser?.uid ?? "guest"}`;
 
 /** Keep in sync with backend PRESETS (locations/locationService.ts). */
 export const RADIUS_PRESETS = { PRECISE: 200, NEARBY: 350, AREA: 750 } as const;
@@ -108,7 +110,6 @@ export async function getLocationPermission(): Promise<PermissionLevel> {
 
 /** Foreground first, then background. A background refusal shows a one-time hint but never blocks. */
 export async function requestLocationPermission(): Promise<PermissionLevel> {
-  await setItem(PERMISSION_ASKED_KEY, "1");
   try {
     if (!(await Location.requestForegroundPermissionsAsync()).granted) return "denied";
     if ((await Location.requestBackgroundPermissionsAsync()).granted) return "background";
@@ -130,7 +131,7 @@ let enabled = false;
 
 /** (Re)builds regions from the task cache. Stops monitoring when off, not Pro, or nothing to watch. */
 export async function syncGeofences(tasks?: Task[]): Promise<void> {
-  const { places, dropped } = placesFromTasks(tasks ?? (await readTasks()));
+  const { places, dropped } = selectTopLocations(groupTasksByLocation(tasks ?? (await readTasks())));
   if (dropped) console.warn(`Location reminders: watching the ${places.length} most-used places, ${dropped} more skipped (limit)`);
   await setItem(SNAPSHOT_KEY, JSON.stringify(places));
   const level = enabled ? await getLocationPermission() : "denied";
@@ -182,12 +183,6 @@ export async function cleanupGeofenceDedup(): Promise<void> {
 
 /* ------------------------------------------------------------------ arrival / departure */
 
-async function formatTime(iso: string): Promise<string> {
-  const d = new Date(iso);
-  const sameDay = d.toDateString() === new Date().toDateString();
-  return d.toLocaleString((await uiLanguage()) === "ur" ? "ur-PK" : undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
-}
-
 async function handleGeofenceEnter(savedLocationId: string): Promise<void> {
   const place = (await readSnapshot()).find((p) => p.id === savedLocationId);
   if (!place) return;
@@ -195,18 +190,17 @@ async function handleGeofenceEnter(savedLocationId: string): Promise<void> {
   const lastAt: Record<string, number> = {};
   for (const t of place.tasks) lastAt[t.taskLocationId] = Number(await getItem(DEDUP_PREFIX + t.taskLocationId)) || 0;
   const due = tasksToAnnounce(place, lastAt, now);
-  const msg = arrivalMessage(place.name, due, now);
-  if (!msg) return;
+  const lang = await uiLanguage();
+  const locale = lang === "ur" ? "ur-PK" : undefined;
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    const sameDay = d.toDateString() === new Date(now).toDateString();
+    return d.toLocaleString(locale, sameDay ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
+  };
+  const body = buildNotificationBody(place.name, due, now, lang, formatTime);
+  if (!body) return;
   for (const t of due) await setItem(DEDUP_PREFIX + t.taskLocationId, String(now));
 
-  const body =
-    msg.kind === "single"
-      ? await tr("location.single", { place: msg.place, title: msg.title })
-      : msg.kind === "early"
-        ? await tr("location.early", { place: msg.place, title: msg.title, time: await formatTime(msg.at) })
-        : msg.kind === "few"
-          ? await tr("location.few", { place: msg.place, titles: msg.titles.join(", ") })
-          : await tr("location.many", { place: msg.place, count: msg.count });
   try {
     await ensureNotificationCategories(); // headless launch: categories may not be registered yet
     await Notifications.scheduleNotificationAsync({
@@ -258,16 +252,34 @@ async function foregroundCheck(): Promise<void> {
 
 /* ------------------------------------------------------------------ lifecycle */
 
+export async function isLocationRemindersEnabled(): Promise<boolean> {
+  return (await getItem(enabledKey())) === "1";
+}
+
 /**
- * Called when the signed-in user's settings are known. Pro: asks for permission once (first time),
- * then keeps geofences in step with the task cache (sync pulls, creates, edits, deletes all write it).
+ * The Settings toggle. On: asks for permission; refused → stays off (returns "denied"). Off: stops
+ * monitoring. Only Pro users can turn it on (the Settings screen disables it otherwise).
+ */
+export async function setLocationRemindersEnabled(on: boolean): Promise<PermissionLevel> {
+  if (!on) {
+    await setItem(enabledKey(), "0");
+    await stopGeofencing();
+    return getLocationPermission();
+  }
+  const level = await requestLocationPermission();
+  if (level === "denied") return level;
+  await setItem(enabledKey(), "1");
+  enabled = true;
+  await syncGeofences();
+  await foregroundCheck();
+  return level;
+}
+
+/**
+ * Called when the signed-in user's settings are known. Geofences follow the task cache (sync pulls,
+ * creates, edits and deletes all write it) while the user is Pro and has the toggle on. Never prompts.
  */
 export function startLocationReminders(opts: { isPro: boolean }): () => void {
-  if (!opts.isPro) {
-    void stopGeofencing();
-    return () => undefined;
-  }
-  enabled = true;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const resync = () => {
     if (timer) clearTimeout(timer);
@@ -275,8 +287,8 @@ export function startLocationReminders(opts: { isPro: boolean }): () => void {
   };
   void (async () => {
     await cleanupGeofenceDedup();
-    if (!(await getItem(PERMISSION_ASKED_KEY))) await requestLocationPermission();
-    await syncGeofences();
+    enabled = opts.isPro && (await isLocationRemindersEnabled());
+    await syncGeofences(); // stops monitoring when not enabled
     await foregroundCheck();
   })();
   const stopTasks = subscribeTasks(resync);

@@ -192,6 +192,8 @@ Saved places are reusable; tasks link to them. The phone monitors geofences; the
 - Tasks from `GET /api/tasks`, `GET /api/tasks/:id` and `POST /api/sync` (`changes`) include `locations: [{ id, savedLocationId, name, latitude, longitude, radiusM, preset, usageCount, active, lastTriggeredAt }]`. `active` is false while the task is completed, skipped or deleted. Changing a place or a link bumps the task's `updatedAt` so incremental sync re-sends it.
 - **`GET /api/geocode?q=…&near_lat=…&near_lng=…`** → `{ results: [{ name, displayName, latitude, longitude }] }` (max 5, biased to ~25 km around `near`; empty on no match or Nominatim error). **`GET /api/geocode/reverse?lat=…&lng=…`** → `{ result }` or `null`. Nominatim is called at most once per second with User-Agent `LifeOrganizer/1.0 (FYP)`; results are cached in memory for 24 h.
 
+**Chat** (`POST /api/assistant/message`): for Pro users a place named in a new task ("from Ali Medical Store", "ghar ja ke") is attached — saved place first (aliases: ghar/home, uni/university, daftar/office), else the first Nominatim result saved under the user's words. "remove the location (from X)", "location hata do", "change the location (of X) to Y" use intent `manage_location`.
+
 ### Check-ins (FR-RN-004)
 
 **`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):

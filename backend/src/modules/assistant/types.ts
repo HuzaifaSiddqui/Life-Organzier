@@ -18,6 +18,8 @@ export type TaskDraft = {
   difficulty: number | null;
   tags: string[];
   context: string | null;
+  /** FR-LB-001: place named in the message; attached as a geofence for Pro users. */
+  location?: string | null;
   /** User explicitly accepted an end-of-day deadline / no time. */
   allowNoTime?: boolean;
   allowNoDuration?: boolean;

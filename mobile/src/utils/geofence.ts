@@ -1,6 +1,7 @@
+import { dictionaries, type Language } from "../i18n/strings";
 import type { Task } from "../types/models";
 
-/** FR-LB-001 geofence rules, kept free of native modules. */
+/** FR-LB-001 geofence rules, kept free of native modules (unit-tested in __tests__/geofence.test.ts). */
 
 export const MAX_REGIONS = 20; // iOS limit; also keeps Android cheap
 export const DEDUP_MS = 4 * 3600000;
@@ -10,11 +11,8 @@ export type GeofencePlace = { id: string; name: string; latitude: number; longit
 
 const OPEN: Array<Task["status"]> = ["PENDING", "IN_PROGRESS"];
 
-/**
- * One region per saved place with at least one open task; at most 20, most-used places first.
- * Returns the kept places and how many were dropped.
- */
-export function placesFromTasks(tasks: Task[]): { places: GeofencePlace[]; dropped: number } {
+/** One entry per saved place that has at least one open task with an active link. */
+export function groupTasksByLocation(tasks: Task[]): GeofencePlace[] {
   const byPlace = new Map<string, GeofencePlace>();
   for (const t of tasks) {
     if (!OPEN.includes(t.status)) continue;
@@ -25,38 +23,53 @@ export function placesFromTasks(tasks: Task[]): { places: GeofencePlace[]; dropp
       byPlace.set(l.savedLocationId, p);
     }
   }
-  const all = [...byPlace.values()].sort((a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name));
-  return { places: all.slice(0, MAX_REGIONS), dropped: Math.max(0, all.length - MAX_REGIONS) };
+  return [...byPlace.values()];
+}
+
+/** The most-used places first, at most `max`; reports how many were left out. */
+export function selectTopLocations(places: GeofencePlace[], max = MAX_REGIONS): { places: GeofencePlace[]; dropped: number } {
+  const sorted = [...places].sort((a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name));
+  return { places: sorted.slice(0, max), dropped: Math.max(0, sorted.length - max) };
+}
+
+/** True while a task was announced less than 4 h ago (`lastAt` = epoch ms, or missing). */
+export function isDedupActive(lastAt: number | null | undefined, now: number): boolean {
+  return typeof lastAt === "number" && lastAt > 0 && now - lastAt < DEDUP_MS;
 }
 
 /** Tasks to announce on entering: open, and not announced in the last 4 h (`lastAt` per taskLocationId). */
 export function tasksToAnnounce(place: GeofencePlace, lastAt: Record<string, number | undefined>, now: number): GeofenceTask[] {
-  return place.tasks.filter((t) => OPEN.includes(t.status) && !(now - (lastAt[t.taskLocationId] ?? -Infinity) < DEDUP_MS));
+  return place.tasks.filter((t) => OPEN.includes(t.status) && !isDedupActive(lastAt[t.taskLocationId], now));
 }
 
-export type ArrivalMessage =
-  | { kind: "single"; place: string; title: string }
-  | { kind: "early"; place: string; title: string; at: string }
-  | { kind: "few"; place: string; titles: string[] }
-  | { kind: "many"; place: string; count: number };
+const fill = (text: string, vars: Record<string, string | number>) => text.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ""));
 
-/** Which wording to use; the caller turns it into localised text. */
-export function arrivalMessage(placeName: string, tasks: GeofenceTask[], now: number): ArrivalMessage | null {
+/**
+ * Arrival text. One task: "nearby", or "early" when its planned start is still ahead; 2–3 tasks: listed;
+ * 4+: a count. `formatTime` turns the planned start into local clock text. Null when nothing to announce.
+ */
+export function buildNotificationBody(placeName: string, tasks: GeofenceTask[], now: number, lang: Language, formatTime: (iso: string) => string): string | null {
+  const d = dictionaries[lang];
   if (!tasks.length) return null;
   if (tasks.length === 1) {
     const t = tasks[0];
     const start = t.scheduledStart ? Date.parse(t.scheduledStart) : NaN;
-    return start > now ? { kind: "early", place: placeName, title: t.title, at: t.scheduledStart as string } : { kind: "single", place: placeName, title: t.title };
+    return start > now
+      ? fill(d["location.early"], { place: placeName, title: t.title, time: formatTime(t.scheduledStart as string) })
+      : fill(d["location.single"], { place: placeName, title: t.title });
   }
-  if (tasks.length <= 3) return { kind: "few", place: placeName, titles: tasks.map((t) => t.title) };
-  return { kind: "many", place: placeName, count: tasks.length };
+  if (tasks.length <= 3) return fill(d["location.few"], { place: placeName, titles: tasks.map((t) => t.title).join(lang === "ur" ? "، " : ", ") });
+  return fill(d["location.many"], { place: placeName, count: tasks.length });
 }
 
-/** Great-circle distance in metres (for the foreground check and "1.2 km away"). */
+/** Great-circle distance in metres (foreground check and "1.2 km away"). */
 export function distanceM(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const dLat = rad(b.latitude - a.latitude);
-  const dLng = rad(b.longitude - a.longitude);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const h = Math.sin(rad(b.latitude - a.latitude) / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(rad(b.longitude - a.longitude) / 2) ** 2;
   return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
+/** "350 m" / "1.2 km". */
+export function formatDistance(m: number): string {
+  return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
 }

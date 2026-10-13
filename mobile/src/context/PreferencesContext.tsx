@@ -61,6 +61,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     void syncNow().then(() => syncReminders());
     const stopResponses = startReminderResponses((target) => {
       if (target.taskId) openAppScreen("TaskDetail", { taskId: target.taskId });
+      else if (target.taskIds?.length) openAppScreen("TaskList", { ids: target.taskIds });
       else if (target.routineOccurrenceId) openAppScreen("Routines");
     });
     // Check-in answers made offline are sent (with their tap time) after the next successful sync.

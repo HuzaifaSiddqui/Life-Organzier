@@ -48,6 +48,7 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
+import { attachPlaceByName, presetLabel } from "../locations/locationService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
@@ -93,6 +94,8 @@ export type Turn = {
   task: TaskContext;
   learned: string[];
   memoriesUsed: number;
+  /** Pro users' saved place names (location extraction accepts them after "at" / "se"). */
+  placeNames?: string[];
 };
 
 export type Out = {
@@ -113,6 +116,7 @@ export function extractOpts(turn: Turn): ExtractOptions {
     now: turn.now,
     tz: turn.tz,
     contexts: Array.isArray(turn.settings.contexts) ? (turn.settings.contexts as string[]) : [],
+    places: turn.placeNames ?? [],
   };
 }
 
@@ -162,6 +166,7 @@ export async function handleAssistantMessage(input: {
     task: { userId: input.user.id, tz, deviceId: input.deviceId },
     learned: [],
     memoriesUsed: 0,
+    placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
   };
 
   const text = input.text?.trim() ?? "";
@@ -659,6 +664,8 @@ export async function proceedWithDraft(
 
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
   if (scheduleNote) lines.push(scheduleNote);
+  // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
+  if (draft.location && isPro(turn.settings)) lines.push(await placeLine(turn.user.id, task.id, draft.location));
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
@@ -674,6 +681,18 @@ export async function proceedWithDraft(
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
   return { content: lines.join("\n"), cards: [taskCard(task, undefined, true)], actions, intent: "task_created" };
+}
+
+export async function placeLine(userId: string, taskId: string, place: string): Promise<string> {
+  try {
+    const r = await attachPlaceByName(userId, taskId, place);
+    if (r.kind === "not_found") return `I created the task but couldn't find '${place}' on the map. You can add the location from the task details.`;
+    const shown = r.kind === "saved" ? r.place.name : truncate(r.result.displayName, 70);
+    return `Location set: ${shown} (${presetLabel(r.place.preset)} range). You'll be notified when nearby.`;
+  } catch (error) {
+    console.warn("Could not attach place from chat", error instanceof Error ? error.message : error);
+    return `I created the task but couldn't find '${place}' on the map. You can add the location from the task details.`;
+  }
 }
 
 async function findPrerequisite(turn: Turn, title: string): Promise<{ course: string; prereq: string } | null> {

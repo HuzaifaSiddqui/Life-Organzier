@@ -108,6 +108,15 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **The phone's copy of tasks decides what an arrival announces.** A task completed on another device is still announced until this phone syncs. "Done" on the notification opens the app to complete the tasks (no background handler).
 - **Geofence accuracy depends on the phone**: Android may report entering late (minutes) or miss very small radii; Precise (200 m) is the smallest preset for that reason.
 
+## Location reminders in chat and the picker
+
+- **Place names in chat are found by rules, not the LLM.** "near …", "when I reach …" and "… ja ke / pohunch ke" accept any name; "at / from / in / se / par / pe" need a place word (store, market, university, ghar, …) or one of the user's saved place names, so "at Packages" is missed until "Packages" is saved, while "from Ali Medical Store" works. The task title keeps the place text.
+- **Chat attaches the first geocoding result** (biased towards the saved Home) and saves it under the words the user used; it can be the wrong branch of a chain store. The reply names the address so the user can correct it in the task.
+- **A place always needs coordinates.** "Enter name manually" uses the current position; without location access it can't be saved (the picker says so) — there are no label-only places.
+- **No "save as frequent place" prompt**: every place picked or found is already a saved place (most used first), so there is nothing to promote.
+- **New tasks created offline** keep their chosen places only until the screen closes; the user adds them again once online (the app says so).
+- **The Location reminders toggle is per phone**, not synced: turning it on on one phone doesn't start geofences on another.
+
 ## Safety
 
 - Crisis detection is a deterministic phrase list (English, Roman Urdu, Urdu script) in

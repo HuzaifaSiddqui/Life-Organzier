@@ -2,6 +2,7 @@ import { TaskStatus, type SavedLocation, type Task, type UserSettings } from "@p
 import { z } from "zod";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
+import { geocode, type GeoResult } from "./geocode.js";
 
 /** FR-LB-001: saved places and their attachment to tasks. The phone does all geofence monitoring. */
 
@@ -160,4 +161,48 @@ export async function detachLocation(userId: string, taskId: string, taskLocatio
   const r = await prisma.taskLocation.deleteMany({ where: { id: taskLocationId, taskId, task: { userId } } });
   if (!r.count) throw new HttpError(404, "TASK_LOCATION_NOT_FOUND", "That location isn't attached to this task");
   await touchTasks({ id: taskId });
+}
+
+/** Everyday words for a user's own places ("ghar" → their saved "Home"). */
+const ALIASES: Record<string, string[]> = {
+  home: ["home", "ghar", "house"],
+  university: ["university", "uni", "campus"],
+  office: ["office", "daftar", "work"],
+};
+
+function aliasesOf(name: string): string[] {
+  const n = name.trim().toLowerCase();
+  const group = Object.values(ALIASES).find((g) => g.includes(n));
+  return group ?? [n];
+}
+
+export type PlaceAttachResult =
+  | { kind: "saved"; place: SavedLocation }
+  | { kind: "geocoded"; place: SavedLocation; result: GeoResult }
+  | { kind: "not_found"; query: string };
+
+/**
+ * Chat (FR-LB-001 §4): attach the place named in a message. A saved place (or its everyday alias) wins;
+ * otherwise the first geocoding result, biased towards the user's saved Home, is saved under the name the
+ * user used and attached. Nothing found → the task stays without a location.
+ */
+export async function attachPlaceByName(userId: string, taskId: string, query: string): Promise<PlaceAttachResult> {
+  const saved = await listLocations(userId);
+  const names = aliasesOf(query);
+  const match = saved.find((p) => names.includes(p.name.trim().toLowerCase()));
+  if (match) {
+    await attachLocation(userId, taskId, match.id);
+    return { kind: "saved", place: match };
+  }
+  const home = saved.find((p) => ALIASES.home.includes(p.name.trim().toLowerCase()));
+  const [first] = await geocode(query, home ? { lat: home.latitude, lng: home.longitude } : null);
+  if (!first) return { kind: "not_found", query };
+  const name = query.trim().replace(/^./, (c) => c.toUpperCase()).slice(0, 100);
+  const { location } = await createOrFindLocation(userId, { name, latitude: first.latitude, longitude: first.longitude });
+  await attachLocation(userId, taskId, location.id);
+  return { kind: "geocoded", place: location, result: first };
+}
+
+export function presetLabel(preset: string): string {
+  return preset === "PRECISE" ? "Precise" : preset === "AREA" ? "Area" : "Nearby";
 }

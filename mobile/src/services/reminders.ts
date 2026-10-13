@@ -241,7 +241,7 @@ export function scheduleReminderSync(delayMs = 1500): void {
   }, delayMs);
 }
 
-export type ReminderOpenTarget = { taskId: string | null; routineOccurrenceId: string | null };
+export type ReminderOpenTarget = { taskId: string | null; routineOccurrenceId: string | null; taskIds?: string[] };
 
 /**
  * After any answer: drop this task's other scheduled check-ins on the phone (they're stale), keep the
@@ -301,7 +301,7 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
       const { updateTask } = await import("./tasksApi");
       for (const id of taskIds) await updateTask(id, { status: "COMPLETED" }).catch((error) => console.warn("Could not complete from location reminder", error));
     } else if (action !== "LOCATION_DISMISS") {
-      onOpen({ taskId: taskIds.length === 1 ? taskIds[0] : null, routineOccurrenceId: null });
+      onOpen({ taskId: taskIds.length === 1 ? taskIds[0] : null, routineOccurrenceId: null, taskIds });
     }
     await dismiss();
     return;
