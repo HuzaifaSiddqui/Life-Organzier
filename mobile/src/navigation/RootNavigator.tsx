@@ -24,7 +24,7 @@ import {
 } from "../services/apiResolver";
 import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen";
 import { CheckinSheet } from "../components/CheckinSheet";
-import { LocationPermissionHint } from "../components/LocationPermissionHint";
+import { LocationSnackbar } from "../components/LocationSnackbar";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
 import { flushPendingNavigation, navigationRef } from "./navigationRef";
@@ -168,7 +168,7 @@ export function RootNavigator() {
         )}
       </Stack.Navigator>
       {firebaseUser?.emailVerified && !bootstrapping ? <CheckinSheet /> : null}
-      {firebaseUser?.emailVerified && !bootstrapping ? <LocationPermissionHint /> : null}
+      {firebaseUser?.emailVerified && !bootstrapping ? <LocationSnackbar /> : null}
     </NavigationContainer>
   );
 }

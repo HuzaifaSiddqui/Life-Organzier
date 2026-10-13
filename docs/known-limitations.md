@@ -100,22 +100,42 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **The Roman Urdu held-out set must be filled before the report is written** (it is empty now): a teammate who hasn't read `entities.ts` adds messages (`backend/tests/eval/README.md`); the extractor's Roman Urdu scores on the development set are optimistic.
 - **Roman Urdu dates:** "kal" always means tomorrow (never yesterday); "hafta/haftay" is only read as "week" next to "agle/is"; daily-routine phrases like "har roz" are not detected by the rules (the LLM may catch them).
 
-## Location reminders (FR-LB-001, in progress)
+## Location reminders
 
-- **Geocoding uses the public Nominatim server**: at most 1 request per second for the whole backend and an in-memory 24 h cache (lost on restart, per server process). Small shops and informal place names in Pakistan are often missing from OpenStreetMap; the app then offers "Use current location". Search results can be in English only.
-- **"Allow all the time" is needed for arrival reminders with the app closed.** Android only geofences with background location. With "While using the app" the phone checks its last known position once each time the app comes to the foreground; there is no departure tracking then, so the 4-hour once-per-visit window is what prevents repeats.
-- **At most 20 places are watched** (iOS limit, applied on Android too): the most-used places with open tasks. Others are skipped until fewer are active.
+- **iOS 20-region limit.** If a user has more than 20 active location-linked tasks across
+  different places, only the 20 most-used places are monitored. Tasks at other places are
+  still shown in the app but won't trigger arrival notifications.
+- **Background permission required.** On Android, geofence triggers only fire with "Allow all
+  the time" location permission. With "While using the app", the app checks position once on
+  each foreground entry — no exit detection, no background triggers.
+- **4-hour per-visit dedup.** A location notification fires at most once per 4 hours per task
+  at that place. Leaving and re-entering resets this (exit event clears the dedup), but GPS
+  drift near a geofence boundary can cause multiple enter/exit cycles.
+- **Nominatim coverage.** OpenStreetMap data is patchy in smaller Pakistani cities and for
+  informal place names. If a search returns nothing, users can set the location manually
+  using "Use current location" (standing at the place) or by saving a place in Settings.
+- **GPS drift in urban areas.** Accuracy is 10–100 m depending on the phone and surroundings.
+  The default 350 m radius absorbs most drift; the 200 m "Precise" preset may trigger
+  inconsistently near tall buildings.
+- **Geofence entry delay.** Android batches geofence events; there can be a delay of up to
+  ~2 minutes between physically entering the radius and receiving the notification.
+- **Offline task creation.** A location cannot be attached to a task created offline (the
+  geocode endpoint needs a connection). The app tells the user to add the location once
+  they're back online.
+- **Chat auto-pick for single geocode result.** When a chat query returns exactly one Nominatim
+  result, it is attached without confirmation. If it's the wrong branch of a chain (e.g. the
+  user said "Fazal Din" meaning a different branch), they can change it from the task detail.
+  Multiple results always show a numbered picker.
+
+## Location reminders: more detail
+
+- **Nominatim usage policy**: at most 1 request per second for the whole backend and an in-memory 24 h cache (lost on restart, per server process). Search results are in English.
+- **Place names in chat are found by rules, not the LLM.** "near …", "when I reach …" and "… ja ke / pohunch ke" accept any name; "at / from / in / se / par / pe" need a place word (store, market, university, ghar, …) or one of the user's saved place names, so "at Packages" is missed until "Packages" is saved. The task title keeps the place text. Everyday words map to saved places: ghar → Home, uni → University, daftar / kaam → Office, masjid → Mosque.
 - **The phone's copy of tasks decides what an arrival announces.** A task completed on another device is still announced until this phone syncs. "Done" on the notification opens the app to complete the tasks (no background handler).
-- **Geofence accuracy depends on the phone**: Android may report entering late (minutes) or miss very small radii; Precise (200 m) is the smallest preset for that reason.
-
-## Location reminders in chat and the picker
-
-- **Place names in chat are found by rules, not the LLM.** "near …", "when I reach …" and "… ja ke / pohunch ke" accept any name; "at / from / in / se / par / pe" need a place word (store, market, university, ghar, …) or one of the user's saved place names, so "at Packages" is missed until "Packages" is saved, while "from Ali Medical Store" works. The task title keeps the place text.
-- **Chat attaches the first geocoding result** (biased towards the saved Home) and saves it under the words the user used; it can be the wrong branch of a chain store. The reply names the address so the user can correct it in the task.
-- **A place always needs coordinates.** "Enter name manually" uses the current position; without location access it can't be saved (the picker says so) — there are no label-only places.
-- **No "save as frequent place" prompt**: every place picked or found is already a saved place (most used first), so there is nothing to promote.
-- **New tasks created offline** keep their chosen places only until the screen closes; the user adds them again once online (the app says so).
-- **The Location reminders toggle is per phone**, not synced: turning it on on one phone doesn't start geofences on another.
+- **A place always needs coordinates.** "Enter name manually" uses the current position; without location access it can't be saved (the picker says so). There are no label-only places, and so no "save as frequent place" prompt: every place picked or found is already a saved place.
+- **Older places have no address** (`displayAddress` was added later); they show only their name.
+- **The Location reminders toggle and the first-time Home / University sheet are per phone**, not synced.
+- **"Radius updated" is shown inside the location sheet**, not as a Snackbar, because the sheet covers the app's Snackbar while it is open.
 
 ## Safety
 

@@ -174,8 +174,10 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 | Component | Use | Notes |
 |---|---|---|
 | `LocationPickerSheet` | Add / edit a place for a task, or edit a saved place | `Sheet` with search (500 ms debounce, 3+ letters, results divided by `hairline`), "Use current location" (`pin` icon), saved-place `Chip`s (most used first, one tap selects), "Not found?" fallback, editable name, radius `Chip`s (Precise 200m / Nearby 350m / Area 750m) and "Save location". No map |
-| `TaskLocationsField` | Location chips on the task form and task detail (Pro only) | `Chip` with a leading `pin` + `IconButton` close to remove; "Add location" secondary button; "Grant" hint when reminders are off; detail shows "· 1.2 km away" |
-| `LocationPermissionHint` | One-time "Allow all the time" hint | `Snackbar` mounted next to `CheckinSheet` |
+| `TaskLocationsField` | Location chips on the task form and task detail (Pro only); tap opens `LocationActionSheet` (new, unsaved tasks: the picker) | `Chip` with a leading `pin` + `IconButton` close to remove; "Add location" secondary button; "Grant" hint when reminders are off; detail shows "· 1.2 km away" |
+| `LocationActionSheet` | Tapping a location chip on a synced task | Compact `Sheet`: name, address (`displayAddress`) and "1.2 km away" as the confirmation (no map), radius `Chip`s that save at once (inline "Radius updated"), "Change location" (opens the picker) and "Remove from task" (Undo for 5 s) |
+| `LocationOnboardingSheet` | First time Location reminders are turned on and allowed | One `Sheet`: Home and University rows (icon, label, "Use current location", search, address preview, "Already saved" when present), Save and Skip. No wizard |
+| `LocationSnackbar` | App-level location messages (permission hint, "Location removed · Undo") | `Snackbar` mounted next to `CheckinSheet`, fed by `showLocationSnackbar` |
 | `SavedPlacesScreen` | Settings → Saved places | `ListItem` rows (name, radius, use count), trash `IconButton` with confirm, skeleton / empty / error states |
 
 Icon added: `pin` (map pin, same 1.8 stroke line style).

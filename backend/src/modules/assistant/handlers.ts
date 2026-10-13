@@ -26,6 +26,7 @@ import {
   conversationalReply,
   focusOn,
   isPro,
+  locationText,
   moodChips,
   placeLine,
   proceedWithDraft,
@@ -42,7 +43,7 @@ import {
 } from "./dialogue.js";
 import { resolveTaskRef } from "./draft.js";
 import { parseLocationCommand } from "./entities.js";
-import { detachLocation } from "../locations/locationService.js";
+import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
@@ -148,7 +149,38 @@ async function manageLocation(turn: Turn, text: string): Promise<Out> {
   if (cmd.kind === "remove") {
     return { content: links.length ? `Location removed from '${task.title}'.` : `'${task.title}' doesn't have a location.`, intent: "location_removed" };
   }
-  return { content: await placeLine(turn.user.id, task.id, cmd.place as string), intent: "location_changed" };
+  return { content: await placeLine(turn, task, cmd.place as string), intent: "location_changed" };
+}
+
+const NONE_RE = /^(?:none|no|nope|skip|cancel|neither|nahi|nahin|koi nahi|rehne do|chhor do|chor do)$/i;
+
+/** Answer to "I found several locations…": a number, part of the address, or "none". Null = moved on. */
+async function resolveLocationChoice(turn: Turn, text: string, p: Extract<NonNullable<Turn["state"]["pending"]>, { kind: "location_choice" }>): Promise<Out | null> {
+  const L = locationText(turn);
+  const t = text.trim().replace(/[.!?]+$/, "");
+  if (NONE_RE.test(t)) {
+    turn.state.pending = null;
+    return { content: L.none, intent: "location_skipped" };
+  }
+  const n = /^\d+$/.test(t) ? Number(t) : NaN;
+  if (p.more && n === p.results.length + 1) {
+    turn.state.pending = null;
+    return { content: L.openHint(p.taskTitle), actions: [{ label: "Open task", payload: { type: "open_task", taskId: p.taskId } }], intent: "location_open_task" };
+  }
+  const lower = t.toLowerCase();
+  const chosen =
+    n >= 1 && n <= p.results.length
+      ? p.results[n - 1]
+      : lower.length >= 3
+        ? p.results.find((r) => r.displayName.toLowerCase().includes(lower)) ??
+          p.results.map((r) => ({ r, s: fuzzySimilarity(t, r.name) })).sort((a, b) => b.s - a.s).find((x) => x.s >= 0.6)?.r
+        : undefined;
+  if (!chosen) return null;
+  turn.state.pending = null;
+  const task = await prisma.task.findFirst({ where: { id: p.taskId, userId: turn.user.id } });
+  if (!task) return { content: "That task no longer exists.", intent: "not_found" };
+  const place = await attachGeoResult(turn.user.id, task.id, p.place, chosen);
+  return { content: L.set(truncate(chosen.displayName, 70), L.range[place.preset] ?? L.range.NEARBY), intent: "location_set" };
 }
 
 const STYLE_CHIP_TEXT: Record<"FUNNY" | "SERIOUS" | "GENTLE", string> = {
@@ -566,6 +598,7 @@ export async function resolveHandlerPending(turn: Turn, text: string, u: Underst
     }
     return null;
   }
+  if (p.kind === "location_choice") return resolveLocationChoice(turn, text, p);
   if (p.kind === "choose_task") {
     const tasks = await prisma.task.findMany({ where: { id: { in: p.candidates }, userId: turn.user.id } });
     const ordered = p.candidates.map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t));

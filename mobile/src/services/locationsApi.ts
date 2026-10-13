@@ -5,7 +5,7 @@ import { readTasks, writeTasks } from "./syncEngine";
 /** FR-LB-001 places and geocoding. All geocoding goes through the backend (Nominatim there). */
 
 export type GeoResult = { name: string; displayName: string; latitude: number; longitude: number };
-export type PlaceInput = { name: string; latitude: number; longitude: number; preset?: SavedLocation["preset"] };
+export type PlaceInput = { name: string; latitude: number; longitude: number; preset?: SavedLocation["preset"]; displayAddress?: string | null };
 
 export async function listPlaces(): Promise<SavedLocation[]> {
   return (await apiGet<{ locations: SavedLocation[] }>("/locations")).locations;

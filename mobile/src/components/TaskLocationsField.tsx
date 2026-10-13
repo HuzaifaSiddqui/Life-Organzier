@@ -2,12 +2,13 @@ import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
-import { detachPlace } from "../services/locationsApi";
-import { getLocationPermission, isLocationRemindersEnabled, setLocationRemindersEnabled } from "../services/locationReminders";
+import { attachPlace, detachPlace } from "../services/locationsApi";
+import { getLocationPermission, isLocationRemindersEnabled, setLocationRemindersEnabled, showLocationSnackbar } from "../services/locationReminders";
 import { useTheme } from "../theme/ThemeProvider";
 import type { SavedLocation, TaskLocation } from "../types/models";
 import { distanceM, formatDistance } from "../utils/geofence";
 import { Icon } from "./icons/Icon";
+import { LocationActionSheet } from "./LocationActionSheet";
 import { LocationPickerSheet } from "./LocationPickerSheet";
 import { Button, Chip, IconButton, Text } from "./ui";
 
@@ -35,6 +36,7 @@ export function TaskLocationsField({
   const [links, setLinks] = useState<TaskLocation[]>(initial);
   const [pending, setPending] = useState<SavedLocation[]>([]);
   const [picker, setPicker] = useState<{ editing: TaskLocation | SavedLocation | null } | null>(null);
+  const [actions, setActions] = useState<TaskLocation | null>(null);
   const [ready, setReady] = useState(true); // reminders on and location allowed
   const [here, setHere] = useState<{ latitude: number; longitude: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,14 +61,31 @@ export function TaskLocationsField({
     onPendingChange?.(list);
   };
 
-  const remove = async (s: Shown) => {
+  /** Detach with a 5-second Undo (re-attaches the same place). */
+  const removeLink = async (link: TaskLocation) => {
     setError(null);
-    if (!s.link) return setPendingList(pending.filter((p) => p.id !== s.key));
+    const id = taskId as string;
     try {
-      setLinks(await detachPlace(taskId as string, s.link.id));
+      setLinks(await detachPlace(id, link.id));
     } catch {
       setError(t("location.error"));
+      return;
     }
+    const at = Date.now();
+    showLocationSnackbar({
+      text: t("location.removed"),
+      action: {
+        label: t("location.undo"),
+        onPress: () => {
+          if (Date.now() - at <= 5000) void attachPlace(id, link.savedLocationId).then(setLinks, () => setError(t("location.error")));
+        },
+      },
+    });
+  };
+
+  const remove = async (s: Shown) => {
+    if (!s.link) return setPendingList(pending.filter((p) => p.id !== s.key));
+    await removeLink(s.link);
   };
 
   const label = (s: Shown) =>
@@ -76,7 +95,7 @@ export function TaskLocationsField({
     <View style={{ gap: spacing.sm }}>
       {shown.map((s) => (
         <View key={s.key} style={styles.row}>
-          <Chip label={label(s)} leading={<Icon name="pin" size={16} color={colors.accent} />} onPress={() => setPicker({ editing: s.link ?? s.place })} />
+          <Chip label={label(s)} leading={<Icon name="pin" size={16} color={colors.accent} />} onPress={() => (s.link ? setActions(s.link) : setPicker({ editing: s.place }))} />
           <IconButton icon={<Icon name="close" size={18} color={colors.textSecondary} />} accessibilityLabel={t("location.remove", { name: s.name })} onPress={() => void remove(s)} />
         </View>
       ))}
@@ -95,6 +114,22 @@ export function TaskLocationsField({
         <Text variant="caption" color="danger">
           {error}
         </Text>
+      ) : null}
+      {taskId ? (
+        <LocationActionSheet
+          link={actions}
+          taskId={taskId}
+          onDismiss={() => setActions(null)}
+          onLinksChanged={setLinks}
+          onChange={(link) => {
+            setActions(null);
+            setPicker({ editing: link });
+          }}
+          onRemove={(link) => {
+            setActions(null);
+            void removeLink(link);
+          }}
+        />
       ) : null}
       <LocationPickerSheet
         visible={!!picker}

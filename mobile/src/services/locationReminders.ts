@@ -26,6 +26,8 @@ export const GEOFENCE_TASK_NAME = "LIFE_ORGANIZER_GEOFENCE";
 const DEDUP_PREFIX = "geofence_triggered_";
 const SNAPSHOT_KEY = "life-organizer:geofence-places";
 const BG_HINT_KEY = "location_background_hint_shown";
+/** Per user and device: the first-time Home / University sheet was shown. */
+const onboardingKey = () => `location_onboarding_shown:${auth.currentUser?.uid ?? "guest"}`;
 /** Per user and device: the Settings toggle (default off). */
 const enabledKey = () => `location_reminders_enabled:${auth.currentUser?.uid ?? "guest"}`;
 
@@ -80,12 +82,17 @@ async function readSnapshot(): Promise<GeofencePlace[]> {
 
 /* ------------------------------------------------------------------ permission */
 
-const hintListeners = new Set<(text: string | null) => void>();
+export type LocationSnack = { text: string; action?: { label: string; onPress: () => void } };
+const snackListeners = new Set<(s: LocationSnack | null) => void>();
 
-/** The one-time "Allow all the time" hint, rendered by LocationPermissionHint (no React here). */
-export function subscribeLocationHint(listener: (text: string | null) => void): () => void {
-  hintListeners.add(listener);
-  return () => hintListeners.delete(listener);
+/** App-level location messages (permission hint, "Location removed · Undo"), rendered by LocationSnackbar. */
+export function showLocationSnackbar(s: LocationSnack | null): void {
+  snackListeners.forEach((l) => l(s));
+}
+
+export function subscribeLocationSnackbar(listener: (s: LocationSnack | null) => void): () => void {
+  snackListeners.add(listener);
+  return () => snackListeners.delete(listener);
 }
 
 async function uiLanguage(): Promise<Language> {
@@ -120,9 +127,27 @@ export async function requestLocationPermission(): Promise<PermissionLevel> {
   if (!(await getItem(BG_HINT_KEY))) {
     await setItem(BG_HINT_KEY, "1");
     const text = await tr("location.backgroundHint");
-    hintListeners.forEach((l) => l(text));
+    showLocationSnackbar({ text });
   }
   return "foreground";
+}
+
+/**
+ * Where the phone is now, for "Use current location": a fix from the last 2 minutes is instant; otherwise
+ * a fresh one, given up after 15 s indoors. Null when not allowed or no fix.
+ */
+export async function currentCoords(): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const recent = await Location.getLastKnownPositionAsync({ maxAge: 120000, requiredAccuracy: 200 });
+    if (recent) return recent.coords;
+    const fresh = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
+    ]);
+    return fresh?.coords ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------ geofences */
@@ -251,6 +276,13 @@ async function foregroundCheck(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ lifecycle */
+
+/** True once: the first time location reminders are turned on (and allowed) on this phone. */
+export async function takeLocationOnboarding(): Promise<boolean> {
+  if (await getItem(onboardingKey())) return false;
+  await setItem(onboardingKey(), "1");
+  return true;
+}
 
 export async function isLocationRemindersEnabled(): Promise<boolean> {
   return (await getItem(enabledKey())) === "1";

@@ -12,6 +12,8 @@ export type Mood = "stressed" | "anxious" | "happy" | "tired" | "motivated" | "s
 export type SavedLocation = {
   id: string;
   name: string;
+  /** Full address from the map search or reverse lookup; null for older places. */
+  displayAddress?: string | null;
   latitude: number;
   longitude: number;
   radiusM: number;
@@ -24,6 +26,7 @@ export type TaskLocation = {
   id: string;
   savedLocationId: string;
   name: string;
+  displayAddress?: string | null;
   latitude: number;
   longitude: number;
   radiusM: number;

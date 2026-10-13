@@ -1,16 +1,17 @@
 import * as Location from "expo-location";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
-import { attachPlace, detachPlace, listPlaces, placeAt, savePlace, searchPlaces, updatePlace, type GeoResult } from "../services/locationsApi";
+import { usePlaceSearch } from "../hooks/usePlaceSearch";
+import { currentCoords } from "../services/locationReminders";
+import { attachPlace, detachPlace, listPlaces, placeAt, savePlace, updatePlace } from "../services/locationsApi";
 import { useTheme } from "../theme/ThemeProvider";
 import type { SavedLocation, TaskLocation } from "../types/models";
 import { Icon } from "./icons/Icon";
 import { Button, Chip, Sheet, Text } from "./ui";
 
 type Preset = SavedLocation["preset"];
-type Selection = { savedLocationId: string | null; name: string; latitude: number | null; longitude: number | null; preset: Preset };
-type Coords = { latitude: number; longitude: number };
+type Selection = { savedLocationId: string | null; name: string; displayAddress: string | null; latitude: number | null; longitude: number | null; preset: Preset };
 
 const PRESETS: Array<{ key: Preset; label: "location.precise" | "location.nearby" | "location.area" }> = [
   { key: "PRECISE", label: "location.precise" },
@@ -44,67 +45,37 @@ export function LocationPickerSheet({
   const { colors, spacing, radii, type } = useTheme();
   const [saved, setSaved] = useState<SavedLocation[]>([]);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GeoResult[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [showFallback, setShowFallback] = useState(false);
+  const [fallbackAsked, setFallbackAsked] = useState(false);
   const [manual, setManual] = useState(false);
   const [locating, setLocating] = useState(false);
   const [hasAccess, setHasAccess] = useState(true);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const near = useRef<Coords | null>(null);
+  const { results, searching, failed } = usePlaceSearch(query, saved);
+  const showFallback = fallbackAsked || results?.length === 0;
 
   const editingPlaceId = editing ? ("savedLocationId" in editing ? editing.savedLocationId : editing.id) : null;
 
   useEffect(() => {
     if (!visible) return;
     setQuery("");
-    setResults(null);
-    setShowFallback(false);
+    setFallbackAsked(false);
     setManual(false);
     setError(null);
-    setSelection(editing ? { savedLocationId: editingPlaceId, name: editing.name, latitude: editing.latitude, longitude: editing.longitude, preset: editing.preset } : null);
-    void (async () => {
-      const places = await listPlaces().catch(() => [] as SavedLocation[]);
-      setSaved(places);
-      const granted = (await Location.getForegroundPermissionsAsync().catch(() => ({ granted: false }))).granted;
-      setHasAccess(granted);
-      // Bias search towards the user: last known position, else their saved "Home".
-      const pos = granted ? await Location.getLastKnownPositionAsync({ maxAge: 3600000 }).catch(() => null) : null;
-      const home = places.find((p) => p.name.trim().toLowerCase() === "home");
-      near.current = pos ? pos.coords : home ? { latitude: home.latitude, longitude: home.longitude } : null;
-    })();
+    setSelection(
+      editing
+        ? { savedLocationId: editingPlaceId, name: editing.name, displayAddress: editing.displayAddress ?? null, latitude: editing.latitude, longitude: editing.longitude, preset: editing.preset }
+        : null,
+    );
+    void listPlaces()
+      .catch(() => [] as SavedLocation[])
+      .then(setSaved);
+    void Location.getForegroundPermissionsAsync()
+      .catch(() => ({ granted: false }))
+      .then((p) => setHasAccess(p.granted));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
-
-  // Search: 500 ms after typing stops, at least 3 characters.
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 3) {
-      setResults(null);
-      return;
-    }
-    let live = true;
-    const timer = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const r = await searchPlaces(q, near.current);
-        if (!live) return;
-        setResults(r);
-        setShowFallback(r.length === 0);
-        setError(null);
-      } catch {
-        if (live) setError(t("location.searchError"));
-      } finally {
-        if (live) setSearching(false);
-      }
-    }, 500);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [query, t]);
 
   const grant = async () => {
     const ok = (await Location.requestForegroundPermissionsAsync().catch(() => ({ granted: false }))).granted;
@@ -112,38 +83,26 @@ export function LocationPickerSheet({
     return ok;
   };
 
-  const currentPosition = async (): Promise<Coords | null> => {
+  const currentPosition = async () => {
     if (!hasAccess && !(await grant())) return null;
     setLocating(true);
-    try {
-      // A fix from the last 2 minutes is instant; otherwise ask for a fresh one, but don't spin forever indoors.
-      const recent = await Location.getLastKnownPositionAsync({ maxAge: 120000, requiredAccuracy: 200 }).catch(() => null);
-      if (recent) return recent.coords;
-      const fresh = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
-      ]);
-      if (!fresh) setError(t("location.noFix"));
-      return fresh?.coords ?? null;
-    } catch {
-      setError(t("location.noFix"));
-      return null;
-    } finally {
-      setLocating(false);
-    }
+    const c = await currentCoords();
+    setLocating(false);
+    if (!c) setError(t("location.noFix"));
+    return c;
   };
 
   const useCurrent = async () => {
     const c = await currentPosition();
     if (!c) return;
     const found = await placeAt(c.latitude, c.longitude).catch(() => null);
-    setSelection({ savedLocationId: null, name: found?.name ?? t("location.currentPlace"), latitude: c.latitude, longitude: c.longitude, preset: "NEARBY" });
+    setSelection({ savedLocationId: null, name: found?.name ?? t("location.currentPlace"), displayAddress: found?.displayName ?? null, latitude: c.latitude, longitude: c.longitude, preset: "NEARBY" });
   };
 
   const startManual = async () => {
     setManual(true);
     const c = hasAccess ? await currentPosition() : null;
-    setSelection({ savedLocationId: null, name: query.trim(), latitude: c?.latitude ?? null, longitude: c?.longitude ?? null, preset: "NEARBY" });
+    setSelection({ savedLocationId: null, name: query.trim(), displayAddress: null, latitude: c?.latitude ?? null, longitude: c?.longitude ?? null, preset: "NEARBY" });
   };
 
   /** Saves the place (and the link when there is a task), replacing the edited link if the place changed. */
@@ -159,7 +118,7 @@ export function LocationPickerSheet({
       } else if (sel.savedLocationId && original) {
         place = original;
       } else {
-        place = await savePlace({ name: sel.name.trim(), latitude: sel.latitude, longitude: sel.longitude, preset: sel.preset });
+        place = await savePlace({ name: sel.name.trim(), displayAddress: sel.displayAddress, latitude: sel.latitude, longitude: sel.longitude, preset: sel.preset });
       }
       let links: TaskLocation[] | null = null;
       if (taskId) {
@@ -231,7 +190,7 @@ export function LocationPickerSheet({
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {saved.map((p) => (
                 // A saved place already has its radius: select and save straight away.
-                <Chip key={p.id} label={p.name} onPress={() => void finish({ savedLocationId: p.id, name: p.name, latitude: p.latitude, longitude: p.longitude, preset: p.preset })} />
+                <Chip key={p.id} label={p.name} onPress={() => void finish({ savedLocationId: p.id, name: p.name, displayAddress: p.displayAddress ?? null, latitude: p.latitude, longitude: p.longitude, preset: p.preset })} />
               ))}
             </ScrollView>
           </View>
@@ -246,7 +205,7 @@ export function LocationPickerSheet({
               <Pressable
                 key={`${r.latitude},${r.longitude},${i}`}
                 accessibilityRole="button"
-                onPress={() => setSelection({ savedLocationId: null, name: r.name, latitude: r.latitude, longitude: r.longitude, preset: "NEARBY" })}
+                onPress={() => setSelection({ savedLocationId: null, name: r.name, displayAddress: r.displayName, latitude: r.latitude, longitude: r.longitude, preset: "NEARBY" })}
                 style={({ pressed }) => [styles.result, { borderTopColor: colors.hairline, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }, pressed && { backgroundColor: colors.accentSoft }]}
               >
                 <Text variant="bodyStrong" numberOfLines={1}>
@@ -258,7 +217,7 @@ export function LocationPickerSheet({
               </Pressable>
             ))}
             {!showFallback ? (
-              <Text variant="caption" color="accent" onPress={() => setShowFallback(true)} style={{ marginTop: spacing.sm }}>
+              <Text variant="caption" color="accent" onPress={() => setFallbackAsked(true)} style={{ marginTop: spacing.sm }}>
                 {t("location.notFoundLink")}
               </Text>
             ) : null}
@@ -283,6 +242,11 @@ export function LocationPickerSheet({
               {t("location.nameLabel").toUpperCase()}
             </Text>
             <TextInput value={selection.name} onChangeText={(name) => setSelection({ ...selection, name })} style={inputStyle} accessibilityLabel={t("location.nameLabel")} autoFocus={manual} />
+            {selection.displayAddress ? (
+              <Text variant="caption" color="secondary" numberOfLines={2}>
+                {selection.displayAddress}
+              </Text>
+            ) : null}
             {selection.latitude === null ? (
               <Text variant="caption" color="warning">
                 {t("location.manualNeedsPosition")}
@@ -303,9 +267,9 @@ export function LocationPickerSheet({
           </View>
         ) : null}
 
-        {error ? (
+        {error || failed ? (
           <Text variant="callout" color="danger">
-            {error}
+            {error ?? t("location.searchError")}
           </Text>
         ) : null}
       </ScrollView>

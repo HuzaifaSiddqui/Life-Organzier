@@ -34,7 +34,7 @@ Notes carried into later phases:
 - **Phase E (done):** the phone re-schedules all `lo:` notifications from each plan, so check-ins the server cancelled are dropped.
 - **Phase F (done):** estimate ratio excludes tasks rescheduled after starting, partial-progress tasks, work that crosses local midnight and ratios outside 0.2–4.
 
-## FR-LB-001 location reminders (in progress)
+## FR-LB-001 location reminders (complete; device test pending)
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Notes carried into later phases:
 | 2 | Mobile geofencing service (expo-location + expo-task-manager), arrival notifications with Done / Dismiss | Done (needs app rebuild; device test pending) |
 | 3 | Location picker sheet, task form/detail, Settings toggle (default off) and Saved places | Done (device test pending) |
 | 4 | Chat: place extraction, attach saved/geocoded place, remove/change by chat | Done |
-| 5 | Onboarding: Home / University | Planned |
+| 5 | Home / University sheet, aliases, numbered place choices in chat, location action sheet, addresses, docs | Done (device test pending) |
 
 ## Open work before release
 

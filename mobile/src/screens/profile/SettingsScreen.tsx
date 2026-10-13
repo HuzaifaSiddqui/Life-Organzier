@@ -28,7 +28,8 @@ import {
   type AccountInfo,
 } from "../../services/settingsApi";
 import { resetLocalData, syncNow } from "../../services/syncEngine";
-import { isLocationRemindersEnabled, setLocationRemindersEnabled } from "../../services/locationReminders";
+import { LocationOnboardingSheet } from "../../components/LocationOnboardingSheet";
+import { isLocationRemindersEnabled, setLocationRemindersEnabled, takeLocationOnboarding } from "../../services/locationReminders";
 import { listPlaces } from "../../services/locationsApi";
 import { syncReminders } from "../../services/reminders";
 import type { UserSettings } from "../../types/models";
@@ -67,6 +68,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [pw, setPw] = useState({ current: "", next: "" });
   const [locationOn, setLocationOn] = useState(false);
   const [placeCount, setPlaceCount] = useState(0);
+  const [onboarding, setOnboarding] = useState(false);
   const isPro = settings?.tier === "PRO";
 
   useEffect(() => {
@@ -88,6 +90,8 @@ export function SettingsScreen({ navigation }: Props) {
     if (on && level === "denied") {
       setLocationOn(false);
       setToast(t("settings.locationDenied"));
+    } else if (on && (await takeLocationOnboarding())) {
+      setOnboarding(true); // first time only, after permission was granted
     }
   };
   useEffect(() => setPhone(phoneNumber ?? ""), [phoneNumber]);
@@ -501,6 +505,13 @@ export function SettingsScreen({ navigation }: Props) {
         </Card>
       </ScrollView>
       <Snackbar text={toast} onHide={() => setToast(null)} />
+      <LocationOnboardingSheet
+        visible={onboarding}
+        onDismiss={() => {
+          setOnboarding(false);
+          listPlaces().then((p) => setPlaceCount(p.length), () => undefined);
+        }}
+      />
     </View>
   );
 }

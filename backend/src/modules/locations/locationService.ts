@@ -11,6 +11,7 @@ export type Preset = keyof typeof PRESETS;
 
 export const locationInput = z.object({
   name: z.string().trim().min(1).max(100),
+  displayAddress: z.string().trim().max(500).nullish(),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   radiusM: z.number().int().min(100).max(2000).optional(),
@@ -32,6 +33,7 @@ export type TaskLocationOut = {
   id: string;
   savedLocationId: string;
   name: string;
+  displayAddress: string | null;
   latitude: number;
   longitude: number;
   radiusM: number;
@@ -56,6 +58,7 @@ export async function locationsForTasks(tasks: Pick<Task, "id" | "status">[]): P
       id: r.id,
       savedLocationId: s.id,
       name: s.name,
+      displayAddress: s.displayAddress,
       latitude: s.latitude,
       longitude: s.longitude,
       radiusM: s.radiusM,
@@ -96,7 +99,7 @@ export async function createOrFindLocation(userId: string, input: LocationInput)
   if (existing) return { location: existing, created: false };
   const { radiusM, preset } = resolveRadius(input);
   try {
-    const location = await prisma.savedLocation.create({ data: { userId, name: input.name, latitude: input.latitude, longitude: input.longitude, radiusM, preset } });
+    const location = await prisma.savedLocation.create({ data: { userId, name: input.name, displayAddress: input.displayAddress ?? null, latitude: input.latitude, longitude: input.longitude, radiusM, preset } });
     return { location, created: true };
   } catch {
     // two creates at once: the other one won
@@ -130,6 +133,7 @@ export async function updateLocation(userId: string, id: string, patch: Partial<
     data: {
       ...radius,
       ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.displayAddress !== undefined ? { displayAddress: patch.displayAddress } : {}),
       ...(patch.latitude !== undefined ? { latitude: patch.latitude } : {}),
       ...(patch.longitude !== undefined ? { longitude: patch.longitude } : {}),
     },
@@ -167,7 +171,10 @@ export async function detachLocation(userId: string, taskId: string, taskLocatio
 const ALIASES: Record<string, string[]> = {
   home: ["home", "ghar", "house"],
   university: ["university", "uni", "campus"],
-  office: ["office", "daftar", "work"],
+  office: ["office", "daftar", "work", "kaam"],
+  hostel: ["hostel"],
+  library: ["library"],
+  mosque: ["mosque", "masjid"],
 };
 
 function aliasesOf(name: string): string[] {
@@ -179,12 +186,13 @@ function aliasesOf(name: string): string[] {
 export type PlaceAttachResult =
   | { kind: "saved"; place: SavedLocation }
   | { kind: "geocoded"; place: SavedLocation; result: GeoResult }
+  | { kind: "choices"; results: GeoResult[] }
   | { kind: "not_found"; query: string };
 
 /**
  * Chat (FR-LB-001 §4): attach the place named in a message. A saved place (or its everyday alias) wins;
- * otherwise the first geocoding result, biased towards the user's saved Home, is saved under the name the
- * user used and attached. Nothing found → the task stays without a location.
+ * otherwise geocode (biased towards the user's saved Home): exactly one result is saved under the name the
+ * user used and attached; several are returned for the user to choose; none → no location.
  */
 export async function attachPlaceByName(userId: string, taskId: string, query: string): Promise<PlaceAttachResult> {
   const saved = await listLocations(userId);
@@ -195,14 +203,16 @@ export async function attachPlaceByName(userId: string, taskId: string, query: s
     return { kind: "saved", place: match };
   }
   const home = saved.find((p) => ALIASES.home.includes(p.name.trim().toLowerCase()));
-  const [first] = await geocode(query, home ? { lat: home.latitude, lng: home.longitude } : null);
-  if (!first) return { kind: "not_found", query };
-  const name = query.trim().replace(/^./, (c) => c.toUpperCase()).slice(0, 100);
-  const { location } = await createOrFindLocation(userId, { name, latitude: first.latitude, longitude: first.longitude });
-  await attachLocation(userId, taskId, location.id);
-  return { kind: "geocoded", place: location, result: first };
+  const results = await geocode(query, home ? { lat: home.latitude, lng: home.longitude } : null);
+  if (!results.length) return { kind: "not_found", query };
+  if (results.length > 1) return { kind: "choices", results };
+  return { kind: "geocoded", result: results[0], place: await attachGeoResult(userId, taskId, query, results[0]) };
 }
 
-export function presetLabel(preset: string): string {
-  return preset === "PRECISE" ? "Precise" : preset === "AREA" ? "Area" : "Nearby";
+/** Saves a geocoding result under the user's own words for the place and attaches it to the task. */
+export async function attachGeoResult(userId: string, taskId: string, query: string, r: GeoResult): Promise<SavedLocation> {
+  const name = query.trim().replace(/^./, (c) => c.toUpperCase()).slice(0, 100);
+  const { location } = await createOrFindLocation(userId, { name, displayAddress: r.displayName, latitude: r.latitude, longitude: r.longitude });
+  await attachLocation(userId, taskId, location.id);
+  return location;
 }

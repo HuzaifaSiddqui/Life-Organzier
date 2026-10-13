@@ -466,6 +466,8 @@ model SavedLocation {
   id         String   @id @default(uuid())
   userId     String
   name       String
+  /// Full address from Nominatim (search result or reverse lookup); null for older places.
+  displayAddress String?
   latitude   Float
   longitude  Float
   radiusM    Int      @default(350)
