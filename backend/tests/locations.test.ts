@@ -155,6 +155,19 @@ test("locations: completing or deleting a task deactivates its geofence; reopeni
   });
 });
 
+test("locations: a parent completed through its sub-tasks deactivates its geofence", { skip }, async () => {
+  await withUser(async (userId) => {
+    const ctx = { userId, tz: "Asia/Karachi" };
+    const { location } = await createOrFindLocation(userId, { name: "Market", latitude: 31.5, longitude: 74.3 });
+    const parent = await newTask(userId, "Shopping");
+    const child = await createTask(ctx, { title: "Buy rice", priority: Priority.MEDIUM, source: TaskSource.MANUAL, parentTaskId: parent.id });
+    await attachLocation(userId, parent.id, location.id);
+    await updateTask(ctx, child.id, { status: TaskStatus.COMPLETED });
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: parent.id } })).status, TaskStatus.COMPLETED);
+    assert.equal((await prisma.taskLocation.findFirstOrThrow({ where: { taskId: parent.id } })).active, false);
+  });
+});
+
 test("locations: users can't touch each other's places; deleting a place removes its attachments; changes re-sync tasks", { skip }, async () => {
   await withUser(async (userId) => {
     await withUser(async (otherId) => {

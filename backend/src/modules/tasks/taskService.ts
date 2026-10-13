@@ -362,6 +362,7 @@ export async function updateParentProgress(parentTaskId: string | null, depth = 
     },
   });
   await recordVersion(updated, null);
+  if (status !== parent.status) await setTaskLocationsActive(updated.id, status);
   if (status === TaskStatus.COMPLETED && parent.status !== TaskStatus.COMPLETED) {
     logEvent(parent.userId, "TASK_COMPLETED", parent.id, { category: parent.category, viaSubtasks: true });
   }
