@@ -48,6 +48,7 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
+import { attachPlaceByName, savedPlaceInTitle } from "../locations/locationService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
@@ -93,6 +94,8 @@ export type Turn = {
   task: TaskContext;
   learned: string[];
   memoriesUsed: number;
+  /** Pro users' saved place names (location extraction accepts them after "at" / "se"). */
+  placeNames?: string[];
 };
 
 export type Out = {
@@ -113,6 +116,7 @@ export function extractOpts(turn: Turn): ExtractOptions {
     now: turn.now,
     tz: turn.tz,
     contexts: Array.isArray(turn.settings.contexts) ? (turn.settings.contexts as string[]) : [],
+    places: turn.placeNames ?? [],
   };
 }
 
@@ -162,6 +166,7 @@ export async function handleAssistantMessage(input: {
     task: { userId: input.user.id, tz, deviceId: input.deviceId },
     learned: [],
     memoriesUsed: 0,
+    placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
   };
 
   const text = input.text?.trim() ?? "";
@@ -325,7 +330,7 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding)
   }
 
   // The user changed the subject: never force their message into the open question.
-  if (isTopicSwitch(u, text) && p.kind !== "choose_task" && p.kind !== "mood_confirm") {
+  if (isTopicSwitch(u, text) && p.kind !== "choose_task" && p.kind !== "mood_confirm" && p.kind !== "location_choice") {
     turn.state.pending = null;
     return null;
   }
@@ -386,6 +391,7 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding)
     case "confirm_delete":
     case "confirm_update":
     case "choose_task":
+    case "location_choice":
     case "clarify_intent":
     case "prereq":
     case "past_date":
@@ -659,6 +665,10 @@ export async function proceedWithDraft(
 
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
   if (scheduleNote) lines.push(scheduleNote);
+  // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
+  // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
+  const place = draft.location ?? savedPlaceInTitle(task.title, turn.placeNames ?? []);
+  if (place && isPro(turn.settings)) lines.push(await placeLine(turn, task, place));
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
@@ -674,6 +684,65 @@ export async function proceedWithDraft(
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
   return { content: lines.join("\n"), cards: [taskCard(task, undefined, true)], actions, intent: "task_created" };
+}
+
+/** FR-LB-001 chat replies (English + Urdu). */
+export const LOCATION_TEXT = {
+  en: {
+    set: (place: string, range: string) => `Location set: ${place} (${range} range). You'll be notified when nearby.`,
+    notFound: (place: string) => `I created the task but couldn't find '${place}' on the map. You can add the location from the task details.`,
+    choose: (title: string, place: string) => `I created '${title}'. I found several locations for '${place}':`,
+    chooseEnd: "Which one? Or say 'none' to skip.",
+    openToSearch: "Open task to search",
+    openHint: (title: string) => `Open '${title}' and tap 'Add location' to search.`,
+    none: "No location set. You can add one from the task details.",
+    range: { PRECISE: "Precise", NEARBY: "Nearby", AREA: "Area" } as Record<string, string>,
+  },
+  ur: {
+    set: (place: string, range: string) => `مقام طے ہو گیا: ${place} (${range})۔ قریب پہنچنے پر آپ کو یاد دلایا جائے گا۔`,
+    notFound: (place: string) => `کام بن گیا، لیکن '${place}' نقشے پر نہیں ملا۔ آپ کام کی تفصیل سے مقام شامل کر سکتے ہیں۔`,
+    choose: (title: string, place: string) => `'${title}' بن گیا۔ '${place}' کے کئی مقامات ملے:`,
+    chooseEnd: "کون سا؟ یا چھوڑنے کے لیے 'none' کہیں۔",
+    openToSearch: "تلاش کے لیے کام کھولیں",
+    openHint: (title: string) => `'${title}' کھولیں اور تلاش کے لیے 'مقام شامل کریں' دبائیں۔`,
+    none: "کوئی مقام طے نہیں ہوا۔ آپ کام کی تفصیل سے شامل کر سکتے ہیں۔",
+    range: { PRECISE: "قریب ترین", NEARBY: "قریب", AREA: "علاقہ" } as Record<string, string>,
+  },
+};
+
+export function locationText(turn: Turn) {
+  return LOCATION_TEXT[turn.settings.language === "ur" ? "ur" : "en"];
+}
+
+/** Numbered choices: up to 4 places, plus "open the task to search" when there were more. */
+export function locationChoiceList(turn: Turn, results: Array<{ displayName: string }>, more: boolean): string {
+  const L = locationText(turn);
+  const rows = results.map((r, i) => `${i + 1}. ${truncate(r.displayName, 90)}`);
+  if (more) rows.push(`${results.length + 1}. ${L.openToSearch}`);
+  return rows.join("\n");
+}
+
+/**
+ * Attaches the place named in chat and returns the reply line. Several geocoding matches → nothing is
+ * attached yet; the numbered choices are asked and remembered in working memory (`location_choice`).
+ */
+export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<string> {
+  const L = locationText(turn);
+  try {
+    const r = await attachPlaceByName(turn.user.id, task.id, place, turn.tz);
+    if (r.kind === "not_found") return L.notFound(place);
+    if (r.kind === "choices") {
+      const results = r.results.slice(0, 4);
+      const more = r.results.length > 4;
+      turn.state.pending = { kind: "location_choice", taskId: task.id, taskTitle: task.title, place, results, more };
+      return `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`;
+    }
+    const shown = r.kind === "saved" ? r.place.name : truncate(r.result.displayName, 70);
+    return L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY);
+  } catch (error) {
+    console.warn("Could not attach place from chat", error instanceof Error ? error.message : error);
+    return L.notFound(place);
+  }
 }
 
 async function findPrerequisite(turn: Turn, title: string): Promise<{ course: string; prereq: string } | null> {

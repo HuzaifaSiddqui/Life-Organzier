@@ -15,6 +15,8 @@ import { PreferencesProvider } from "./src/context/PreferencesContext";
 import { LocaleProvider } from "./src/i18n/LocaleProvider";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { configureReminders } from "./src/services/reminders";
+// Registers the geofence background task at module load, before anything renders (FR-LB-001).
+import "./src/services/locationReminders";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 
 // Only the weights in theme/tokens `fonts` — importing the package root would bundle every weight.

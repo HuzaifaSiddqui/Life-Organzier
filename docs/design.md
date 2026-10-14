@@ -160,7 +160,8 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 | `Dot` | Priority/category marker | `color`, `size` | Always next to a label |
 | `Card` | Elevation-1 container | `tone`: `neutral · accent · success · warning · danger`; `onPress` | Never nest cards. Tappable cards get press scale |
 | `ListItem` | Row | `title`, `subtitle`, `leading`, `trailing`, `onPress` | Min height 56. No scale, pressed tint only |
-| `Sheet` | Bottom sheet (elevation 2) | `visible`, `onClose`, `title` | Springs up from the bottom; tap the scrim or press back to close; `accessibilityViewIsModal`; safe-area padding |
+| `Sheet` | Bottom sheet (elevation 2) | `visible`, `onClose`, `title` | Springs up from the bottom; tap the scrim or press back to close; `accessibilityViewIsModal`; safe-area padding. Sizes to its content and does not avoid the keyboard: don't put text fields in it (see `LocationPickerSheet`) |
+| `KeyboardPad` | Keeps content above the on-screen keyboard | `style` | Pads the bottom by the keyboard height (Android 15+ is edge-to-edge and no longer resizes the window). One wraps the whole app in `RootNavigator`, so screens need nothing. A `Modal` is a separate window: the routine form wraps its content in one; the place picker uses `KeyboardAvoidingView` |
 | `Skeleton` | Loading placeholder | `height`, `width`, `radius` | Compose skeletons that match the final layout. No bare spinners for content. Hidden from screen readers |
 | `Snackbar` | Transient feedback + Undo | `text`, `tone` `neutral · success · warning · danger`, `action`, `onHide` | Inverse surface, above bottom nav, polite live region. Use an Undo action for delete / complete / edit |
 | `EmptyState` | Empty screen or section | `icon` (emoji or node), `title`, `text`, `action` | Short helpful copy that teaches by example ("Try typing 'Submit report Friday 3 PM'") plus one action |
@@ -168,6 +169,21 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 | `SyncBadge` | Offline / pending / syncing / failed | — (subscribes to `syncEngine`) | Hidden when synced. Retry when failed or offline |
 | `ConflictSheet` | "Keep mine / Use cloud version" | `visible`, `mine`, `cloud`, `onKeepMine`, `onUseCloud`, `onClose` | **Not wired up:** `syncEngine` has no conflict detection yet |
 | `SectionTitle`, `ProgressBar`, `ConfidenceMeter`, `HighlightText`, `TutorialTip`, `HelpButton` | Composites in `ui.tsx` | as before | Token-styled. `ProgressBar` has a progressbar role/value and is never width-animated. `HelpButton` opens a `Sheet` |
+
+**Feature components (FR-LB-001 location reminders)** — built from the primitives above, `useTheme()` and `t()` only:
+
+| Component | Use | Notes |
+|---|---|---|
+| `LocationPickerSheet` | Add / edit a place for a task, add or edit a saved place | Its own `Modal` (slide, `scrim` backdrop closes it) with a fixed panel at 85% of the screen inside a `KeyboardAvoidingView` (`padding` on iOS, `height` on Android). Top to bottom: handle, title + close, saved-place `Chip`s (most used first, one tap selects), search (500 ms debounce, 3+ letters, never auto-focused), "Use current location", results in a `FlatList` (one tap selects with the keyboard open; dragging dismisses it), "Not found?" fallback. After a pick: editable name, radius `Chip`s (Precise 200m / Nearby 350m / Area 750m), "Save location". In Saved places, "Change location" moves the place (same name, new position). No map |
+| `TaskLocationsField` | Location chips on the task form and task detail (Pro only); tap opens `LocationActionSheet` (new, unsaved tasks: the picker) | `Chip` with a leading `pin` + `IconButton` close to remove; "Add location" secondary button; "Grant" hint when reminders are off; detail shows "· 1.2 km away" |
+| `LocationActionSheet` | Tapping a location chip on a synced task | Compact `Sheet`: name, address (`displayAddress`) and "1.2 km away" as the confirmation (no map), radius `Chip`s that save at once (inline "Radius updated"), "Change location" (opens the picker) and "Remove from task" (Undo for 5 s) |
+| `LocationOnboardingSheet` | First time Location reminders are turned on and allowed | One `Sheet` of `ListItem` rows: Home, University, Office and every other saved place (address, or "Tap to set location"; a check when saved). A row opens `LocationPickerSheet`, which saves at once. "Add another place" (no limit) and "Done". No text fields, no wizard |
+| `LocationSnackbar` | App-level location messages (permission hint, "Location removed · Undo") | `Snackbar` mounted next to `CheckinSheet`, fed by `showLocationSnackbar` |
+| `SavedPlacesScreen` | Settings → Saved places | `ListItem` rows (name, radius, use count), trash `IconButton` with confirm, skeleton / empty / error states |
+
+Icon added: `pin` (map pin, same 1.8 stroke line style).
+
+`Sheet` is a bottom-anchored flex child inside the modal (not `position: absolute`), so it re-measures when its content changes after opening (the picker grows from search to results to the radius step).
 
 Legacy prop renames done in Phase 0: Button `kind="ai"` → `"tonal"`, Card/Chip `tone="ai" | "primary"` → `"accent"`, `Toast` → `Snackbar`.
 
@@ -213,8 +229,11 @@ All installed with `npx expo install`. The native ones need a **new development 
 | `expo-font` | Font loading (config plugin added to `app.json`) | yes |
 | `expo-navigation-bar` | Android nav-bar button style per theme (edge-to-edge: the bar is transparent over `canvas`) | yes |
 | `@expo-google-fonts/inter`, `@expo-google-fonts/noto-nastaliq-urdu` | Font files | no |
+| `expo-location`, `expo-task-manager` | FR-LB-001 geofence reminders (config plugin in `app.json` adds fine/coarse/background location) | yes |
 
-Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), a charts library (`react-native-svg` + `components/charts` are enough), and a keyboard library (`KeyboardAvoidingView` first).
+App-level transient messages with no screen of their own (e.g. the one-time location-permission hint, `components/LocationPermissionHint.tsx`) use the same `Snackbar`, mounted once next to `CheckinSheet` in `RootNavigator` and fed by a small listener in the service.
+
+Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), a charts library (`react-native-svg` + `components/charts` are enough), and a keyboard library (the `KeyboardPad` primitive covers screens; don't add `KeyboardAvoidingView` to screens, it would pad twice. Text entry in a popup uses a `Modal` + `KeyboardAvoidingView`, as `LocationPickerSheet` does).
 
 ## Migration log
 

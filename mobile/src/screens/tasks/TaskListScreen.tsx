@@ -26,6 +26,7 @@ import { getApiErrorMessage } from "../../services/api";
 import { subscribeTasks } from "../../services/syncEngine";
 import { deleteTask, getCachedTasks, getTasks, restoreTask, updateTask } from "../../services/tasksApi";
 import type { Task, TaskStatus } from "../../types/models";
+import { useLocale } from "../../i18n/LocaleProvider";
 import { isOverdue } from "../../utils/format";
 import { PRIORITY_RANK } from "../../utils/priorityColors";
 
@@ -96,6 +97,9 @@ export function TaskListScreen({ navigation, route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>(route.params?.filter === "overdue" ? "OVERDUE" : "ALL");
+  const { t: tr } = useLocale();
+  const [onlyIds, setOnlyIds] = useState<string[] | null>(route.params?.ids?.length ? route.params.ids : null);
+  useEffect(() => setOnlyIds(route.params?.ids?.length ? route.params.ids : null), [route.params?.ids]);
   const [range, setRange] = useState<RangeFilter>(route.params?.filter === "today" ? "TODAY" : "ALL");
   const [sort, setSort] = useState<SortKey>("due_asc");
   const [cats, setCats] = useState<string[]>([]);
@@ -142,6 +146,7 @@ export function TaskListScreen({ navigation, route }: Props) {
     const parentsShown = new Set(tasks.filter((t) => !t.parentTaskId).map((t) => t.id));
     const list = tasks.filter((t) => {
       if (t.status === "DELETED" || t.archived) return false;
+      if (onlyIds) return onlyIds.includes(t.id);
       if (t.parentTaskId && parentsShown.has(t.parentTaskId) && !q) return false;
       if (status === "OVERDUE" && !isOverdue(t)) return false;
       if (status !== "ALL" && status !== "OVERDUE" && t.status !== (status as TaskStatus)) return false;
@@ -176,7 +181,7 @@ export function TaskListScreen({ navigation, route }: Props) {
       }
     });
     return list;
-  }, [tasks, status, range, cats, tags, tagMode, query, sort, useContext, settings?.currentContext]);
+  }, [tasks, status, range, cats, tags, tagMode, query, sort, useContext, settings?.currentContext, onlyIds]);
 
   const overdueCount = useMemo(() => tasks.filter((t) => isOverdue(t)).length, [tasks]);
 
@@ -266,6 +271,11 @@ export function TaskListScreen({ navigation, route }: Props) {
         <TutorialTip id="tasks" title="Quick actions" text="Swipe a task right to complete it, left to push it to tomorrow, or long-press for edit/delete." />
         <TextInput style={styles.search} placeholder="Search tasks" placeholderTextColor="#646A78" value={query} onChangeText={setQuery} />
 
+        {onlyIds ? (
+          <View style={styles.chips}>
+            <Chip small selected label={tr("location.onlyTasks", { count: onlyIds.length })} onPress={() => setOnlyIds(null)} />
+          </View>
+        ) : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {STATUS.map((s) => (
             <Chip key={s.key} small label={s.key === "OVERDUE" && overdueCount ? `Overdue (${overdueCount})` : s.label} selected={status === s.key} tone={s.key === "OVERDUE" && overdueCount ? "danger" : undefined} onPress={() => setStatus(s.key)} />

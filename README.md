@@ -64,6 +64,18 @@ npm run dev
 cd backend
 npx prisma studio
 
+
+adb reverse tcp:5050 tcp:5050
+
+adb reverse tcp:8081 tcp:8081
+
+omniroute serve --daemon --no-open
+
+TO STOP 
+kill $(lsof -t -iTCP:5050 -sTCP:LISTEN)   # backend
+kill $(lsof -t -iTCP:8081 -sTCP:LISTEN)   # Metro
+
+
 ## Local development setup
 
 One-time:

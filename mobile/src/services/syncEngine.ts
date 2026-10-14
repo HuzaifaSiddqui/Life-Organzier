@@ -168,6 +168,13 @@ type SyncResponse = {
 const prePullHooks = new Set<() => Promise<unknown>>();
 
 /**
+ * The first sync after each app start (per user) pulls everything instead of only what changed. An
+ * incremental pull can't report tasks that no longer exist on the server (purged, or removed there), so
+ * without this they stay on the phone forever and every request about them fails with "Task not found".
+ */
+let pulledAllFor: string | null = null;
+
+/**
  * Work that must reach the server before tasks are pulled (e.g. check-in answers made offline), so
  * the pulled state already includes it and the list doesn't flicker back.
  */
@@ -180,7 +187,8 @@ async function runSync(): Promise<boolean> {
   if (!auth.currentUser) return false;
   for (const hook of prePullHooks) await hook().catch(() => undefined);
   const queue = await readQueue();
-  const since = await readJson<string | null>(K.since(), null);
+  const uid = auth.currentUser.uid;
+  const since = pulledAllFor === uid ? await readJson<string | null>(K.since(), null) : null;
   setStatus({ syncing: true, error: null });
   try {
     const res = await api.post("/sync", { mutations: queue, since }, { timeout: 30000 });
@@ -212,6 +220,7 @@ async function runSync(): Promise<boolean> {
     await writeQueue(remaining);
     await writeTasks(tasks);
     await writeJson(K.since(), serverTime);
+    pulledAllFor = uid;
     attempts = 0;
     setStatus({ syncing: false, failed: false, online: true, lastSyncAt: serverTime, error: null });
     return true;

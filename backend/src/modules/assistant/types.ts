@@ -18,6 +18,8 @@ export type TaskDraft = {
   difficulty: number | null;
   tags: string[];
   context: string | null;
+  /** FR-LB-001: place named in the message; attached as a geofence for Pro users. */
+  location?: string | null;
   /** User explicitly accepted an end-of-day deadline / no time. */
   allowNoTime?: boolean;
   allowNoDuration?: boolean;
@@ -55,6 +57,7 @@ export type Pending =
   | { kind: "mood_confirm"; mood: string; confidence: number; text: string }
   | { kind: "confirm_update"; taskId: string; changes: Record<string, unknown>; summary: string }
   | { kind: "confirm_delete"; taskId: string; title: string }
+  | { kind: "location_choice"; taskId: string; taskTitle: string; place: string; results: Array<{ name: string; displayName: string; latitude: number; longitude: number }>; more: boolean }
   | { kind: "choose_task"; purpose: "update" | "complete" | "delete" | "progress" | "split" | "query_progress"; candidates: string[]; data: Record<string, unknown> }
   | { kind: "clarify_intent"; text: string }
   | { kind: "prereq"; draft: TaskDraft; course: string; prereq: string; source: "CHAT" | "VOICE" | "WHATSAPP" }

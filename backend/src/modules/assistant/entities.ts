@@ -32,6 +32,8 @@ export type Entities = {
   difficulty: number | null;
   tags: string[];
   context: string | null;
+  /** FR-LB-001 place named in the message ("from Ali Medical Store", "ghar ja ke"); not removed from the title. */
+  location: string | null;
   flexibleTime: boolean;
   residual: string;
 };
@@ -41,6 +43,8 @@ export type ExtractOptions = {
   tz: string;
   contexts?: string[];
   customCategories?: string[];
+  /** The user's saved place names: weak markers (at/in/from/se/par/pe) also accept these. */
+  places?: string[];
 };
 
 const WEEKDAY_NAMES: Record<string, number> = {
@@ -504,6 +508,8 @@ export function extractEntities(text: string, opts: ExtractOptions): Entities {
   else if (/\b(hard|difficult|tough|challenging|complex)\b/i.test(text)) difficulty = 4;
   else if (/\b(easy|quick|simple|small|light)\b/i.test(text)) difficulty = 2;
 
+  const location = extractLocation(cur.text, opts.places ?? []);
+
   let context: string | null = null;
   for (const c of opts.contexts ?? []) {
     const bare = c.replace(/^(at|in)\s+/i, "");
@@ -530,9 +536,79 @@ export function extractEntities(text: string, opts: ExtractOptions): Entities {
     difficulty,
     tags,
     context,
+    location,
     flexibleTime,
     residual: cur.text,
   };
+}
+
+/* ------------------------------------------------------------------ places (FR-LB-001) */
+
+/** Words that make a phrase a place ("Ali Medical Store", "Model Town", "university"). */
+const PLACE_WORDS =
+  /\b(?:store|shop|market|bazaa?r|mall|plaza|university|uni|campus|college|school|office|daftar|ghar|home|hostel|hospital|clinic|pharmacy|medical|bank|atm|masjid|mosque|park|chowk|road|town|colony|block|phase|station|stop|gym|hotel|restaurant|cafe|library|mandi|cent(?:er|re)|airport|salon|bakery|stadium|dhaba)\b/i;
+/** Where a place name ends. */
+const PLACE_END = String.raw`(?=\s*(?:[,.;!?]|$|\b(?:and|aur|to|toh|by|before|after|on|for|tomorrow|today|tonight|kal|aaj|when|then|phir|at\s+\d|ko|ke|ka|ki|hai|hain|karna|karni|lena|leni|dena|deni)\b))`;
+const EN_STRONG = new RegExp(String.raw`\b(?:when\s+i(?:'m|\s+am)\s+(?:at|in|near)|when\s+i\s+(?:reach|get\s+to|pass|arrive\s+at|go\s+to)|while\s+(?:at|in)|near)\s+(?:the\s+)?([a-z][\w'&.-]*(?:\s+[a-z0-9][\w'&.-]*){0,4}?)${PLACE_END}`, "i");
+const EN_WEAK = new RegExp(String.raw`\b(?:at|from|in)\s+(?:the\s+)?([a-z][\w'&.-]*(?:\s+[a-z0-9][\w'&.-]*){0,4}?)${PLACE_END}`, "gi");
+/** Roman Urdu markers come after the place: "ghar ja ke", "Ali medical store se". */
+const UR_STRONG = /((?:[a-z][\w'&.-]*\s+){0,2}[a-z][\w'&.-]*)\s+(?:ja\s*ke|jaa\s*ke|ja\s*kar|pohu?n?ch\s*ke|pahunch\s*ke|jaa?un|jaa?o)\b/i;
+const UR_WEAK = /((?:[a-z][\w'&.-]*\s+){0,2}[a-z][\w'&.-]*)\s+(?:se|par|pe)\b/gi;
+const NOT_PLACE_START = /^(?:mujhe|main|mein|mai|ne|ko|phir|pehle|bhi|aur|i|me|my|a|an|the|to|go|buy|get|pick|drop|submit)$/i;
+
+function knownPlace(candidate: string, places: string[]): boolean {
+  const c = candidate.toLowerCase();
+  return places.some((p) => p.toLowerCase() === c);
+}
+
+/** Keeps the place part of a Roman Urdu phrase: from a leading proper name or the first place word. */
+function trimUrduCandidate(raw: string): string {
+  const words = raw.trim().split(/\s+/);
+  while (words.length > 1 && NOT_PLACE_START.test(words[0])) words.shift();
+  const firstPlace = words.findIndex((w) => PLACE_WORDS.test(w));
+  if (firstPlace > 0) {
+    const start = /^[A-Z]/.test(words[firstPlace - 1]) && !NOT_PLACE_START.test(words[firstPlace - 1]) ? firstPlace - 1 : firstPlace;
+    return words.slice(start).join(" ");
+  }
+  return words.join(" ");
+}
+
+/**
+ * The place a task should happen at, or null. Strong markers ("near", "when I reach", "ja ke") accept
+ * any name; weak ones ("at", "from", "in", "se", "par", "pe") need a place word or a saved place name,
+ * so "at 5", "in the morning", "Ali se baat" are not places.
+ */
+export function extractLocation(text: string, places: string[] = []): string | null {
+  const clean = (p: string) => p.replace(/\s+/g, " ").replace(/[.,]+$/, "").trim();
+  const strong = EN_STRONG.exec(text);
+  if (strong) return clean(strong[1]);
+  const urStrong = UR_STRONG.exec(text);
+  if (urStrong) return clean(trimUrduCandidate(urStrong[1]));
+  for (const m of text.matchAll(EN_WEAK)) {
+    const p = clean(m[1]);
+    if (PLACE_WORDS.test(p) || knownPlace(p, places)) return p;
+  }
+  for (const m of text.matchAll(UR_WEAK)) {
+    const p = clean(trimUrduCandidate(m[1]));
+    if (PLACE_WORDS.test(p) || knownPlace(p, places)) return p;
+  }
+  return null;
+}
+
+export type LocationCommand = { kind: "remove"; taskRef: string } | { kind: "change"; taskRef: string; place: string | null };
+
+/** "remove the location (from X)", "X ki location hata do", "change the location (of X) to Y", "jagah badal do". */
+export function parseLocationCommand(text: string): LocationCommand | null {
+  const t = text.trim().replace(/[.!?]+$/, "");
+  let m = /^(?:please\s+)?(?:remove|delete|clear|drop)\s+(?:the\s+)?(?:location|place)(?:\s+(?:from|of|on)\s+(.+))?$/i.exec(t);
+  if (m) return { kind: "remove", taskRef: (m[1] ?? "").trim() };
+  m = /^(?:(.+?)\s+(?:ki|ka|ke|se)\s+)?(?:location|jagah)\s+(?:hata|hatao|hata\s*do|hata\s*dein|nikal\s*do)$/i.exec(t);
+  if (m) return { kind: "remove", taskRef: (m[1] ?? "").trim() };
+  m = /^(?:please\s+)?change\s+(?:the\s+)?(?:location|place)(?:\s+(?:of|for)\s+(.+?))?\s+to\s+(.+)$/i.exec(t);
+  if (m) return { kind: "change", taskRef: (m[1] ?? "").trim(), place: m[2].trim() };
+  m = /^(?:(.+?)\s+(?:ki|ka|ke)\s+)?(?:location|jagah)\s+(?:badal|badlo|change\s*kar)\s*(?:do|dein|den)?$/i.exec(t);
+  if (m) return { kind: "change", taskRef: (m[1] ?? "").trim(), place: null };
+  return null;
 }
 
 const FILLER_PREFIX =

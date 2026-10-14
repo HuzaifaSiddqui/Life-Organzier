@@ -46,6 +46,13 @@
     { "id": "m41", "lang": "en", "text": "the thing for Friday", "intent": "unclear", "alsoOk": ["create_task"] },
     { "id": "m42", "lang": "ru", "text": "Ali ka birthday", "intent": "create_task", "alsoOk": ["unclear", "provide_info"] }
   ],
+  "locations": [
+    { "id": "l01", "text": "buy medicine from Ali Medical Store", "location": "Ali Medical Store" },
+    { "id": "l02", "text": "ghar ja ke nails cut karna", "location": "ghar" },
+    { "id": "l03", "text": "submit assignment at university by 5pm", "location": "university" },
+    { "id": "l04", "text": "buy groceries near Model Town", "location": "Model Town" },
+    { "id": "l05", "text": "kal meeting hai", "location": null }
+  ],
   "firstSteps": [
     { "id": "f01", "title": "Physics assignment", "durationMinutes": 120 },
     { "id": "f02", "title": "Write the history essay", "durationMinutes": 180 },

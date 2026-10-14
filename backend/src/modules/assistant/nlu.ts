@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getAi, type ChatMessage } from "../../ai/llm.js";
 import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
 import { parseCheckinStyle } from "../checkins/style.js";
-import { cleanTitle, extractEntities, isHabitLike, type Entities, type ExtractOptions } from "./entities.js";
+import { cleanTitle, extractEntities, isHabitLike, parseLocationCommand, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
   "create_task",
@@ -24,6 +24,7 @@ export const INTENTS = [
   "thanks",
   "help",
   "set_checkin_style",
+  "manage_location",
   "confirm",
   "deny",
   "provide_info",
@@ -112,6 +113,7 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   const t = text.trim();
   const words = t.split(/\s+/).length;
   if (parseCheckinStyle(t)) return { intent: "set_checkin_style", confidence: 0.95 };
+  if (parseLocationCommand(t)) return { intent: "manage_location", confidence: 0.95 };
   if (CONFIRM.test(t)) return { intent: "confirm", confidence: 0.95 };
   if (DENY.test(t) && words <= 4) return { intent: "deny", confidence: 0.9 };
   if (GREETING.test(t)) return { intent: "greeting", confidence: 0.95 };

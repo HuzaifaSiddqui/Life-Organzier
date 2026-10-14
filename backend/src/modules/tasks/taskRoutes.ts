@@ -7,6 +7,7 @@ import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { suggestCategory, suggestTags } from "../assistant/entities.js";
 import { proposeSubtasks } from "../assistant/responder.js";
+import { attachLocation, detachLocation, requirePro, withLocations } from "../locations/locationService.js";
 import { loadScheduleContext, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   createTask,
@@ -87,7 +88,7 @@ taskRouter.get(
     const includeArchived = req.query.includeArchived === "true";
     const tasks = await listTasksForUser(req.user.id, { includeArchived });
     const now = new Date();
-    sendSuccess(res, { tasks: tasks.map((t) => serializeTask(t, now)), serverTime: now.toISOString() });
+    sendSuccess(res, { tasks: await withLocations(tasks.map((t) => serializeTask(t, now))), serverTime: now.toISOString() });
   }),
 );
 
@@ -136,7 +137,7 @@ taskRouter.get(
     const subtasks = await listSubtasks(req.user.id, task.id);
     const parent = task.parentTaskId ? await getTaskForUser(req.user.id, task.parentTaskId) : null;
     sendSuccess(res, {
-      task: serializeTask(task),
+      task: (await withLocations([serializeTask(task)]))[0],
       subtasks: subtasks.map((t) => serializeTask(t)),
       parent: parent ? { id: parent.id, title: parent.title } : null,
       canUndo: task.version > 1 && task.updatedAt.getTime() > Date.now() - 15 * 60000,
@@ -240,5 +241,27 @@ taskRouter.delete(
     const task = await softDeleteTask(ctxOf(req), req.params.id);
     if (!task) throw new HttpError(404, "TASK_NOT_FOUND", "Task not found");
     sendSuccess(res, { task: serializeTask(task) }, "Task deleted — you can undo for 24 hours");
+  }),
+);
+
+/* FR-LB-001: geofence locations on a task (saved places are managed under /api/locations). */
+
+taskRouter.post(
+  "/:id/locations",
+  handle(async (req, res) => {
+    requirePro(req.settings);
+    const { savedLocationId } = parseBody(z.object({ savedLocationId: z.string().uuid() }), req.body);
+    await attachLocation(req.user.id, req.params.id, savedLocationId);
+    const task = await getTaskForUser(req.user.id, req.params.id);
+    sendSuccess(res, { task: task ? (await withLocations([serializeTask(task)]))[0] : null }, "Location added", 201);
+  }),
+);
+
+taskRouter.delete(
+  "/:id/locations/:taskLocationId",
+  handle(async (req, res) => {
+    await detachLocation(req.user.id, req.params.id, req.params.taskLocationId);
+    const task = await getTaskForUser(req.user.id, req.params.id);
+    sendSuccess(res, { task: task ? (await withLocations([serializeTask(task)]))[0] : null }, "Location removed");
   }),
 );

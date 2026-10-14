@@ -1,9 +1,8 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Keyboard,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -70,6 +69,27 @@ export function AssistantScreen({ navigation, route }: Props) {
   const scrollToEnd = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
   }, []);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  // Keep the newest message in view when the keyboard opens (the app-wide KeyboardPad lifts the composer).
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => {
+      setKeyboardOpen(true);
+      scrollToEnd();
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [scrollToEnd]);
+  // Opening the chat lands on the newest message. Twice: the first jump can run before a long thread is laid out.
+  useEffect(() => {
+    if (loading) return;
+    const jump = () => scrollRef.current?.scrollToEnd({ animated: false });
+    const timers = [setTimeout(jump, 100), setTimeout(jump, 500)];
+    return () => timers.forEach(clearTimeout);
+  }, [loading]);
 
   useEffect(() => {
     let alive = true;
@@ -194,7 +214,7 @@ export function AssistantScreen({ navigation, route }: Props) {
   const last = messages[messages.length - 1];
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <View style={styles.root}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Icon name="back" size={24} color={colors.text} />
@@ -300,7 +320,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       </ScrollView>
 
-      <View style={[styles.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.composer, { paddingBottom: keyboardOpen ? 10 : Math.max(insets.bottom, 10) }]}>
         {listening ? (
           <View style={styles.listening}>
             <ListeningWaveform />
@@ -348,7 +368,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           </View>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

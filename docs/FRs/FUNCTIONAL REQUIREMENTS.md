@@ -2225,8 +2225,9 @@ This document specifies all functional requirements for Life Organizer. It descr
 1. **Geofence Setup**
    - User assigns task/routine to location
    - Example: "Buy medicine at Medical Store"
-   - User sets location on map (address or GPS coordinates)
-   - User sets radius (default 500 meters, adjustable)
+   - User picks a place by text search (OpenStreetMap Nominatim, via the backend) or "Use current location" (no map view)
+   - Places are saved and reused across tasks ("Home", "Ali Medical Store")
+   - Radius presets: Precise 200 m, Nearby 350 m (default), Area 750 m; custom 100–2000 m
 
 2. **Location Detection**
    - App monitors user's location (if location permission granted)

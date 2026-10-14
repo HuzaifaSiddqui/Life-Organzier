@@ -4,6 +4,7 @@ import { addDaysYmd, formatClock, localParts, localYmd, parseClock, relativeDayL
 import { formatDuration, listJoin, plural } from "../../lib/text.js";
 import { logEvent } from "../events/eventService.js";
 import { latestMood, STRESS, type Mood } from "../mood/moodService.js";
+import { setTaskLocationsActive } from "../locations/locationService.js";
 import { getPatterns, peakWindowsFrom, peakWindowsLabel } from "../patterns/patternService.js";
 import { getRecommendations, type Recommendation } from "../patterns/recommendationService.js";
 import { markMissedOccurrences, occurrenceStart, occurrencesForDay } from "../routines/routineService.js";
@@ -117,6 +118,7 @@ export async function getAttention(user: User, settings: UserSettings, now = new
     const end = new Date(t.dueAt.getTime() + (t.durationMinutes ?? 60) * 60000);
     if (end > now) continue;
     await prisma.task.update({ where: { id: t.id }, data: { status: TaskStatus.SKIPPED, version: t.version + 1, lastModifiedAt: now } });
+    await setTaskLocationsActive(t.id, TaskStatus.SKIPPED);
     logEvent(user.id, "TASK_SKIPPED", t.id, { reason: "missed_fixed", category: t.category });
     items.push({
       id: `missed-fixed:${t.id}`,

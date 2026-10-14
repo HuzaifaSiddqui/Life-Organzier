@@ -11,7 +11,7 @@ mood and learns habits. Target users are students in Pakistan (English + Urdu).
 | Mobile (`mobile/`) | Expo SDK 57, React Native 0.86, React 19, TypeScript, React Navigation (native stack), axios, Firebase Auth (client), expo-notifications, expo-speech / expo-speech-recognition, Reanimated 4 + gesture-handler, react-hook-form + zod |
 | Backend (`backend/`) | Node 24, Express 4, TypeScript (ESM, run with `tsx`), Prisma 6 + PostgreSQL, firebase-admin, zod, multer, pdf-parse / pdfjs-dist, mammoth (DOCX), tesseract.js (OCR) |
 | AI | Ollama (local): `qwen2.5:7b` chat (`OLLAMA_MODEL`), `nomic-embed-text` embeddings. Optional Gemini provider (off by default) |
-| CI | `.github/workflows/ci.yml`: backend typecheck + tests, mobile typecheck |
+| CI | `.github/workflows/ci.yml`: backend typecheck + tests, mobile typecheck + vitest |
 
 ## Repo layout
 
@@ -57,7 +57,7 @@ cd mobile && npx expo start --dev-client  # or `npx expo run:android` after nati
 
 # checks
 cd backend && npm run typecheck && npm test
-cd mobile && npx tsc --noEmit
+cd mobile && npx tsc --noEmit && npm test   # vitest: pure modules in src/utils/__tests__
 cd backend && npm run smoke               # HTTP checks; needs DB + running server
 ```
 
@@ -92,14 +92,13 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 
 - Calendar integration (Google/Outlook)
 - Collaboration / shared tasks
-- FR-LB-001 location-based (geofence) reminders
 - FR-OB-003 guest mode
 - Payments / subscriptions (the Pro tier is a settings flag, no billing)
 - Desktop app
 
 ## Rules for changes
 
-- Run backend `npm run typecheck && npm test` and mobile `npx tsc --noEmit` before finishing any task.
+- Run backend `npm run typecheck && npm test` and mobile `npx tsc --noEmit && npm test` before finishing any task.
 - Add a unit test for non-trivial logic (parsers, merge rules, planners, safety checks).
 - UI work follows `docs/design.md` and updates it (tokens, components, migration log) in the same change.
   Use primitives + `useTheme()`; no raw hex, no emoji as icons, copy via `t()` where migrated.

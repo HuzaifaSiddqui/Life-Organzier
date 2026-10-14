@@ -3,11 +3,14 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { TaskLocationsField } from "../../components/TaskLocationsField";
+import { usePreferences } from "../../context/PreferencesContext";
 import { Button, Card, Chip, ProgressBar, Snackbar, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
 import { sendToAssistant } from "../../services/assistantApi";
+import { isLocalId } from "../../services/syncEngine";
 import { createTask, deleteTask, getTask, splitTask, suggestSlot, undoTaskEdit, updateTask } from "../../services/tasksApi";
 import type { Task } from "../../types/models";
 import { formatDue, formatDuration, formatTime, isOverdue } from "../../utils/format";
@@ -18,6 +21,7 @@ type Props = NativeStackScreenProps<MainStackParamList, "TaskDetail">;
 export function TaskDetailScreen({ navigation, route }: Props) {
   const { taskId } = route.params;
   const [task, setTask] = useState<Task | null>(null);
+  const { isPro } = usePreferences();
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [parent, setParent] = useState<{ id: string; title: string } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
@@ -123,6 +127,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           {Array.isArray(task.tags) && task.tags.length ? <Text style={styles.tags}>{task.tags.map((t) => `#${t}`).join("  ")}</Text> : null}
           {task.description ? <Text style={ui.body}>{task.description}</Text> : null}
           {task.source !== "MANUAL" ? <Text style={styles.meta}>Added via {task.source.toLowerCase()}</Text> : null}
+          {isPro && !isLocalId(task.id) ? <TaskLocationsField key={task.updatedAt} taskId={task.id} initial={task.locations ?? []} showDistance /> : null}
         </Card>
 
         {overdue ? (

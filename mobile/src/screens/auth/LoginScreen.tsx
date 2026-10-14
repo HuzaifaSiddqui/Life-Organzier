@@ -3,8 +3,6 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -53,10 +51,7 @@ export function LoginScreen({ navigation }: Props) {
     <View style={styles.root}>
       <Pressable style={styles.backdrop} onPress={close} accessibilityLabel="Dismiss" />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.keyboard}
-      >
+      <View style={styles.keyboard}>
         <View style={styles.sheetWrap}>
           <View style={styles.card}>
             <View style={styles.modalHeader}>
@@ -136,7 +131,7 @@ export function LoginScreen({ navigation }: Props) {
             </Text>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }
