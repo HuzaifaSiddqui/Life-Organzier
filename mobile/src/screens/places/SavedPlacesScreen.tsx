@@ -5,7 +5,7 @@ import { Alert, ScrollView, View } from "react-native";
 import { Icon } from "../../components/icons/Icon";
 import { LocationPickerSheet } from "../../components/LocationPickerSheet";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { EmptyState, ErrorState, IconButton, ListItem, Skeleton } from "../../components/ui";
+import { Button, EmptyState, ErrorState, IconButton, ListItem, Skeleton } from "../../components/ui";
 import { useLocale } from "../../i18n/LocaleProvider";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { deletePlace, listPlaces } from "../../services/locationsApi";
@@ -16,13 +16,14 @@ type Props = NativeStackScreenProps<MainStackParamList, "SavedPlaces">;
 
 const PRESET_KEY = { PRECISE: "location.precise", NEARBY: "location.nearby", AREA: "location.area" } as const;
 
-/** FR-LB-001: the user's saved places — edit name/radius or delete (removes it from every task). */
+/** FR-LB-001: the user's saved places — add, edit (name, radius, or move it to a new position) or delete (removes it from every task). */
 export function SavedPlacesScreen({ navigation }: Props) {
   const { t } = useLocale();
   const { colors, spacing } = useTheme();
   const [places, setPlaces] = useState<SavedLocation[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [editing, setEditing] = useState<SavedLocation | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -64,15 +65,26 @@ export function SavedPlacesScreen({ navigation }: Props) {
             <ListItem
               key={p.id}
               title={p.name}
-              subtitle={`${t(PRESET_KEY[p.preset])} · ${t("places.used", { count: p.usageCount })}`}
+              subtitle={[p.displayAddress, t(PRESET_KEY[p.preset]), t("places.used", { count: p.usageCount })].filter(Boolean).join(" · ")}
               leading={<Icon name="pin" color={colors.accent} />}
               onPress={() => setEditing(p)}
               trailing={<IconButton icon={<Icon name="trash" color={colors.danger.fg} />} accessibilityLabel={t("places.deleteTitle", { name: p.name })} onPress={() => confirmDelete(p)} />}
             />
           ))
         )}
+        {places && !failed ? (
+          <Button title={t("places.add")} kind="secondary" icon={<Icon name="plus" size={18} color={colors.accent} />} onPress={() => setAdding(true)} style={{ marginTop: spacing.sm }} />
+        ) : null}
       </ScrollView>
-      <LocationPickerSheet visible={!!editing} onDismiss={() => setEditing(null)} editing={editing} onLocationAdded={() => void load()} />
+      <LocationPickerSheet
+        visible={!!editing || adding}
+        onDismiss={() => {
+          setEditing(null);
+          setAdding(false);
+        }}
+        editing={editing}
+        onLocationAdded={() => void load()}
+      />
     </View>
   );
 }

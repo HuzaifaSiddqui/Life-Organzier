@@ -112,7 +112,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   at that place. Leaving and re-entering resets this (exit event clears the dedup), but GPS
   drift near a geofence boundary can cause multiple enter/exit cycles.
 - **Nominatim coverage.** OpenStreetMap data is patchy in smaller Pakistani cities and for
-  informal place names. If a search returns nothing, users can set the location manually
+  informal place names; individual shop branches are often missing (e.g. a pharmacy branch that
+  exists but was never mapped). Search looks within ~30 km, then ~39 km, then anywhere, and the
+  picker says the map may not list the shop. If a search returns nothing, users can set the location manually
   using "Use current location" (standing at the place) or by saving a place in Settings.
 - **GPS drift in urban areas.** Accuracy is 10–100 m depending on the phone and surroundings.
   The default 350 m radius absorbs most drift; the 200 m "Precise" preset may trigger
@@ -129,6 +131,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Location reminders: more detail
 
+- **Slow search for unmapped places.** A place that isn't nearby takes up to three Nominatim calls (one per second), so an empty result can take about 3 s.
+- **Saved place named in a task title (chat).** When no place is named as such, a saved place that appears as a whole word in the title ("Print notes at uni") is attached. "work", "kaam" and "house" are ignored because they are common in titles; other names can still match by accident, and the location can be removed from the task. The task form does not do this.
+- **Country fallback** without a position covers Pakistan, India, UAE, UK and USA (by timezone); other timezones search worldwide.
 - **Nominatim usage policy**: at most 1 request per second for the whole backend and an in-memory 24 h cache (lost on restart, per server process). Search results are in English.
 - **Place names in chat are found by rules, not the LLM.** "near …", "when I reach …" and "… ja ke / pohunch ke" accept any name; "at / from / in / se / par / pe" need a place word (store, market, university, ghar, …) or one of the user's saved place names, so "at Packages" is missed until "Packages" is saved. The task title keeps the place text. Everyday words map to saved places: ghar → Home, uni → University, daftar / kaam → Office, masjid → Mosque.
 - **The phone's copy of tasks decides what an arrival announces.** A task completed on another device is still announced until this phone syncs. "Done" on the notification opens the app to complete the tasks (no background handler).

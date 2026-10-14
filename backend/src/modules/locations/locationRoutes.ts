@@ -54,7 +54,7 @@ geocodeRouter.get(
   handle(async (req, res) => {
     const q = z.object({ q: z.string().trim().min(2).max(200), near_lat: coord(-90, 90).optional(), near_lng: coord(-180, 180).optional() }).parse(req.query);
     const near = q.near_lat !== undefined && q.near_lng !== undefined ? { lat: q.near_lat, lng: q.near_lng } : null;
-    sendSuccess(res, { results: await geocode(q.q, near) });
+    sendSuccess(res, { results: await geocode(q.q, near, {}, req.settings.timezone) });
   }),
 );
 

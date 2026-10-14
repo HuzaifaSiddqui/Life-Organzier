@@ -183,6 +183,22 @@ function aliasesOf(name: string): string[] {
   return group ?? [n];
 }
 
+/** Aliases too common in task titles to mean the place ("kaam karna hai", "finish work"). */
+const NOT_IN_TITLES = ["work", "kaam", "house"];
+
+/**
+ * The saved place a task title names as a whole word ("Print notes at uni" → the user's "University"),
+ * or null. Longest name first, so "Home Depot" wins over "Home".
+ */
+export function savedPlaceInTitle(title: string, placeNames: string[]): string | null {
+  const words = ` ${title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  for (const name of [...placeNames].sort((a, b) => b.length - a.length)) {
+    const terms = aliasesOf(name).filter((a) => !NOT_IN_TITLES.includes(a) || a === name.trim().toLowerCase());
+    if (terms.some((a) => words.includes(` ${a.replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `))) return name;
+  }
+  return null;
+}
+
 export type PlaceAttachResult =
   | { kind: "saved"; place: SavedLocation }
   | { kind: "geocoded"; place: SavedLocation; result: GeoResult }
@@ -194,7 +210,7 @@ export type PlaceAttachResult =
  * otherwise geocode (biased towards the user's saved Home): exactly one result is saved under the name the
  * user used and attached; several are returned for the user to choose; none → no location.
  */
-export async function attachPlaceByName(userId: string, taskId: string, query: string): Promise<PlaceAttachResult> {
+export async function attachPlaceByName(userId: string, taskId: string, query: string, timezone?: string): Promise<PlaceAttachResult> {
   const saved = await listLocations(userId);
   const names = aliasesOf(query);
   const match = saved.find((p) => names.includes(p.name.trim().toLowerCase()));
@@ -203,7 +219,7 @@ export async function attachPlaceByName(userId: string, taskId: string, query: s
     return { kind: "saved", place: match };
   }
   const home = saved.find((p) => ALIASES.home.includes(p.name.trim().toLowerCase()));
-  const results = await geocode(query, home ? { lat: home.latitude, lng: home.longitude } : null);
+  const results = await geocode(query, home ? { lat: home.latitude, lng: home.longitude } : null, {}, timezone);
   if (!results.length) return { kind: "not_found", query };
   if (results.length > 1) return { kind: "choices", results };
   return { kind: "geocoded", result: results[0], place: await attachGeoResult(userId, taskId, query, results[0]) };

@@ -48,7 +48,7 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
-import { attachPlaceByName } from "../locations/locationService.js";
+import { attachPlaceByName, savedPlaceInTitle } from "../locations/locationService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
@@ -666,7 +666,9 @@ export async function proceedWithDraft(
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
   if (scheduleNote) lines.push(scheduleNote);
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
-  if (draft.location && isPro(turn.settings)) lines.push(await placeLine(turn, task, draft.location));
+  // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
+  const place = draft.location ?? savedPlaceInTitle(task.title, turn.placeNames ?? []);
+  if (place && isPro(turn.settings)) lines.push(await placeLine(turn, task, place));
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
@@ -727,7 +729,7 @@ export function locationChoiceList(turn: Turn, results: Array<{ displayName: str
 export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<string> {
   const L = locationText(turn);
   try {
-    const r = await attachPlaceByName(turn.user.id, task.id, place);
+    const r = await attachPlaceByName(turn.user.id, task.id, place, turn.tz);
     if (r.kind === "not_found") return L.notFound(place);
     if (r.kind === "choices") {
       const results = r.results.slice(0, 4);

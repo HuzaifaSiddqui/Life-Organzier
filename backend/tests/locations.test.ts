@@ -4,7 +4,7 @@ import test from "node:test";
 import { Priority, TaskSource, TaskStatus } from "@prisma/client";
 import { prisma } from "../src/config/db.js";
 import { geocode, resetGeocodeCache, reverseGeocode, type GeocodeDeps } from "../src/modules/locations/geocode.js";
-import { attachLocation, createOrFindLocation, deleteLocation, detachLocation, locationInput, locationsForTasks, requirePro, resolveRadius, updateLocation } from "../src/modules/locations/locationService.js";
+import { attachLocation, createOrFindLocation, deleteLocation, detachLocation, locationInput, locationsForTasks, requirePro, resolveRadius, savedPlaceInTitle, updateLocation } from "../src/modules/locations/locationService.js";
 import { createTask, restoreTask, softDeleteTask, updateTask } from "../src/modules/tasks/taskService.js";
 import { dbAvailable, settings } from "./fixtures.js";
 
@@ -59,7 +59,43 @@ test("geocode: User-Agent, max 5 results, bias box around the user", async () =>
   assert.equal(r.length, 5);
   assert.deepEqual(r[0], { name: "Store 0", displayName: "Store 0, Lahore, Pakistan", latitude: 31.5, longitude: 74.3 });
   assert.equal(f.calls[0].headers["User-Agent"], "LifeOrganizer/1.0 (FYP)");
-  assert.match(f.calls[0].url, /viewbox=74\.05%2C31\.75%2C74\.55%2C31\.25/);
+  assert.match(f.calls[0].url, /viewbox=74\.03%2C31\.77%2C74\.57%2C31\.23&bounded=1/);
+  assert.equal(f.calls.length, 1); // found nearby: no wider search
+});
+
+test("geocode: nothing within ~30 km → ~39 km → anywhere (still biased to the user)", async () => {
+  resetGeocodeCache();
+  const f = fakeNominatim([]);
+  assert.deepEqual(await geocode("fazal din pharmacy", { lat: 31.5, lng: 74.3 }, f.deps), []);
+  assert.equal(f.calls.length, 3);
+  assert.match(f.calls[0].url, /viewbox=74\.03%2C.*bounded=1/);
+  assert.match(f.calls[1].url, /viewbox=73\.95%2C31\.85%2C74\.65%2C31\.15&bounded=1/);
+  assert.match(f.calls[2].url, /viewbox=74\.03%2C/);
+  assert.doesNotMatch(f.calls[2].url, /bounded/);
+});
+
+test("geocode: no position → the timezone's country is added to the query", async () => {
+  resetGeocodeCache();
+  const f = fakeNominatim([place("KFC", 0)]);
+  await geocode("KFC", null, f.deps, "Asia/Karachi");
+  assert.match(f.calls[0].url, /q=KFC%2C\+Pakistan/);
+  assert.doesNotMatch(f.calls[0].url, /viewbox/);
+  await geocode("KFC", null, f.deps, "Antarctica/Troll"); // unknown timezone: query unchanged
+  assert.match(f.calls[1].url, /q=KFC&/);
+  await geocode("KFC", { lat: 31.5, lng: 74.3 }, f.deps, "Asia/Karachi"); // a position wins over the country
+  assert.match(f.calls[2].url, /q=KFC&.*bounded=1/);
+});
+
+test("locations: a saved place named in a task title is found as a whole word", () => {
+  const places = ["Home", "University", "Office", "Al-Fatah"];
+  assert.equal(savedPlaceInTitle("Print notes at uni", places), "University");
+  assert.equal(savedPlaceInTitle("Ghar ki safai", places), "Home");
+  assert.equal(savedPlaceInTitle("Buy milk from al fatah", places), "Al-Fatah");
+  assert.equal(savedPlaceInTitle("Finish homework", places), null);
+  assert.equal(savedPlaceInTitle("Kaam khatam karna hai", places), null); // "kaam" is an Office alias only when said as a place
+  assert.equal(savedPlaceInTitle("Finish work report", places), null);
+  assert.equal(savedPlaceInTitle("Meeting at office", places), "Office");
+  assert.equal(savedPlaceInTitle("Call mom", []), null);
 });
 
 test("geocode: cached for 24 h; calls are at least 1 s apart", async () => {

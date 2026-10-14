@@ -209,6 +209,8 @@ export async function cleanupGeofenceDedup(): Promise<void> {
 /* ------------------------------------------------------------------ arrival / departure */
 
 async function handleGeofenceEnter(savedLocationId: string): Promise<void> {
+  // Location notifications bypass quiet hours — user needs the reminder when they arrive.
+  // (Check-ins and timed reminders respect quiet hours; that is decided on the server.)
   const place = (await readSnapshot()).find((p) => p.id === savedLocationId);
   if (!place) return;
   const now = Date.now();

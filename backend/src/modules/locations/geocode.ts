@@ -58,16 +58,42 @@ function toResult(p: NominatimPlace): GeoResult | null {
   return { name: p.name || p.display_name.split(",")[0].trim(), displayName: p.display_name, latitude, longitude };
 }
 
-/** Forward search, max 5 results, biased (not limited) to ~25 km around `near` when given. Empty on any failure. */
-export async function geocode(q: string, near: { lat: number; lng: number } | null, deps: GeocodeDeps = {}): Promise<GeoResult[]> {
-  const params = new URLSearchParams({ q: q.trim(), format: "jsonv2", limit: "5", addressdetails: "0" });
-  if (near) {
-    const d = 0.25; // ≈ 25 km box around the user
-    params.set("viewbox", `${near.lng - d},${near.lat + d},${near.lng + d},${near.lat - d}`);
-  }
-  try {
+/** Country for a user with no known position, from their timezone ("KFC" → "KFC, Pakistan"). */
+const TZ_COUNTRY: Record<string, string> = {
+  "Asia/Karachi": "Pakistan",
+  "Asia/Kolkata": "India",
+  "Asia/Dubai": "UAE",
+  "Europe/London": "UK",
+  "America/New_York": "USA",
+};
+
+/** Search boxes around the user, tried in order: ≈30 km, then ≈39 km. */
+const BOX_DEG = [0.27, 0.35];
+
+/**
+ * Forward search, max 5 results. With `near`: only places inside ≈30 km, then ≈39 km, and only if both are
+ * empty anywhere (still ranked towards the user), so "KFC" finds the local branch, not one abroad.
+ * Without `near`: the country of the user's timezone is added to the query. Empty on any failure.
+ */
+export async function geocode(q: string, near: { lat: number; lng: number } | null, deps: GeocodeDeps = {}, timezone?: string): Promise<GeoResult[]> {
+  const country = near ? undefined : TZ_COUNTRY[timezone ?? ""];
+  const search = async (boxDeg?: number, bounded = false): Promise<GeoResult[]> => {
+    const params = new URLSearchParams({ q: country ? `${q.trim()}, ${country}` : q.trim(), format: "jsonv2", limit: "5", addressdetails: "0" });
+    if (near && boxDeg) {
+      const n = (x: number) => Number(x.toFixed(4));
+      params.set("viewbox", `${n(near.lng - boxDeg)},${n(near.lat + boxDeg)},${n(near.lng + boxDeg)},${n(near.lat - boxDeg)}`);
+      if (bounded) params.set("bounded", "1");
+    }
     const rows = (await cachedGet(`${BASE}/search?${params}`, deps)) as NominatimPlace[];
     return (Array.isArray(rows) ? rows : []).map(toResult).filter((r): r is GeoResult => r !== null).slice(0, 5);
+  };
+  try {
+    if (!near) return await search();
+    for (const box of BOX_DEG) {
+      const local = await search(box, true);
+      if (local.length) return local;
+    }
+    return await search(BOX_DEG[0]);
   } catch (error) {
     console.warn("Geocoding failed", error instanceof Error ? error.message : error);
     return [];

@@ -115,7 +115,7 @@ The same engine serves the app chat, voice, and WhatsApp, so memory is shared ac
 | FR-AP-001..004 account, preferences, context scheduling | Implemented — UI is English-only (assistant replies follow the language setting; no RTL UI translation) |
 | FR-OB-001..002 onboarding & tutorials | Implemented |
 | FR-VF-003 voice conversation (Phase 2) | Not implemented |
-| FR-LB-001 location-based (geofence) reminders | Implemented (Pro tier, expo-location geofencing, Nominatim geocoding, 350m default radius) — device test pending |
+| FR-LB-001 location-based (geofence) reminders | Implemented (Pro tier, expo-location geofencing, Nominatim geocoding searched near the user first, 350m default radius, saved places named in a chat task title attached automatically) — device test pending |
 | Future work (out of scope): FR-OB-003 guest mode, calendar integration, collaboration, payments/subscriptions, desktop app | Not planned for this release |
 
 Known gaps and platform restrictions (including the Google Play `USE_EXACT_ALARM` restriction, offline-sync scope and OCR languages): [known-limitations.md](known-limitations.md).
