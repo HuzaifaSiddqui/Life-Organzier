@@ -25,6 +25,7 @@ import {
 import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen";
 import { CheckinSheet } from "../components/CheckinSheet";
 import { LocationSnackbar } from "../components/LocationSnackbar";
+import { KeyboardPad } from "../components/primitives";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
 import { flushPendingNavigation, navigationRef } from "./navigationRef";
@@ -149,27 +150,29 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={theme} ref={navigationRef} onReady={flushPendingNavigation}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!firebaseUser ? (
-          <Stack.Screen name="Auth" component={AuthStack} />
-        ) : !firebaseUser.emailVerified ? (
-          <Stack.Screen name="VerifyEmail" component={EmailVerificationScreen} />
-        ) : bootstrapping ? (
-          <Stack.Screen name="Boot">
-            {() => (
-              <View style={styles.centered}>
-                <BrandedBootLoader message="Preparing your workspace…" />
-              </View>
-            )}
-          </Stack.Screen>
-        ) : (
-          <Stack.Screen name="App" component={MainStack} />
-        )}
-      </Stack.Navigator>
-      {firebaseUser?.emailVerified && !bootstrapping ? <CheckinSheet /> : null}
-      {firebaseUser?.emailVerified && !bootstrapping ? <LocationSnackbar /> : null}
-    </NavigationContainer>
+    <KeyboardPad style={{ backgroundColor: colors.bg }}>
+      <NavigationContainer theme={theme} ref={navigationRef} onReady={flushPendingNavigation}>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {!firebaseUser ? (
+            <Stack.Screen name="Auth" component={AuthStack} />
+          ) : !firebaseUser.emailVerified ? (
+            <Stack.Screen name="VerifyEmail" component={EmailVerificationScreen} />
+          ) : bootstrapping ? (
+            <Stack.Screen name="Boot">
+              {() => (
+                <View style={styles.centered}>
+                  <BrandedBootLoader message="Preparing your workspace…" />
+                </View>
+              )}
+            </Stack.Screen>
+          ) : (
+            <Stack.Screen name="App" component={MainStack} />
+          )}
+        </Stack.Navigator>
+        {firebaseUser?.emailVerified && !bootstrapping ? <CheckinSheet /> : null}
+        {firebaseUser?.emailVerified && !bootstrapping ? <LocationSnackbar /> : null}
+      </NavigationContainer>
+    </KeyboardPad>
   );
 }
 

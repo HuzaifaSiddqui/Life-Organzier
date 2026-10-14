@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
 import { Button, Card, Chip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
@@ -275,7 +275,7 @@ export function TaskForm({
   const contexts = settings?.contexts ?? [];
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Card style={{ gap: 14 }}>
           <View>
@@ -445,7 +445,7 @@ export function TaskForm({
         {error ? <Text style={ui.error}>{error}</Text> : null}
         <Button title={submitLabel} onPress={() => void submit()} loading={busy} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

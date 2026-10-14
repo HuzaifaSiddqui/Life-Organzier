@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, EmptyState, HelpButton, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
+import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -230,7 +230,7 @@ export function RoutineScreen({ navigation }: Props) {
 
       <Modal visible={Boolean(form)} animationType="slide" onRequestClose={() => setForm(null)}>
         {form ? (
-          <View style={ui.screen}>
+          <KeyboardPad style={ui.screen}>
             <ScreenHeader title={form.id ? "Edit routine" : "New routine"} onBack={() => setForm(null)} />
             <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
               <Card style={{ gap: 14 }}>
@@ -349,7 +349,7 @@ export function RoutineScreen({ navigation }: Props) {
                 />
               ) : null}
             </ScrollView>
-          </View>
+          </KeyboardPad>
         ) : null}
       </Modal>
       <Snackbar text={toast} onHide={() => setToast(null)} />

@@ -1,4 +1,3 @@
-import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -11,7 +10,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AssistantCards } from "../../components/assistant/AssistantCards";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
@@ -72,12 +70,8 @@ export function AssistantScreen({ navigation, route }: Props) {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
   }, []);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  // The real keyboard height (window insets), so the composer sits on top of it. Android 15+ draws
-  // edge-to-edge and no longer resizes the window, and KeyboardAvoidingView doesn't see the keyboard there.
-  const keyboard = useAnimatedKeyboard();
-  const keyboardPad = useAnimatedStyle(() => ({ paddingBottom: keyboard.height.value }));
 
-  // Keep the newest message in view when the keyboard opens and whenever the screen is shown again.
+  // Keep the newest message in view when the keyboard opens (the app-wide KeyboardPad lifts the composer).
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => {
       setKeyboardOpen(true);
@@ -89,11 +83,13 @@ export function AssistantScreen({ navigation, route }: Props) {
       hide.remove();
     };
   }, [scrollToEnd]);
-  useFocusEffect(
-    useCallback(() => {
-      scrollToEnd();
-    }, [scrollToEnd]),
-  );
+  // Opening the chat lands on the newest message. Twice: the first jump can run before a long thread is laid out.
+  useEffect(() => {
+    if (loading) return;
+    const jump = () => scrollRef.current?.scrollToEnd({ animated: false });
+    const timers = [setTimeout(jump, 100), setTimeout(jump, 500)];
+    return () => timers.forEach(clearTimeout);
+  }, [loading]);
 
   useEffect(() => {
     let alive = true;
@@ -218,7 +214,7 @@ export function AssistantScreen({ navigation, route }: Props) {
   const last = messages[messages.length - 1];
 
   return (
-    <Animated.View style={[styles.root, keyboardPad]}>
+    <View style={styles.root}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Icon name="back" size={24} color={colors.text} />
@@ -372,7 +368,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           </View>
         )}
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
