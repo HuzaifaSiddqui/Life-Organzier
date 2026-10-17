@@ -23,6 +23,8 @@ export type RoutineInput = {
   priority?: RoutinePriority;
   timeLocked?: boolean;
   locationContext?: string | null;
+  /** Room or venue of a class, as written in the source document. */
+  location?: string | null;
   wellnessType?: string | null;
   active?: boolean;
 };
@@ -105,6 +107,7 @@ export async function createRoutine(userId: string, tz: string, input: RoutineIn
       priority: input.priority ?? RoutinePriority.NORMAL,
       timeLocked: input.timeLocked ?? false,
       locationContext: input.locationContext ?? null,
+      location: input.location?.trim() || null,
       wellnessType: input.wellnessType ?? null,
     },
   });

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { maskNumber } from "../whatsapp/linking.js";
 import type { AuthRequest } from "../../middleware/authMiddleware.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendError, sendSuccess } from "../../utils/apiResponse.js";
@@ -18,7 +19,7 @@ userRouter.get("/me", requireFirebaseUser, async (req: AuthRequest, res) => {
       sendError(res, "User not found. Call sync-user first.", "USER_NOT_FOUND", 404);
       return;
     }
-    sendSuccess(res, { user });
+    sendSuccess(res, { user: user && { ...user, phoneNumber: maskNumber(user.phoneNumber) } });
   } catch (e) {
     console.error(e);
     sendError(res, "Could not load profile", "PROFILE_FAILED", 500);

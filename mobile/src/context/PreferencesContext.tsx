@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import type { Category, UserSettings } from "../types/models";
-import { getCategories, getSettings, saveSettings } from "../services/settingsApi";
+import { getCategories, getSettings, saveSettings, type WhatsappLink } from "../services/settingsApi";
 import { startSyncEngine, syncNow } from "../services/syncEngine";
 import { startCheckinQueue } from "../services/checkins";
 import { startLocationReminders } from "../services/locationReminders";
@@ -12,7 +12,7 @@ import { trackAppOpen } from "../services/insightsApi";
 type PreferencesValue = {
   settings: UserSettings | null;
   categories: Category[];
-  phoneNumber: string | null;
+  whatsapp: WhatsappLink;
   loading: boolean;
   reload: () => Promise<void>;
   update: (patch: Partial<UserSettings>) => Promise<UserSettings | null>;
@@ -31,7 +31,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const { dbUser } = useAuth();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [whatsapp, setWhatsapp] = useState<WhatsappLink>({ linked: false, maskedNumber: null });
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
@@ -40,7 +40,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     try {
       const [s, c] = await Promise.all([getSettings(), getCategories().catch(() => [] as Category[])]);
       setSettings(s.settings);
-      setPhoneNumber(s.phoneNumber);
+      setWhatsapp(s.whatsapp ?? { linked: false, maskedNumber: null });
       setCategories(c);
     } catch {
       // Offline: keep whatever we had; screens degrade gracefully.
@@ -104,7 +104,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     () => ({
       settings,
       categories,
-      phoneNumber,
+      whatsapp,
       loading,
       reload,
       update,
@@ -112,7 +112,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       markTutorialSeen,
       isPro: settings?.tier === "PRO",
     }),
-    [settings, categories, phoneNumber, loading, reload, update, markTutorialSeen],
+    [settings, categories, whatsapp, loading, reload, update, markTutorialSeen],
   );
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }

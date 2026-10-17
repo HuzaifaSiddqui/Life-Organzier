@@ -32,6 +32,7 @@ const base = {
   priority: z.nativeEnum(RoutinePriority).default(RoutinePriority.NORMAL),
   timeLocked: z.boolean().default(false),
   locationContext: z.string().max(60).nullable().optional(),
+  location: z.string().trim().max(60).nullable().optional(),
   wellnessType: z.string().max(40).nullable().optional(),
 };
 

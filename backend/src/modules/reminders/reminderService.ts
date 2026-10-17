@@ -195,6 +195,15 @@ export function placeTaskReminder(
   return at;
 }
 
+/**
+ * Whether a planned reminder may still go out at `at`, by the same rules as placeTaskReminder. Do Not
+ * Disturb or quiet hours may have changed since the plan was made (WhatsApp checks this before sending).
+ */
+export function stillAllowedAt(at: Date, level: ReminderLevel, onTime: boolean, dueAt: Date | null, settings: UserSettings, tz: string): boolean {
+  const placed = placeTaskReminder({ at, level, body: "", onTime }, dueAt, settings, tz, settings.dndUntil, new Date(at.getTime() - 1), new Date(at.getTime() + 1));
+  return placed?.getTime() === at.getTime();
+}
+
 export async function planReminders(userId: string, settings: UserSettings, now = new Date(), horizonDays = 7): Promise<PlannedReminder[]> {
   const tz = settings.timezone;
   if (settings.notificationFrequency === "NONE") return [];
@@ -286,6 +295,7 @@ async function recordPlan(userId: string, planned: PlannedReminder[], tasks: Tas
       category: categoryOf.get(p.taskId as string) ?? null,
     }));
   if (rows.length) await prisma.reminderLog.createMany({ data: rows, skipDuplicates: true });
+  await prisma.userSettings.updateMany({ where: { userId }, data: { remindersPlannedAt: now } });
 }
 
 /** Notification action from the device: DONE | SNOOZE | OPEN | DISMISS. */

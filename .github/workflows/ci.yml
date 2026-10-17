@@ -26,6 +26,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/life_organizer_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/life_organizer_test
       # DB-backed tests must run in CI, not skip.
       REQUIRE_DB: "true"
       AI_ENABLED: "false"

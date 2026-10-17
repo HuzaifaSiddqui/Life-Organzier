@@ -22,9 +22,11 @@ export async function existingTaskId(userId: string, title: string, dueDate: Dat
   return t?.id ?? null;
 }
 
-export async function existingRoutineId(userId: string, title: string, daysOfWeek: number[], dueTime: string | null): Promise<string | null> {
+/** Same class already saved? Also matches the old title style "Physics (Room B-12)" from before Routine.location existed. */
+export async function existingRoutineId(userId: string, title: string, daysOfWeek: number[], dueTime: string | null, room?: string | null): Promise<string | null> {
+  const titles = room ? [title, `${title} (Room ${room})`] : [title];
   const candidates = await prisma.routine.findMany({
-    where: { userId, active: true, title: { equals: title, mode: "insensitive" }, dueTime },
+    where: { userId, active: true, OR: titles.map((t) => ({ title: { equals: t, mode: "insensitive" as const } })), dueTime },
     select: { id: true, daysOfWeek: true },
   });
   const key = [...daysOfWeek].sort().join(",");
@@ -136,8 +138,9 @@ export async function processDocument(
     const autoSchedules = extracted.schedules.length <= 5;
     for (const s of extracted.schedules) {
       if (!autoSchedules || s.confidence < SCHEDULE_AUTO || !s.daysOfWeek.length) continue;
-      const title = s.room ? `${s.title} (Room ${s.room})` : s.title;
-      const already = await existingRoutineId(user.id, title, s.daysOfWeek, s.time);
+      // Clean title; the room (only ever taken from the document text) goes into its own field.
+      const title = s.title;
+      const already = await existingRoutineId(user.id, title, s.daysOfWeek, s.time, s.room);
       if (already) {
         s.created = true;
         s.existing = true;
@@ -154,6 +157,7 @@ export async function processDocument(
         category: "Academic",
         priority: RoutinePriority.IMPORTANT,
         timeLocked: true,
+        location: s.room,
       });
       s.created = true;
       s.routineId = routine.id;

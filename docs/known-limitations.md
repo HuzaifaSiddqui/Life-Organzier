@@ -75,6 +75,20 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
 - WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
 
+## WhatsApp (FR-WA)
+
+- **Pro only.** Free accounts that are linked get one "WhatsApp is a Pro feature" reply a day and nothing is processed.
+- **24-hour window.** WhatsApp only allows free-form messages within 24 hours of the user's last message. Reminders are sent only inside that window (no approved templates); outside it the phone's local notification covers it, and a send rejected by Twilio for a closed window (error 63016) marks the reminder skipped, not retried.
+- **Sandbox join expiry.** On the Twilio sandbox each tester must send the `join <code>` message first, and that join expires after 72 hours of inactivity; then messages stop until they join again.
+- **No voice notes.** Audio messages get a "please type" reply. **No calls** (future work).
+- **Replies are English.** Questions are understood in English, Urdu and Roman Urdu, but deadline and class answers are written in English.
+- **In-memory state per server process.** The per-number message queue, link-failure counts and "once an hour/day" notices (each capped at 10,000 entries, oldest dropped first) reset on restart (lost messages are covered by the "please resend" sweep every 5 minutes). Several backend instances would need these in the database.
+- **Lost messages.** A message still unanswered after 5 minutes and not being processed (e.g. the server restarted mid-way) gets "Sorry, I missed that, please resend". A slow job on the same server is left alone; with several backend instances one instance can't see another's jobs.
+- **Crisis messages are answered for everyone.** The crisis check runs on every WhatsApp text before the link/Pro checks, so unlinked numbers and Free accounts get the support resources too; nothing about such a message is stored.
+- **Check-ins don't go to WhatsApp.** With notification devices set to "WhatsApp only", the phone schedules neither reminders nor check-ins, and check-ins have no WhatsApp path yet.
+- **Routine reminders** (not tasks) are not sent on WhatsApp.
+- **Classes are routines.** "Next class" counts Academic timetable routines, routines with a room, and routines named like a class (class, lecture, lab, tutorial, period, seminar). "Next week" questions aren't understood yet.
+
 ## Check-in first steps
 
 - **Task titles go to Google when Gemini is configured.** With `GEMINI_API_KEY` set, the first step for each

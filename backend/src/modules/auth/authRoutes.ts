@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { maskNumber } from "../whatsapp/linking.js";
 import type { AuthRequest } from "../../middleware/authMiddleware.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendError, sendSuccess } from "../../utils/apiResponse.js";
@@ -21,7 +22,7 @@ authRouter.post("/sync-user", requireFirebaseUser, async (req: AuthRequest, res)
       photoUrl: fb.picture ?? null,
     });
 
-    sendSuccess(res, { user }, "User synced");
+    sendSuccess(res, { user: { ...user, phoneNumber: maskNumber(user.phoneNumber) } }, "User synced");
   } catch (e) {
     console.error(e);
     sendError(res, "Could not sync user", "SYNC_FAILED", 500);
