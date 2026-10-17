@@ -335,7 +335,7 @@ model ReminderLog {
   fireAt              DateTime
   level               String
   category            String?
-  /// SCHEDULED | ACTED | IGNORED | SENDING | SENT_WHATSAPP | SKIPPED | FAILED
+  /// SCHEDULED | ACTED | IGNORED | SENDING | SENT_WHATSAPP | SKIPPED | FAILED | SNOOZED (a WhatsApp snooze; recordPlan never deletes it)
   status              String    @default("SCHEDULED")
   action              String?
   actedAt             DateTime?

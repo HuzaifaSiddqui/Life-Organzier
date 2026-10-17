@@ -1,4 +1,4 @@
-import { TaskStatus, type User, type UserSettings } from "@prisma/client";
+import { Prisma, Priority, TaskStatus, type Task, type User, type UserSettings } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { instantLabel } from "../../lib/time.js";
 import { addOutboundMessage } from "../conversations/conversationService.js";
@@ -126,56 +126,156 @@ export async function replanStaleWhatsappUsers(now = new Date()): Promise<number
   return replanned;
 }
 
-/** Sends due reminders over WhatsApp. Each row is claimed atomically first, so overlapping runs never double-send. */
-export async function sendDueWhatsappReminders(now = new Date(), send: Sender = sendWhatsapp): Promise<number> {
-  if ((send === sendWhatsapp && !twilioConfigured()) || pausedUntil > now.getTime()) return 0;
+/** Global guard against bulk sending; true when sending must stop for now. */
+async function bulkPaused(now: Date): Promise<boolean> {
+  if (pausedUntil > now.getTime()) return true;
   const recentSends = await prisma.activityEvent.count({ where: { type: "WHATSAPP_SENT", createdAt: { gte: new Date(now.getTime() - 10 * 60000) } } });
-  if (recentSends > BULK_LIMIT) {
-    pausedUntil = now.getTime() + 3600000;
-    console.warn("WhatsApp reminders paused for 1h: bulk sending detected");
-    return 0;
+  if (recentSends <= BULK_LIMIT) return false;
+  pausedUntil = now.getTime() + 3600000;
+  console.warn("WhatsApp reminders paused for 1h: bulk sending detected");
+  return true;
+}
+
+async function overDailyCap(userId: string, now: Date): Promise<boolean> {
+  const sentToday = await prisma.activityEvent.count({ where: { userId, type: "WHATSAPP_SENT", createdAt: { gte: new Date(now.getTime() - 24 * 3600000) } } });
+  return sentToday >= MAX_WHATSAPP_REMINDERS_PER_DAY;
+}
+
+const isActive = (t: Task) => (t.status === TaskStatus.PENDING || t.status === TaskStatus.IN_PROGRESS) && !t.archived && t.reminderMode !== "NONE";
+
+/**
+ * Sends one claimed row's message, records the outcome on the row and, when sent, stores it in the
+ * WhatsApp chat with focus on the task so "done" / a number reply acts on it.
+ * On a transient error the row goes back to `retryStatus` (null = delete it, so the next run claims it again).
+ */
+async function deliver(
+  row: { id: string; userId: string; level: string },
+  to: string,
+  task: Task,
+  body: string,
+  actions: Array<{ label: string; payload: Record<string, unknown> }>,
+  retryStatus: string | null,
+  send: Sender,
+): Promise<boolean> {
+  const result = await send(to, body);
+  if (!result.ok) {
+    if (result.twilioCode === TWILIO_WINDOW_CLOSED) {
+      await prisma.reminderLog.update({ where: { id: row.id }, data: { status: "SKIPPED" } });
+      logEvent(row.userId, "WHATSAPP_SKIPPED_WINDOW", task.id, { level: row.level });
+    } else if (result.transient) {
+      if (retryStatus) await prisma.reminderLog.update({ where: { id: row.id }, data: { status: retryStatus } });
+      else await prisma.reminderLog.delete({ where: { id: row.id } });
+    } else {
+      await prisma.reminderLog.update({ where: { id: row.id }, data: { status: "FAILED" } });
+    }
+    return false;
   }
+  await prisma.reminderLog.update({ where: { id: row.id }, data: { status: "SENT_WHATSAPP" } });
+  await addOutboundMessage(row.userId, "WHATSAPP", body, { focusTaskId: task.id, actions });
+  logEvent(row.userId, "WHATSAPP_SENT", task.id, { level: row.level });
+  return true;
+}
+
+const doneAction = (taskId: string) => ({ label: "Done", payload: { type: "complete_task", taskId } });
+const snoozeAction = (taskId: string) => ({ label: "Snooze 1h", payload: { type: "snooze_task", taskId, minutes: 60 } });
+
+/**
+ * Sends due reminders (planned ones and WhatsApp snoozes) over WhatsApp. Each row is claimed atomically
+ * first, so overlapping runs never double-send.
+ */
+export async function sendDueWhatsappReminders(now = new Date(), send: Sender = sendWhatsapp): Promise<number> {
+  if ((send === sendWhatsapp && !twilioConfigured()) || (await bulkPaused(now))) return 0;
   const due = await prisma.reminderLog.findMany({
-    where: { status: "SCHEDULED", taskId: { not: null }, fireAt: { lte: now, gte: new Date(now.getTime() - SEND_LATENESS_MS) }, user: eligibleWhere(now) },
+    where: { status: { in: ["SCHEDULED", "SNOOZED"] }, taskId: { not: null }, fireAt: { lte: now, gte: new Date(now.getTime() - SEND_LATENESS_MS) }, user: eligibleWhere(now) },
     include: { user: { include: { settings: true } } },
     orderBy: { fireAt: "asc" },
     take: 100,
   });
   let sent = 0;
   for (const r of due) {
-    const claimed = await prisma.reminderLog.updateMany({ where: { id: r.id, status: "SCHEDULED" }, data: { status: "SENDING" } });
+    const claimed = await prisma.reminderLog.updateMany({ where: { id: r.id, status: r.status }, data: { status: "SENDING" } });
     if (claimed.count !== 1) continue;
-    const finish = (status: string) => prisma.reminderLog.update({ where: { id: r.id }, data: { status } });
     const s = r.user.settings as UserSettings;
     const task = await prisma.task.findFirst({ where: { id: r.taskId as string, userId: r.userId } });
-    const active = task && (task.status === TaskStatus.PENDING || task.status === TaskStatus.IN_PROGRESS) && !task.archived && task.reminderMode !== "NONE";
-    const onTime = Boolean(task?.dueAt && Math.abs(task.dueAt.getTime() - r.fireAt.getTime()) < 60000 && r.level === "critical");
+    const onTime = Boolean(task?.dueAt && Math.abs(task.dueAt.getTime() - r.fireAt.getTime()) < 60000 && (r.level === "critical" || r.level === SNOOZE_LEVEL));
     // Quiet hours, DND and placement are judged at the PLANNED time: the job runs up to 5 min late, and judging
     // an on-time "due now" reminder at run time would always reject it. The 24 h window is judged at send time (query above).
-    if (!task || !active || !stillAllowedAt(r.fireAt, r.level as ReminderLevel, onTime, task.dueAt, s, s.timezone)) {
-      await finish("SKIPPED");
+    const allowed = task && isActive(task) && stillAllowedAt(r.fireAt, (r.level === SNOOZE_LEVEL ? "normal" : r.level) as ReminderLevel, onTime, task.dueAt, s, s.timezone);
+    if (!task || !allowed || (await overDailyCap(r.userId, now))) {
+      await prisma.reminderLog.update({ where: { id: r.id }, data: { status: "SKIPPED" } });
       continue;
     }
-    const sentToday = await prisma.activityEvent.count({ where: { userId: r.userId, type: "WHATSAPP_SENT", createdAt: { gte: new Date(now.getTime() - 24 * 3600000) } } });
-    if (sentToday >= MAX_WHATSAPP_REMINDERS_PER_DAY) {
-      await finish("SKIPPED");
-      continue;
-    }
-    const due = task.dueAt ? ` is due ${instantLabel(task.dueAt, s.timezone, now)}` : "";
-    const body = `Reminder: ${task.title}${due}.\n\n1. Done\n\nReply 1 or "done" when it's finished.`;
-    const result = await send(r.user.phoneNumber as string, body);
-    if (!result.ok) {
-      // A closed 24 h window won't open by retrying; anything else permanent is FAILED; transient errors retry next run.
-      await finish(result.twilioCode === TWILIO_WINDOW_CLOSED ? "SKIPPED" : result.transient ? "SCHEDULED" : "FAILED");
-      continue;
-    }
-    await finish("SENT_WHATSAPP");
-    // Stored in the WhatsApp conversation with focus on the task, so "done" or "1" completes this task.
-    await addOutboundMessage(r.userId, "WHATSAPP", body, { focusTaskId: task.id, actions: [{ label: "Done", payload: { type: "complete_task", taskId: task.id } }] });
-    logEvent(r.userId, "WHATSAPP_SENT", task.id, { level: r.level });
-    sent += 1;
+    const dueText = task.dueAt ? ` is due ${instantLabel(task.dueAt, s.timezone, now)}` : "";
+    const body = `Reminder: ${task.title}${dueText}.\n\n1. Done\n2. Snooze 1h\n\nReply done or snooze 1h.`;
+    if (await deliver(r, r.user.phoneNumber as string, task, body, [doneAction(task.id), snoozeAction(task.id)], r.status, send)) sent += 1;
   }
   return sent;
+}
+
+/* ------------------------------------------------------------------ urgent alerts (P3) */
+
+/** "Urgent" = due within this long. */
+export const URGENT_WITHIN_MS = 3 * 3600000;
+const URGENT_LEVEL = "URGENT";
+export const SNOOZE_LEVEL = "SNOOZE";
+
+/** A pending (not started, done, skipped or deleted), high or urgent priority task due within the next 3 hours. */
+export function isUrgent(task: Pick<Task, "status" | "priority" | "dueAt" | "archived">, now: Date): boolean {
+  if (task.status !== TaskStatus.PENDING || task.archived || !task.dueAt) return false;
+  if (task.priority !== Priority.HIGH && task.priority !== Priority.URGENT) return false;
+  const left = task.dueAt.getTime() - now.getTime();
+  return left > 0 && left <= URGENT_WITHIN_MS;
+}
+
+/**
+ * One WhatsApp message per urgent task (Pro, verified number, WhatsApp allowed in notification devices).
+ * Outside the 24 h window it is not sent (WHATSAPP_SKIPPED_WINDOW; the phone's local notification covers it).
+ * Quiet hours, DND and the daily cap hold it back; it is tried again on the next run while still urgent.
+ * Dedupe: a ReminderLog row with level URGENT at dueAt − 1 s (unique per task; never a planned reminder's time).
+ */
+export async function sendUrgentWhatsappAlerts(now = new Date(), send: Sender = sendWhatsapp): Promise<number> {
+  if ((send === sendWhatsapp && !twilioConfigured()) || (await bulkPaused(now))) return 0;
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: TaskStatus.PENDING,
+      archived: false,
+      priority: { in: [Priority.HIGH, Priority.URGENT] },
+      reminderMode: { not: "NONE" },
+      dueAt: { gt: now, lte: new Date(now.getTime() + URGENT_WITHIN_MS) },
+      user: { phoneNumber: { not: null }, phoneVerifiedAt: { not: null }, settings: { tier: "PRO", notificationDevices: { in: ["ALL", "WHATSAPP"] } } },
+    },
+    include: { user: { include: { settings: true } } },
+    take: 200,
+  });
+  let sent = 0;
+  for (const task of tasks) {
+    if (!isUrgent(task, now)) continue;
+    if (await prisma.reminderLog.findFirst({ where: { taskId: task.id, level: URGENT_LEVEL }, select: { id: true } })) continue;
+    const s = task.user.settings as UserSettings;
+    const fireAt = new Date((task.dueAt as Date).getTime() - 1000);
+    const inWindow = s.lastWhatsappMessageAt && s.lastWhatsappMessageAt.getTime() >= now.getTime() - WINDOW_MS;
+    if (!inWindow) {
+      const skipped = await claimRow(task.userId, task.id, fireAt, URGENT_LEVEL, "SKIPPED");
+      if (skipped) logEvent(task.userId, "WHATSAPP_SKIPPED_WINDOW", task.id, { level: URGENT_LEVEL });
+      continue;
+    }
+    if (!stillAllowedAt(now, "urgent", false, task.dueAt, s, s.timezone) || (await overDailyCap(task.userId, now))) continue;
+    const row = await claimRow(task.userId, task.id, fireAt, URGENT_LEVEL, "SENDING");
+    if (!row) continue;
+    const body = `Urgent: ${task.title} is due ${instantLabel(task.dueAt as Date, s.timezone, now)}.\n\n1. Done\n2. Snooze 1h\n\nReply done or snooze 1h.`;
+    if (await deliver({ id: row, userId: task.userId, level: URGENT_LEVEL }, task.user.phoneNumber as string, task, body, [doneAction(task.id), snoozeAction(task.id)], null, send)) sent += 1;
+  }
+  return sent;
+}
+
+/** Inserts a ReminderLog row; null when another run already has it (unique userId + taskId + fireAt). */
+export async function claimRow(userId: string, taskId: string, fireAt: Date, level: string, status: string): Promise<string | null> {
+  try {
+    return (await prisma.reminderLog.create({ data: { userId, taskId, fireAt, level, status } })).id;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return null;
+    throw error;
+  }
 }
 
 /** Test hook. */
