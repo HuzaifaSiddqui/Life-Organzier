@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { prisma } from "../../config/db.js";
+import { setBounded } from "../../lib/boundedMap.js";
 
 /**
  * FR-WA-001 verified linking. The app shows an 8-character code; the user sends "LINK <code>" from
@@ -49,11 +50,11 @@ export function parseLinkCommand(text: string): string | null {
 // ponytail: in-memory per server process; a restart forgets recent failures. Move to the database if the
 // backend ever runs as several instances.
 const failures = new Map<string, number[]>();
+/** Sending numbers remembered at most; the oldest are forgotten first. */
+export const MAX_FAILURE_ENTRIES = 10000;
 
 function recentFailures(number: string, now: number): number[] {
-  const list = (failures.get(number) ?? []).filter((t) => now - t < 3600000);
-  failures.set(number, list);
-  return list;
+  return (failures.get(number) ?? []).filter((t) => now - t < 3600000);
 }
 
 /** Test hook. */
@@ -90,7 +91,7 @@ export async function tryLink(fromNumber: string, code: string, now = new Date()
   const t = now.getTime();
   if (recentFailures(fromNumber, t).length >= MAX_FAILURES_PER_HOUR) return { kind: "locked" };
   const fail = (): LinkOutcome => {
-    recentFailures(fromNumber, t).push(t);
+    setBounded(failures, fromNumber, [...recentFailures(fromNumber, t), t], MAX_FAILURE_ENTRIES);
     return { kind: "failed" };
   };
   if (code.length !== CODE_LENGTH) return fail();

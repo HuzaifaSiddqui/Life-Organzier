@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import { ConversationRole, Prisma } from "@prisma/client";
 import { prisma } from "../../config/db.js";
+import { setBounded } from "../../lib/boundedMap.js";
 import { ensureSettings } from "../../lib/http.js";
+import { crisisResponse, detectCrisis } from "../mood/crisis.js";
 import { handleAssistantMessage } from "../assistant/dialogue.js";
 import type { ActionPayload, QuickAction } from "../assistant/types.js";
 import { logEvent } from "../events/eventService.js";
@@ -48,6 +50,12 @@ export async function recordInbound(sid: string, fromNumber: string): Promise<bo
 // sweep covers lost work); move to the database or Redis if the backend runs as several instances.
 const queues = new Map<string, Promise<void>>();
 const lastNotice = new Map<string, number>();
+/** Notices remembered at most; the oldest are forgotten first (at worst one extra notice). */
+export const MAX_NOTICE_ENTRIES = 10000;
+/** MessageSids being processed right now, so the stuck-message sweep leaves slow jobs alone. */
+const inFlight = new Set<string>();
+/** A message still RECEIVED (and not in flight) after this long was lost. */
+export const STUCK_AFTER_MS = 5 * 60000;
 
 /** Runs jobs for the same key one after another, so rapid messages don't race on conversation state. */
 export function enqueue(key: string, job: () => Promise<void>): Promise<void> {
@@ -63,7 +71,7 @@ export function enqueue(key: string, job: () => Promise<void>): Promise<void> {
 function noticeDue(key: string, ms: number, now: number): boolean {
   const last = lastNotice.get(key);
   if (last !== undefined && now - last < ms) return false;
-  lastNotice.set(key, now);
+  setBounded(lastNotice, key, now, MAX_NOTICE_ENTRIES);
   return true;
 }
 
@@ -71,6 +79,7 @@ function noticeDue(key: string, ms: number, now: number): boolean {
 export function resetInboundState(): void {
   queues.clear();
   lastNotice.clear();
+  inFlight.clear();
 }
 
 async function lastActions(userId: string): Promise<QuickAction[]> {
@@ -93,9 +102,17 @@ export function formatReply(content: string, actions: QuickAction[]): string {
 /** Handles one recorded message and marks it DONE. Never throws. */
 export async function processInbound(msg: InboundMessage, send: Sender = sendWhatsapp, now = new Date()): Promise<void> {
   const from = normalizeNumber(msg.from);
+  inFlight.add(msg.sid);
   try {
     if (!from) return;
     const reply = (text: string) => send(from, text);
+
+    // Safety first, for every sender (unlinked, Free, Pro): crisis resources at once, and nothing is stored.
+    if (msg.body.trim() && detectCrisis(msg.body)) {
+      const known = await prisma.user.findFirst({ where: { phoneNumber: from, phoneVerifiedAt: { not: null } }, select: { settings: { select: { language: true } } } });
+      await reply(crisisResponse(known?.settings?.language ?? "en"));
+      return;
+    }
 
     const code = parseLinkCommand(msg.body);
     if (code !== null) {
@@ -150,14 +167,19 @@ export async function processInbound(msg: InboundMessage, send: Sender = sendWha
     if (from) await send(from, "Sorry, something went wrong. Please try again.");
   } finally {
     await prisma.whatsappInbound.updateMany({ where: { messageSid: msg.sid }, data: { status: "DONE" } }).catch(() => undefined);
+    inFlight.delete(msg.sid);
   }
 }
 
-/** Messages still RECEIVED after 2 minutes were lost (restart, crash): ask the sender to resend. */
+/**
+ * Messages still RECEIVED after 5 minutes and not being processed were lost (restart, crash): ask the
+ * sender to resend. A slow job (a long document) is in flight and is left alone.
+ */
 export async function recoverStuckInbound(now = new Date(), send: Sender = sendWhatsapp): Promise<number> {
-  const stuck = await prisma.whatsappInbound.findMany({ where: { status: "RECEIVED", createdAt: { lt: new Date(now.getTime() - 2 * 60000) } }, take: 100 });
+  const stuck = await prisma.whatsappInbound.findMany({ where: { status: "RECEIVED", createdAt: { lt: new Date(now.getTime() - STUCK_AFTER_MS) } }, take: 100 });
   let recovered = 0;
   for (const row of stuck) {
+    if (inFlight.has(row.messageSid)) continue;
     const claimed = await prisma.whatsappInbound.updateMany({ where: { messageSid: row.messageSid, status: "RECEIVED" }, data: { status: "DONE" } });
     if (claimed.count !== 1) continue;
     const to = normalizeNumber(row.fromNumber);
