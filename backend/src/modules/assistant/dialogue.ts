@@ -49,6 +49,7 @@ import {
   type Mood,
 } from "../mood/moodService.js";
 import { attachPlaceByName, savedPlaceInTitle } from "../locations/locationService.js";
+import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
@@ -660,6 +661,7 @@ export async function proceedWithDraft(
 
   const taskSource = source === "WHATSAPP" ? TaskSource.WHATSAPP : source === "VOICE" ? TaskSource.VOICE : TaskSource.CHAT;
   const task = await createTask(turn.task, draftToCreateInput(draft, turn.tz, taskSource, confidence));
+  if (turn.channel === "WHATSAPP") notifyAddedFromWhatsapp(turn.user.id, [task.title]); // P2: shows up on the phone now
   turn.state.pending = null;
   focusOn(turn, task.id);
 
@@ -985,6 +987,7 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
     timeLocked: draft.timeLocked,
     locationContext: draft.context,
   });
+  if (turn.channel === "WHATSAPP") notifyAddedFromWhatsapp(turn.user.id, [routine.title]);
   turn.state.pending = null;
   const freq =
     draft.frequency === RoutineFrequency.DAILY

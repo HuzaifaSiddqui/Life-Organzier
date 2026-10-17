@@ -22,6 +22,7 @@ import { recomputeDueAts } from "./modules/tasks/taskService.js";
 import { taskRouter } from "./modules/tasks/taskRoutes.js";
 import { userRouter } from "./modules/users/userRoutes.js";
 import { whatsappRouter } from "./modules/whatsapp/whatsappRoutes.js";
+import { pushRouter } from "./modules/push/pushRoutes.js";
 import { sendError } from "./utils/apiResponse.js";
 
 /**
@@ -80,6 +81,7 @@ export function createApp() {
   app.use("/api/account", accountRouter);
   app.use("/api/preferences", preferenceRouter);
   app.use("/api/whatsapp", whatsappRouter);
+  app.use("/api/push", pushRouter);
 
   app.use((_req, res) => sendError(res, "Not found", "NOT_FOUND", 404));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

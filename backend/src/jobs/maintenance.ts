@@ -3,6 +3,7 @@ import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
 import { computeDueAt } from "../lib/time.js";
 import { expireCheckins } from "../modules/checkins/checkinService.js";
+import { checkPushReceipts } from "../modules/push/pushService.js";
 import { purgeOldInbound, recoverStuckInbound } from "../modules/whatsapp/inbound.js";
 import { replanStaleWhatsappUsers, sendDueWhatsappReminders } from "../modules/whatsapp/whatsappService.js";
 
@@ -48,6 +49,7 @@ export async function runWhatsappJobs(now = new Date()): Promise<void> {
   await recoverStuckInbound(now);
   await replanStaleWhatsappUsers(now);
   await sendDueWhatsappReminders(now);
+  await checkPushReceipts(now.getTime());
 }
 
 export function startJobs(): () => void {

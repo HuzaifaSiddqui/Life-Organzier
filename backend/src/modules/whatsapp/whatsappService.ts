@@ -4,6 +4,7 @@ import { instantLabel } from "../../lib/time.js";
 import { addOutboundMessage } from "../conversations/conversationService.js";
 import { processDocument } from "../documents/documentProcessing.js";
 import { logEvent } from "../events/eventService.js";
+import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { planReminders, stillAllowedAt, type ReminderLevel } from "../reminders/reminderService.js";
 
 export function twilioConfigured(): boolean {
@@ -78,6 +79,7 @@ export async function processDocumentForWhatsapp(user: User, settings: UserSetti
     autoCreate: true,
   });
   const created = result.createdTasks.length + result.createdRoutines.length;
+  notifyAddedFromWhatsapp(user.id, [...result.createdTasks, ...result.createdRoutines].map((x) => x.title));
   const pending = result.extracted.deadlines.filter((d) => !d.created).length + result.extracted.schedules.filter((s) => !s.created).length;
   if (result.extracted.warning && !created) return result.extracted.warning;
   return `Read your document. Created ${created} item${created === 1 ? "" : "s"}${pending ? `; ${pending} more need your review in the app (Documents).` : "."}`;
