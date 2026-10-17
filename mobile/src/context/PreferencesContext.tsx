@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AppState } from "react-native";
+import { flushPushQueue, registerForPush, startPushListeners } from "../services/push";
 import { useAuth } from "./AuthContext";
 import type { Category, UserSettings } from "../types/models";
 import { getCategories, getSettings, saveSettings, type WhatsappLink } from "../services/settingsApi";
@@ -49,6 +51,15 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     }
   }, [dbUser]);
 
+  // Sign-out may have left push unregisters queued (e.g. offline): retry on start and on every return to the app.
+  useEffect(() => {
+    void flushPushQueue();
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void flushPushQueue();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     if (!dbUser) {
       setSettings(null);
@@ -58,7 +69,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const stop = startSyncEngine();
     void configureReminders();
     trackAppOpen();
-    void syncNow().then(() => syncReminders());
+    // Push registration waits for the reminder sync, which asks for notification permission the first time.
+    void syncNow().then(() => syncReminders()).then(() => registerForPush());
     const stopResponses = startReminderResponses((target) => {
       if (target.taskId) openAppScreen("TaskDetail", { taskId: target.taskId });
       else if (target.taskIds?.length) openAppScreen("TaskList", { ids: target.taskIds });
@@ -66,10 +78,13 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     });
     // Check-in answers made offline are sent (with their tap time) after the next successful sync.
     const stopCheckins = startCheckinQueue(() => void syncReminders());
+    // P2: tasks added on WhatsApp arrive by push and trigger a sync.
+    const stopPush = startPushListeners();
     return () => {
       stop();
       stopResponses();
       stopCheckins();
+      stopPush();
     };
   }, [dbUser, reload]);
 

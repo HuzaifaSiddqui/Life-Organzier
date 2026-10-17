@@ -36,6 +36,7 @@ import {
   startTaskDraft,
   storeInfo,
   taskCard,
+  taskById,
   todayRoutinesText,
   dueLabel,
   type Out,
@@ -43,6 +44,7 @@ import {
 } from "./dialogue.js";
 import { resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
+import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
@@ -105,6 +107,8 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       return help();
     case "set_checkin_style":
       return setCheckinStyle(turn, text);
+    case "snooze_task":
+      return snoozeReply(turn, parseSnooze(text) ?? SNOOZE_DEFAULT_MINUTES);
     case "manage_location":
       return manageLocation(turn, text);
     case "confirm":
@@ -126,6 +130,36 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       };
     }
   }
+}
+
+/**
+ * "Snooze 1h" in reply to a WhatsApp reminder: one more reminder for that task later (rules in whatsapp/snooze.ts).
+ * The message never names a task (parseSnooze matches the whole text): it is the task of the latest reminder
+ * sent in the last 6 hours; with none, there is nothing to snooze.
+ */
+async function snoozeReply(turn: Turn, minutes: number, taskId?: string): Promise<Out> {
+  if (turn.channel !== "WHATSAPP") return { content: "Snooze works for WhatsApp reminders. In the app, use Snooze on the notification.", intent: "snooze_unsupported" };
+  const reminded = await recentlyRemindedTaskId(turn.user.id, turn.now, taskId);
+  const task = reminded ? await taskById(turn, reminded) : null;
+  if (!task || (task.status !== TaskStatus.PENDING && task.status !== TaskStatus.IN_PROGRESS)) {
+    return { content: "Nothing to snooze right now.", intent: "snooze_nothing" };
+  }
+  focusOn(turn, task.id);
+  const r = await snoozeTask(task, minutes, turn.settings, turn.now);
+  if (!r.ok) {
+    const why = {
+      limit: `You've snoozed "${task.title}" ${MAX_SNOOZES_PER_TASK} times already. Reply done when it's finished.`,
+      due: `"${task.title}" is already due.`,
+      muted: `Your quiet hours or Do Not Disturb last until after "${task.title}" is due, so I can't snooze it.`,
+    }[r.reason];
+    return { content: why, intent: "snooze_refused" };
+  }
+  const lp = localParts(r.at, turn.tz);
+  const when = `${relativeDayLabel(localYmd(r.at, turn.tz), turn.todayYmd)} at ${formatClock(lp.h, lp.mi)}`;
+  const content = r.movedFor
+    ? `${r.movedFor === "dnd" ? "Do Not Disturb is on" : "Your quiet hours are on"} then, so I'll remind you about "${task.title}" ${when}${r.atDueTime ? ", when it's due" : ""}.`
+    : `Okay, I'll remind you about "${task.title}" again ${when}${r.atDueTime ? ", when it's due" : ""}.`;
+  return { content, intent: "snoozed" };
 }
 
 /** FR-LB-001 §4: remove or change a task's arrival location from chat. */
@@ -731,6 +765,8 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     case "cancel_pending":
       turn.state.pending = null;
       return { content: "Okay, cancelled.", intent: "cancel" };
+    case "snooze_task":
+      return snoozeReply(turn, payload.minutes, payload.taskId);
     case "complete_task": {
       const task = await getTaskForUser(turn.user.id, payload.taskId);
       return task ? completeTask(turn, task) : { content: "That task no longer exists.", intent: "not_found" };

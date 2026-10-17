@@ -86,8 +86,8 @@ export async function apiPatch<T>(url: string, body?: unknown): Promise<T> {
   return res.data.data;
 }
 
-export async function apiDelete<T>(url: string): Promise<T> {
-  const res = await api.delete<ApiSuccess<T> | ApiError>(url);
+export async function apiDelete<T>(url: string, body?: unknown): Promise<T> {
+  const res = await api.delete<ApiSuccess<T> | ApiError>(url, body === undefined ? undefined : { data: body });
   if (!res.data.success) throw new Error(res.data.message);
   return res.data.data;
 }

@@ -3,6 +3,7 @@ import { getAi, type ChatMessage } from "../../ai/llm.js";
 import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { parseQuery } from "./queries.js";
+import { parseSnooze } from "../whatsapp/snooze.js";
 import { cleanTitle, extractEntities, isHabitLike, parseLocationCommand, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -26,6 +27,7 @@ export const INTENTS = [
   "help",
   "set_checkin_style",
   "manage_location",
+  "snooze_task",
   "confirm",
   "deny",
   "provide_info",
@@ -115,6 +117,7 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   const words = t.split(/\s+/).length;
   if (parseCheckinStyle(t)) return { intent: "set_checkin_style", confidence: 0.95 };
   if (parseLocationCommand(t)) return { intent: "manage_location", confidence: 0.95 };
+  if (parseSnooze(t) !== null) return { intent: "snooze_task", confidence: 0.95 };
   if (CONFIRM.test(t)) return { intent: "confirm", confidence: 0.95 };
   if (DENY.test(t) && words <= 4) return { intent: "deny", confidence: 0.9 };
   if (GREETING.test(t)) return { intent: "greeting", confidence: 0.95 };

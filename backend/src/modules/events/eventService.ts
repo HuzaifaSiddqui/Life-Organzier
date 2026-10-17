@@ -23,6 +23,7 @@ export type ActivityType =
   | "RECOMMENDATION_REJECTED"
   | "CONTEXT_SWITCHED"
   | "WHATSAPP_SENT"
+  | "WHATSAPP_SKIPPED_WINDOW"
   | "WHATSAPP_RECEIVED";
 
 export function logEvent(
