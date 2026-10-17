@@ -6,6 +6,11 @@
  *   npm test refuses to run without TEST_DATABASE_URL, or if its database name doesn't contain "test".
  * - No real WhatsApp messages or pushes: Twilio and Expo credentials are blanked (blank, not deleted, so
  *   Prisma's own .env loading can't fill them back in) and any request to their hosts throws.
+ * - No real model: AI is switched off (AI_ENABLED=false, as in CI) and GEMINI_API_KEY is blanked, so the
+ *   provider chain is empty and replies come from the rules. Requests to Gemini or Ollama throw too. A test
+ *   that needs a model injects a fake one with setAi(new AiService([...])).
+ * Scripts that are meant to use the real model (scripts/e2e-conversation.ts, scripts/model-benchmark.ts)
+ * load .env themselves and never run this file.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { parse } from "dotenv";
@@ -26,11 +31,18 @@ process.env.DATABASE_URL = testUrl;
 for (const key of new Set([...Object.keys(process.env), ...Object.keys(fromFile)])) {
   if (/^(?:TWILIO_|EXPO_)/.test(key)) process.env[key] = "";
 }
+process.env.AI_ENABLED = "false";
+process.env.GEMINI_API_KEY = "";
+
+/** Where Ollama would be reached (same default as ai/llm.ts). */
+const ollamaBase = (process.env.OLLAMA_URL || fromFile.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+const ollamaHosts = new Set([new URL(ollamaBase).host, "127.0.0.1:11434", "localhost:11434"]);
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (/^https?:\/\/(?:[\w-]+\.)*(?:twilio\.com|exp\.host|expo\.dev)(?:[:/]|$)/i.test(url)) {
+  const host = /^https?:\/\//i.test(url) ? new URL(url).host : "";
+  if (/^https?:\/\/(?:[\w-]+\.)*(?:twilio\.com|exp\.host|expo\.dev|generativelanguage\.googleapis\.com)(?:[:/]|$)/i.test(url) || ollamaHosts.has(host)) {
     throw new Error(`A test tried to call ${new URL(url).host} for real.`);
   }
   return realFetch(input, init);
