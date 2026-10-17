@@ -4,9 +4,9 @@ import test from "node:test";
 import { Priority, TaskStatus } from "@prisma/client";
 import { prisma } from "../src/config/db.js";
 import { CRISIS_RESOURCES } from "../src/modules/mood/crisis.js";
-import { MISSED_REPLY, PRO_ONLY_REPLY, processInbound, recordInbound, recoverStuckInbound, resetInboundState, twilioSignatureValid, UNLINKED_REPLY } from "../src/modules/whatsapp/inbound.js";
+import { MISSED_REPLY, PRO_ONLY_REPLY, processInbound, recordInbound, recoverStuckInbound, resetInboundState, STUCK_AFTER_MS, twilioSignatureValid, UNLINKED_REPLY } from "../src/modules/whatsapp/inbound.js";
 import { CODE_ALPHABET, generateCode, LINK_FAILED_REPLY, LINKED_REPLY, maskNumber, normalizeNumber, parseLinkCommand, resetLinkFailures, startLink } from "../src/modules/whatsapp/linking.js";
-import { resetWhatsappPause, sendDueWhatsappReminders, splitMessage, TWILIO_WINDOW_CLOSED, type SendResult } from "../src/modules/whatsapp/whatsappService.js";
+import { resetWhatsappPause, sendDueWhatsappReminders, sendWhatsapp, splitMessage, TWILIO_WINDOW_CLOSED, type SendResult } from "../src/modules/whatsapp/whatsappService.js";
 import { dbAvailable } from "./fixtures.js";
 
 const skip = !dbAvailable && "no database";
@@ -187,6 +187,29 @@ test("whatsapp: the crisis check runs on WhatsApp messages too", { skip }, async
   assert.ok(reply.includes(CRISIS_RESOURCES.emergency), `crisis resources missing in: ${reply}`);
 });
 
+test("whatsapp: the crisis check runs before the link/Pro gates, for unlinked numbers and Free users, and stores nothing", { skip }, async () => {
+  resetInboundState();
+  const f = fakeSender();
+  const stranger = randomNumber();
+  await processInbound(msg(stranger, "mujhe khudkushi karni hai"), f.send);
+  assert.ok(f.sent.at(-1)?.body.includes(CRISIS_RESOURCES.emergency), "unlinked number got no crisis resources");
+  assert.notEqual(f.sent.at(-1)?.body, UNLINKED_REPLY);
+
+  const freeNumber = randomNumber();
+  const free = await makeUser({ tier: "FREE", linkedNumber: freeNumber });
+  await processInbound(msg(freeNumber, "I want to end my life"), f.send);
+  assert.ok(f.sent.at(-1)?.body.includes(CRISIS_RESOURCES.emergency), "Free user got no crisis resources");
+  assert.notEqual(f.sent.at(-1)?.body, PRO_ONLY_REPLY);
+
+  const proNumber = randomNumber();
+  const pro = await makeUser({ linkedNumber: proNumber });
+  await processInbound(msg(proNumber, "I want to kill myself"), f.send);
+  for (const u of [free, pro]) {
+    assert.equal(await prisma.conversationMessage.count({ where: { userId: u.id } }), 0);
+    assert.equal(await prisma.moodLog.count({ where: { userId: u.id } }), 0);
+  }
+});
+
 async function reminderFixture(opts: { quietNow?: boolean } = {}) {
   resetWhatsappPause();
   const number = randomNumber();
@@ -254,13 +277,53 @@ test("whatsapp reminders: the 24 h window is checked at send time, not at the pl
   assert.equal((await prisma.reminderLog.findUniqueOrThrow({ where: { id: log.id } })).status, "SCHEDULED"); // left to the phone
 });
 
-test("whatsapp: messages stuck as RECEIVED for 2+ minutes get 'please resend' once", { skip }, async () => {
+test("whatsapp: a lost message (RECEIVED 5+ min, not in flight) gets 'please resend' once; a newer one waits", { skip }, async () => {
+  assert.equal(STUCK_AFTER_MS, 5 * 60000);
+  const recent = `SMtest${randomUUID()}`;
+  const recentNumber = randomNumber();
+  await prisma.whatsappInbound.create({ data: { messageSid: recent, fromNumber: `whatsapp:${recentNumber}`, createdAt: new Date(Date.now() - 3 * 60000) } });
   const sid = `SMtest${randomUUID()}`;
   const number = randomNumber();
-  await prisma.whatsappInbound.create({ data: { messageSid: sid, fromNumber: `whatsapp:${number}`, createdAt: new Date(Date.now() - 3 * 60000) } });
+  await prisma.whatsappInbound.create({ data: { messageSid: sid, fromNumber: `whatsapp:${number}`, createdAt: new Date(Date.now() - 6 * 60000) } });
   const f = fakeSender();
   await recoverStuckInbound(new Date(), f.send);
   await recoverStuckInbound(new Date(), f.send);
   assert.deepEqual(f.sent.filter((s) => s.to === number).map((s) => s.body), [MISSED_REPLY]);
   assert.equal((await prisma.whatsappInbound.findUniqueOrThrow({ where: { messageSid: sid } })).status, "DONE");
+  assert.equal(f.sent.filter((s) => s.to === recentNumber).length, 0);
+});
+
+test("whatsapp: a slow job still being processed is not 'recovered'", { skip }, async () => {
+  resetInboundState();
+  const number = randomNumber();
+  await makeUser({ linkedNumber: number });
+  const m = msg(number, "What's due today?");
+  await recordInbound(m.sid, m.from);
+  let release: () => void = () => undefined;
+  const sent: string[] = [];
+  const slowSend = async (_to: string, body: string) => {
+    await new Promise<void>((r) => (release = r)); // the reply hangs, like a long document
+    sent.push(body);
+    return { ok: true, twilioCode: null };
+  };
+  const job = processInbound(m, slowSend);
+  await new Promise((r) => setTimeout(r, 200)); // job is now waiting inside send
+  await prisma.whatsappInbound.update({ where: { messageSid: m.sid }, data: { createdAt: new Date(Date.now() - 10 * 60000) } });
+  const f = fakeSender();
+  await recoverStuckInbound(new Date(), f.send);
+  assert.equal(f.sent.filter((s) => s.to === number).length, 0);
+  assert.equal((await prisma.whatsappInbound.findUniqueOrThrow({ where: { messageSid: m.sid } })).status, "RECEIVED");
+  release();
+  await job;
+  assert.equal(sent.length, 1);
+  assert.equal((await prisma.whatsappInbound.findUniqueOrThrow({ where: { messageSid: m.sid } })).status, "DONE");
+});
+
+test("tests can't reach Twilio or Expo: credentials are blanked and requests to their hosts throw", async () => {
+  assert.equal(process.env.TWILIO_AUTH_TOKEN ?? "", "");
+  assert.equal(process.env.TWILIO_ACCOUNT_SID ?? "", "");
+  assert.deepEqual(await sendWhatsapp("+923001234567", "hi"), { ok: false, twilioCode: null });
+  assert.throws(() => fetch("https://api.twilio.com/2010-04-01/Accounts/x/Messages.json"), /for real/);
+  assert.throws(() => fetch("https://exp.host/--/api/v2/push/send"), /for real/);
+  assert.match(process.env.DATABASE_URL ?? "", /test/i);
 });
