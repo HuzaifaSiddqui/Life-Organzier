@@ -3,7 +3,8 @@ import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
 import { computeDueAt } from "../lib/time.js";
 import { expireCheckins } from "../modules/checkins/checkinService.js";
-import { sendDueWhatsappReminders } from "../modules/whatsapp/whatsappService.js";
+import { purgeOldInbound, recoverStuckInbound } from "../modules/whatsapp/inbound.js";
+import { replanStaleWhatsappUsers, sendDueWhatsappReminders } from "../modules/whatsapp/whatsappService.js";
 
 /** Permanent deletion & retention rules from the FRD (FR-TM-005, FR-MS-004, FR-AP-001). */
 export async function runMaintenance(now = new Date()): Promise<void> {
@@ -11,6 +12,7 @@ export async function runMaintenance(now = new Date()): Promise<void> {
   const purgedVersions = await prisma.taskVersion.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 90 * 86400000) } } });
   await prisma.reminderLog.deleteMany({ where: { fireAt: { lt: new Date(now.getTime() - 90 * 86400000) } } });
   await expireCheckins(now);
+  await purgeOldInbound(now);
   await prisma.activityEvent.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 400 * 86400000) } } });
 
   const expired = await prisma.user.findMany({ where: { deletionRequestedAt: { lt: new Date(now.getTime() - 30 * 86400000) } } });
@@ -41,6 +43,13 @@ export async function backfillDueAt(): Promise<void> {
   if (tasks.length) console.info(`Backfilled deadlines for ${tasks.length} tasks`);
 }
 
+/** Every 5 minutes: lost inbound messages, then fresh reminder plans for WhatsApp users, then due reminders. */
+export async function runWhatsappJobs(now = new Date()): Promise<void> {
+  await recoverStuckInbound(now);
+  await replanStaleWhatsappUsers(now);
+  await sendDueWhatsappReminders(now);
+}
+
 export function startJobs(): () => void {
   const safe = (name: string, fn: () => Promise<unknown>) => () => {
     fn().catch((error) => console.warn(`Job ${name} failed:`, error instanceof Error ? error.message : error));
@@ -48,7 +57,7 @@ export function startJobs(): () => void {
   safe("backfill", backfillDueAt)();
   safe("maintenance", () => runMaintenance())();
   const hourly = setInterval(safe("maintenance", () => runMaintenance()), 3600000);
-  const whatsapp = setInterval(safe("whatsapp-reminders", () => sendDueWhatsappReminders()), 5 * 60000);
+  const whatsapp = setInterval(safe("whatsapp", () => runWhatsappJobs()), 5 * 60000);
   return () => {
     clearInterval(hourly);
     clearInterval(whatsapp);
