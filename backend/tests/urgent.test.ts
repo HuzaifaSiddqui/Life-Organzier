@@ -116,17 +116,21 @@ test("urgent: one WhatsApp alert per task, stored in the chat; '2' snoozes it", 
   assert.match(s.sent.at(-1)?.body ?? "", /remind you about .+ again (?:today|tomorrow) at \d/);
 });
 
-test("urgent: outside the 24 h window → not sent, logged once; in quiet hours → held back, no row", { skip }, async () => {
+test("urgent: outside the 24 h window → not sent, nothing claimed, logged once; a later in-window message still gets it", { skip }, async () => {
   resetWhatsappPause();
   const stale = await makeUser({ lastMessageAgoMs: 30 * H });
   const t1 = await urgentTask(stale.user.id);
   const s = fakeSender();
   await sendUrgentWhatsappAlerts(new Date(), s.send);
   await sendUrgentWhatsappAlerts(new Date(), s.send);
-  await settle();
   assert.equal(s.sent.filter((m) => m.to === stale.number).length, 0);
-  assert.equal(await prisma.reminderLog.count({ where: { taskId: t1.id, level: "URGENT", status: "SKIPPED" } }), 1);
-  assert.equal(await prisma.activityEvent.count({ where: { userId: stale.user.id, type: "WHATSAPP_SKIPPED_WINDOW" } }), 1);
+  assert.equal(await prisma.reminderLog.count({ where: { taskId: t1.id } }), 0);
+  assert.equal(await prisma.activityEvent.count({ where: { userId: stale.user.id, entityId: t1.id, type: "WHATSAPP_SKIPPED_WINDOW" } }), 1);
+  // the user writes to the bot → window open → the next run sends the alert
+  await prisma.userSettings.update({ where: { userId: stale.user.id }, data: { lastWhatsappMessageAt: new Date() } });
+  await sendUrgentWhatsappAlerts(new Date(), s.send);
+  assert.equal(s.sent.filter((m) => m.to === stale.number).length, 1);
+  assert.equal(await prisma.reminderLog.count({ where: { taskId: t1.id, level: "URGENT", status: "SENT_WHATSAPP" } }), 1);
 
   const sleeping = await makeUser({ quietNow: true });
   const t2 = await urgentTask(sleeping.user.id);
@@ -179,8 +183,8 @@ test("snooze: inside quiet hours or DND it moves to when they end (said in the r
   const reminded = await prisma.task.create({ data: { userId: sleeping.user.id, title: "Pack bag", dueAt: new Date(now.getTime() + 10 * H) } });
   const s = fakeSender();
   await prisma.conversation.deleteMany({ where: { userId: sleeping.user.id } });
-  await processInbound(msg(sleeping.number, "snooze 30m"), s.send); // no focus yet → asks which task
-  assert.match(s.sent.at(-1)?.body ?? "", /Which task/);
+  await processInbound(msg(sleeping.number, "snooze 30m"), s.send); // no reminder sent yet
+  assert.equal(s.sent.at(-1)?.body, "Nothing to snooze right now.");
   const { addOutboundMessage } = await import("../src/modules/conversations/conversationService.js");
   await addOutboundMessage(sleeping.user.id, "WHATSAPP", "Reminder: Pack bag", { focusTaskId: reminded.id });
   await processInbound(msg(sleeping.number, "snooze 30m"), s.send);
@@ -205,4 +209,23 @@ test("snooze: a re-plan keeps it, and it is sent when due", { skip }, async () =
   assert.equal(mine.length, 1);
   assert.match(mine[0].body, /Read chapter 4/);
   assert.equal(await prisma.reminderLog.count({ where: { taskId: task.id, level: "SNOOZE", status: "SENT_WHATSAPP" } }), 1);
+});
+
+test("snooze: only a reminder from the last 6 hours can be snoozed; the reply names the task and the new time", { skip }, async () => {
+  resetInboundState();
+  const { user, number } = await makeUser();
+  const old = await prisma.task.create({ data: { userId: user.id, title: "Old one", dueAt: new Date(Date.now() + 12 * H) } });
+  const { addOutboundMessage } = await import("../src/modules/conversations/conversationService.js");
+  await addOutboundMessage(user.id, "WHATSAPP", "Reminder: Old one", { focusTaskId: old.id });
+  await prisma.conversationMessage.updateMany({ where: { userId: user.id, role: "ASSISTANT" }, data: { createdAt: new Date(Date.now() - 7 * H) } });
+  const s = fakeSender();
+  await processInbound(msg(number, "snooze"), s.send);
+  assert.equal(s.sent.at(-1)?.body, "Nothing to snooze right now.");
+  assert.equal(await prisma.reminderLog.count({ where: { taskId: old.id, level: "SNOOZE" } }), 0);
+
+  const fresh = await prisma.task.create({ data: { userId: user.id, title: "Fresh one", dueAt: new Date(Date.now() + 12 * H) } });
+  await addOutboundMessage(user.id, "WHATSAPP", "Reminder: Fresh one", { focusTaskId: fresh.id });
+  await processInbound(msg(number, "snooze 2 hours"), s.send);
+  assert.match(s.sent.at(-1)?.body ?? "", /^Okay, I'll remind you about "Fresh one" again (?:today|tomorrow) at \d{1,2}:\d{2} [AP]M\.$/);
+  assert.equal(await prisma.reminderLog.count({ where: { taskId: fresh.id, level: "SNOOZE" } }), 1);
 });

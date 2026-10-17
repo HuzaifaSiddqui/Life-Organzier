@@ -1,4 +1,4 @@
-import type { Task, UserSettings } from "@prisma/client";
+import { ConversationRole, type Prisma, type Task, type UserSettings } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { respectQuietHours, stillAllowedAt } from "../reminders/reminderService.js";
 import { claimRow, SNOOZE_LEVEL } from "./whatsappService.js";
@@ -13,6 +13,24 @@ export const SNOOZE_MIN_MINUTES = 15;
 export const SNOOZE_MAX_MINUTES = 240;
 export const SNOOZE_DEFAULT_MINUTES = 60;
 export const MAX_SNOOZES_PER_TASK = 3;
+/** Only a reminder sent within this long can be snoozed. */
+export const SNOOZE_REMINDER_WINDOW_MS = 6 * 3600000;
+
+/**
+ * The task of the latest WhatsApp reminder (or urgent alert) sent in the last 6 hours, or, with `taskId`,
+ * that task if it was reminded in that time. Null = nothing to snooze.
+ */
+export async function recentlyRemindedTaskId(userId: string, now: Date, taskId?: string): Promise<string | null> {
+  const filters: Prisma.ConversationMessageWhereInput[] = [{ metadata: { path: ["intent"], equals: "reminder" } }];
+  if (taskId) filters.push({ metadata: { path: ["taskId"], equals: taskId } });
+  const last = await prisma.conversationMessage.findFirst({
+    where: { userId, role: ConversationRole.ASSISTANT, conversation: { channel: "WHATSAPP" }, createdAt: { gte: new Date(now.getTime() - SNOOZE_REMINDER_WINDOW_MS) }, AND: filters },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true },
+  });
+  const id = (last?.metadata as { taskId?: unknown } | null)?.taskId;
+  return typeof id === "string" ? id : null;
+}
 
 /** "snooze" → 60, "snooze 30m", "snooze 2 hours", "snooze for 45 min", "snooze 90" (minutes); null otherwise. */
 export function parseSnooze(text: string): number | null {

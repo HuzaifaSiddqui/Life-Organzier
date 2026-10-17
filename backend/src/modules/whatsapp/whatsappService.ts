@@ -229,7 +229,8 @@ export function isUrgent(task: Pick<Task, "status" | "priority" | "dueAt" | "arc
 
 /**
  * One WhatsApp message per urgent task (Pro, verified number, WhatsApp allowed in notification devices).
- * Outside the 24 h window it is not sent (WHATSAPP_SKIPPED_WINDOW; the phone's local notification covers it).
+ * Outside the 24 h window it is not sent and not claimed (WHATSAPP_SKIPPED_WINDOW, logged once per task); it is
+ * checked again on later runs, so if the user messages while it is still urgent, the alert goes out then.
  * Quiet hours, DND and the daily cap hold it back; it is tried again on the next run while still urgent.
  * Dedupe: a ReminderLog row with level URGENT at dueAt − 1 s (unique per task; never a planned reminder's time).
  */
@@ -255,8 +256,9 @@ export async function sendUrgentWhatsappAlerts(now = new Date(), send: Sender = 
     const fireAt = new Date((task.dueAt as Date).getTime() - 1000);
     const inWindow = s.lastWhatsappMessageAt && s.lastWhatsappMessageAt.getTime() >= now.getTime() - WINDOW_MS;
     if (!inWindow) {
-      const skipped = await claimRow(task.userId, task.id, fireAt, URGENT_LEVEL, "SKIPPED");
-      if (skipped) logEvent(task.userId, "WHATSAPP_SKIPPED_WINDOW", task.id, { level: URGENT_LEVEL });
+      // Nothing is claimed, so a message later on (window open again) still gets the alert. Logged once per task.
+      const logged = await prisma.activityEvent.findFirst({ where: { userId: task.userId, entityId: task.id, type: "WHATSAPP_SKIPPED_WINDOW" }, select: { id: true } });
+      if (!logged) await prisma.activityEvent.create({ data: { userId: task.userId, type: "WHATSAPP_SKIPPED_WINDOW", entityId: task.id, payload: { level: URGENT_LEVEL } } });
       continue;
     }
     if (!stillAllowedAt(now, "urgent", false, task.dueAt, s, s.timezone) || (await overDailyCap(task.userId, now))) continue;

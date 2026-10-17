@@ -79,7 +79,7 @@ export async function addOutboundMessage(
   if (opts.focusTaskId) state.focus = [opts.focusTaskId, ...state.focus.filter((id) => id !== opts.focusTaskId)].slice(0, 8);
   state.pending = null;
   await saveState(conversation.id, state);
-  await addMessage({ conversationId: conversation.id, userId, role: ConversationRole.ASSISTANT, content, metadata: { intent: "reminder", actions: opts.actions ?? [] } as Prisma.InputJsonValue });
+  await addMessage({ conversationId: conversation.id, userId, role: ConversationRole.ASSISTANT, content, metadata: { intent: "reminder", taskId: opts.focusTaskId ?? null, actions: opts.actions ?? [] } as Prisma.InputJsonValue });
 }
 
 export async function recentChat(conversationId: string, limit = 8): Promise<ChatMessage[]> {

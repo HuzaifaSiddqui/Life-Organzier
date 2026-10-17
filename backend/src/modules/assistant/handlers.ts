@@ -44,7 +44,7 @@ import {
 } from "./dialogue.js";
 import { resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
-import { MAX_SNOOZES_PER_TASK, parseSnooze, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
+import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
@@ -134,14 +134,15 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
 
 /**
  * "Snooze 1h" in reply to a WhatsApp reminder: one more reminder for that task later (rules in whatsapp/snooze.ts).
- * The message never names a task (parseSnooze matches the whole text), so it is the reminded task in focus.
+ * The message never names a task (parseSnooze matches the whole text): it is the task of the latest reminder
+ * sent in the last 6 hours; with none, there is nothing to snooze.
  */
 async function snoozeReply(turn: Turn, minutes: number, taskId?: string): Promise<Out> {
   if (turn.channel !== "WHATSAPP") return { content: "Snooze works for WhatsApp reminders. In the app, use Snooze on the notification.", intent: "snooze_unsupported" };
-  const focused = taskId ?? turn.state.focus[0];
-  const task = focused ? await taskById(turn, focused) : null;
+  const reminded = await recentlyRemindedTaskId(turn.user.id, turn.now, taskId);
+  const task = reminded ? await taskById(turn, reminded) : null;
   if (!task || (task.status !== TaskStatus.PENDING && task.status !== TaskStatus.IN_PROGRESS)) {
-    return { content: 'Which task should I snooze? Reply "snooze 1h" to one of my reminders.', intent: "snooze_unclear" };
+    return { content: "Nothing to snooze right now.", intent: "snooze_nothing" };
   }
   focusOn(turn, task.id);
   const r = await snoozeTask(task, minutes, turn.settings, turn.now);

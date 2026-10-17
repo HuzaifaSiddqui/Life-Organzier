@@ -1,4 +1,5 @@
 import { prisma } from "../../config/db.js";
+import { setBounded } from "../../lib/boundedMap.js";
 
 /**
  * Push notifications to the user's phones (P2). Used so a task added on WhatsApp shows up on the phone
@@ -66,6 +67,8 @@ export function setPushProvider(p: PushProvider): void {
 // ponytail: tickets waiting for a receipt live in memory; a restart drops them (their tokens get cleaned up
 // the next time a push to them fails). Fine for one backend instance.
 const pendingReceipts = new Map<string, { token: string; at: number }>();
+/** Tickets waiting for a receipt, at most; the oldest are dropped first. */
+const MAX_PENDING_RECEIPTS = 10000;
 
 /** Test hook. */
 export function resetPushState(): void {
@@ -102,7 +105,7 @@ export async function sendPushToUser(userId: string, msg: Omit<PushMessage, "to"
     const tickets = await provider.send(tokens.map((to) => ({ ...msg, to })));
     const dead: string[] = [];
     tickets.forEach((t, i) => {
-      if (t.id) pendingReceipts.set(t.id, { token: tokens[i], at: Date.now() });
+      if (t.id) setBounded(pendingReceipts, t.id, { token: tokens[i], at: Date.now() }, MAX_PENDING_RECEIPTS);
       else if (t.error === "DeviceNotRegistered") dead.push(tokens[i]);
     });
     if (dead.length) await prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
