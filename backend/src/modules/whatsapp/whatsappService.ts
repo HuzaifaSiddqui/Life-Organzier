@@ -148,7 +148,9 @@ export async function sendDueWhatsappReminders(now = new Date(), send: Sender = 
     const task = await prisma.task.findFirst({ where: { id: r.taskId as string, userId: r.userId } });
     const active = task && (task.status === TaskStatus.PENDING || task.status === TaskStatus.IN_PROGRESS) && !task.archived && task.reminderMode !== "NONE";
     const onTime = Boolean(task?.dueAt && Math.abs(task.dueAt.getTime() - r.fireAt.getTime()) < 60000 && r.level === "critical");
-    if (!task || !active || !stillAllowedAt(now, r.level as ReminderLevel, onTime, task.dueAt, s, s.timezone)) {
+    // Quiet hours, DND and placement are judged at the PLANNED time: the job runs up to 5 min late, and judging
+    // an on-time "due now" reminder at run time would always reject it. The 24 h window is judged at send time (query above).
+    if (!task || !active || !stillAllowedAt(r.fireAt, r.level as ReminderLevel, onTime, task.dueAt, s, s.timezone)) {
       await finish("SKIPPED");
       continue;
     }

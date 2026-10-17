@@ -232,6 +232,28 @@ test("whatsapp reminders: closed 24 h window → skipped; transient error → re
   }
 });
 
+test("whatsapp reminders: an on-time 'due now' reminder still goes out when the job runs a few minutes late", { skip }, async () => {
+  resetWhatsappPause();
+  const number = randomNumber();
+  const user = await makeUser({ linkedNumber: number, ...quiet(false) });
+  const dueAt = new Date(Math.floor((Date.now() - 3 * 60000) / 60000) * 60000); // due 3 min ago, on the minute
+  const task = await prisma.task.create({ data: { userId: user.id, title: "Hand in form", dueAt, dueTime: "1:00 PM" } });
+  const log = await prisma.reminderLog.create({ data: { userId: user.id, taskId: task.id, fireAt: dueAt, level: "critical" } });
+  const f = fakeSender();
+  assert.equal(await sendDueWhatsappReminders(new Date(), f.send), 1);
+  assert.equal((await prisma.reminderLog.findUniqueOrThrow({ where: { id: log.id } })).status, "SENT_WHATSAPP");
+});
+
+test("whatsapp reminders: the 24 h window is checked at send time, not at the planned time", { skip }, async () => {
+  resetWhatsappPause();
+  const { log, now, user } = await reminderFixture();
+  await prisma.userSettings.update({ where: { userId: user.id }, data: { lastWhatsappMessageAt: new Date(now.getTime() - 24 * 3600000 - 30000) } }); // window closed 30 s ago
+  const f = fakeSender();
+  assert.equal(await sendDueWhatsappReminders(now, f.send), 0);
+  assert.equal(f.sent.length, 0);
+  assert.equal((await prisma.reminderLog.findUniqueOrThrow({ where: { id: log.id } })).status, "SCHEDULED"); // left to the phone
+});
+
 test("whatsapp: messages stuck as RECEIVED for 2+ minutes get 'please resend' once", { skip }, async () => {
   const sid = `SMtest${randomUUID()}`;
   const number = randomNumber();
