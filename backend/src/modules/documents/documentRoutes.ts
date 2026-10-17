@@ -132,6 +132,7 @@ documentRouter.post(
               daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1),
               time: z.string().nullable().optional(),
               durationMinutes: z.number().int().positive().nullable().optional(),
+              location: z.string().trim().max(60).nullable().optional(),
             }),
           )
           .max(60)
@@ -161,7 +162,7 @@ documentRouter.post(
     }
     const routines = [];
     for (const s of body.schedules) {
-      if (await existingRoutineId(req.user.id, s.title, s.daysOfWeek, s.time && parseClock(s.time) ? s.time : null)) {
+      if (await existingRoutineId(req.user.id, s.title, s.daysOfWeek, s.time && parseClock(s.time) ? s.time : null, s.location)) {
         skipped += 1;
         continue;
       }
@@ -175,6 +176,7 @@ documentRouter.post(
           category: "Academic",
           priority: RoutinePriority.IMPORTANT,
           timeLocked: true,
+          location: s.location ?? null,
         }),
       );
     }

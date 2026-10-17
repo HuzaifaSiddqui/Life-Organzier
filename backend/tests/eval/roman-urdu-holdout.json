@@ -5,5 +5,40 @@
   "messages": [
     { "id": "h-example-1", "example": true, "text": "parson shaam 5 baje meeting hai", "date": "2026-10-07", "time": "5 PM" },
     { "id": "h-example-2", "example": true, "text": "agle hafte peer ko assignment jama karwani hai", "date": "2026-10-12" }
-  ]
+  ],
+  "todo_queries_unscored": {
+    "note": "UNSCORED TODO for a teammate: deadline/class question phrasings for assistant/queries.ts parseQuery(). Written after the parser was final and never run against it; none of these appear in tests/queries.test.ts. 'expected' is only a suggestion (a ParsedQuery, or null) — a teammate who has not read queries.ts should check/relabel each row, add more of their own, and then score them. Not read by scripts/model-benchmark.ts (it only reads 'messages').",
+    "messages": [
+      { "id": "q-en-1", "lang": "en", "text": "Got anything due by tonight?", "expected": { "kind": "due", "range": "today" } },
+      { "id": "q-en-2", "lang": "en", "text": "What's left to submit this week?", "expected": { "kind": "due", "range": "week" } },
+      { "id": "q-en-3", "lang": "en", "text": "when does the AI quiz close", "expected": { "kind": "when_due", "ref": "AI quiz" } },
+      { "id": "q-en-4", "lang": "en", "text": "what's the due date on my stats homework?", "expected": { "kind": "when_due", "ref": "stats homework" } },
+      { "id": "q-en-5", "lang": "en", "text": "Have I fallen behind on anything?", "expected": { "kind": "overdue" } },
+      { "id": "q-en-6", "lang": "en", "text": "which task should I tackle first", "expected": { "kind": "urgent" } },
+      { "id": "q-en-7", "lang": "en", "text": "Is there a lecture tomorrow morning?", "expected": { "kind": "classes", "day": "tomorrow" } },
+      { "id": "q-en-8", "lang": "en", "text": "what comes after this class?", "expected": { "kind": "next_class" } },
+      { "id": "q-en-9", "lang": "en", "text": "Which building is my networks class in?", "expected": { "kind": "where_class" } },
+      { "id": "q-en-10", "lang": "en", "text": "please set my compiler lab as due friday", "expected": null },
+      { "id": "q-roman-1", "lang": "roman", "text": "aaj raat tak kuch jama karwana hai kya", "expected": { "kind": "due", "range": "today" } },
+      { "id": "q-roman-2", "lang": "roman", "text": "is week mein kon kon si deadlines hain", "expected": { "kind": "due", "range": "week" } },
+      { "id": "q-roman-3", "lang": "roman", "text": "networks wala assignment kab tak jama hoga", "expected": { "kind": "when_due", "ref": "networks wala assignment" } },
+      { "id": "q-roman-4", "lang": "roman", "text": "kya koi kaam pending reh gaya hai", "expected": { "kind": "overdue" } },
+      { "id": "q-roman-5", "lang": "roman", "text": "abhi sab se pehle kaunsa kaam karun", "expected": { "kind": "urgent" } },
+      { "id": "q-roman-6", "lang": "roman", "text": "kal subah koi lecture hai?", "expected": { "kind": "classes", "day": "tomorrow" } },
+      { "id": "q-roman-7", "lang": "roman", "text": "is ke baad konsi class hai", "expected": { "kind": "next_class" } },
+      { "id": "q-roman-8", "lang": "roman", "text": "networks ka lecture kis block mein hai", "expected": { "kind": "where_class" } },
+      { "id": "q-roman-9", "lang": "roman", "text": "kal quiz ki tayari karni hai", "expected": null },
+      { "id": "q-roman-10", "lang": "roman", "text": "class khatam ho gayi", "expected": null },
+      { "id": "q-ur-1", "lang": "ur", "text": "آج رات تک کیا جمع کروانا ہے", "expected": { "kind": "due", "range": "today" } },
+      { "id": "q-ur-2", "lang": "ur", "text": "اس ہفتے کی ساری ڈیڈ لائنز دکھائیں", "expected": { "kind": "due", "range": "week" } },
+      { "id": "q-ur-3", "lang": "ur", "text": "نیٹ ورکس والی اسائنمنٹ کی آخری تاریخ کیا ہے", "expected": { "kind": "when_due", "ref": "نیٹ ورکس والی اسائنمنٹ" } },
+      { "id": "q-ur-4", "lang": "ur", "text": "کون سے کام وقت پر نہیں ہوئے", "expected": { "kind": "overdue" } },
+      { "id": "q-ur-5", "lang": "ur", "text": "ابھی سب سے پہلے کون سا کام کروں", "expected": { "kind": "urgent" } },
+      { "id": "q-ur-6", "lang": "ur", "text": "کل صبح کوئی کلاس ہے کیا", "expected": { "kind": "classes", "day": "tomorrow" } },
+      { "id": "q-ur-7", "lang": "ur", "text": "اس کے بعد کون سی کلاس ہے", "expected": { "kind": "next_class" } },
+      { "id": "q-ur-8", "lang": "ur", "text": "نیٹ ورکس کا لیکچر کس بلاک میں ہے", "expected": { "kind": "where_class" } },
+      { "id": "q-ur-9", "lang": "ur", "text": "کل کوئز کی تیاری کرنی ہے", "expected": null },
+      { "id": "q-ur-10", "lang": "ur", "text": "آج کی کلاس ختم ہو گئی", "expected": null }
+    ]
+  }
 }

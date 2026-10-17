@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getAi, type ChatMessage } from "../../ai/llm.js";
 import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
 import { parseCheckinStyle } from "../checkins/style.js";
+import { parseQuery } from "./queries.js";
 import { cleanTitle, extractEntities, isHabitLike, parseLocationCommand, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -127,6 +128,8 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (e.progress !== null && /\b(?:done|complete|completed|finished|through|with|on)\b/i.test(t)) return { intent: "set_progress", confidence: 0.9 };
   if (SPLIT.test(t) && /\b(?:into|in)\s+\S+/i.test(t)) return { intent: "split_task", confidence: 0.9 };
   if (/^\s*break\s+(?:it|this|that)?\s*down\b/i.test(t)) return { intent: "split_task", confidence: 0.8 };
+  // Deadline and class questions in English, Urdu and Roman Urdu (queries.ts), before plan/create rules.
+  if (parseQuery(t)) return { intent: "query_tasks", confidence: 0.9 };
   if (PLAN.test(t)) return { intent: "plan_day", confidence: 0.85 };
   if (QUERY.test(t) && !CREATE_CUE.test(t) && (QUESTION.test(t) || /^(?:show|list)/i.test(t))) return { intent: "query_tasks", confidence: 0.85 };
   // "X helps me when I'm stressed" shares a coping strategy — it is not a mood report.
