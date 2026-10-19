@@ -97,6 +97,8 @@ export type Routine = {
   priority: RoutinePriority;
   timeLocked: boolean;
   locationContext: string | null;
+  /** Room or venue of a class, as written in the timetable. */
+  location?: string | null;
   wellnessType?: string | null;
   active: boolean;
   occurrences: RoutineOccurrence[];

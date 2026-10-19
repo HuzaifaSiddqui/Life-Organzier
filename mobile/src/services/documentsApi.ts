@@ -144,7 +144,7 @@ export async function applyDocument(
   id: string,
   items: {
     deadlines: Array<{ title: string; date: string; time: string | null }>;
-    schedules: Array<{ title: string; daysOfWeek: number[]; time: string | null; durationMinutes: number | null }>;
+    schedules: Array<{ title: string; daysOfWeek: number[]; time: string | null; durationMinutes: number | null; location?: string | null }>;
   },
 ): Promise<{ tasks: Task[]; routines: Array<{ id: string; title: string }> }> {
   const result = await apiPost<{ tasks: Task[]; routines: Array<{ id: string; title: string }> }>(`/documents/${id}/apply`, items);

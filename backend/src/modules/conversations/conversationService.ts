@@ -63,6 +63,25 @@ export async function addMessage(input: {
   });
 }
 
+/**
+ * A message the assistant sent on its own (a WhatsApp reminder). Working memory is focused on
+ * `focusTaskId` and any open question is dropped, so a reply like "done" is about that task; `actions`
+ * make the numbered reply ("1") work like a tap.
+ */
+export async function addOutboundMessage(
+  userId: string,
+  channel: string,
+  content: string,
+  opts: { focusTaskId?: string; actions?: Array<{ label: string; payload: Record<string, unknown> }> } = {},
+): Promise<void> {
+  const conversation = await getOrCreateConversation(userId, channel);
+  const state = readState(conversation);
+  if (opts.focusTaskId) state.focus = [opts.focusTaskId, ...state.focus.filter((id) => id !== opts.focusTaskId)].slice(0, 8);
+  state.pending = null;
+  await saveState(conversation.id, state);
+  await addMessage({ conversationId: conversation.id, userId, role: ConversationRole.ASSISTANT, content, metadata: { intent: "reminder", taskId: opts.focusTaskId ?? null, actions: opts.actions ?? [] } as Prisma.InputJsonValue });
+}
+
 export async function recentChat(conversationId: string, limit = 8): Promise<ChatMessage[]> {
   const messages = await prisma.conversationMessage.findMany({
     where: { conversationId },

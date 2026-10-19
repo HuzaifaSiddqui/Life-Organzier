@@ -22,13 +22,13 @@ import {
   getTags,
   recoverAccount,
   requestAccountDeletion,
-  savePhone,
   setDnd,
   updateProfile,
   type AccountInfo,
 } from "../../services/settingsApi";
 import { resetLocalData, syncNow } from "../../services/syncEngine";
 import { LocationOnboardingSheet } from "../../components/LocationOnboardingSheet";
+import { WhatsappLinkCard } from "../../components/WhatsappLinkCard";
 import { isLocationRemindersEnabled, setLocationRemindersEnabled, takeLocationOnboarding } from "../../services/locationReminders";
 import { listPlaces } from "../../services/locationsApi";
 import { syncReminders } from "../../services/reminders";
@@ -55,12 +55,11 @@ function to12h(hhmm: string): string {
 
 export function SettingsScreen({ navigation }: Props) {
   const { refreshProfile, firebaseUser } = useAuth();
-  const { settings, update, categories, setCategories, phoneNumber, reload } = usePreferences();
+  const { settings, update, categories, setCategories, reload } = usePreferences();
   const { t } = useLocale();
   const [toast, setToast] = useState<string | null>(null);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState(phoneNumber ?? "");
   const [newContext, setNewContext] = useState("");
   const [catName, setCatName] = useState("");
   const [catColor, setCatColor] = useState(COLORS[0]);
@@ -94,7 +93,6 @@ export function SettingsScreen({ navigation }: Props) {
       setOnboarding(true); // first time only, after permission was granted
     }
   };
-  useEffect(() => setPhone(phoneNumber ?? ""), [phoneNumber]);
 
   if (!settings) {
     return (
@@ -384,24 +382,7 @@ export function SettingsScreen({ navigation }: Props) {
         </Card>
 
         <SectionTitle title="WhatsApp" />
-        <Card style={{ gap: 8 }}>
-          <Text style={styles.meta}>Link your number to chat with the assistant on WhatsApp. Pro users also get reminders there while the 24-hour window is open.</Text>
-          <View style={styles.row}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={phone} onChangeText={setPhone} placeholder="+923001234567" placeholderTextColor="#646A78" keyboardType="phone-pad" />
-            <Chip
-              label="Save"
-              onPress={async () => {
-                try {
-                  await savePhone(phone.trim() || null);
-                  await reload();
-                  setToast("WhatsApp number saved");
-                } catch (e) {
-                  setToast(getApiErrorMessage(e));
-                }
-              }}
-            />
-          </View>
-        </Card>
+        <WhatsappLinkCard />
 
         <SectionTitle title="Help & tutorials" />
         <Card style={{ gap: 8 }}>

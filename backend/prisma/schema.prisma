@@ -14,7 +14,9 @@ model User {
   email               String    @unique
   displayName         String?
   photoUrl            String?
+  /// WhatsApp number (E.164). Set only by the LINK flow, together with phoneVerifiedAt.
   phoneNumber         String?   @unique
+  phoneVerifiedAt     DateTime?
   deletionRequestedAt DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -35,6 +37,8 @@ model User {
   reminderLogs         ReminderLog[]
   checkinLogs          CheckinLog[]
   savedLocations       SavedLocation[]
+  whatsappLinkCode     WhatsappLinkCode?
+  pushTokens           PushToken[]
 }
 
 model Task {
@@ -82,19 +86,19 @@ model Task {
   /// FR-RN-004: pre-generated check-in messages + the scheduledStart they were written for.
   checkinCopy     Json?
 
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parentTask Task?         @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
-  subtasks   Task[]        @relation("TaskSubtasks")
-  versions   TaskVersion[]
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentTask  Task?          @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks    Task[]         @relation("TaskSubtasks")
+  versions    TaskVersion[]
   checkinLogs CheckinLog[]
+  /// FR-LB-001 geofence locations (GPS). Separate from `locationContext` (a text label for filtering).
+  locations   TaskLocation[]
 
   @@unique([userId, clientId])
   @@index([userId, dueDate])
   @@index([userId, status])
   @@index([userId, updatedAt])
   @@index([parentTaskId])
-  /// FR-LB-001 geofence locations (GPS). Separate from `locationContext` (a text label for filtering).
-  locations       TaskLocation[]
 }
 
 model TaskVersion {
@@ -127,6 +131,8 @@ model Routine {
   priority        RoutinePriority  @default(NORMAL)
   timeLocked      Boolean          @default(false)
   locationContext String?
+  /// Room or venue for a class, only when it appears in the source document ("B-12", "Lab 3").
+  location        String?
   wellnessType    String?
   active          Boolean          @default(true)
   createdAt       DateTime         @default(now())
@@ -186,6 +192,8 @@ model UserSettings {
   ttsEnabled            Boolean   @default(false)
   ttsRate               Float     @default(1.0)
   lastWhatsappMessageAt DateTime?
+  /// When the reminder plan (ReminderLog SCHEDULED rows) was last rebuilt, by the phone or the WhatsApp job.
+  remindersPlannedAt    DateTime?
   /// FR-RN-004 start & completion check-ins
   checkinsEnabled       Boolean   @default(true)
   /// FUNNY | SERIOUS | GENTLE — changes only when the user changes it
@@ -312,7 +320,7 @@ model CheckinLog {
   researchMode Boolean   @default(false)
   createdAt    DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@unique([taskId, kind, fireAt])
@@ -320,18 +328,18 @@ model CheckinLog {
 }
 
 model ReminderLog {
-  id        String    @id @default(uuid())
-  userId    String
-  taskId    String?
+  id                  String    @id @default(uuid())
+  userId              String
+  taskId              String?
   routineOccurrenceId String?
-  fireAt    DateTime
-  level     String
-  category  String?
-  /// SCHEDULED | ACTED | IGNORED | SENT_WHATSAPP
-  status    String    @default("SCHEDULED")
-  action    String?
-  actedAt   DateTime?
-  createdAt DateTime  @default(now())
+  fireAt              DateTime
+  level               String
+  category            String?
+  /// SCHEDULED | ACTED | IGNORED | SENDING | SENT_WHATSAPP | SKIPPED | FAILED | SNOOZED (a WhatsApp snooze; recordPlan never deletes it)
+  status              String    @default("SCHEDULED")
+  action              String?
+  actedAt             DateTime?
+  createdAt           DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -463,20 +471,20 @@ enum RoutineOccurrenceStatus {
 
 /// FR-LB-001: the user's reusable places (GPS + radius). Geofences are monitored on the phone only.
 model SavedLocation {
-  id         String   @id @default(uuid())
-  userId     String
-  name       String
+  id             String   @id @default(uuid())
+  userId         String
+  name           String
   /// Full address from Nominatim (search result or reverse lookup); null for older places.
   displayAddress String?
-  latitude   Float
-  longitude  Float
-  radiusM    Int      @default(350)
+  latitude       Float
+  longitude      Float
+  radiusM        Int      @default(350)
   /// PRECISE (200 m) | NEARBY (350 m) | AREA (750 m)
-  preset     String   @default("NEARBY")
+  preset         String   @default("NEARBY")
   /// Incremented each time the place is attached to a task (frequent places first).
-  usageCount Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  usageCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   taskLocations TaskLocation[]
@@ -500,4 +508,39 @@ model TaskLocation {
 
   @@unique([taskId, savedLocationId])
   @@index([savedLocationId])
+}
+
+/// One pending WhatsApp link code per user (FR-WA-001). Only a hash is stored; 10-minute expiry.
+model WhatsappLinkCode {
+  userId    String   @id
+  codeHash  String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Twilio webhook deliveries, keyed by MessageSid so retries are ignored. Stores no message text.
+model WhatsappInbound {
+  messageSid String   @id
+  fromNumber String
+  /// RECEIVED | DONE
+  status     String   @default("RECEIVED")
+  createdAt  DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+/// Expo push token of a signed-in device (P2: tasks added on WhatsApp appear on the phone). Never logged.
+model PushToken {
+  token     String   @id
+  userId    String
+  platform  String
+  deviceId  String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

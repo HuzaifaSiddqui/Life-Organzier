@@ -1,12 +1,12 @@
 import { Priority, RoutineOccurrenceStatus, TaskStatus, TaskType, type Task } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
-import { addDaysYmd, dueDateFromYmd, formatClock, localParts, localYmd, relativeDayLabel, startOfLocalDay } from "../../lib/time.js";
+import { addDaysYmd, dueDateFromYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, startOfLocalDay } from "../../lib/time.js";
 import { formatDuration, fuzzySimilarity, listJoin, plural, truncate } from "../../lib/text.js";
 import { logEvent } from "../events/eventService.js";
 import { isMood, type Mood } from "../mood/moodService.js";
 import { acceptRecommendation, dismissRecommendation } from "../patterns/recommendationService.js";
-import { rescheduleOccurrence, updateOccurrence } from "../routines/routineService.js";
+import { occurrenceEnd, occurrencesForDay, occurrenceStart, rescheduleOccurrence, updateOccurrence } from "../routines/routineService.js";
 import { chunkPlan, dayPlan, loadScheduleContext, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   getTaskForUser,
@@ -36,12 +36,16 @@ import {
   startTaskDraft,
   storeInfo,
   taskCard,
+  taskById,
   todayRoutinesText,
   dueLabel,
   type Out,
   type Turn,
 } from "./dialogue.js";
 import { resolveTaskRef } from "./draft.js";
+import { parseQuery } from "./queries.js";
+import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
+import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
@@ -103,6 +107,8 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       return help();
     case "set_checkin_style":
       return setCheckinStyle(turn, text);
+    case "snooze_task":
+      return snoozeReply(turn, parseSnooze(text) ?? SNOOZE_DEFAULT_MINUTES);
     case "manage_location":
       return manageLocation(turn, text);
     case "confirm":
@@ -124,6 +130,36 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       };
     }
   }
+}
+
+/**
+ * "Snooze 1h" in reply to a WhatsApp reminder: one more reminder for that task later (rules in whatsapp/snooze.ts).
+ * The message never names a task (parseSnooze matches the whole text): it is the task of the latest reminder
+ * sent in the last 6 hours; with none, there is nothing to snooze.
+ */
+async function snoozeReply(turn: Turn, minutes: number, taskId?: string): Promise<Out> {
+  if (turn.channel !== "WHATSAPP") return { content: "Snooze works for WhatsApp reminders. In the app, use Snooze on the notification.", intent: "snooze_unsupported" };
+  const reminded = await recentlyRemindedTaskId(turn.user.id, turn.now, taskId);
+  const task = reminded ? await taskById(turn, reminded) : null;
+  if (!task || (task.status !== TaskStatus.PENDING && task.status !== TaskStatus.IN_PROGRESS)) {
+    return { content: "Nothing to snooze right now.", intent: "snooze_nothing" };
+  }
+  focusOn(turn, task.id);
+  const r = await snoozeTask(task, minutes, turn.settings, turn.now);
+  if (!r.ok) {
+    const why = {
+      limit: `You've snoozed "${task.title}" ${MAX_SNOOZES_PER_TASK} times already. Reply done when it's finished.`,
+      due: `"${task.title}" is already due.`,
+      muted: `Your quiet hours or Do Not Disturb last until after "${task.title}" is due, so I can't snooze it.`,
+    }[r.reason];
+    return { content: why, intent: "snooze_refused" };
+  }
+  const lp = localParts(r.at, turn.tz);
+  const when = `${relativeDayLabel(localYmd(r.at, turn.tz), turn.todayYmd)} at ${formatClock(lp.h, lp.mi)}`;
+  const content = r.movedFor
+    ? `${r.movedFor === "dnd" ? "Do Not Disturb is on" : "Your quiet hours are on"} then, so I'll remind you about "${task.title}" ${when}${r.atDueTime ? ", when it's due" : ""}.`
+    : `Okay, I'll remind you about "${task.title}" again ${when}${r.atDueTime ? ", when it's due" : ""}.`;
+  return { content, intent: "snoozed" };
 }
 
 /** FR-LB-001 §4: remove or change a task's arrival location from chat. */
@@ -467,8 +503,14 @@ async function splitIntent(turn: Turn, u: Understanding): Promise<Out> {
 }
 
 async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<Out> {
-  if (/\b(?:when|what time|due|deadline|status)\b/i.test(text) && u.targetRef && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(u.targetRef)) {
-    const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: true });
+  // Deterministic parse (English, Urdu, Roman Urdu) decides what is asked; the regexes below cover older English phrasing.
+  const q = parseQuery(text);
+  if (q?.kind === "classes" || q?.kind === "next_class" || q?.kind === "where_class") return classQuery(turn, q);
+  if (q?.kind === "urgent") return urgentQuery(turn);
+
+  const ref = q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null;
+  if (ref && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(ref)) {
+    const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted: true });
     if (r.task) {
       focusOn(turn, r.task.id);
       const t = r.task;
@@ -480,42 +522,91 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
         intent: "query_task",
       };
     }
+    if (q?.kind === "when_due") {
+      // A course name usually matches several tasks ("physics" → assignment, quiz): list them by due date.
+      const matches = r.candidates.length ? r.candidates : (await listActiveTasks(turn.user.id)).filter((t) => t.title.toLowerCase().includes(ref.toLowerCase()) || t.category?.toLowerCase() === ref.toLowerCase());
+      if (!matches.length) return { content: `I couldn't find a task called "${ref}".`, intent: "query_task" };
+      const sorted = [...matches].sort((x, y) => (x.dueAt?.getTime() ?? Infinity) - (y.dueAt?.getTime() ?? Infinity));
+      return taskListReply(turn, `Matching "${ref}"`, sorted, "");
+    }
   }
+
   const all = await listActiveTasks(turn.user.id);
   const context = turn.settings.currentContext;
   const visible = all.filter((t) => !context || !t.locationContext || t.locationContext === context);
+  const range = q?.kind === "overdue" ? "overdue" : q?.kind === "due" ? q.range : null;
   let title = "Today";
   let list: Task[];
-  if (/\boverdue|late|missed\b/i.test(text)) {
+  if (range === "overdue" || (!q && /\boverdue|late|missed\b/i.test(text))) {
     title = "Overdue";
     list = visible.filter((t) => t.dueAt && t.dueAt < turn.now);
-  } else if (/\b(?:this week|week)\b/i.test(text)) {
+  } else if (range === "week" || (!q && /\b(?:this week|week)\b/i.test(text))) {
     title = "This week";
     const end = startOfLocalDay(addDaysYmd(turn.todayYmd, 7), turn.tz);
     list = visible.filter((t) => t.dueAt && t.dueAt < end);
-  } else if (u.entities.date) {
-    title = relativeDayLabel(u.entities.date.ymd, turn.todayYmd);
-    list = visible.filter((t) => t.dueAt && localYmd(t.dueAt, turn.tz) === u.entities.date?.ymd);
-  } else if (/\b(?:all|pending|everything|left|remaining)\b/i.test(text)) {
+  } else if (range === "tomorrow" || (range !== "today" && u.entities.date)) {
+    const ymd = range === "tomorrow" ? addDaysYmd(turn.todayYmd, 1) : (u.entities.date?.ymd as string);
+    title = relativeDayLabel(ymd, turn.todayYmd);
+    list = visible.filter((t) => t.dueAt && localYmd(t.dueAt, turn.tz) === ymd);
+  } else if (!q && /\b(?:all|pending|everything|left|remaining)\b/i.test(text)) {
     title = "All pending";
     list = visible;
   } else {
     const end = startOfLocalDay(addDaysYmd(turn.todayYmd, 1), turn.tz);
     list = visible.filter((t) => (t.dueAt && t.dueAt < end) || (t.scheduledStart && t.scheduledStart < end));
   }
-  list = list.slice(0, 12);
-  focusOn(turn, ...list.slice(0, 3).map((t) => t.id).reverse());
   const routines = title.toLowerCase() === "today" ? await todayRoutinesText(turn) : "";
-  const label = title.charAt(0).toUpperCase() + title.slice(1);
-  const content = list.length
-    ? `${label}: ${plural(list.length, "task")}${list.some((t) => t.dueAt && t.dueAt < turn.now) ? ` (${list.filter((t) => t.dueAt && t.dueAt < turn.now).length} overdue)` : ""}. ${routines}`.trim()
-    : `Nothing ${title === "Overdue" ? "overdue" : `due ${title.toLowerCase()}`} ${routines}`.trim();
+  return taskListReply(turn, title.charAt(0).toUpperCase() + title.slice(1), list, routines);
+}
+
+/**
+ * A task list as a reply. On WhatsApp the list is the text itself (no cards), capped at 8; in the app a
+ * short summary sits above the task card (capped at 12). Both say "…and N more" when cut.
+ */
+function taskListReply(turn: Turn, label: string, list: Task[], routines: string): Out {
+  const whatsapp = turn.channel === "WHATSAPP";
+  const shown = list.slice(0, whatsapp ? WHATSAPP_LIST_CAP : APP_LIST_CAP);
+  focusOn(turn, ...shown.slice(0, 3).map((t) => t.id).reverse());
+  const more = moreLine(list.length, shown.length);
+  const overdue = list.filter((t) => t.dueAt && t.dueAt < turn.now).length;
+  const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${label.toLowerCase()}`}.`;
+  const content = !list.length
+    ? [empty, routines].filter(Boolean).join(" ")
+    : whatsapp
+      ? [`${label}:`, ...shown.map((t) => `• ${t.title} (${dueLabel(t, turn)})`), more, routines].filter(Boolean).join("\n")
+      : [`${label}: ${plural(list.length, "task")}${overdue ? ` (${overdue} overdue)` : ""}.`, more, routines].filter(Boolean).join(" ");
   return {
     content,
-    cards: [{ type: "task_list", title: label, tasks: list.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }],
+    cards: [{ type: "task_list", title: label, tasks: shown.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }],
     actions: [{ label: "Plan my day", payload: { type: "plan_day" } }, { label: "Read them to me", text: "Read back my tasks" }],
     intent: "query_tasks",
   };
+}
+
+/** "What's my most urgent task": overdue first, then due within 24 h, then priority; top 3. */
+async function urgentQuery(turn: Turn): Promise<Out> {
+  const top = mostUrgent(await listActiveTasks(turn.user.id), turn.now);
+  if (!top.length) return { content: "Nothing urgent. You have no pending tasks.", intent: "query_urgent" };
+  focusOn(turn, ...top.map((t) => t.id).reverse());
+  const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
+  return { content: ["Most urgent:", ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
+}
+
+/** Class questions are answered from the user's routines (timetable), never from raw document text. */
+async function classQuery(turn: Turn, q: { kind: "classes"; day: "today" | "tomorrow" } | { kind: "next_class" } | { kind: "where_class" }): Promise<Out> {
+  const ymd = q.kind === "classes" && q.day === "tomorrow" ? addDaysYmd(turn.todayYmd, 1) : turn.todayYmd;
+  const occ = await occurrencesForDay(turn.user.id, turn.tz, ymd, turn.settings.currentContext);
+  const slots: ClassSlot[] = occ
+    .filter((o) => o.status !== RoutineOccurrenceStatus.SKIPPED && isClassRoutine(o.routine) && parseClock(o.dueTime))
+    .map((o) => ({ title: o.routine.title, location: o.routine.location, start: occurrenceStart(o, turn.tz), end: occurrenceEnd(o, turn.tz) }))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const clock = (d: Date) => {
+    const p = localParts(d, turn.tz);
+    return formatClock(p.h, p.mi);
+  };
+  const content =
+    q.kind === "classes" ? classesForDay(slots, q.day === "tomorrow" ? "tomorrow" : "today", clock, turn.channel === "WHATSAPP" ? WHATSAPP_LIST_CAP : APP_LIST_CAP) : currentOrNextClass(slots, turn.now, clock, q.kind === "where_class" ? "where" : "next");
+  return { content, intent: "query_classes" };
 }
 
 export async function planDay(turn: Turn, ymd: string | null): Promise<Out> {
@@ -674,6 +765,8 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     case "cancel_pending":
       turn.state.pending = null;
       return { content: "Okay, cancelled.", intent: "cancel" };
+    case "snooze_task":
+      return snoozeReply(turn, payload.minutes, payload.taskId);
     case "complete_task": {
       const task = await getTaskForUser(turn.user.id, payload.taskId);
       return task ? completeTask(turn, task) : { content: "That task no longer exists.", intent: "not_found" };

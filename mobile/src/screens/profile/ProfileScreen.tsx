@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { unregisterPush } from "../../services/push";
 import { signOut } from "firebase/auth";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -113,7 +114,7 @@ export function ProfileScreen({ navigation }: Props) {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              void Promise.all([clearAllReminders(), clearGeofenceData()]).finally(() => {
+              void Promise.all([clearAllReminders(), clearGeofenceData(), unregisterPush()]).finally(() => {
                 void signOut(auth);
               });
             }}

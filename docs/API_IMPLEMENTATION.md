@@ -194,6 +194,18 @@ Saved places are reusable; tasks link to them. The phone monitors geofences; the
 
 **Chat** (`POST /api/assistant/message`): for Pro users a place named in a new task ("from Ali Medical Store", "ghar ja ke") is attached — saved place first (aliases: ghar/home, uni/university, daftar/kaam/office, masjid/mosque, hostel, library); else Nominatim: one result is attached (saved under the user's words, with its address); 2–4 results are listed as numbered choices (5 or more: the first 4 plus "Open task to search") and the reply "2", part of an address, or "none" resolves it (working-memory pending `location_choice`); none → task without location. "remove the location (from X)", "location hata do", "change the location (of X) to Y" use intent `manage_location`.
 
+### WhatsApp (FR-WA, Pro only)
+
+- **`POST /api/whatsapp/webhook`** (Twilio, form-encoded, `X-Twilio-Signature` checked against `PUBLIC_BASE_URL`). Records the `MessageSid` (a repeat returns an empty `<Response/>` and does nothing), answers at once with an empty TwiML and processes in the background; the reply is sent through the Twilio REST API. `LINK <code>` from any number links it; unlinked numbers get instructions (once an hour), linked Free accounts a Pro notice (once a day).
+- **`POST /api/whatsapp/link/start`** (auth, Pro) → `{ code, expiresAt, botNumber }`. 8 characters from `23456789ABCDEFGHJKLMNPQRSTUVWXYZ`, valid 10 minutes, replaces the previous code; only a hash is stored. 403 `PRO_REQUIRED` for Free.
+- **`DELETE /api/whatsapp/link`** (auth) unlinks.
+- **`PUT /api/settings/phone` was removed.** The number is set only by the LINK flow. `GET /api/settings` returns `whatsapp: { linked, maskedNumber }` (last 3 digits) instead of the number; `/auth/sync-user` and `/users/me` mask it the same way.
+- **Routines** accept and return `location` (room/venue, max 60). `POST /api/documents/:id/confirm` schedules accept `location`.
+
+### Push (P2)
+
+- **`POST /api/push/register`** (auth) `{ token, platform: "android"|"ios", deviceId? }` saves the device's Expo push token (a token used by another account on the same phone moves to this one). **`DELETE /api/push/register`** `{ token }` removes it (only the owner's). **`POST /api/push/unregister-device`** `{ token, deviceId }` (no login) is used by the phone's sign-out retry queue: it deletes the token only when the device id matches the one it was registered with. Tokens are never logged.
+
 ### Check-ins (FR-RN-004)
 
 **`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):

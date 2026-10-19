@@ -2,7 +2,10 @@ import type { Category, User, UserSettings } from "../types/models";
 import { apiDelete, apiGet, apiPost, apiPut } from "./api";
 import { scheduleReminderSync } from "./reminders";
 
-export async function getSettings(): Promise<{ settings: UserSettings; phoneNumber: string | null }> {
+/** WhatsApp link state. The server only ever sends the last 3 digits of the number. */
+export type WhatsappLink = { linked: boolean; maskedNumber: string | null };
+
+export async function getSettings(): Promise<{ settings: UserSettings; whatsapp: WhatsappLink }> {
   return apiGet("/settings");
 }
 
@@ -18,8 +21,13 @@ export async function setDnd(minutes: number): Promise<UserSettings> {
   return settings;
 }
 
-export async function savePhone(phoneNumber: string | null): Promise<string | null> {
-  return (await apiPut<{ phoneNumber: string | null }>("/settings/phone", { phoneNumber })).phoneNumber;
+/** A fresh 8-character code (valid 10 minutes) and the number to send "LINK <code>" to. Pro only. */
+export async function startWhatsappLink(): Promise<{ code: string; expiresAt: string; botNumber: string | null }> {
+  return apiPost("/whatsapp/link/start", {});
+}
+
+export async function unlinkWhatsapp(): Promise<void> {
+  await apiDelete("/whatsapp/link");
 }
 
 export async function getCategories(): Promise<Category[]> {

@@ -38,7 +38,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 type Picked = { uri: string; name: string; mimeType: string; size: number };
 type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; assumedTime: boolean };
-type EditableSchedule = { index: number; title: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
+type EditableSchedule = { index: number; title: string; room: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
 
 function confColor(c: number): string {
   return c >= 90 ? palette.success : c >= 80 ? palette.warning : palette.danger;
@@ -112,6 +112,7 @@ export function DocumentsScreen({ navigation }: Props) {
       r.extracted.schedules.map((s) => ({
         index: s.index,
         title: s.title,
+        room: s.room ?? "",
         days: s.daysOfWeek,
         time: s.time ?? "",
         durationMinutes: s.durationMinutes,
@@ -183,7 +184,7 @@ export function DocumentsScreen({ navigation }: Props) {
     try {
       const r = await applyDocument(result.document.id, {
         deadlines: ds.map((d) => ({ title: d.title, date: d.date, time: d.time || null })),
-        schedules: ss.filter((s) => s.days.length).map((s) => ({ title: s.title, daysOfWeek: s.days, time: s.time || null, durationMinutes: s.durationMinutes })),
+        schedules: ss.filter((s) => s.days.length).map((s) => ({ title: s.title, daysOfWeek: s.days, time: s.time || null, durationMinutes: s.durationMinutes, location: s.room.trim() || null })),
       });
       setToast(`Created ${r.tasks.length} task${r.tasks.length === 1 ? "" : "s"} and ${r.routines.length} routine${r.routines.length === 1 ? "" : "s"}`);
       setDeadlines((l) => l.map((d) => (d.include ? { ...d, created: true, include: false } : d)));
@@ -344,6 +345,8 @@ export function DocumentsScreen({ navigation }: Props) {
                     ))}
                   </View>
                   <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
+                  {/* Room only as read from the document (empty when the document has none); the user may correct it. */}
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, room } : x)))} accessibilityLabel="Room" />
                   <Text style={[styles.meta, { color: confColor(s.confidence) }]}>
                     {s.existing ? "Already in your routines · " : s.created ? "Added automatically · " : ""}Confidence {s.confidence}%{!s.days.length ? " · pick the days" : ""}
                   </Text>

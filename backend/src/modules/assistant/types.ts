@@ -79,6 +79,7 @@ export type ActionPayload =
   | { type: "accept_estimate"; minutes: number }
   | { type: "cancel_pending" }
   | { type: "complete_task"; taskId: string }
+  | { type: "snooze_task"; taskId: string; minutes: number }
   | { type: "undo_task"; taskId: string }
   | { type: "restore_task"; taskId: string }
   | { type: "accept_slot"; taskId: string; start: string; end: string }

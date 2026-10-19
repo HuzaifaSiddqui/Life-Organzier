@@ -32,6 +32,7 @@ export function settings(overrides: Partial<UserSettings> = {}): UserSettings {
     ttsEnabled: false,
     ttsRate: 1,
     lastWhatsappMessageAt: null,
+    remindersPlannedAt: null,
     checkinsEnabled: true,
     checkinTone: "FUNNY",
     checkinResearchMode: false,

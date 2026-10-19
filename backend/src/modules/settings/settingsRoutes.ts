@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { maskNumber } from "../whatsapp/linking.js";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../config/db.js";
@@ -60,7 +61,9 @@ settingsRouter.use(requireFirebaseUser, requireUser);
 settingsRouter.get(
   "/",
   handle(async (req, res) => {
-    sendSuccess(res, { settings: req.settings, phoneNumber: req.user.phoneNumber });
+    // The number itself never leaves the server: last 3 digits only, and whether it was verified by the LINK flow.
+    const linked = Boolean(req.user.phoneNumber && req.user.phoneVerifiedAt);
+    sendSuccess(res, { settings: req.settings, whatsapp: { linked, maskedNumber: linked ? maskNumber(req.user.phoneNumber) : null } });
   }),
 );
 
@@ -101,21 +104,6 @@ settingsRouter.post(
   }),
 );
 
-settingsRouter.put(
-  "/phone",
-  handle(async (req, res) => {
-    const { phoneNumber } = parseBody(
-      z.object({ phoneNumber: z.string().regex(/^\+[1-9]\d{7,14}$/, "Use international format, e.g. +923001234567").nullable() }),
-      req.body,
-    );
-    if (phoneNumber) {
-      const taken = await prisma.user.findFirst({ where: { phoneNumber, NOT: { id: req.user.id } } });
-      if (taken) throw new HttpError(409, "PHONE_TAKEN", "That phone number is linked to another account");
-    }
-    const user = await prisma.user.update({ where: { id: req.user.id }, data: { phoneNumber } });
-    sendSuccess(res, { phoneNumber: user.phoneNumber }, "Phone number saved");
-  }),
-);
 
 export const categoryRouter = Router();
 categoryRouter.use(requireFirebaseUser, requireUser);
