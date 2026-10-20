@@ -59,3 +59,18 @@ test("analyzeDocument runs the AI pass on documents the rules already understand
   assert.equal(mid?.aiAgrees, true);
   assert.ok(a.deadlines.every((d) => !d.aiOnly || d.confidence < 95));
 });
+
+test("merge: the model reading a line the rules already read differently adds nothing", () => {
+  const line = "Viva: Nov 23 - Nov 25, 2026";
+  const rules = [item({ title: "Viva", date: "2026-11-25", source: line, rangeStart: "Nov 23, 2026" })];
+  const merged = mergeDeadlines(rules, [item({ title: "Viva", date: "2026-11-23", source: line })]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].date, "2026-11-25");
+  const flight = mergeDeadlines(
+    [item({ title: "Departure: BOARDING PASS", date: "2026-10-14", time: "6:45 AM", source: "Date: 14 Oct 2026   Boarding: 06:15   Departure: 06:45", review: true, confidence: 90 })],
+    [item({ title: "Flight Karachi → Islamabad (PK-301)", date: "2026-10-14", time: "6:15 AM", source: "Date: 14 Oct 2026   Boarding: 06:15" })],
+  );
+  assert.equal(flight.length, 1);
+  assert.equal(flight[0].aiAgrees, true);
+  assert.equal(flight[0].time, "6:45 AM");
+});

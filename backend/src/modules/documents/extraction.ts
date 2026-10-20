@@ -510,16 +510,25 @@ export const AI_ONLY_MAX = 80;
  * raises a rule item's confidence (still capped for items that are always reviewed or have no time);
  * model-only items stay below the auto-create threshold; duplicates across chunks are dropped.
  */
+/** The model's evidence comes from the line a rule item was read from (long enough to be specific). */
+function sameLine(rule: ExtractedDeadline, item: ExtractedDeadline): boolean {
+  const ev = item.source.trim().toLowerCase();
+  const src = rule.source.toLowerCase();
+  return ev.length >= 12 && (src.includes(ev) || ev.includes(src.slice(0, 40)));
+}
+
 export function mergeDeadlines(rules: ExtractedDeadline[], ai: ExtractedDeadline[]): ExtractedDeadline[] {
   const out = rules.map((r) => ({ ...r }));
   for (const item of ai) {
     // Agreement is with what the rules found; a second model-only copy is a duplicate, not a confirmation.
-    const match = out.find((r) => !r.aiOnly && r.date && r.date === item.date && sameItem(r.title, item.title));
+    const match = out.find((r) => !r.aiOnly && r.date && r.date === item.date && (sameItem(r.title, item.title) || sameLine(r, item)));
     if (match) {
       if (!match.aiAgrees) match.confidence = Math.min(match.review || match.assumedTime ? 90 : 99, match.confidence + 5);
       match.aiAgrees = true;
       continue;
     }
+    // The rules already read that line (e.g. the model took a range's start or the boarding time): theirs wins.
+    if (out.some((r) => !r.aiOnly && sameLine(r, item))) continue;
     if (out.some((r) => r.aiOnly && r.date === item.date && sameItem(r.title, item.title))) continue; // same item from an overlapping chunk
     out.push({ ...item, confidence: Math.min(item.confidence, AI_ONLY_MAX), aiOnly: true });
   }
