@@ -61,6 +61,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Scanned PDFs** (no text layer) are rendered on the server and OCR'd: at most the first 10 pages, within about
   90 seconds; the reply says how many pages were skipped. Each image gets up to 5 OCR passes (preprocessed in three
   page-segmentation modes, raw in two) within 45 seconds, so a large photo can take several seconds.
+- **Week numbers** ("Week 7: Quiz 2") get a date only when the document states the semester start ("Semester starts:
+  31 August 2026", "Week 1 (31 Aug…)"); otherwise the item is listed undated with "needs the semester start".
+  Week N is the Monday of that week.
+- **Dates without a year** take the year of the document's term ("Fall 2026": Aug–Dec 2026, Jan–Jul 2027) or of
+  its other full dates; with neither, the next occurrence is used.
+- **Numeric dates are day-first** (07-09-2026 = 7 September). US-style month-first documents are misread.
 - **OCR preprocessing** auto-rotates (EXIF), deskews up to ±10°, denoises, normalises contrast, sharpens and
   upscales to at least 2000 px. Pages upside down or rotated 90° without EXIF data are not corrected.
 - Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.

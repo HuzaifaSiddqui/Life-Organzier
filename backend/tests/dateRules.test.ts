@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { documentYear, joinRecords, normalizeDocumentText, rangeToEnd, readTables, repairOcr, semesterStart, urduWeekdayStart, weekToDate } from "../src/modules/documents/dateRules.js";
+import { extractDeadlines, extractSchedules } from "../src/modules/documents/extraction.js";
+import { NOW, TZ } from "./fixtures.js";
+
+test("OCR repair only inside date-like tokens", () => {
+  assert.equal(repairOcr("Assignment 2 due 0ct 12, 2026"), "Assignment 2 due Oct 12, 2026");
+  assert.equal(repairOcr("Quiz 4 on l2 Nov 2026"), "Quiz 4 on 12 Nov 2026");
+  assert.equal(repairOcr("Final Exam: 2O Dec 2026"), "Final Exam: 20 Dec 2026");
+  assert.equal(repairOcr("due Decernber 10, 2026 by 1 1: 59 PM"), "due December 10, 2026 by 11:59 PM");
+  assert.equal(repairOcr("Assignrnent 1"), "Assignment 1");
+  for (const keep of ["I may be late", "Room l2", "Govern the corner", "Lab 0 is open"]) assert.equal(repairOcr(keep), keep);
+});
+
+test("document text: Urdu months, 'Sep.' and 'agle Monday' are read by entities.ts", () => {
+  assert.equal(normalizeDocumentText("آخری تاریخ 20 اکتوبر 2026"), "آخری تاریخ 20 October 2026");
+  assert.equal(normalizeDocumentText("due Sep. 30"), "due Sep 30");
+  assert.equal(normalizeDocumentText("Quiz agle Monday"), "Quiz next Monday");
+});
+
+test("document year: the term or the document's other dates, not 'next occurrence'", () => {
+  const fall = documentYear("Fall 2026 course plan", NOW, TZ);
+  assert.equal(fall.yearFor(9), 2026);
+  assert.equal(fall.yearFor(1), 2027);
+  assert.equal(documentYear("Spring 2027", NOW, TZ).yearFor(3), 2027);
+  assert.equal(documentYear("Quiz 1 on 20 Sep 2026\nQuiz 2 on 2 Nov 2026", NOW, TZ).yearFor(9), 2026);
+  assert.equal(documentYear("no dates here", NOW, TZ).yearFor(9), null);
+});
+
+test("week numbers: from the semester start in the document, else undated and flagged", () => {
+  const start = semesterStart("Semester starts: 31 August 2026", NOW, TZ, documentYear("", NOW, TZ));
+  assert.equal(start, "2026-08-31");
+  assert.equal(weekToDate(7, "2026-08-31"), "2026-10-12");
+  assert.equal(weekToDate(1, "2026-09-02"), "2026-08-31"); // week 1 starts on its Monday
+  const [d] = extractDeadlines("Week 4: Assignment 1 due", NOW, TZ);
+  assert.equal(d.date, null);
+  assert.equal(d.needsSemesterStart, true);
+  assert.ok(d.confidence < 95);
+});
+
+test("ranges: the end is the deadline, the start is kept", () => {
+  assert.deepEqual(rangeToEnd("Midterm exams: 20–24 Oct 2026"), { line: "Midterm exams: 24 Oct 2026", start: "20 Oct 2026" });
+  assert.deepEqual(rangeToEnd("Viva: Nov 23 - Nov 25, 2026"), { line: "Viva: Nov 25, 2026", start: "Nov 23, 2026" });
+  assert.deepEqual(rangeToEnd("from 7 to 11 December 2026"), { line: "from 11 December 2026", start: "7 December 2026" });
+  assert.deepEqual(rangeToEnd("Lecture 9:00-10:30"), { line: "Lecture 9:00-10:30", start: null });
+  const [d] = extractDeadlines("Final exams: 14-18 December 2026", NOW, TZ);
+  assert.equal(d.date, "2026-12-18");
+  assert.equal(d.rangeStart, "14 December 2026");
+});
+
+test("multi-line records join a heading with its labelled lines (OCR blank lines allowed)", () => {
+  const head = (l: string) => /exam|assignment/i.test(l);
+  const date = (l: string) => /\d/.test(l) && !/assignment \d$/i.test(l);
+  const [r] = joinRecords(["Midterm Exam", "", "Date: 15 Nov", "", "Time: 10 AM"], head, date);
+  assert.equal(r.text, "Midterm Exam — Date: 15 Nov — Time: 10 AM");
+  assert.equal(joinRecords(["Quiz", "Date:", "20/10/2026"], () => true, (l) => /\d/.test(l))[0].text, "Quiz — Date: 20/10/2026");
+});
+
+test("tables: header columns map title, date and time; day columns are classes", () => {
+  const { rows } = readTables(["Assignment | Due | Weight", "Assignment 1 | 14 Oct 2026 | 10%", "", "Project | 30 Nov 2026 | 20%"]);
+  assert.deepEqual(rows.map((r) => [r.title, r.date]), [["Assignment 1", "14 Oct 2026"], ["Project", "30 Nov 2026"]]);
+  const { classes } = readTables(["Time | Monday | Tuesday", "9:00-10:00 AM | Calculus | Physics"]);
+  assert.deepEqual(classes.map((c) => [c.title, c.day]), [["Calculus", 1], ["Physics", 2]]);
+  const s = extractSchedules("Monday | 9:00-10:30 AM Calculus\nWednesday | 9:00-10:30 AM Calculus", NOW, TZ);
+  assert.deepEqual(s.map((x) => [x.title, x.daysOfWeek]), [["Calculus", [1, 3]]]);
+});
+
+test("Roman Urdu / Urdu weekday at the start of a timetable line", () => {
+  assert.deepEqual(urduWeekdayStart("Peer subah 9 baje Calculus"), { day: 1, rest: "subah 9 baje Calculus" });
+  assert.equal(urduWeekdayStart("بدھ 11 بجے فزکس")?.day, 3);
+  assert.equal(urduWeekdayStart("Calculus on Monday"), null);
+});
+
+test("tickets and notices: the departure time wins; a month-year period is not a deadline", () => {
+  const [flight] = extractDeadlines("BOARDING PASS\nDate: 14 Oct 2026   Boarding: 06:15   Departure: 06:45", NOW, TZ);
+  assert.equal(flight.date, "2026-10-14");
+  assert.equal(flight.time, "6:45 AM");
+  assert.ok(flight.confidence < 95, "non-academic items are always reviewed");
+  assert.deepEqual(extractDeadlines("Electricity Bill\nBill Month: Oct 2026", NOW, TZ), []);
+});

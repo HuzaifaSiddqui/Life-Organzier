@@ -76,8 +76,8 @@ export async function estimateSkew(image: Buffer): Promise<number> {
   return best.angle;
 }
 
-/** Auto-rotate (EXIF) and deskew, grayscale, denoise, stretch contrast, upscale small images, sharpen. */
-export async function preprocessForOcr(buffer: Buffer): Promise<Buffer> {
+/** Auto-rotate (EXIF) and deskew, grayscale, denoise, stretch contrast, upscale small images, sharpen. `strong`: heavier denoise for grainy photos. */
+export async function preprocessForOcr(buffer: Buffer, strong = false): Promise<Buffer> {
   const oriented = await sharp(buffer, { failOn: "none" }).rotate().flatten({ background: "#ffffff" }).grayscale().png().toBuffer();
   const skew = await estimateSkew(oriented).catch(() => 0);
   const img = sharp(oriented);
@@ -85,7 +85,7 @@ export async function preprocessForOcr(buffer: Buffer): Promise<Buffer> {
   const width = meta.width ?? MIN_OCR_WIDTH;
   const target = Math.min(MAX_OCR_WIDTH, Math.max(width, MIN_OCR_WIDTH));
   return (skew ? img.rotate(skew, { background: "#ffffff" }) : img)
-    .median(3)
+    .median(strong ? 5 : 3)
     .normalise()
     .resize({ width: target, kernel: "lanczos3" })
     .sharpen({ sigma: 1 })
@@ -126,6 +126,18 @@ export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAG
       const confidence = readable ? Math.round(data.confidence ?? 0) : 0;
       if (confidence > best.confidence || (confidence === best.confidence && data.text.length > best.text.length)) best = { text: data.text, confidence, label: step.label };
       if (best.confidence >= 92) break;
+    }
+    // Still unsure (grainy photo): a heavier denoise, read as a page and as sparse text.
+    if (best.confidence < 85 && Date.now() - started < budgetMs) {
+      const strong = await preprocessForOcr(buffer, true).catch(() => null);
+      for (const psm of strong ? [PSM.AUTO, PSM.SPARSE_TEXT] : []) {
+        if (Date.now() - started > budgetMs) break;
+        await worker.setParameters({ tessedit_pageseg_mode: psm });
+        const { data } = await worker.recognize(strong as Buffer);
+        const readable = (data.text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 15;
+        const confidence = readable ? Math.round(data.confidence ?? 0) : 0;
+        if (confidence > best.confidence) best = { text: data.text, confidence, label: `strong/${psm}` };
+      }
     }
     return best;
   });
