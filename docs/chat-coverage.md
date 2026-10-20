@@ -8,6 +8,11 @@ What a user can do by typing (app chat), speaking (voice) or messaging on WhatsA
 wording, **no** = only in the app screens. **Command** is the registry command that covers it
 (`backend/src/modules/assistant/commands/`); "—" means it stays app-only, with the reason.
 
+**Status:** every command in the Command column is implemented, with rules in English, Urdu script and Roman
+Urdu, and works with AI off. Rules-only eval (`npm run eval:assistant`, 211 utterances): 54/211 (25.6 %) before
+the registry, 207/211 (98.1 %) after. The 4 misses are existing intent rules in `nlu.ts` (three mood / completion
+phrasings in Roman Urdu and English, one "how far am I with X" progress question), left unchanged.
+
 ## Tasks (FR-TM-001…008)
 
 | Feature | FR | Chat today | Command |

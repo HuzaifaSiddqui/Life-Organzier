@@ -9,7 +9,7 @@ import type { ActionPayload } from "../src/modules/assistant/types.js";
 import { createRoutine, occurrencesForDay } from "../src/modules/routines/routineService.js";
 import { addDaysYmd, localYmd } from "../src/lib/time.js";
 import { streakFromDays } from "../src/modules/analytics/analyticsService.js";
-import { parseCtx } from "../src/modules/assistant/commands/registry.js";
+import { classify, COMMANDS, parseCtx } from "../src/modules/assistant/commands/registry.js";
 import { routeWithLlm } from "../src/modules/assistant/commands/router.js";
 import { formatReply } from "../src/modules/whatsapp/inbound.js";
 import { dbAvailable } from "./fixtures.js";
@@ -449,4 +449,11 @@ test("WhatsApp: command replies are short plain text with numbered options; '1' 
     const yes = await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: "whatsapp", payload: { type: "confirm_pending" }, label: "Yes", channel: "WHATSAPP" });
     assert.equal(yes.message.intent, "routine_deleted");
   });
+});
+
+test("registry: every command's examples are understood by its own rules (help never shows a phrase that fails)", () => {
+  const ctx = parseCtx({ now: new Date("2026-10-05T05:00:00.000Z"), tz: TZ, contexts: ["At Home", "At Work", "At University"] });
+  const wrong: string[] = [];
+  for (const c of COMMANDS) for (const ex of c.examples) if (classify(ex, ctx).command !== c.name) wrong.push(`${c.name}: "${ex}" → ${classify(ex, ctx).command}`);
+  assert.deepEqual(wrong, []);
 });

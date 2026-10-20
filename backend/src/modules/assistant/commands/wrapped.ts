@@ -16,7 +16,7 @@ const WRAPPED: Array<{ intent: Intent; category: CommandCategory; summary: strin
   { intent: "complete_task", category: "tasks", summary: "Mark a task done", examples: ["I finished the essay"] },
   { intent: "delete_task", category: "tasks", summary: "Delete a task (asks first, undo for 24 hours)", examples: ["Delete the old draft"] },
   { intent: "set_progress", category: "tasks", summary: "Record progress on a task", examples: ["I'm 50% done with the lab report"] },
-  { intent: "query_progress", category: "tasks", summary: "Ask how far a task is", examples: ["How far am I with the essay?"] },
+  { intent: "query_progress", category: "tasks", summary: "Ask how far a task is", examples: ["How much of the essay is done?"] },
   { intent: "split_task", category: "tasks", summary: "Split a task into parts", examples: ["Split the project into 3 parts"] },
   { intent: "query_tasks", category: "tasks", summary: "What's due today, tomorrow, this week, overdue, classes", examples: ["What do I have today?", "When is the physics assignment due?"] },
   { intent: "plan_day", category: "tasks", summary: "Plan the day and find free time", examples: ["Plan my day"] },

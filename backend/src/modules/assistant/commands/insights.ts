@@ -12,7 +12,7 @@ import type { Command } from "./types.js";
  * from the LLM. "This week" / "this month" are the analytics ranges: the last 7 / 30 days.
  */
 
-const HOW_MANY = "how many|how much|count|number of|total|kitne|kitni|kitna|کتنے|کتنی|کتنا";
+const HOW_MANY = "how many|count|number of|total|kitne|kitni|کتنے|کتنی";
 const MONTH = "month|this month|mahine|maheene|mahina|مہینے|مہینہ";
 const range = (t: string): "week" | "month" => (has(t, MONTH) ? "month" : "week");
 const rangeLabel = (r: "week" | "month") => (r === "week" ? "in the last 7 days" : "in the last 30 days");
