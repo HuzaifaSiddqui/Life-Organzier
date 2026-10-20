@@ -136,7 +136,7 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 | FR-MS-001..004 sync (offline queue, idempotent creates, field-level merge, versions/history 90 days, backoff) | Implemented for tasks only — local store is AsyncStorage, not SQLite; conflicts resolve last-write-wins without UI (see known-limitations.md) |
 | FR-AN-001..002 analytics (ranges, comparison, categories, heatmap, routines, insights, CSV export) | Implemented — PDF export not implemented |
 | FR-CT-001..002 categories & tags | Implemented |
-| FR-AP-001..004 account, preferences, context scheduling | Implemented — UI is English-only (assistant replies follow the language setting; no RTL UI translation) |
+| FR-AP-001..004 account, preferences, context scheduling | Implemented — UI is English-only (assistant replies follow the language setting; no RTL UI translation). From chat: quiet hours, Do Not Disturb (on / off / for N hours / until a time, max 24 h), where reminders go (WhatsApp needs Pro and a linked number), language, check-ins, settings summary; each change echoes the new value and is undoable, and the app reloads its preferences |
 | FR-OB-001..002 onboarding & tutorials | Implemented |
 | FR-VF-003 voice conversation (Phase 2) | Not implemented |
 | FR-LB-001 location-based (geofence) reminders | Implemented (Pro tier, expo-location geofencing, Nominatim geocoding searched near the user first, 350m default radius, saved places named in a chat task title attached automatically) — device test pending |

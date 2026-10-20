@@ -22,9 +22,10 @@ export async function withChatUser(tier: "FREE" | "PRO", fn: (say: Say, tap: Tap
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
   await prisma.userSettings.create({ data: { userId: user.id, tier, timezone: TZ } });
   const settings = () => prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } });
+  const fresh = () => prisma.user.findUniqueOrThrow({ where: { id: user.id } });
   try {
-    const say: Say = async (text, channel = "APP") => handleAssistantMessage({ user, settings: await settings(), deviceId: null, text, channel });
-    const tap: Tap = async (payload) => handleAssistantMessage({ user, settings: await settings(), deviceId: null, payload, channel: "APP" });
+    const say: Say = async (text, channel = "APP") => handleAssistantMessage({ user: await fresh(), settings: await settings(), deviceId: null, text, channel });
+    const tap: Tap = async (payload) => handleAssistantMessage({ user: await fresh(), settings: await settings(), deviceId: null, payload, channel: "APP" });
     await fn(say, tap, user);
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
@@ -199,5 +200,52 @@ test("task commands: add, list and complete subtasks; undo removes the added one
     await say("add a subtask to the project: submit");
     await tap({ type: "undo_command" });
     assert.equal(await prisma.task.count({ where: { parentTaskId: project.id, status: { not: "DELETED" } } }), 3);
+  });
+});
+
+test("settings commands: quiet hours, DND, language; new value echoed, undo restores", { skip }, async () => {
+  await withChatUser("FREE", async (say, tap, user) => {
+    const s = () => prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } });
+    assert.match((await say("what are my quiet hours?")).message.content, /10 PM to 8 AM/);
+    const set = await say("quiet hours raat 11 se subah 7 tak kar do");
+    assert.equal(set.message.intent, "settings_quiet_hours_set");
+    assert.match(set.message.content, /11 PM to 7 AM/);
+    assert.deepEqual([(await s()).quietStart, (await s()).quietEnd], ["23:00", "07:00"]);
+    await tap({ type: "undo_command" });
+    assert.deepEqual([(await s()).quietStart, (await s()).quietEnd], ["22:00", "08:00"]);
+
+    const on = await say("do not disturb for 2 hours");
+    assert.equal(on.message.intent, "settings_dnd_on");
+    const until = (await s()).dndUntil as Date;
+    assert.ok(Math.abs(until.getTime() - Date.now() - 2 * 3600000) < 60000);
+    assert.match((await say("is do not disturb on?")).message.content, /on until/);
+    assert.equal((await say("turn off DND")).message.intent, "settings_dnd_off");
+    assert.equal((await s()).dndUntil, null);
+    await say("undo");
+    assert.ok((await s()).dndUntil);
+
+    const ur = await say("switch to Urdu");
+    assert.equal(ur.message.intent, "settings_language_set");
+    assert.match(ur.message.content, /اردو/);
+    assert.equal((await s()).language, "ur");
+    await tap({ type: "undo_command" });
+    assert.equal((await s()).language, "en");
+    assert.match((await say("show my settings")).message.content, /Quiet hours: 10 PM to 8 AM/);
+  });
+});
+
+test("settings commands: WhatsApp reminders need Pro and a linked number", { skip }, async () => {
+  await withChatUser("FREE", async (say) => {
+    assert.equal((await say("send my reminders to WhatsApp only")).message.intent, "settings_pro_only");
+  });
+  await withChatUser("PRO", async (say, _tap, user) => {
+    assert.equal((await say("send my reminders to WhatsApp only")).message.intent, "settings_whatsapp_unlinked");
+    await prisma.user.update({ where: { id: user.id }, data: { phoneNumber: `+92300${Math.floor(1000000 + Math.random() * 8999999)}`, phoneVerifiedAt: new Date() } });
+    assert.equal((await say("reminders whatsapp pe bhejo")).message.intent, "settings_notify_devices_set");
+    assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).notificationDevices, "WHATSAPP");
+    const both = await say("remind me on both phone and WhatsApp");
+    assert.equal(both.message.intent, "settings_notify_devices_set");
+    assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).notificationDevices, "ALL");
+    assert.match((await say("where do my reminders go?")).message.content, /phone and WhatsApp/);
   });
 });
