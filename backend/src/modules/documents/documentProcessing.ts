@@ -4,7 +4,7 @@ import { dueDateFromYmd, localYmd } from "../../lib/time.js";
 import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
-import { cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmActionItems, llmTopics, maskPersonalNumbers, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
+import { aiDeadlines, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
 import { gridSchedulesFromPdf } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
@@ -97,12 +97,13 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
       grid = true;
     }
   }
-  // Tickets, bills, invitations… don't match the syllabus rules: let the model find dated action items.
+  // AI pass on every document when AI is on (masked text only), merged with the rules.
   let aiNote: string | null = null;
-  if (input.docType !== "NOTES" && !deadlines.length && !schedules.length && !raw.needsLanguage) {
-    deadlines = await llmActionItems(text, localYmd(now, tz), tz);
-    const todayYmd = localYmd(now, tz);
-    if (deadlines.length && deadlines.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
+  const todayYmd = localYmd(now, tz);
+  if (input.docType !== "NOTES" && !raw.needsLanguage) {
+    deadlines = mergeDeadlines(deadlines, await aiDeadlines(text, todayYmd, tz));
+    const dated = deadlines.filter((d) => d.date);
+    if (dated.length && !schedules.length && dated.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
   }
   // A grid lists many courses — picking one as "the course" would store a wrong memory.
   const course = extractCourseInfo(grid ? "" : text);

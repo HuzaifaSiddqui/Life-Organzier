@@ -67,6 +67,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Dates without a year** take the year of the document's term ("Fall 2026": Aug–Dec 2026, Jan–Jul 2027) or of
   its other full dates; with neither, the next occurrence is used.
 - **Numeric dates are day-first** (07-09-2026 = 7 September). US-style month-first documents are misread.
+- **The AI pass on documents reads at most 6 chunks (about 15,000 characters) within 2 minutes**; later pages
+  get the rules only. Model-only items are never created automatically.
 - **OCR preprocessing** auto-rotates (EXIF), deskews up to ±10°, denoises, normalises contrast, sharpens and
   upscales to at least 2000 px. Pages upside down or rotated 90° without EXIF data are not corrected.
 - Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.

@@ -2,6 +2,7 @@ import { RoutineFrequency } from "@prisma/client";
 import { z } from "zod";
 import { getAi } from "../../ai/llm.js";
 import { formatClock } from "../../lib/time.js";
+import { fuzzySimilarity } from "../../lib/text.js";
 import { cleanTitle, extractEntities } from "../assistant/entities.js";
 import { documentYear, joinRecords, normalizeDocumentText, rangeToEnd, readTables, semesterStart, urduActivityHint, urduWeekdayStart, WEEK_RE, weekToDate, withDocumentYear } from "./dateRules.js";
 
@@ -20,6 +21,12 @@ export type ExtractedDeadline = {
   rangeStart?: string | null;
   /** The year came from the document ("Fall 2026", its other dates), not from the date itself. */
   yearInferred?: boolean;
+  /** Always confirmed by the user, even when the model agrees (tickets, bills, dates from week numbers). */
+  review?: boolean;
+  /** The AI pass found the same item (same date, similar title). */
+  aiAgrees?: boolean;
+  /** Found only by the AI pass: shown for review, never created automatically. */
+  aiOnly?: boolean;
 };
 
 export type ExtractedSchedule = {
@@ -199,6 +206,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
       ...(needsSemesterStart ? { needsSemesterStart: true } : {}),
       ...(range.start ? { rangeStart: range.start } : {}),
       ...(yearInferred ? { yearInferred: true } : {}),
+      ...(event || (week && date) ? { review: true } : {}),
     });
   }
   return out.slice(0, 60);
@@ -455,4 +463,78 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
     });
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ AI pass on every document */
+
+/** Chunks of at most `size` characters on line boundaries, each starting with the last ~`overlap` characters of the previous one. */
+export function chunkText(text: string, size = 2500, overlap = 200, max = 6): string[] {
+  const lines = text.split("\n");
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    const piece = line.slice(0, size);
+    if (length + piece.length + 1 > size && current.length) {
+      chunks.push(current.join("\n"));
+      if (chunks.length >= max) return chunks;
+      const carry: string[] = [];
+      let carried = 0;
+      for (let i = current.length - 1; i >= 0 && carried + current[i].length <= overlap; i -= 1) {
+        carry.unshift(current[i]);
+        carried += current[i].length + 1;
+      }
+      current = carry;
+      length = carried;
+    }
+    current.push(piece);
+    length += piece.length + 1;
+  }
+  if (current.join("").trim()) chunks.push(current.join("\n"));
+  return chunks.slice(0, max);
+}
+
+function sameItem(a: string, b: string): boolean {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  if (x.includes(y) || y.includes(x) || fuzzySimilarity(x, y) >= 0.5) return true;
+  const words = (s: string) => new Set(s.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4));
+  const wx = words(x);
+  return [...words(y)].some((w) => wx.has(w));
+}
+
+export const AI_ONLY_MAX = 80;
+
+/**
+ * Rules + the model, on every document when AI is on (FR-DP-002). Agreement (same date, similar title)
+ * raises a rule item's confidence (still capped for items that are always reviewed or have no time);
+ * model-only items stay below the auto-create threshold; duplicates across chunks are dropped.
+ */
+export function mergeDeadlines(rules: ExtractedDeadline[], ai: ExtractedDeadline[]): ExtractedDeadline[] {
+  const out = rules.map((r) => ({ ...r }));
+  for (const item of ai) {
+    // Agreement is with what the rules found; a second model-only copy is a duplicate, not a confirmation.
+    const match = out.find((r) => !r.aiOnly && r.date && r.date === item.date && sameItem(r.title, item.title));
+    if (match) {
+      if (!match.aiAgrees) match.confidence = Math.min(match.review || match.assumedTime ? 90 : 99, match.confidence + 5);
+      match.aiAgrees = true;
+      continue;
+    }
+    if (out.some((r) => r.aiOnly && r.date === item.date && sameItem(r.title, item.title))) continue; // same item from an overlapping chunk
+    out.push({ ...item, confidence: Math.min(item.confidence, AI_ONLY_MAX), aiOnly: true });
+  }
+  return out.slice(0, 60).map((d, index) => ({ ...d, index }));
+}
+
+/** The AI pass: llmActionItems per chunk, within a chunk cap and a total time budget. [] with AI off. */
+export async function aiDeadlines(text: string, todayYmd: string, tz: string, opts: { maxChunks?: number; budgetMs?: number } = {}): Promise<ExtractedDeadline[]> {
+  const ai = getAi();
+  if (!ai.enabled || !ai.available) return [];
+  const started = Date.now();
+  const items: ExtractedDeadline[] = [];
+  for (const chunk of chunkText(text, 2500, 200, opts.maxChunks ?? 6)) {
+    if (Date.now() - started > (opts.budgetMs ?? 120_000)) break;
+    items.push(...(await llmActionItems(chunk, todayYmd, tz)));
+  }
+  return items;
 }
