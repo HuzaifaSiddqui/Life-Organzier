@@ -48,17 +48,41 @@ type Extracted = {
   method: string;
 };
 
-export async function processDocument(
-  user: User,
-  settings: UserSettings,
-  input: { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean },
-) {
-  const tz = settings.timezone;
+export type AnalyzeInput = {
+  buffer?: Buffer;
+  text?: string;
+  fileName: string;
+  mimeType: string;
+  docType: (typeof DOC_TYPES)[number];
+  language: string;
+  tz: string;
+  now?: Date;
+};
+
+export type Analysis = {
+  /** Cleaned and masked text (what is stored and what a model may see). */
+  text: string;
+  deadlines: ExtractedDeadline[];
+  schedules: ExtractedSchedule[];
+  course: CourseInfo;
+  ocrConfidence: number;
+  warning: string | null;
+  needsLanguage: boolean;
+  method: string;
+  grid: boolean;
+};
+
+/**
+ * Reads a document and extracts deadlines, schedules and course info. No database writes, so the
+ * evaluation (`npm run eval:documents`) runs exactly what an upload runs.
+ */
+export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
+  const { tz } = input;
   const raw = input.text !== undefined
     ? { text: input.text, confidence: 100, method: "text" as const, warning: null, needsLanguage: false }
     : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language);
   const text = maskPersonalNumbers(cleanDocumentText(raw.text));
-  const now = new Date();
+  const now = input.now ?? new Date();
   let deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
   let schedules = input.docType === "NOTES" ? [] : extractSchedules(text, now, tz);
   // Grid timetables lose their layout as plain text; read them by position instead.
@@ -88,6 +112,18 @@ export async function processDocument(
       if (/^(?:lectures?|class(?:es)?|labs?|tutorials?|sessions?|sections?)$/i.test(s.title)) s.title = `${course.code} ${s.title}`;
     }
   }
+  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? aiNote, needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method, grid };
+}
+
+export async function processDocument(
+  user: User,
+  settings: UserSettings,
+  input: { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean },
+) {
+  const tz = settings.timezone;
+  const a = await analyzeDocument({ ...input, tz });
+  const { text, deadlines, schedules, course } = a;
+  const raw = { confidence: a.ocrConfidence, needsLanguage: a.needsLanguage };
 
   const document = await prisma.document.create({
     data: {
@@ -98,11 +134,11 @@ export async function processDocument(
       docType: input.docType,
       language: input.language,
       text: text.slice(0, 200000),
-      ocrConfidence: raw.confidence,
+      ocrConfidence: a.ocrConfidence,
     },
   });
 
-  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? aiNote, needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method };
+  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method };
   const createdTasks = [];
   const createdRoutines = [];
   if (input.autoCreate && !raw.needsLanguage && raw.confidence >= 70) {

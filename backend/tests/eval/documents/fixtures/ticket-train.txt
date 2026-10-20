@@ -1,0 +1,6 @@
+PAKISTAN RAILWAYS
+E-TICKET
+Train: 1-UP Karachi Express
+Departure: 07-11-2026 22:00
+From: Karachi Cantt   To: Lahore Jn
+Coach 6  Seat 14B   Fare Rs 4500

@@ -1,0 +1,4 @@
+Deliverable        Due Date        Weight
+Proposal           Oct 16          5%
+Progress Report    Nov 6           10%
+Final Report       Dec 4           25%

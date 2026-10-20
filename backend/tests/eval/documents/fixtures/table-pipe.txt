@@ -1,0 +1,5 @@
+Course Deliverables
+Assignment | Due | Weight
+Assignment 1 | 14 Oct 2026 | 10%
+Assignment 2 | 28 Oct 2026 | 10%
+Project | 30 Nov 2026 | 20%

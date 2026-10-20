@@ -1,0 +1,4 @@
+BOARDING PASS
+PK 301  KHI -> ISB
+Date: 14 Oct 2026   Boarding: 06:15   Departure: 06:45
+Gate 12  Seat 21C

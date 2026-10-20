@@ -1,0 +1,4 @@
+Item	Deadline	Marks
+Lab Report 1	09/10/2026	5
+Lab Report 2	23/10/2026	5
+Lab Report 3	06/11/2026	5

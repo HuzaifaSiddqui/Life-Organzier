@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "e2e": "tsx scripts/e2e-conversation.ts",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx scripts/http-smoke.ts"
+    "smoke": "tsx scripts/http-smoke.ts",
+    "eval:documents": "tsx scripts/eval-documents.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
@@ -25,6 +26,7 @@
     "mammoth": "^1.13.0",
     "multer": "^2.4.0",
     "pdf-parse": "^2.4.5",
+    "sharp": "^0.34.4",
     "tesseract.js": "^7.0.0",
     "zod": "^3.24.1"
   },

@@ -1,0 +1,5 @@
+K-Electric
+Electricity Bill
+Bill Month: Oct 2026
+Due Date: 22-10-2026
+Amount payable within due date Rs 5,430

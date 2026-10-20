@@ -1,0 +1,114 @@
+{
+  "All": {
+    "recall": "44.3%",
+    "precision": "92.6%"
+  },
+  "Text fixtures": {
+    "recall": "44.6%",
+    "precision": "87.2%"
+  },
+  "Image fixtures (OCR)": {
+    "recall": "43.9%",
+    "precision": "100.0%"
+  },
+  "blur": {
+    "recall": "54.5%",
+    "precision": "100.0%"
+  },
+  "clean": {
+    "recall": "54.5%",
+    "precision": "100.0%"
+  },
+  "day-first": {
+    "recall": "64.3%",
+    "precision": "100.0%"
+  },
+  "image": {
+    "recall": "43.9%",
+    "precision": "100.0%"
+  },
+  "invoice": {
+    "recall": "50.0%",
+    "precision": "100.0%"
+  },
+  "lowcontrast": {
+    "recall": "54.5%",
+    "precision": "100.0%"
+  },
+  "month-abbrev": {
+    "recall": "33.3%",
+    "precision": "100.0%"
+  },
+  "multi-line": {
+    "recall": "0.0%",
+    "precision": "n/a"
+  },
+  "noise": {
+    "recall": "18.2%",
+    "precision": "100.0%"
+  },
+  "notice": {
+    "recall": "0.0%",
+    "precision": "n/a"
+  },
+  "ocr-slip": {
+    "recall": "0.0%",
+    "precision": "n/a"
+  },
+  "ordinal": {
+    "recall": "37.5%",
+    "precision": "100.0%"
+  },
+  "precision": {
+    "recall": "n/a",
+    "precision": "n/a"
+  },
+  "range": {
+    "recall": "66.7%",
+    "precision": "80.0%"
+  },
+  "roman-urdu": {
+    "recall": "25.0%",
+    "precision": "50.0%"
+  },
+  "rotate": {
+    "recall": "27.3%",
+    "precision": "100.0%"
+  },
+  "small": {
+    "recall": "54.5%",
+    "precision": "100.0%"
+  },
+  "syllabus": {
+    "recall": "100.0%",
+    "precision": "100.0%"
+  },
+  "table": {
+    "recall": "56.3%",
+    "precision": "100.0%"
+  },
+  "ticket": {
+    "recall": "0.0%",
+    "precision": "n/a"
+  },
+  "timetable": {
+    "recall": "45.5%",
+    "precision": "85.7%"
+  },
+  "two-digit-year": {
+    "recall": "100.0%",
+    "precision": "100.0%"
+  },
+  "urdu": {
+    "recall": "0.0%",
+    "precision": "n/a"
+  },
+  "week-number": {
+    "recall": "28.6%",
+    "precision": "100.0%"
+  },
+  "year-inference": {
+    "recall": "55.6%",
+    "precision": "71.4%"
+  }
+}
