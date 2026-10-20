@@ -7,7 +7,8 @@ import { prisma } from "../src/config/db.js";
 import { handleAssistantMessage, type Channel } from "../src/modules/assistant/dialogue.js";
 import type { ActionPayload } from "../src/modules/assistant/types.js";
 import { createRoutine, occurrencesForDay } from "../src/modules/routines/routineService.js";
-import { localYmd } from "../src/lib/time.js";
+import { addDaysYmd, localYmd } from "../src/lib/time.js";
+import { streakFromDays } from "../src/modules/analytics/analyticsService.js";
 import { dbAvailable } from "./fixtures.js";
 
 const skip = !dbAvailable && "no database";
@@ -247,5 +248,33 @@ test("settings commands: WhatsApp reminders need Pro and a linked number", { ski
     assert.equal(both.message.intent, "settings_notify_devices_set");
     assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).notificationDevices, "ALL");
     assert.match((await say("where do my reminders go?")).message.content, /phone and WhatsApp/);
+  });
+});
+
+test("insights: streak counts days in a row, alive until today ends", () => {
+  const today = "2026-10-05";
+  const days = (...ymds: string[]) => new Set(ymds);
+  assert.deepEqual(streakFromDays(days(), today), { days: 0, includesToday: false });
+  assert.deepEqual(streakFromDays(days(today, "2026-10-04", "2026-10-03", "2026-10-01"), today), { days: 3, includesToday: true });
+  assert.deepEqual(streakFromDays(days("2026-10-04", "2026-10-03"), today), { days: 2, includesToday: false });
+  assert.deepEqual(streakFromDays(days("2026-10-03"), today), { days: 0, includesToday: false });
+});
+
+test("insights commands: completed, overdue, time per category, streak, compare, from real data", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    const now = new Date();
+    const today = localYmd(now, TZ);
+    const mk = (title: string, extra: Record<string, unknown>) => prisma.task.create({ data: { userId: user.id, title, priority: "MEDIUM", source: "CHAT", ...extra } });
+    await mk("Essay", { status: "COMPLETED", completedAt: now, category: "Academic", durationMinutes: 90 });
+    await mk("Lab", { status: "COMPLETED", completedAt: new Date(now.getTime() - 86400000), category: "Academic", durationMinutes: 60 });
+    await mk("Rent", { status: "COMPLETED", completedAt: now, category: "Finance" });
+    await mk("Old quiz", { status: "PENDING", dueAt: new Date(now.getTime() - 3 * 86400000), dueDate: new Date(`${addDaysYmd(today, -3)}T00:00:00Z`) });
+
+    assert.match((await say("how many tasks did I complete this week?")).message.content, /completed 3 tasks in the last 7 days/);
+    assert.match((await say("how many tasks are overdue?")).message.content, /^1 task is overdue/);
+    const time = await say("how much time did I spend on Academic this week?");
+    assert.match(time.message.content, /Academic: 2h 30m across 2 tasks/);
+    assert.match((await say("what's my streak?")).message.content, /^2 days in a row/);
+    assert.match((await say("how did I do compared to last week?")).message.content, /Last 7 days: 3 tasks done/);
   });
 });

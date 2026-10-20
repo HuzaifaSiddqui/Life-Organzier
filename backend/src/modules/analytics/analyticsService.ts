@@ -206,3 +206,45 @@ export async function exportCsv(userId: string): Promise<string> {
   for (const m of moods) lines.push([m.mood, m.score, m.source, m.note, m.createdAt].map(csvCell).join(","));
   return lines.join("\n");
 }
+
+/**
+ * Days in a row (local calendar) with at least one completed task or routine, ending today, or
+ * yesterday when nothing is done yet today (the streak is still alive until the day ends). Pure.
+ */
+export function streakFromDays(doneDays: Set<string>, todayYmd: string): { days: number; includesToday: boolean } {
+  const includesToday = doneDays.has(todayYmd);
+  let day = includesToday ? todayYmd : addDaysYmd(todayYmd, -1);
+  let days = 0;
+  while (doneDays.has(day)) {
+    days += 1;
+    day = addDaysYmd(day, -1);
+  }
+  return { days, includesToday };
+}
+
+export async function completionStreak(userId: string, tz: string, now = new Date()) {
+  const since = new Date(now.getTime() - 366 * 86400000);
+  const [tasks, routines] = await Promise.all([
+    prisma.task.findMany({ where: { userId, status: TaskStatus.COMPLETED, completedAt: { gte: since } }, select: { completedAt: true } }),
+    prisma.routineOccurrence.findMany({ where: { userId, status: RoutineOccurrenceStatus.COMPLETED, completedAt: { gte: since } }, select: { completedAt: true } }),
+  ]);
+  const days = new Set([...tasks, ...routines].map((x) => localYmd(x.completedAt as Date, tz)));
+  return streakFromDays(days, localYmd(now, tz));
+}
+
+/** Planned time (task durations) of tasks completed in the range, per category. Tasks without a duration are counted, not timed. */
+export async function timeByCategory(userId: string, tz: string, key: "week" | "month", now = new Date()) {
+  const today = localYmd(now, tz);
+  const from = startOfLocalDay(addDaysYmd(today, key === "week" ? -6 : -29), tz);
+  const done = await prisma.task.findMany({ where: { userId, status: TaskStatus.COMPLETED, completedAt: { gte: from, lte: now } }, select: { category: true, durationMinutes: true } });
+  const map = new Map<string, { minutes: number; tasks: number; untimed: number }>();
+  for (const t of done) {
+    const c = t.category ?? "Uncategorized";
+    const e = map.get(c) ?? { minutes: 0, tasks: 0, untimed: 0 };
+    e.tasks += 1;
+    if (t.durationMinutes) e.minutes += t.durationMinutes;
+    else e.untimed += 1;
+    map.set(c, e);
+  }
+  return [...map.entries()].map(([category, v]) => ({ category, ...v })).sort((a, b) => b.minutes - a.minutes || b.tasks - a.tasks);
+}

@@ -214,3 +214,6 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   command changes can't be undone from chat. Settings and routine changes undo for 15 minutes, deletes for 24 hours.
 - **Routine names without the word "routine".** "Skip gym today" and "move today's gym to 8 PM" look for a routine
   first; when no routine matches (and the message didn't say "routine"), the message is handled as a task instead.
+- **Insights from chat use the analytics ranges**: "this week" is the last 7 days and "this month" the last 30, not
+  calendar weeks. "Time per category" is the planned duration of completed tasks (tasks have no time tracking);
+  tasks without a duration are counted but not timed. The streak counts days with a completed task or routine.
