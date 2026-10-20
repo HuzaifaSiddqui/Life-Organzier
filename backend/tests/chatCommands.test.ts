@@ -136,3 +136,68 @@ test("routine commands: a task name without the word routine falls back to the t
     assert.notEqual(out.message.intent, "routine_not_found");
   });
 });
+
+const taskNamed = async (userId: string, title: string) => prisma.task.findFirstOrThrow({ where: { userId, title } });
+
+test("task commands: note, reminder mode, tags and category, each echoed and undoable", { skip }, async () => {
+  await withChatUser("FREE", async (say, tap, user) => {
+    await say("Submit the essay by Friday 5 PM");
+    const essay = await taskNamed(user.id, "Submit the essay");
+
+    assert.equal((await say("add a note to the essay: bring printouts")).message.intent, "task_note_added");
+    assert.equal((await taskNamed(user.id, "Submit the essay")).description, "bring printouts");
+    await tap({ type: "undo_command" });
+    assert.equal((await taskNamed(user.id, "Submit the essay")).description, null);
+
+    const mode = await say("turn off reminders for the essay");
+    assert.equal(mode.message.intent, "task_reminder_mode");
+    assert.match(mode.message.content, /no reminders/);
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: essay.id } })).reminderMode, "NONE");
+
+    await say("add tag uni to the essay");
+    assert.deepEqual((await prisma.task.findUniqueOrThrow({ where: { id: essay.id } })).tags, ["uni"]);
+    assert.match((await say("remove the tag physics from the essay")).message.content, /doesn't have the tag #physics/);
+    await say("essay se uni ka tag hata do");
+    assert.deepEqual((await prisma.task.findUniqueOrThrow({ where: { id: essay.id } })).tags, []);
+
+    assert.equal((await say("put the essay in the Spaceship category")).message.intent, "category_unknown");
+    assert.equal((await say("put the essay in the academic category")).message.intent, "task_category_updated");
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: essay.id } })).category, "Academic");
+  });
+});
+
+test("task commands: start, reopen, and a new task when the name matches nothing", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    await say("Submit the essay by Friday 5 PM");
+    assert.equal((await say("start the essay")).message.intent, "task_started");
+    assert.equal((await taskNamed(user.id, "Submit the essay")).status, "IN_PROGRESS");
+    await say("I finished the essay");
+    assert.equal((await taskNamed(user.id, "Submit the essay")).status, "COMPLETED");
+    assert.equal((await say("reopen the essay")).message.intent, "task_reopened");
+    assert.equal((await taskNamed(user.id, "Submit the essay")).status, "PENDING");
+    assert.equal((await say("reopen the essay")).message.intent, "task_reopen"); // already open
+
+    const fresh = await say("start studying physics");
+    assert.notEqual(fresh.message.intent, "not_found");
+  });
+});
+
+test("task commands: add, list and complete subtasks; undo removes the added ones", { skip }, async () => {
+  await withChatUser("FREE", async (say, tap, user) => {
+    await say("Finish the project by Friday 5 PM");
+    const project = await taskNamed(user.id, "Finish the project");
+    const added = await say("add subtasks to the project: research, draft and review");
+    assert.equal(added.message.intent, "subtasks_added");
+    assert.equal(await prisma.task.count({ where: { parentTaskId: project.id, status: { not: "DELETED" } } }), 3);
+
+    const list = await say("show the subtasks of the project");
+    assert.match(list.message.content, /0\/3 done\n1\. Research\n2\. Draft\n3\. Review/);
+    assert.equal((await say("mark step 2 of the project as done")).message.intent, "task_completed");
+    assert.equal((await taskNamed(user.id, "Draft")).status, "COMPLETED");
+    assert.equal((await say("complete the review subtask of the project")).message.intent, "task_completed");
+
+    await say("add a subtask to the project: submit");
+    await tap({ type: "undo_command" });
+    assert.equal(await prisma.task.count({ where: { parentTaskId: project.id, status: { not: "DELETED" } } }), 3);
+  });
+});
