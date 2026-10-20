@@ -220,3 +220,6 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Bulk changes act on at most 25 tasks per confirmation**; the preview says how many more there are, and the
   same request again handles the next ones. Moving a parent task moves its subtasks with it, so a subtask whose
   parent is in the same batch isn't moved twice.
+- **One question per multi-request reply.** If two parts of a message both need an answer, the first is asked and
+  the reply names the other to send again. Parts are split only at and / aur / then / also / phir (and the Urdu
+  words), not at commas alone.

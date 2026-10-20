@@ -4,6 +4,7 @@ import { rulesUnderstand } from "../nlu.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 import { bulkCommands } from "./bulk.js";
 import { insightCommands } from "./insights.js";
+import { parseMulti } from "./multi.js";
 import { routineCommands } from "./routines.js";
 import { settingsCommands } from "./settings.js";
 import { taskCommands } from "./tasks.js";
@@ -45,6 +46,8 @@ export type Classification = { command: string; args: CommandArgs };
  */
 export function classify(text: string, ctx: ParseCtx, opts: { baseline?: boolean } = {}): Classification {
   if (!opts.baseline) {
+    const parts = parseMulti(text, ctx);
+    if (parts) return { command: "multi", args: { commands: parts.map((p) => p.command) } };
     const hit = matchCommand(text, ctx);
     if (hit) return { command: hit.command.name, args: hit.args };
   }

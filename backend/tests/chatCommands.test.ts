@@ -331,3 +331,33 @@ test("bulk: at most 25 tasks per confirmation; WhatsApp preview is short plain t
     assert.equal(await prisma.task.count({ where: { userId: user.id, status: "DELETED" } }), 25);
   });
 });
+
+test("multi: two requests run in order with one summary; a list of items stays one task", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    await say("Submit the essay by Thursday 5 PM");
+    const r = await say("remind me to call Ali tomorrow at 5 PM and move the essay to Friday");
+    assert.equal(r.message.intent, "multi");
+    const lines = r.message.content.split("\n");
+    assert.equal(lines.length, 2);
+    assert.match(lines[0], /^• Added: Call Ali/);
+    assert.match(lines[1], /^• Updated: Submit the essay/);
+    assert.ok(await prisma.task.findFirst({ where: { userId: user.id, title: "Call Ali" } }));
+
+    const one = await say("Buy bread and eggs tomorrow at 6 PM");
+    assert.notEqual(one.message.intent, "multi");
+    assert.ok(await prisma.task.findFirst({ where: { userId: user.id, title: { contains: "bread and eggs", mode: "insensitive" } } }));
+  });
+});
+
+test("multi: an ambiguous part asks about that part only; the rest is done", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    await daily(user.id, "Morning reading");
+    await daily(user.id, "Night reading");
+    const r = await say("remind me to buy milk tomorrow at 6 PM then pause my reading routine");
+    assert.equal(r.message.intent, "multi_command_choice");
+    assert.match(r.message.content, /^• Added: Buy milk.*\nWhich routine do you mean\?$/);
+    assert.ok(await prisma.task.findFirst({ where: { userId: user.id, title: "Buy milk" } }));
+    assert.equal((await say("1")).message.intent, "routine_paused");
+    assert.equal((await prisma.routine.findFirstOrThrow({ where: { userId: user.id, title: "Morning reading" } })).active, false);
+  });
+});

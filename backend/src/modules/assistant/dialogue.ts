@@ -79,6 +79,7 @@ import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
 import { matchCommand, parseCtx } from "./commands/registry.js";
 import { resolveCommandPending, runCommand } from "./commands/runtime.js";
+import { parseMulti, runMulti } from "./commands/multi.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
 export type Channel = "APP" | "VOICE" | "WHATSAPP";
@@ -266,7 +267,13 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
 
   // Chat commands (commands/registry.ts): their rules are specific, so a match is a new request and
   // drops any open question. Everything else continues through nlu.ts and the existing handlers.
-  const hit = matchCommand(text, parseCtx(extractOpts(turn)));
+  const ctx = parseCtx(extractOpts(turn));
+  const parts = parseMulti(text, ctx);
+  if (parts) {
+    turn.state.pending = null;
+    return runMulti(turn, parts);
+  }
+  const hit = matchCommand(text, ctx);
   if (hit) {
     turn.state.pending = null;
     return runCommand(turn, hit.command.name, hit.args);

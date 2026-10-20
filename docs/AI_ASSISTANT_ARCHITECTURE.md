@@ -117,6 +117,10 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, postpone
   non-urgent. One preview with the titles (at most 25 tasks per confirmation; WhatsApp shows 8 and "…and N
   more"), one "yes", undone as one batch from per-task snapshots.
+- **Several requests in one message** (`multi.ts`): split only at clause boundaries (and / aur / then / also /
+  phir / اور / پھر) and only when every part parses on its own (a new task needs an explicit "add / remind me",
+  so "buy bread and eggs" stays one task). Parts run in order with one summary reply; a part that has to ask
+  (which one? confirm?) is asked, and at most one question per reply.
 - **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
   `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
 
