@@ -13,7 +13,6 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import type { ChatMessage } from "../../ai/llm.js";
-import { getAi } from "../../ai/llm.js";
 import {
   addDaysYmd,
   dueDateFromYmd,
@@ -77,7 +76,9 @@ import { extractEntities, isHabitLike, isVagueTitle, type ExtractOptions } from 
 import { understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
-import { matchCommand, parseCtx } from "./commands/registry.js";
+import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
+import { routeWithLlm } from "./commands/router.js";
+import { capabilityReply } from "./commands/capabilities.js";
 import { resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
@@ -292,10 +293,22 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     const resolved = await resolvePending(turn, text, u);
     if (resolved) return resolved;
   }
+  // Rules unsure and AI on: the two-stage router picks a registry command (validated, resolved by code).
+  if (u.ruleConfidence < 0.75 && !NO_ROUTE.has(u.intent)) {
+    const routed = await routeWithLlm(text, ctx);
+    if (routed) {
+      const command = getCommand(routed.command);
+      // A wrapped intent keeps this turn's understanding (LLM title etc.); new commands run through the registry.
+      if (command?.wrapped) return handleIntent(turn, { ...u, intent: routed.command as Understanding["intent"], targetRef: typeof routed.args.ref === "string" && routed.args.ref ? routed.args.ref.toLowerCase() : u.targetRef }, text);
+      return runCommand(turn, routed.command, routed.args);
+    }
+  }
   return handleIntent(turn, u, text);
 }
 
 const SWITCH_INTENTS = new Set([...STRONG_SWITCH, "support", "thanks"]);
+/** Intents the router never overrides: answers, greetings, feelings and support stay conversation. */
+const NO_ROUTE = new Set(["confirm", "deny", "greeting", "thanks", "support", "log_mood", "provide_info"]);
 const QUESTIONISH = /\?\s*$|^(?:what|when|where|why|how|who|which|can|could|should|would|is|are|do|does|did)\b/i;
 
 function isTopicSwitch(u: Understanding, text: string): boolean {
@@ -1114,12 +1127,8 @@ export async function conversationalReply(turn: Turn, text: string, mode: "chat"
       intent: "support",
     };
   }
-  return {
-    content: getAi().enabled
-      ? "I couldn't reach my language model just now, but I can still manage your tasks. Try \"What do I have today?\" or \"Remind me to call Ali tomorrow at 5 PM\"."
-      : "I can help you add tasks, routines, plan your day, and track how you feel. Try \"What do I have today?\"",
-    intent: "chat_fallback",
-  };
+  // No language model for a chat answer: say what I can do instead of a generic reply.
+  return { ...capabilityReply(turn, text, "I can't chat about that right now, but here's what I can do:"), intent: "chat_fallback" };
 }
 
 export async function storeInfo(turn: Turn, text: string): Promise<Out> {

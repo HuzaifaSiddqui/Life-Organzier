@@ -9,6 +9,9 @@ import type { ActionPayload } from "../src/modules/assistant/types.js";
 import { createRoutine, occurrencesForDay } from "../src/modules/routines/routineService.js";
 import { addDaysYmd, localYmd } from "../src/lib/time.js";
 import { streakFromDays } from "../src/modules/analytics/analyticsService.js";
+import { parseCtx } from "../src/modules/assistant/commands/registry.js";
+import { routeWithLlm } from "../src/modules/assistant/commands/router.js";
+import { formatReply } from "../src/modules/whatsapp/inbound.js";
 import { dbAvailable } from "./fixtures.js";
 
 const skip = !dbAvailable && "no database";
@@ -359,5 +362,91 @@ test("multi: an ambiguous part asks about that part only; the rest is done", { s
     assert.ok(await prisma.task.findFirst({ where: { userId: user.id, title: "Buy milk" } }));
     assert.equal((await say("1")).message.intent, "routine_paused");
     assert.equal((await prisma.routine.findFirstOrThrow({ where: { userId: user.id, title: "Morning reading" } })).active, false);
+  });
+});
+
+/** Scripted model: stage 1 (area) and stage 2 (command) answers; records how often it was asked. */
+function scriptedModel(area: string, command: unknown) {
+  const calls: string[] = [];
+  const provider = {
+    name: "scripted",
+    chat: async (messages: Array<{ role: string; content: string }>) => {
+      const system = messages[0]?.content ?? "";
+      if (system.includes("route a message")) {
+        calls.push("area");
+        return JSON.stringify({ category: area });
+      }
+      if (system.includes("Pick the one command")) {
+        calls.push("command");
+        return JSON.stringify(command);
+      }
+      calls.push("other");
+      return "{}";
+    },
+  };
+  return { calls, ai: new AiService([provider]) };
+}
+
+test("router: model picks area then command; its times are ignored, the parser's are used; bad output → null", async () => {
+  const ctx = parseCtx({ now: new Date("2026-10-05T05:00:00.000Z"), tz: TZ });
+  const m = scriptedModel("routines", { command: "routine_update", args: { ref: "workout", time: "9 PM" } });
+  setAi(m.ai);
+  const r = await routeWithLlm("make the workout one happen at 7 pm", ctx);
+  assert.deepEqual(m.calls, ["area", "command"]);
+  assert.equal(r?.command, "routine_update");
+  assert.equal(r?.args.ref, "workout");
+  assert.equal(r?.args.time, "7 PM");
+
+  setAi(scriptedModel("routines", { command: "no_such_command", args: {} }).ai);
+  assert.equal(await routeWithLlm("make the workout one happen at 7 pm", ctx), null);
+  setAi(scriptedModel("settings", { command: "settings_language", args: { language: "klingon" } }).ai);
+  assert.equal(await routeWithLlm("talk to me differently", ctx), null);
+  setAi(scriptedModel("none", {}).ai);
+  assert.equal(await routeWithLlm("what is the capital of France", ctx), null);
+  setAi(new AiService([]));
+  assert.equal(await routeWithLlm("make the workout one happen at 7 pm", ctx), null);
+});
+
+test("router in the pipeline: unsure rules → routed command; nothing matches → 4–5 things I can do; help lists them", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    await prisma.task.create({ data: { userId: user.id, title: "Essay", priority: "MEDIUM", source: "CHAT", status: "COMPLETED", completedAt: new Date() } });
+    const m = scriptedModel("insights", { command: "insights_completed", args: { range: "week" } });
+    setAi(m.ai);
+    const routed = await say("give me the numbers about my productivity");
+    assert.equal(routed.message.intent, "insights_completed");
+    assert.match(routed.message.content, /completed 1 task/);
+
+    setAi(new AiService([]));
+    const lost = await say("blorp the flux capacitor");
+    assert.equal(lost.message.intent, "unclear");
+    assert.equal(lost.message.actions?.length, 5);
+    assert.match(lost.message.actions?.[0].label ?? "", /^Add "blorp the flux capacitor" as a task/);
+
+    const help = await say("what can you do?");
+    assert.equal(help.message.intent, "help");
+    assert.match(help.message.content, /Routines: .*\nSettings: .*\nInsights: /);
+  });
+});
+
+test("WhatsApp: command replies are short plain text with numbered options; '1' answers them", { skip }, async () => {
+  await withChatUser("PRO", async (say, _tap, user) => {
+    await daily(user.id, "Morning reading");
+    await daily(user.id, "Night reading");
+    const wa = (r: Awaited<ReturnType<Say>>) => formatReply(r.message.content, r.message.actions ?? []);
+
+    const which = await say("pause my reading routine", "WHATSAPP");
+    assert.equal(wa(which), "Which routine do you mean?\n\n1. Morning reading\n2. Night reading");
+    const paused = await say("2", "WHATSAPP");
+    assert.equal(wa(paused), 'Paused "Night reading". No reminders until you resume it.\n\n1. Undo');
+
+    const list = await say("show my routines", "WHATSAPP");
+    assert.ok(!/[*_`]/.test(wa(list)), "no markdown");
+    assert.ok(!wa(list).includes("Open routines"), "app-only buttons are dropped");
+
+    const del = await say("delete my morning reading routine", "WHATSAPP");
+    assert.match(wa(del), /^Delete the routine "Morning reading".*\n\n1\. Yes\n2\. Cancel$/s);
+    // "1" on WhatsApp is the numbered option: the inbound pipeline turns it into the action's payload.
+    const yes = await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: "whatsapp", payload: { type: "confirm_pending" }, label: "Yes", channel: "WHATSAPP" });
+    assert.equal(yes.message.intent, "routine_deleted");
   });
 });

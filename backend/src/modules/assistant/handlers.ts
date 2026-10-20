@@ -55,6 +55,7 @@ import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
 import { applyCommandUndo, commandUndoIsNewest, confirmCommand, recordUndo, snapshots, UNDO_ACTION } from "./commands/runtime.js";
 import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
+import { capabilityReply, helpReply } from "./commands/capabilities.js";
 
 /* ======================================================================== intents */
 
@@ -106,7 +107,7 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
     case "thanks":
       return { content: "Anytime! I'm here whenever you need me.", intent: "thanks" };
     case "help":
-      return help();
+      return helpReply(turn);
     case "set_checkin_style":
       return setCheckinStyle(turn, text);
     case "snooze_task":
@@ -119,18 +120,9 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
     case "smalltalk":
       return conversationalReply(turn, text, "chat");
     case "unclear":
-    default: {
-      turn.state.pending = { kind: "clarify_intent", text };
-      return {
-        content: "I'm not sure what you'd like me to do. Is this a task, or are you just telling me?",
-        actions: [
-          { label: "Create a task", text: `Add a task: ${truncate(text, 60)}` },
-          { label: "Add a routine", text: `Add a daily routine: ${truncate(text, 60)}` },
-          { label: "Just telling you", text: "I'm just telling you" },
-        ],
-        intent: "unclear",
-      };
-    }
+    default:
+      // Nothing matched (rules, and the LLM router when AI is on): what I can do that is closest to the words.
+      return capabilityReply(turn, text);
   }
 }
 
@@ -254,22 +246,6 @@ export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
   recordUndo(turn, { kind: "settings", before, label: `check-in style set to ${STYLE_NAMES.en[req.tone]}` });
   logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinTone: req.tone, reenabled: wasOff });
   return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: [...others(req.tone), UNDO_ACTION], intent: "checkin_style_set" };
-}
-
-function help(): Out {
-  return {
-    content:
-      "I'm your personal assistant. I learn how you work and plan around it. You can talk to me naturally — for example:",
-    actions: [
-      { label: "Math assignment due Friday 3 PM", text: "Complete math assignment by Friday 3 PM" },
-      { label: "Daily meditation at 6 AM", text: "Daily meditation at 6 AM for 10 minutes" },
-      { label: "What do I have today?", text: "What do I have today?" },
-      { label: "Plan my day", text: "Plan my day" },
-      { label: "I'm feeling stressed", text: "I'm feeling stressed" },
-      { label: "I'm 50% done with it", text: "I'm 50% done with it" },
-    ],
-    intent: "help",
-  };
 }
 
 async function greet(turn: Turn): Promise<Out> {

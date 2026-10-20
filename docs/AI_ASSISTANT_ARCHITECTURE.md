@@ -121,6 +121,14 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
   phir / اور / پھر) and only when every part parses on its own (a new task needs an explicit "add / remind me",
   so "buy bread and eggs" stays one task). Parts run in order with one summary reply; a part that has to ask
   (which one? confirm?) is asked, and at most one question per reply.
+- **Fallback router** (`router.ts`, AI on and rules unsure, i.e. rule confidence below 0.75): two small
+  schema-constrained calls, area then command, over the registry. The model returns a command name and argument
+  words only; dates, times, durations and weekdays are re-extracted by `entities.ts`, the arguments are
+  validated with the command's zod schema, and references resolve in code. If the rules accept the text after
+  all, they win. No match → `capabilities.ts` replies with 4–5 things I can do closest to the message (never a
+  generic chat answer); the same happens for chit-chat when no model is available. Help is built from the registry.
+- **WhatsApp**: command replies are plain text; options become a numbered list (`formatReply`), "1" answers them,
+  app-only buttons (open a screen) are dropped, lists cap at 8.
 - **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
   `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
 

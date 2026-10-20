@@ -223,3 +223,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **One question per multi-request reply.** If two parts of a message both need an answer, the first is asked and
   the reply names the other to send again. Parts are split only at and / aur / then / also / phir (and the Urdu
   words), not at commas alone.
+- **Command replies are in English** (the language switch confirms in Urdu, and crisis and check-in texts follow the
+  language setting as before). The rules understand English, Urdu script and Roman Urdu; Urdu-script clock times
+  are only read inside ranges such as "رات 11 سے صبح 7 تک".
+- **The LLM router adds up to two model calls** when the rules are unsure (on top of the existing intent call), so
+  those messages are slower with a local model. It never runs with AI off.
