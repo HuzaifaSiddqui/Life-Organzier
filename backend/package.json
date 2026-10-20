@@ -15,7 +15,8 @@
     "e2e": "tsx scripts/e2e-conversation.ts",
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/http-smoke.ts",
-    "eval:documents": "tsx scripts/eval-documents.ts"
+    "eval:documents": "tsx scripts/eval-documents.ts",
+    "eval:assistant": "tsx scripts/eval-assistant.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

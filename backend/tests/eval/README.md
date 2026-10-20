@@ -1,6 +1,8 @@
 # Evaluation sets
 
 - `assistant-eval.json` — fixed set for `scripts/model-benchmark.ts` (intent, titles, first steps, deterministic fields). The Roman Urdu date/time rules in `entities.ts` were tuned against it, so its Roman Urdu scores are not an unbiased estimate.
+- `assistant-eval.json` → `commands` — 169 chat-command rows (English, Urdu script, Roman Urdu) with the expected registry command and arguments, scored together with the `messages` intents by `npm run eval:assistant` (rules only, AI off; `-- --baseline` = the rules before the command registry). The command rules were written against these rows, so they are not an unbiased estimate either.
+- `chat-holdout.json` — **held-out** chat commands, currently empty (two `"example": true` rows show the schema). Scored separately by `npm run eval:assistant`.
 - `roman-urdu-holdout.json` — **held-out** Roman Urdu messages, currently empty (two `"example": true` rows show the schema and are not scored).
 
 ## Adding to the held-out set
@@ -8,3 +10,7 @@
 A teammate who **has not read `assistant/entities.ts`** should add about 20 messages, the way they or their friends really type tasks (mix of dates, clock times, "subah/shaam", "saarhe/sawa/pone", durations; include some with no date or time). For each message add the expected `date`, `time` and/or `duration` as a human would read it, using the file's `now` (Mon 5 Oct 2026) and Asia/Karachi. Leave a field out if the message doesn't contain it.
 
 Do not tune `entities.ts` against these rows; if you fix a miss, add new rows rather than moving the failing ones. Report with `npx tsx scripts/model-benchmark.ts --deterministic` (section "Held-out Roman Urdu").
+
+## Adding to the chat held-out set
+
+Same rule: a teammate who **has not read `assistant/commands/` or `entities.ts`** writes about 30 messages asking the assistant to do things in the app (routines, settings, insights, bulk changes, two requests in one message), in the three languages. For each, add the command name from `docs/chat-coverage.md` and only the arguments a human reads from the message. Never tune the rules on these rows.

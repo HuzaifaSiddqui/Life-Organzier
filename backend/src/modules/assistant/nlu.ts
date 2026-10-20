@@ -39,6 +39,8 @@ export type Intent = (typeof INTENTS)[number];
 export type Understanding = {
   intent: Intent;
   confidence: number;
+  /** Confidence of the rules alone (below 0.75 the rules were unsure). */
+  ruleConfidence: number;
   source: "rules" | "llm";
   entities: Entities;
   title: string;
@@ -246,6 +248,26 @@ export function nluMessages(text: string, opts: { history: ChatMessage[]; pendin
 export const NLU_LLM_OPTIONS = { json: LLM_JSON_SCHEMA, maxTokens: 80, timeoutMs: 20000 };
 export { llmSchema as NLU_LLM_SCHEMA, LLM_INTENTS };
 
+/** Rules only: no LLM, no I/O (the chat command registry and the eval script use it). */
+export function rulesUnderstand(text: string, opts: ExtractOptions): Understanding {
+  const entities = extractEntities(text, opts);
+  const mood = detectMood(text);
+  const rule = rulesIntent(text, entities, mood);
+  const contextMatch = text.match(SWITCH_CONTEXT);
+  return {
+    intent: rule.intent,
+    confidence: rule.confidence,
+    ruleConfidence: rule.confidence,
+    source: "rules",
+    entities,
+    title: cleanTitle(entities.residual),
+    targetRef: targetFromText(targetFromText(entities.residual, rule.intent), rule.intent),
+    mood,
+    splitParts: rule.intent === "split_task" ? splitParts(text) : [],
+    contextTarget: contextMatch ? contextMatch[1].trim() : null,
+  };
+}
+
 export async function understand(
   text: string,
   opts: ExtractOptions & { history: ChatMessage[]; pendingHint?: string | null; memoryHint?: string | null; allowLlm: boolean },
@@ -287,6 +309,7 @@ export async function understand(
   return {
     intent,
     confidence,
+    ruleConfidence: rule.confidence,
     source,
     entities,
     title,
