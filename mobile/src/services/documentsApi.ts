@@ -16,6 +16,12 @@ export type ExtractedDeadline = {
   assumedTime: boolean;
   confidence: number;
   source: string;
+  /** A week number with no semester start in the document: undated until the user picks the date. */
+  needsSemesterStart?: boolean;
+  rangeStart?: string | null;
+  yearInferred?: boolean;
+  aiOnly?: boolean;
+  aiAgrees?: boolean;
   created?: boolean;
   existing?: boolean;
 };

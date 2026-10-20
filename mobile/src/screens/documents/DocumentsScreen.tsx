@@ -4,6 +4,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as Network from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineReviewItem";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
@@ -37,7 +38,7 @@ const LANGS = [
 const MAX_BYTES = 10 * 1024 * 1024;
 
 type Picked = { uri: string; name: string; mimeType: string; size: number };
-type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; assumedTime: boolean };
+type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags };
 type EditableSchedule = { index: number; title: string; room: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
 
 function confColor(c: number): string {
@@ -102,10 +103,12 @@ export function DocumentsScreen({ navigation }: Props) {
         date: d.date ?? "",
         time: d.time ?? "",
         confidence: d.confidence,
-        include: !d.created && d.confidence >= 80 && Boolean(d.date),
+        // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
+        include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly,
         created: Boolean(d.created),
         existing: Boolean(d.existing),
-        assumedTime: d.assumedTime,
+        source: d.source,
+        flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred },
       })),
     );
     setSchedules(
@@ -303,14 +306,17 @@ export function DocumentsScreen({ navigation }: Props) {
                     </Pressable>
                     <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, title } : x)))} />
                   </View>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.date} placeholder="YYYY-MM-DD" placeholderTextColor="#646A78" editable={!d.created} onChangeText={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date } : x)))} />
-                    <TextInput style={[ui.input, { width: 110, paddingVertical: 8 }]} value={d.time} placeholder="11:59 PM" placeholderTextColor="#646A78" editable={!d.created} onChangeText={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
-                  </View>
+                  <DeadlineReviewItem
+                    date={d.date}
+                    time={d.time}
+                    source={d.source}
+                    flags={d.created ? { assumedTime: false } : d.flags}
+                    disabled={d.created}
+                    onChangeDate={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date, include: true, flags: { ...x.flags, needsSemesterStart: false } } : x)))}
+                    onChangeTime={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time, flags: { ...x.flags, assumedTime: false } } : x)))}
+                  />
                   <Text style={[styles.meta, { color: confColor(d.confidence) }]}>
                     {d.existing ? "Already in your tasks · " : d.created ? "Added automatically · " : ""}Confidence {d.confidence}%
-                    {d.assumedTime && !d.created ? " · time assumed 11:59 PM — OK?" : ""}
-                    {!d.date ? " · too vague — enter a date" : ""}
                   </Text>
                 </Card>
               ))
