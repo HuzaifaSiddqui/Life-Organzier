@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SavedLocation } from "../../types/models";
 import { distanceM } from "../geofence";
-import { clampLatitude, clampLongitude, clampZoom, commandScript, defaultCenter, homePlace, initialCenter, isCoords, parseMapMessage, presetRadius, PRESET_RADIUS_M } from "../map";
+import { centerForPlaces, clampLatitude, clampLongitude, clampZoom, commandScript, defaultCenter, homePlace, initialCenter, isCoords, parseMapMessage, presetRadius, PRESET_RADIUS_M } from "../map";
 
 const place = (name: string, latitude = 31.5, longitude = 74.3): SavedLocation => ({ id: name, name, latitude, longitude, preset: "NEARBY", radiusM: 350, usageCount: 0, displayAddress: null }) as SavedLocation;
 
@@ -84,5 +84,16 @@ describe("where the map opens", () => {
     expect(initialCenter({ current: null, saved: [], timeZone: "Asia/Karachi" }).zoom).toBe(5);
     expect(defaultCenter("Mars/Olympus")).toEqual({ latitude: 20, longitude: 0, zoom: 2 });
     expect(homePlace([place(" HOME ")])?.name).toBe(" HOME ");
+  });
+});
+
+describe("saved places overview", () => {
+  it("centres on the middle of the places and zooms out until the farthest fits", () => {
+    expect(centerForPlaces([], distanceM)).toBeNull();
+    const near = centerForPlaces([{ latitude: 31.52, longitude: 74.35 }, { latitude: 31.521, longitude: 74.351 }], distanceM);
+    expect(near?.zoom).toBe(15);
+    expect(near?.latitude).toBeCloseTo(31.5205, 4);
+    expect(centerForPlaces([{ latitude: 31.52, longitude: 74.35 }, { latitude: 31.6, longitude: 74.35 }], distanceM)?.zoom).toBe(13);
+    expect(centerForPlaces([{ latitude: 31.52, longitude: 74.35 }, { latitude: 24.86, longitude: 67.0 }], distanceM)?.zoom).toBe(6);
   });
 });

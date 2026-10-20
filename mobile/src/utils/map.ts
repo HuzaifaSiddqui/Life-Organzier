@@ -99,6 +99,19 @@ export function defaultCenter(timeZone: string | null | undefined): Center {
   return (timeZone && TIMEZONE_CENTERS[timeZone]) || WORLD;
 }
 
+/**
+ * A view that shows all the places: their middle, zoomed out until the farthest one fits
+ * (roughly: within 1 km → 15, 5 km → 13, 20 km → 11, 100 km → 9, else 6). Null without places.
+ */
+export function centerForPlaces(places: Coords[], distance: (a: Coords, b: Coords) => number): Center | null {
+  const valid = places.filter(isCoords);
+  if (!valid.length) return null;
+  const mid = { latitude: valid.reduce((s, p) => s + p.latitude, 0) / valid.length, longitude: valid.reduce((s, p) => s + p.longitude, 0) / valid.length };
+  const far = Math.max(...valid.map((p) => distance(mid, p)));
+  const zoom = far < 1000 ? 15 : far < 5000 ? 13 : far < 20000 ? 11 : far < 100000 ? 9 : 6;
+  return { ...mid, zoom };
+}
+
 const HOME_NAMES = ["home", "ghar", "گھر"];
 
 export function homePlace(saved: SavedLocation[]): SavedLocation | null {

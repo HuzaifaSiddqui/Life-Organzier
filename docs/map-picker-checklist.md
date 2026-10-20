@@ -36,3 +36,8 @@ account with location reminders on. Tick each line in light and dark mode, and o
 - [ ] Onboarding (first time location reminders are turned on) → Home → pick a spot: it is saved as "Home".
 - [ ] Create a new task with a location from the task form: the place is attached after the task is saved.
 - [ ] Walk (or mock-locate) into the circle of a place with an open task: the arrival notification still comes.
+
+## Saved places screen
+- [ ] Settings → Saved places: a map above the list shows a dot for every place, all in view.
+- [ ] Scrolling the screen over the map scrolls the list (the map doesn't pan); pinch zooms the map.
+- [ ] Tap a dot: that place opens for editing. Offline: a short note replaces the map; the list works.

@@ -32,7 +32,8 @@ html, body, #map { margin: 0; padding: 0; height: 100%; background: ${c.canvas};
   function num(v) { return typeof v === "number" && isFinite(v); }
   function okLL(a, b) { return num(a) && num(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180; }
 
-  var map = L.map("map", { zoomControl: false, attributionControl: true }).setView([cfg.latitude, cfg.longitude], cfg.zoom);
+  // Read-only maps sit in scrolling screens: no one-finger panning (it would fight the scroll); pinch still zooms.
+  var map = L.map("map", { zoomControl: false, attributionControl: true, dragging: cfg.interactive }).setView([cfg.latitude, cfg.longitude], cfg.zoom);
   map.attributionControl.setPrefix(false);
   var tiles = L.tileLayer(cfg.tileUrl, { maxZoom: cfg.maxZoom, attribution: cfg.attribution });
   var loaded = 0, failed = 0, reported = false;
