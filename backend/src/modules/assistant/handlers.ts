@@ -1,4 +1,4 @@
-import { Priority, RoutineOccurrenceStatus, TaskStatus, TaskType, type Task } from "@prisma/client";
+import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
 import { addDaysYmd, dueDateFromYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, startOfLocalDay } from "../../lib/time.js";
@@ -53,7 +53,8 @@ import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
-import { applyCommandUndo, commandUndoIsNewest, confirmCommand, recordUndo, UNDO_ACTION } from "./commands/runtime.js";
+import { applyCommandUndo, commandUndoIsNewest, confirmCommand, recordUndo, snapshots, UNDO_ACTION } from "./commands/runtime.js";
+import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
 
 /* ======================================================================== intents */
 
@@ -824,11 +825,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     case "postpone_task":
       return postpone(turn, [payload.taskId], payload.days);
     case "postpone_nonurgent": {
-      const ids = payload.taskIds?.length
-        ? payload.taskIds
-        : (await listActiveTasks(turn.user.id))
-            .filter((t) => t.priority !== Priority.URGENT && t.taskType !== TaskType.FIXED && t.dueAt && t.dueAt < startOfLocalDay(addDaysYmd(turn.todayYmd, 2), turn.tz))
-            .map((t) => t.id);
+      const ids = payload.taskIds?.length ? payload.taskIds : nonUrgentSoon(turn, await listActiveTasks(turn.user.id)).map((t) => t.id);
       return postpone(turn, ids, 1);
     }
     case "log_mood":
@@ -907,21 +904,9 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
 }
 
 async function postpone(turn: Turn, ids: string[], days: number): Promise<Out> {
-  const moved: Task[] = [];
-  for (const id of ids.slice(0, 15)) {
-    const t = await getTaskForUser(turn.user.id, id);
-    if (!t) continue;
-    const shift = days * 86400000;
-    const updated = await updateTask(turn.task, id, {
-      dueDate: t.dueDate ? new Date(t.dueDate.getTime() + shift) : dueDateFromYmd(addDaysYmd(turn.todayYmd, days), turn.tz),
-      scheduledStart: t.scheduledStart ? new Date(t.scheduledStart.getTime() + shift) : null,
-      scheduledEnd: t.scheduledEnd ? new Date(t.scheduledEnd.getTime() + shift) : null,
-    });
-    if (updated) {
-      moved.push(updated);
-      logEvent(turn.user.id, "TASK_POSTPONED", id, { days });
-    }
-  }
+  const tasks = (await Promise.all(ids.slice(0, 15).map((id) => getTaskForUser(turn.user.id, id)))).filter((t): t is Task => Boolean(t));
+  const moved = await shiftTasks(turn, tasks, days);
+  if (moved.length) recordUndo(turn, { kind: "tasks", op: "edit", taskIds: moved.map((t) => t.id), before: snapshots(tasks), label: `${plural(moved.length, "task")} postponed` });
   if (!moved.length) return { content: "There was nothing to postpone. You're all clear.", intent: "postponed" };
   return {
     content: `Moved ${plural(moved.length, "task")} ${days === 1 ? "to tomorrow" : `by ${days} days`}. Take care of yourself first.`,

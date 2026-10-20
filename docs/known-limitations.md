@@ -217,3 +217,6 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Insights from chat use the analytics ranges**: "this week" is the last 7 days and "this month" the last 30, not
   calendar weeks. "Time per category" is the planned duration of completed tasks (tasks have no time tracking);
   tasks without a duration are counted but not timed. The streak counts days with a completed task or routine.
+- **Bulk changes act on at most 25 tasks per confirmation**; the preview says how many more there are, and the
+  same request again handles the next ones. Moving a parent task moves its subtasks with it, so a subtask whose
+  parent is in the same batch isn't moved twice.

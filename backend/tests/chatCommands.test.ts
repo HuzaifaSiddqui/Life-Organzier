@@ -278,3 +278,56 @@ test("insights commands: completed, overdue, time per category, streak, compare,
     assert.match((await say("how did I do compared to last week?")).message.content, /Last 7 days: 3 tasks done/);
   });
 });
+
+test("bulk: move all of today previews titles, one yes moves them, undo moves them back", { skip }, async () => {
+  await withChatUser("FREE", async (say, tap, user) => {
+    const today = localYmd(new Date(), TZ);
+    const mkToday = (title: string) => prisma.task.create({ data: { userId: user.id, title, priority: "MEDIUM", source: "CHAT", dueDate: new Date(`${today}T00:00:00Z`), dueTime: "11:59 PM", dueAt: new Date(Date.now() + 3600000) } });
+    await mkToday("Read chapter 3");
+    await mkToday("Email the TA");
+    const ask = await say("move all of today's tasks to tomorrow");
+    assert.equal(ask.message.intent, "bulk_move_today_confirm");
+    assert.match(ask.message.content, /^Move 2 tasks from today to tomorrow\?\n• /);
+    assert.match(ask.message.content, /Read chapter 3/);
+    assert.equal((await say("yes")).message.intent, "bulk_moved");
+    const moved = await prisma.task.findMany({ where: { userId: user.id } });
+    assert.ok(moved.every((t) => localYmd(t.dueDate as Date, "UTC") === addDaysYmd(today, 1)));
+    assert.equal((await tap({ type: "undo_command" })).message.intent, "undone");
+    const back = await prisma.task.findMany({ where: { userId: user.id } });
+    assert.ok(back.every((t) => localYmd(t.dueDate as Date, "UTC") === today));
+  });
+});
+
+test("bulk: complete by tag, delete completed (undo restores), no means nothing changes", { skip }, async () => {
+  await withChatUser("FREE", async (say, tap, user) => {
+    const mk = (title: string, extra: Record<string, unknown> = {}) => prisma.task.create({ data: { userId: user.id, title, priority: "MEDIUM", source: "CHAT", ...extra } });
+    await mk("Physics lab", { tags: ["uni"] });
+    await mk("Maths sheet", { tags: ["uni", "maths"] });
+    await mk("Laundry");
+    await say("complete all tasks tagged #uni");
+    assert.equal((await say("no")).message.intent, "cancel");
+    assert.equal(await prisma.task.count({ where: { userId: user.id, status: "COMPLETED" } }), 0);
+    await say("mark all #uni tasks as done");
+    assert.equal((await say("yes")).message.intent, "bulk_completed");
+    assert.equal(await prisma.task.count({ where: { userId: user.id, status: "COMPLETED" } }), 2);
+
+    assert.match((await say("delete all completed tasks")).message.content, /^Delete 2 completed tasks\?/);
+    await say("yes");
+    assert.equal(await prisma.task.count({ where: { userId: user.id, status: "DELETED" } }), 2);
+    await say("undo");
+    assert.equal(await prisma.task.count({ where: { userId: user.id, status: "DELETED" } }), 0);
+  });
+});
+
+test("bulk: at most 25 tasks per confirmation; WhatsApp preview is short plain text with numbered options", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    for (let i = 1; i <= 30; i += 1) await prisma.task.create({ data: { userId: user.id, title: `Done ${i}`, priority: "LOW", source: "CHAT", status: "COMPLETED", completedAt: new Date(Date.now() - (40 - i) * 60000) } });
+    const wa = await say("delete all completed tasks", "WHATSAPP");
+    assert.match(wa.message.content, /^Delete 25 completed tasks\?/);
+    assert.match(wa.message.content, /…and 17 more\nThat's the first 25 of 30/);
+    assert.equal(wa.message.cards?.length ?? 0, 0);
+    assert.deepEqual(wa.message.actions?.map((a) => a.label), ["Yes", "Cancel"]);
+    await say("yes", "WHATSAPP");
+    assert.equal(await prisma.task.count({ where: { userId: user.id, status: "DELETED" } }), 25);
+  });
+});

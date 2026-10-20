@@ -665,7 +665,20 @@ export function extractWeekdays(text: string): number[] | null {
   return days.size ? [...days].sort((a, b) => a - b) : null;
 }
 
-export type LocationCommand ={ kind: "remove"; taskRef: string } | { kind: "change"; taskRef: string; place: string | null };
+/**
+ * Target day of a command ("move everything to Friday", "سارے کام کل کر دو"): extractEntities' date, else
+ * Urdu-script آج / کل / پرسوں (کل read forward, as a command target is never in the past). Kept out of
+ * extractEntities so task and mood parsing of Urdu text does not change.
+ */
+export function extractTargetDay(text: string, opts: ExtractOptions): string | null {
+  const e = extractEntities(text, opts);
+  if (e.date) return e.date.ymd;
+  const m = /(?:^|\s)(پرسوں|آج|کل)(?=\s|$|[،۔؟!])/.exec(text);
+  if (!m) return null;
+  return addDaysYmd(localYmd(opts.now, opts.tz), m[1] === "آج" ? 0 : m[1] === "کل" ? 1 : 2);
+}
+
+export type LocationCommand = { kind: "remove"; taskRef: string } | { kind: "change"; taskRef: string; place: string | null };
 
 /** "remove the location (from X)", "X ki location hata do", "change the location (of X) to Y", "jagah badal do". */
 export function parseLocationCommand(text: string): LocationCommand | null {

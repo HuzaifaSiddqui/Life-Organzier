@@ -9,7 +9,7 @@ import { resolveTaskRef } from "../draft.js";
 import { extractEntities } from "../entities.js";
 import { handlePayload } from "../handlers.js";
 import { ASK, DO_IT, ROUTINE, TASK_WORD, capture, has, norm, refFrom, splitList } from "./lexicon.js";
-import { askChoice, recordUndo, runCommand, UNDO_ACTION } from "./runtime.js";
+import { askChoice, recordUndo, runCommand, snapshots, UNDO_ACTION } from "./runtime.js";
 import type { Command, CommandArgs, Prepared } from "./types.js";
 
 const taskRef = z.object({ ref: z.string().max(120).default(""), taskId: z.string().uuid().optional(), text: z.string().max(1000).optional() }).passthrough();
@@ -43,7 +43,7 @@ async function edit(turn: Turn, task: Task, changes: Parameters<typeof updateTas
   const updated = await updateTask(turn.task, task.id, changes);
   if (!updated) return null;
   focusOn(turn, updated.id);
-  recordUndo(turn, { kind: "tasks", op: "edit", taskIds: [updated.id], label });
+  recordUndo(turn, { kind: "tasks", op: "edit", taskIds: [updated.id], before: snapshots([task]), label });
   return updated;
 }
 
@@ -164,7 +164,7 @@ const taskStart: Command = {
     const task = await taskOf(turn, args);
     if (!task) return gone;
     const out = await handlePayload(turn, { type: "start_task", taskId: task.id });
-    recordUndo(turn, { kind: "tasks", op: "edit", taskIds: [task.id], label: `started "${task.title}"` });
+    recordUndo(turn, { kind: "tasks", op: "edit", taskIds: [task.id], before: snapshots([task]), label: `started "${task.title}"` });
     return { ...out, actions: [...(out.actions ?? []), UNDO_ACTION] };
   },
 };
@@ -436,7 +436,7 @@ const subtaskComplete: Command = {
     const sub = await getTaskForUser(turn.user.id, String(args.subtaskId));
     if (!sub) return gone;
     const out = await handlePayload(turn, { type: "complete_task", taskId: sub.id });
-    recordUndo(turn, { kind: "tasks", op: "edit", taskIds: [sub.id], label: `"${sub.title}" done` });
+    recordUndo(turn, { kind: "tasks", op: "edit", taskIds: [sub.id], before: snapshots([sub]), label: `"${sub.title}" done` });
     return { ...out, actions: [UNDO_ACTION, ...(out.actions ?? []).filter((a) => a.payload?.type !== "undo_task")] };
   },
 };

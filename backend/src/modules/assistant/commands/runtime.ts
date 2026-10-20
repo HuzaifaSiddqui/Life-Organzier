@@ -2,7 +2,8 @@ import { Prisma, type RoutineFrequency, type RoutineOccurrenceStatus, type Routi
 import { prisma } from "../../../config/db.js";
 import { fuzzySimilarity, truncate } from "../../../lib/text.js";
 import { generateRoutineOccurrences, updateRoutine } from "../../routines/routineService.js";
-import { getTaskForUser, restoreTask, softDeleteTask, undoLastEdit } from "../../tasks/taskService.js";
+import type { Task } from "@prisma/client";
+import { changesFromSnapshot, getTaskForUser, restoreTask, snapshotOf, softDeleteTask, undoLastEdit, updateTask } from "../../tasks/taskService.js";
 import type { Out, Turn } from "../dialogue.js";
 import type { Understanding } from "../nlu.js";
 import type { QuickAction, UndoRecord } from "../types.js";
@@ -16,6 +17,11 @@ type UndoInput = UndoRecord extends infer U ? (U extends unknown ? Omit<U, "at">
 /** Called by execute after the change is saved (the timestamp orders it against later task edits). */
 export function recordUndo(turn: Turn, rec: UndoInput): void {
   turn.state.undo = { ...rec, at: new Date().toISOString() } as UndoRecord;
+}
+
+/** Fields of each task before a change, for the undo step. */
+export function snapshots(tasks: Task[]): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(tasks.map((t) => [t.id, snapshotOf(t)]));
 }
 
 /** Validates, resolves references, asks for confirmation when the command's policy requires it, then executes. */
@@ -166,7 +172,11 @@ export async function applyCommandUndo(turn: Turn): Promise<Out | null> {
     }
     case "tasks": {
       for (const id of rec.taskIds) {
-        if (rec.op === "edit") await undoLastEdit(turn.task, id);
+        if (rec.op === "edit") {
+          const before = rec.before?.[id];
+          if (before) await updateTask(turn.task, id, changesFromSnapshot(before));
+          else await undoLastEdit(turn.task, id);
+        }
         else if (rec.op === "delete") await restoreTask(turn.task, id);
         else await softDeleteTask(turn.task, id);
       }

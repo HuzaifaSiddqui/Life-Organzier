@@ -114,6 +114,9 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
   deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
   command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.
+- **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, postpone
+  non-urgent. One preview with the titles (at most 25 tasks per confirmation; WhatsApp shows 8 and "…and N
+  more"), one "yes", undone as one batch from per-task snapshots.
 - **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
   `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
 

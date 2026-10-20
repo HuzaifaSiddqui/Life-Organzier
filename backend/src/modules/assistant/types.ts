@@ -76,7 +76,8 @@ export type UndoRecord = { at: string; label: string } & (
   | { kind: "routine"; routineId: string; before: Record<string, unknown> }
   | { kind: "routine_deleted"; snapshot: Record<string, unknown> }
   | { kind: "occurrence"; occurrenceId: string; before: { status: string; occurrenceDate: string; dueTime: string | null } }
-  | { kind: "tasks"; op: "edit" | "delete" | "create"; taskIds: string[] }
+  /** `before`: each task's fields before an edit (restored as they were; version history is the fallback). */
+  | { kind: "tasks"; op: "edit" | "delete" | "create"; taskIds: string[]; before?: Record<string, Record<string, unknown>> }
 );
 
 export type DialogueState = {
