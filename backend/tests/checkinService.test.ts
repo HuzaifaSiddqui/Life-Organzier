@@ -270,10 +270,13 @@ test("chat: style requests update the setting and confirm with chips for the oth
     let r = await say("be more serious with reminders");
     assert.equal(r.message.intent, "checkin_style_set");
     assert.match(r.message.content, /serious/);
-    assert.deepEqual(r.message.actions?.map((a) => a.label), ["Funny", "Gentle"]);
+    assert.deepEqual(r.message.actions?.map((a) => a.label), ["Funny", "Gentle", "Undo"]);
     assert.equal((await prisma.userSettings.findUnique({ where: { userId: user.id } }))?.checkinTone, "SERIOUS");
     r = await say("narmi se baat karo");
     assert.equal((await prisma.userSettings.findUnique({ where: { userId: user.id } }))?.checkinTone, "GENTLE");
+    r = await say("undo");
+    assert.equal(r.message.intent, "undone");
+    assert.equal((await prisma.userSettings.findUnique({ where: { userId: user.id } }))?.checkinTone, "SERIOUS");
     r = await say("Turn off check-ins");
     assert.equal(r.message.intent, "checkins_off");
     assert.equal((await prisma.userSettings.findUnique({ where: { userId: user.id } }))?.checkinsEnabled, false);

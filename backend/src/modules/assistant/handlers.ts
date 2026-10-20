@@ -53,6 +53,7 @@ import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
+import { applyCommandUndo, commandUndoIsNewest, confirmCommand, recordUndo, UNDO_ACTION } from "./commands/runtime.js";
 
 /* ======================================================================== intents */
 
@@ -235,20 +236,23 @@ export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
   if (req.kind === "ask") {
     return { content: t.STYLE_ASK, actions: (["FUNNY", "SERIOUS", "GENTLE"] as const).map((s) => ({ label: STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), text: STYLE_CHIP_TEXT[s] })), intent: "checkin_style_ask" };
   }
+  const before = { checkinsEnabled: turn.settings.checkinsEnabled, checkinTone: turn.settings.checkinTone };
   if (req.kind === "off" || req.kind === "on") {
     const checkinsEnabled = req.kind === "on";
     turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinsEnabled } });
+    recordUndo(turn, { kind: "settings", before, label: checkinsEnabled ? "check-ins turned on" : "check-ins turned off" });
     logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinsEnabled });
     return {
       content: checkinsEnabled ? t.CHECKINS_ON : t.CHECKINS_OFF,
-      actions: checkinsEnabled ? others(turn.settings.checkinTone) : [{ label: lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", text: "Turn check-ins back on" }],
+      actions: checkinsEnabled ? [...others(turn.settings.checkinTone), UNDO_ACTION] : [{ label: lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", text: "Turn check-ins back on" }],
       intent: checkinsEnabled ? "checkins_on" : "checkins_off",
     };
   }
   const wasOff = !turn.settings.checkinsEnabled;
   turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinTone: req.tone, checkinsEnabled: true } });
+  recordUndo(turn, { kind: "settings", before, label: `check-in style set to ${STYLE_NAMES.en[req.tone]}` });
   logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinTone: req.tone, reenabled: wasOff });
-  return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: others(req.tone), intent: "checkin_style_set" };
+  return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: [...others(req.tone), UNDO_ACTION], intent: "checkin_style_set" };
 }
 
 function help(): Out {
@@ -635,6 +639,11 @@ async function readBack(turn: Turn): Promise<Out> {
 }
 
 async function undoIntent(turn: Turn): Promise<Out> {
+  // A chat command (settings, routine, bulk) newer than the last task edit is undone first.
+  if (await commandUndoIsNewest(turn)) {
+    const r = await applyCommandUndo(turn);
+    if (r) return r;
+  }
   for (const id of turn.state.focus) {
     const r = await undoTask(turn, id);
     if (r) return r;
@@ -747,6 +756,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       if (!p) return { content: "There's nothing waiting for confirmation.", intent: "noop" };
       if (p.kind === "task_review") return proceedWithDraft(turn, p.draft, p.source, { clarified: true, reviewed: true });
       if (p.kind === "confirm_delete") return confirmDelete(turn, p.taskId);
+      if (p.kind === "confirm_command") return confirmCommand(turn, p.command, p.args);
       if (p.kind === "mood_confirm" && isMood(p.mood)) return confirmMood(turn, p.mood, p.confidence);
       if (p.kind === "typo") {
         const u = await understand("yes", { now: turn.now, tz: turn.tz, history: [], allowLlm: false });
@@ -773,6 +783,8 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     }
     case "undo_task":
       return (await undoTask(turn, payload.taskId)) ?? { content: "That change can't be undone anymore.", intent: "undo_none" };
+    case "undo_command":
+      return (await applyCommandUndo(turn)) ?? { content: "That change can't be undone anymore.", intent: "undo_none" };
     case "restore_task": {
       const restored = await restoreTask(turn.task, payload.taskId);
       return restored

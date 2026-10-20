@@ -93,17 +93,36 @@ requests, so it never adds latency.
 
 ## Turn pipeline (`backend/src/modules/assistant`)
 
-`crisis check → working-memory resolution (answer to the open question, or topic switch) →
-NLU (rules → LLM if unsure) → handler → reply with cards + one-tap actions → background learning`.
+`crisis check → chat command rules (registry) → working-memory resolution (answer to the open question, or
+topic switch) → NLU (rules → LLM if unsure) → handler → reply with cards + one-tap actions → background learning`.
 
 The same engine serves the app chat, voice, and WhatsApp, so memory is shared across channels.
+
+### Chat commands (`assistant/commands/`)
+
+What chat can do, per feature: [chat-coverage.md](chat-coverage.md). Each command in `registry.ts` has a name,
+rule patterns (English, Urdu script, Roman Urdu; pure, no I/O), a zod argument schema, a reference resolver,
+`execute` (reusing the services the REST routes use), a confirmation policy and an undo step. The intents that
+existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline still runs them through `nlu.ts`.
+
+- **Rules first, AI off works.** A new command is matched by its own rules right after the crisis check; dates and
+  times come only from `entities.ts` (`extractTimeRange` and `extractWeekdays` were added for commands).
+- **References** ("my gym routine", "the essay") resolve by fuzzy match; several matches ask "which one?" with
+  numbered options (`command_choice`), none says so.
+- **Confirmation**: deletes, bulk changes and skipping a mandatory routine ask once (`confirm_command`); the
+  resolved arguments are stored, so "yes" runs exactly what was shown.
+- **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
+  deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
+  command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.
+- **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
+  `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
 
 ## FR coverage
 
 | Area | Status |
 |---|---|
 | FR-TM-001..008 tasks (Clarity Index, mandatory clarifications, type classification, chat edits, soft delete 24h, undo, scheduling, overload, splitting, progress, missed/overdue handling) | Implemented |
-| FR-RM-001..004 routines (frequency, priority, mandatory confirm, time-locked vs flexible, contexts) | Implemented |
+| FR-RM-001..004 routines (frequency, priority, mandatory confirm, time-locked vs flexible, contexts) | Implemented. From chat: list, change time/days/title/priority/duration, pause/resume, delete (confirmed, undo 24 h), done/skip today, move one occurrence |
 | FR-RN-001..003 reminders (escalating, peak-hour critical reminder, quiet hours, DND, adaptive on ignored reminders, per-task overrides, OS notifications with Done/Snooze) | Implemented |
 | FR-DP-001..004 documents (PDF/DOCX/OCR, cleaning, deadlines/schedules/timetables with confidence thresholds, course info, prerequisite question, grid timetable PDFs, AI action items for other documents with date grounding, re-upload dedupe, CNIC/phone masking) | Implemented — scanned PDFs are rendered on the server and OCR'd (first 10 pages); images are preprocessed with sharp (EXIF rotate, deskew, denoise, contrast, upscale) and read in several page-segmentation modes, keeping the most confident; only English OCR works offline. Deadline rules (`documents/dateRules.ts`, dates still read by `entities.ts`): multi-line records joined, table columns mapped from the header row, week numbers from the semester start in the document (else undated, "needs the semester start"), ranges keep the end date, 2-digit years, OCR slips repaired inside date tokens only, day-first numbers, the year inferred from the term or the document's other dates; tickets, bills and notices found by event words and always reviewed; header rows are never items; deadlines OCR'd at below 90 % confidence are always reviewed. With AI on, every document also gets a model pass (masked text, chunks of 2,500 characters with overlap, at most 6 chunks / 2 minutes): items it agrees with gain confidence (reviewed kinds stay ≤ 90), model-only items are review-only (≤ 80), and its dates must appear in the document. Each document gets at most 150 s (OCR + AI, `DOCUMENT_TIME_LIMIT_MS`); past that the rules' result comes back with a warning. The OCR queue refuses work (503 "try again in a minute") when 3 jobs are already waiting. Accuracy is measured by `npm run eval:documents` on synthetic fixtures: [document-eval-results.md](document-eval-results.md) |
 | FR-MH-001..004 mood (detection + confirmation, check-in, mood→task mapping, stress chunking/postpone, coping memories, crisis safety, Pro conversation) | Implemented |

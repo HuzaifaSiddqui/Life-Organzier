@@ -77,6 +77,8 @@ import { extractEntities, isHabitLike, isVagueTitle, type ExtractOptions } from 
 import { understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
+import { matchCommand, parseCtx } from "./commands/registry.js";
+import { resolveCommandPending, runCommand } from "./commands/runtime.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
 export type Channel = "APP" | "VOICE" | "WHATSAPP";
@@ -262,6 +264,14 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     };
   }
 
+  // Chat commands (commands/registry.ts): their rules are specific, so a match is a new request and
+  // drops any open question. Everything else continues through nlu.ts and the existing handlers.
+  const hit = matchCommand(text, parseCtx(extractOpts(turn)));
+  if (hit) {
+    turn.state.pending = null;
+    return runCommand(turn, hit.command.name, hit.args);
+  }
+
   const memoryHint = turn.history.length ? null : (await retrieveMemories(turn.user.id, text, { k: 2 })).map((m) => m.content).join("; ") || null;
   const u = await understand(text, {
     ...extractOpts(turn),
@@ -331,7 +341,7 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding)
   }
 
   // The user changed the subject: never force their message into the open question.
-  if (isTopicSwitch(u, text) && p.kind !== "choose_task" && p.kind !== "mood_confirm" && p.kind !== "location_choice") {
+  if (isTopicSwitch(u, text) && p.kind !== "choose_task" && p.kind !== "mood_confirm" && p.kind !== "location_choice" && p.kind !== "command_choice") {
     turn.state.pending = null;
     return null;
   }
@@ -387,6 +397,12 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding)
       );
       if (corrected) return confirmMood(turn, corrected, 1);
       if (no) return cancelPending(turn, "Thanks for clarifying. How are you feeling, then?", moodChips());
+      break;
+    }
+    case "confirm_command":
+    case "command_choice": {
+      const r = await resolveCommandPending(turn, text, u);
+      if (r) return r;
       break;
     }
     case "confirm_delete":

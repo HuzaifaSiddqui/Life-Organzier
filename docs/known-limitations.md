@@ -204,3 +204,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   `backend/src/modules/mood/crisis.ts`. It must be reviewed by a native Urdu speaker before release, and the
   helpline numbers in `CRISIS_RESOURCES` must be verified (`// VERIFY BEFORE RELEASE`). A mental-health helpline
   is intentionally left as a placeholder (not shown) until someone verifies one.
+
+## Chat commands
+
+- **Undoing a routine delete restores the routine, not its history.** Deleting removes its past occurrences
+  (done/skipped marks); undo recreates the routine with the same id and settings and fresh upcoming occurrences.
+  The confirmation says so.
+- **One undo step per conversation.** "Undo" reverts the newest chat change (a command or a task edit); older
+  command changes can't be undone from chat. Settings and routine changes undo for 15 minutes, deletes for 24 hours.
+- **Routine names without the word "routine".** "Skip gym today" and "move today's gym to 8 PM" look for a routine
+  first; when no routine matches (and the message didn't say "routine"), the message is handled as a task instead.
