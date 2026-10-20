@@ -64,6 +64,41 @@ async function damaged(svg: Buffer, damage: (typeof DAMAGES)[number], seed: numb
   }
 }
 
+/** A one-page PDF with only an embedded JPEG (no text layer), like a phone "scan to PDF". */
+function scannedPdf(jpeg: Buffer, width: number, height: number): Buffer {
+  const parts: Buffer[] = [];
+  const offsets: number[] = [];
+  let length = 0;
+  const add = (chunk: string | Buffer) => {
+    const b = typeof chunk === "string" ? Buffer.from(chunk, "latin1") : chunk;
+    parts.push(b);
+    length += b.length;
+  };
+  const obj = (n: number, body: string | Buffer[]) => {
+    offsets[n] = length;
+    add(`${n} 0 obj\n`);
+    if (typeof body === "string") add(body);
+    else body.forEach(add);
+    add("\nendobj\n");
+  };
+  // Page size in points: the image at 150 dpi.
+  const w = Math.round((width / 150) * 72);
+  const h = Math.round((height / 150) * 72);
+  const content = `q ${w} 0 0 ${h} 0 0 cm /Im0 Do Q`;
+  add("%PDF-1.4\n");
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  obj(4, [Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, "latin1"), jpeg, Buffer.from("\nendstream", "latin1")]);
+  obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  const xref = length;
+  add(`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`);
+  add(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return Buffer.concat(parts);
+}
+
+const SCANNED = ["table-pipe", "syllabus-full"];
+
 const manifestPath = join(dir, "manifest.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { documents: Array<Record<string, unknown>> };
 manifest.documents = manifest.documents.filter((d) => !d.from); // regenerate image rows
@@ -79,5 +114,13 @@ for (const name of SOURCES) {
     manifest.documents.push({ file, from: name, docType: source.docType, categories: ["image", damage] });
   }
 }
+for (const name of SCANNED) {
+  const svg = page(readFileSync(join(dir, "fixtures", `${name}.txt`), "utf8").trimEnd());
+  const { data, info } = await sharp(svg).flatten({ background: "#ffffff" }).grayscale().jpeg({ quality: 85 }).toBuffer({ resolveWithObject: true });
+  const source = manifest.documents.find((d) => d.file === `fixtures/${name}.txt`);
+  const file = `images/${name}.scanned.pdf`;
+  writeFileSync(join(dir, file), scannedPdf(data, info.width, info.height));
+  manifest.documents.push({ file, from: name, docType: source?.docType, categories: ["image", "scanned-pdf"] });
+}
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-console.log(`Wrote ${SOURCES.length * DAMAGES.length} images.`);
+console.log(`Wrote ${SOURCES.length * DAMAGES.length} images and ${SCANNED.length} scanned PDFs.`);

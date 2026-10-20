@@ -984,6 +984,24 @@
         "image",
         "small"
       ]
+    },
+    {
+      "file": "images/table-pipe.scanned.pdf",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "scanned-pdf"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.scanned.pdf",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "scanned-pdf"
+      ]
     }
   ]
 }

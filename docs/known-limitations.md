@@ -55,7 +55,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   - To bundle Urdu: download `https://cdn.jsdelivr.net/npm/@tesseract.js-data/urd/4.0.0_best_int/urd.traineddata.gz`
     (~1.0 MB compressed), gunzip it into `backend/` as `urd.traineddata` (a few MB), and commit it — or set
     `langPath`/`cachePath` in `createWorker` (`documents/textExtraction.ts`) to a dedicated `tessdata/` folder.
-- Scanned PDFs without a text layer must be uploaded as images.
+- **Urdu documents are read as English + Urdu** (`eng+urd`, likewise for the other languages), since most mix
+  both. Urdu-script text is OCR'd, but only English and Roman Urdu dates are extracted by the rules (Urdu month
+  names are not).
+- **Scanned PDFs** (no text layer) are rendered on the server and OCR'd: at most the first 10 pages, within about
+  90 seconds; the reply says how many pages were skipped. Each image gets up to 5 OCR passes (preprocessed in three
+  page-segmentation modes, raw in two) within 45 seconds, so a large photo can take several seconds.
+- **OCR preprocessing** auto-rotates (EXIF), deskews up to ±10°, denoises, normalises contrast, sharpens and
+  upscales to at least 2000 px. Pages upside down or rotated 90° without EXIF data are not corrected.
 - Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
 
 ## Task classification
