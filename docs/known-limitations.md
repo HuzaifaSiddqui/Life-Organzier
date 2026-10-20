@@ -185,6 +185,15 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   user said "Fazal Din" meaning a different branch), they can change it from the task detail.
   Multiple results always show a numbered picker.
 
+## Place picker map
+
+- **Map tiles come from the public OpenStreetMap server**, which is for light use only (fine for the project and
+  testing, not for a large release). To switch to a keyed provider, change `mobile/src/config/map.ts` only.
+- **The map needs internet.** Offline (or if the WebView fails) the picker shows a short note; search needs internet
+  too, so offline only "Use current location" and a manual name work, as before.
+- The map is not accessible to screen readers; search, current location and the name field do everything it does.
+- Native module: after pulling this, rebuild the app (`npx expo run:android`).
+
 ## Location reminders: more detail
 
 - **Slow search for unmapped places.** A place that isn't nearby takes up to three Nominatim calls (one per second), so an empty result can take about 3 s.

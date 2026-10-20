@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import { useEffect, useRef, useState } from "react";
 import { searchPlaces, type GeoResult } from "../services/locationsApi";
 import type { SavedLocation } from "../types/models";
+import { homePlace } from "../utils/map";
 
 /**
  * FR-LB-001 place search through the backend: waits 500 ms after typing, needs 3+ letters, and biases
@@ -17,7 +18,7 @@ export function usePlaceSearch(query: string, saved: SavedLocation[]) {
     void (async () => {
       const granted = (await Location.getForegroundPermissionsAsync().catch(() => ({ granted: false }))).granted;
       const pos = granted ? await Location.getLastKnownPositionAsync({ maxAge: 3600000 }).catch(() => null) : null;
-      const home = saved.find((p) => ["home", "ghar"].includes(p.name.trim().toLowerCase()));
+      const home = homePlace(saved);
       near.current = pos ? pos.coords : home ? { latitude: home.latitude, longitude: home.longitude } : null;
     })();
   }, [saved]);
