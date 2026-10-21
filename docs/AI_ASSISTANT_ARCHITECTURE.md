@@ -110,7 +110,13 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **References** ("my gym routine", "the essay") resolve by fuzzy match; several matches ask "which one?" with
   numbered options (`command_choice`), none says so.
 - **Confirmation**: deletes, bulk changes and skipping a mandatory routine ask once (`confirm_command`); the
-  resolved arguments are stored, so "yes" runs exactly what was shown.
+  resolved arguments are stored, so "yes" runs exactly what was shown. A confirmation expires after 10 minutes: a later
+  "yes" runs nothing and offers "Show it again" (the original words, re-run for a fresh preview).
+- **Open questions come first** (`pendingAnswer.ts`): while a question is open, a plausible answer to it (yes / no in
+  English, Urdu or Roman Urdu, a number, "done", "cancel", a date or time for a draft, a name from the list) goes to
+  that question and never starts a command; if the question can't use it, it is asked again. Only a reply that is
+  not an answer (e.g. "mark all done" to a time question) can replace the question. The reply's `answered` field
+  says which question took it. Eval group: `pending` in `assistant-eval.json`.
 - **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
   deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
   command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.

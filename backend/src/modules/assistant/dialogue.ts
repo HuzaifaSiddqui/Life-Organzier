@@ -81,6 +81,7 @@ import { routeWithLlm } from "./commands/router.js";
 import { capabilityReply } from "./commands/capabilities.js";
 import { resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
+import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
 export type Channel = "APP" | "VOICE" | "WHATSAPP";
@@ -110,6 +111,8 @@ export type Out = {
   speak?: string;
   intent?: string;
   mood?: string | null;
+  /** Set when the reply answered the open question (see commands/pendingAnswer.ts). */
+  answered?: string;
 };
 
 export function isPro(settings: UserSettings): boolean {
@@ -153,8 +156,10 @@ export async function handleAssistantMessage(input: {
   label?: string | null;
   conversationId?: string | null;
   channel: Channel;
+  /** Test hook: the turn's clock (expiry of confirmations, relative dates). */
+  now?: Date;
 }): Promise<AssistantReply> {
-  const now = new Date();
+  const now = input.now ?? new Date();
   const tz = input.settings.timezone;
   const conversation = await getOrCreateConversation(input.user.id, input.channel, input.conversationId);
   const turn: Turn = {
@@ -204,6 +209,7 @@ export async function handleAssistantMessage(input: {
     mood: out.mood ?? null,
     memoriesUsed: turn.memoriesUsed,
     learned: turn.learned,
+    ...(out.answered ? { answered: out.answered } : {}),
   };
   const assistantMessage = await addMessage({
     conversationId: conversation.id,
@@ -266,18 +272,22 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     };
   }
 
-  // Chat commands (commands/registry.ts): their rules are specific, so a match is a new request and
-  // drops any open question. Everything else continues through nlu.ts and the existing handlers.
   const ctx = parseCtx(extractOpts(turn));
-  const parts = parseMulti(text, ctx);
-  if (parts) {
-    turn.state.pending = null;
-    return runMulti(turn, parts);
-  }
-  const hit = matchCommand(text, ctx);
-  if (hit) {
-    turn.state.pending = null;
-    return runCommand(turn, hit.command.name, hit.args);
+  // An open question gets a plausible answer first ("2", "tomorrow", "haan", "done"): no command may take it.
+  const answering = turn.state.pending && isPlausibleAnswer(turn.state.pending, text, ctx) ? turn.state.pending.kind : null;
+  if (!answering) {
+    // Chat commands (commands/registry.ts): their rules are specific, so a match is a new request and
+    // drops the open question. Everything else continues through nlu.ts and the existing handlers.
+    const parts = parseMulti(text, ctx);
+    if (parts) {
+      turn.state.pending = null;
+      return runMulti(turn, parts);
+    }
+    const hit = matchCommand(text, ctx);
+    if (hit) {
+      turn.state.pending = null;
+      return runCommand(turn, hit.command.name, hit.args, { text });
+    }
   }
 
   const memoryHint = turn.history.length ? null : (await retrieveMemories(turn.user.id, text, { k: 2 })).map((m) => m.content).join("; ") || null;
@@ -290,8 +300,8 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
   });
 
   if (turn.state.pending) {
-    const resolved = await resolvePending(turn, text, u);
-    if (resolved) return resolved;
+    const resolved = await resolvePending(turn, text, u, Boolean(answering));
+    if (resolved) return answering ? { ...resolved, answered: answering } : resolved;
   }
   // Rules unsure and AI on: the two-stage router picks a registry command (validated, resolved by code).
   if (u.ruleConfidence < 0.75 && !NO_ROUTE.has(u.intent)) {
@@ -340,7 +350,11 @@ function pendingHint(state: DialogueState): string | null {
  * Working memory: interprets the message as an answer to the open question when it fits;
  * returns null when the user moved on to something else (the pending question is dropped).
  */
-export async function resolvePending(turn: Turn, text: string, u: Understanding): Promise<Out | null> {
+/**
+ * `answering`: the reply is a plausible answer to this question (commands/pendingAnswer.ts). It is then
+ * never treated as a change of subject; if the question can't use it, the question is asked again.
+ */
+export async function resolvePending(turn: Turn, text: string, u: Understanding, answering = false): Promise<Out | null> {
   const p = turn.state.pending;
   if (!p) return null;
   const yes = u.intent === "confirm";
@@ -361,7 +375,7 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding)
   }
 
   // The user changed the subject: never force their message into the open question.
-  if (isTopicSwitch(u, text) && p.kind !== "choose_task" && p.kind !== "mood_confirm" && p.kind !== "location_choice" && p.kind !== "command_choice") {
+  if (!answering && isTopicSwitch(u, text) && p.kind !== "choose_task" && p.kind !== "mood_confirm" && p.kind !== "location_choice" && p.kind !== "command_choice") {
     turn.state.pending = null;
     return null;
   }
@@ -439,6 +453,17 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding)
       if (r) return r;
       break;
     }
+  }
+  if (answering) {
+    // An answer the question couldn't use ("done" to "Delete 5 tasks?"): ask it again, keep it open.
+    turn.state.pending = p;
+    if (p.kind === "task_draft" || p.kind === "routine_draft") {
+      p.reasks = 0;
+      const again = reask(turn);
+      if (again) return again;
+      turn.state.pending = p;
+    }
+    return { ...answerPrompt(p, turn.settings.language), intent: "pending_reask" };
   }
   if (STRONG_SWITCH.has(u.intent) || (u.intent === "create_task" && u.confidence >= 0.85) || u.intent === "create_routine" || u.intent === "log_mood") {
     turn.state.pending = null;

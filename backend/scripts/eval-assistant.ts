@@ -17,6 +17,7 @@ type EvalFile = { now: string; timezone: string; messages?: Array<{ id: string; 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const baseline = process.argv.includes("--baseline");
 const { classify, parseCtx } = await import("../src/modules/assistant/commands/registry.js");
+const { isPlausibleAnswer } = await import("../src/modules/assistant/commands/pendingAnswer.js");
 
 const norm = (v: unknown): unknown =>
   typeof v === "string" ? v.trim().toLowerCase().replace(/\s+/g, " ") : Array.isArray(v) ? v.map(norm) : v;
@@ -26,6 +27,29 @@ function argsMatch(expected: Record<string, unknown> | undefined, got: Record<st
     if (JSON.stringify(norm(got[key])) !== JSON.stringify(norm(value))) return `${key}: expected ${JSON.stringify(value)}, got ${JSON.stringify(got[key] ?? null)}`;
   }
   return null;
+}
+
+type PendingSet = { kinds: Array<Record<string, unknown> & { kind: string }>; answers: string[]; notAnswers: Array<{ kind: string; text: string }> };
+
+/** Open-question group: each answer must be taken by every kind of question; each new request must not. */
+function scorePending(file: EvalFile, set: PendingSet): void {
+  const ctx = parseCtx({ now: new Date(file.now), tz: file.timezone });
+  const failures: string[] = [];
+  let total = 0;
+  for (const p of set.kinds) {
+    for (const text of set.answers) {
+      total += 1;
+      if (!isPlausibleAnswer(p as never, text, ctx)) failures.push(`  ${p.kind} + "${text}": not taken as an answer`);
+    }
+  }
+  for (const row of set.notAnswers) {
+    total += 1;
+    const p = set.kinds.find((k) => k.kind === row.kind);
+    if (p && isPlausibleAnswer(p as never, row.text, ctx)) failures.push(`  ${row.kind} + "${row.text}": a new request taken as an answer`);
+  }
+  const ok = total - failures.length;
+  console.log(`\npending (open question + reply): ${ok}/${total} = ${((ok / total) * 100).toFixed(1)}%`);
+  console.log(failures.length ? `Failures (${failures.length}):\n${failures.join("\n")}` : "No failures.");
 }
 
 function score(file: EvalFile, label: string): void {
@@ -66,6 +90,8 @@ function score(file: EvalFile, label: string): void {
   console.log(failures.length ? `\nFailures (${failures.length}):\n${failures.join("\n")}` : "\nNo failures.");
 }
 
-score(JSON.parse(readFileSync(join(root, "tests/eval/assistant-eval.json"), "utf8")) as EvalFile, "assistant-eval.json");
+const main = JSON.parse(readFileSync(join(root, "tests/eval/assistant-eval.json"), "utf8")) as EvalFile & { pending?: PendingSet };
+score(main, "assistant-eval.json");
+if (main.pending && !baseline) scorePending(main, main.pending);
 score(JSON.parse(readFileSync(join(root, "tests/eval/chat-holdout.json"), "utf8")) as EvalFile, "chat-holdout.json (held out, never tuned on)");
 process.exit(0);

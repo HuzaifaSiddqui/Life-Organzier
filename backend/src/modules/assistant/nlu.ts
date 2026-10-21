@@ -51,8 +51,8 @@ export type Understanding = {
   contextTarget: string | null;
 };
 
-const CONFIRM = /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|correct|right|confirm(?:ed)?|do it|sounds good|go ahead|that'?s right|exactly|perfect|y|absolutely|of course|please do|yes please)\b[\s.!]*$/i;
-const DENY = /^(?:no|nope|nah|not really|cancel|never ?mind|stop|don'?t|wrong|incorrect|n|no thanks|not now|skip)\b[\s.!]*$/i;
+const CONFIRM = /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|correct|right|confirm(?:ed)?|do it|sounds good|go ahead|that'?s right|exactly|perfect|y|absolutely|of course|please do|yes please|haa?n|han ji|haan ji|ji|jee|ji haan|theek(?: hai)?|thik(?: hai)?|bilkul|zaroor|ہاں|جی|جی ہاں|ٹھیک ہے|بالکل)[\s.!]*$/i;
+const DENY = /^(?:no|nope|nah|not really|cancel|never ?mind|stop|don'?t|wrong|incorrect|n|no thanks|not now|skip|nahi?n?|nai|na|mat|rehne do|chhor do|chor do|نہیں|نہ|رہنے دو)[\s.!]*$/i;
 const GREETING = /^(?:hi|hello|hey|hiya|yo|salam|assalam\w*|aoa|good (?:morning|afternoon|evening))\b[\s!.,]*(?:there|assistant)?[\s!.]*$/i;
 const THANKS = /^(?:thanks|thank you|thx|ty|great,? thanks|awesome,? thanks|cool,? thanks|perfect,? thanks|ok thanks)\b[\s!.]*$/i;
 const HELP = /^(?:help|what can you do|how (?:do|can) (?:i|you) (?:use|work)|what do you do|commands)\??[\s!.]*$/i;

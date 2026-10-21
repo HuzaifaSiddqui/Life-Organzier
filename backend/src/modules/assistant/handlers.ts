@@ -53,7 +53,7 @@ import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
-import { applyCommandUndo, commandUndoIsNewest, confirmCommand, recordUndo, snapshots, UNDO_ACTION } from "./commands/runtime.js";
+import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, snapshots, UNDO_ACTION } from "./commands/runtime.js";
 import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
 import { capabilityReply, helpReply } from "./commands/capabilities.js";
 
@@ -207,7 +207,8 @@ async function resolveLocationChoice(turn: Turn, text: string, p: Extract<NonNul
         : undefined;
   if (!chosen) return null;
   turn.state.pending = null;
-  const task = await prisma.task.findFirst({ where: { id: p.taskId, userId: turn.user.id } });
+  // Deleted meanwhile (e.g. from the app): say so instead of failing on the attach.
+  const task = await prisma.task.findFirst({ where: { id: p.taskId, userId: turn.user.id, status: { not: "DELETED" } } });
   if (!task) return { content: "That task no longer exists.", intent: "not_found" };
   const place = await attachGeoResult(turn.user.id, task.id, p.place, chosen);
   return { content: L.set(truncate(chosen.displayName, 70), L.range[place.preset] ?? L.range.NEARBY), intent: "location_set" };
@@ -733,7 +734,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       if (!p) return { content: "There's nothing waiting for confirmation.", intent: "noop" };
       if (p.kind === "task_review") return proceedWithDraft(turn, p.draft, p.source, { clarified: true, reviewed: true });
       if (p.kind === "confirm_delete") return confirmDelete(turn, p.taskId);
-      if (p.kind === "confirm_command") return confirmCommand(turn, p.command, p.args);
+      if (p.kind === "confirm_command") return confirmPending(turn, p);
       if (p.kind === "mood_confirm" && isMood(p.mood)) return confirmMood(turn, p.mood, p.confidence);
       if (p.kind === "typo") {
         const u = await understand("yes", { now: turn.now, tz: turn.tz, history: [], allowLlm: false });

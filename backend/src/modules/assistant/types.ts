@@ -66,7 +66,7 @@ export type Pending =
   | { kind: "capacity"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; ymd: string }
   | { kind: "conflict"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; routine: string }
   /** Chat command waiting for "yes" (destructive or bulk); args are already resolved. */
-  | { kind: "confirm_command"; command: string; args: Record<string, unknown>; summary: string }
+  | { kind: "confirm_command"; command: string; args: Record<string, unknown>; summary: string; at?: string; text?: string }
   /** Chat command waiting for "which one?"; the answer fills args[field] with the chosen id. */
   | { kind: "command_choice"; command: string; args: Record<string, unknown>; field: string; candidates: Array<{ id: string; label: string }> };
 
@@ -147,6 +147,8 @@ export type AssistantMessageMeta = {
   mood?: string | null;
   memoriesUsed?: number;
   learned?: string[];
+  /** The kind of open question this reply answered (it went to that question, not to a new command). */
+  answered?: string;
 };
 
 export type AssistantReply = {

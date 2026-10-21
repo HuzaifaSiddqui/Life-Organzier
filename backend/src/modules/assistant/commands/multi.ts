@@ -68,7 +68,7 @@ export async function runMulti(turn: Turn, parts: Part[]): Promise<Out> {
   let questionPending = turn.state.pending;
   for (const part of parts) {
     turn.state.pending = null;
-    const out = await runCommand(turn, part.command, part.args);
+    const out = await runCommand(turn, part.command, part.args, { text: part.text });
     if (turn.state.pending) {
       if (question) {
         skipped.push(part.text);

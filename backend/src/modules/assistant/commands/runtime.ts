@@ -6,11 +6,17 @@ import type { Task } from "@prisma/client";
 import { changesFromSnapshot, getTaskForUser, restoreTask, snapshotOf, softDeleteTask, undoLastEdit, updateTask } from "../../tasks/taskService.js";
 import type { Out, Turn } from "../dialogue.js";
 import type { Understanding } from "../nlu.js";
-import type { QuickAction, UndoRecord } from "../types.js";
+import type { Pending, QuickAction, UndoRecord } from "../types.js";
+import { commandText } from "./copy.js";
 import { getCommand } from "./registry.js";
 import type { CommandArgs } from "./types.js";
 
 export const UNDO_ACTION: QuickAction = { label: "Undo", payload: { type: "undo_command" } };
+
+/** The Undo button in the user's language. */
+export function undoAction(language: string | null | undefined): QuickAction {
+  return { ...UNDO_ACTION, label: commandText(language).undo };
+}
 
 type UndoInput = UndoRecord extends infer U ? (U extends unknown ? Omit<U, "at"> : never) : never;
 
@@ -24,25 +30,32 @@ export function snapshots(tasks: Task[]): Record<string, Record<string, unknown>
   return Object.fromEntries(tasks.map((t) => [t.id, snapshotOf(t)]));
 }
 
-/** Validates, resolves references, asks for confirmation when the command's policy requires it, then executes. */
-export async function runCommand(turn: Turn, name: string, rawArgs: CommandArgs): Promise<Out> {
+/** A confirmation (bulk preview, delete) is valid this long; a later "yes" does nothing and offers to show it again. */
+export const CONFIRM_TTL_MS = 10 * 60000;
+
+/**
+ * Validates, resolves references, asks for confirmation when the command's policy requires it, then executes.
+ * `text`: the user's words, kept with a confirmation so an expired one can be shown again.
+ */
+export async function runCommand(turn: Turn, name: string, rawArgs: CommandArgs, opts: { text?: string } = {}): Promise<Out> {
+  const c = commandText(turn.settings.language);
   const command = getCommand(name);
-  if (!command) return { content: "Sorry, I can't do that from chat yet.", intent: "unknown_command" };
+  if (!command) return { content: c.unknown, intent: "unknown_command" };
   const parsed = command.schema.safeParse(rawArgs);
-  if (!parsed.success) return { content: "I didn't quite get the details. Could you say it another way?", intent: "invalid_args" };
+  if (!parsed.success) return { content: c.invalid, intent: "invalid_args" };
   let args = parsed.data;
   if (command.prepare) {
     const p = await command.prepare(turn, args);
     if ("out" in p) return p.out;
     args = p.args;
     if (p.confirm) {
-      turn.state.pending = { kind: "confirm_command", command: name, args, summary: p.confirm.question };
+      turn.state.pending = { kind: "confirm_command", command: name, args, summary: p.confirm.question, at: turn.now.toISOString(), ...(opts.text ? { text: opts.text } : {}) };
       return {
         content: p.confirm.question,
         cards: p.confirm.cards,
         actions: [
-          { label: "Yes", payload: { type: "confirm_pending" }, style: "danger" },
-          { label: "Cancel", payload: { type: "cancel_pending" } },
+          { label: c.yes, payload: { type: "confirm_pending" }, style: "danger" },
+          { label: c.cancel, payload: { type: "cancel_pending" } },
         ],
         intent: `${name}_confirm`,
       };
@@ -61,10 +74,14 @@ export function askChoice(turn: Turn, command: string, args: CommandArgs, field:
 /** Answers to confirm_command / command_choice. Null = the user moved on (the question is dropped by the caller). */
 export async function resolveCommandPending(turn: Turn, text: string, u: Understanding): Promise<Out | null> {
   const p = turn.state.pending;
+  const c = commandText(turn.settings.language);
   if (p?.kind === "confirm_command") {
-    turn.state.pending = null;
-    if (u.intent === "confirm") return confirmCommand(turn, p.command, p.args);
-    if (u.intent === "deny") return { content: "Okay, I left everything as it was.", intent: "cancel" };
+    // Only a yes or a no closes it; anything else leaves the question open (the caller re-asks or moves on).
+    if (u.intent === "confirm") return confirmPending(turn, p);
+    if (u.intent === "deny") {
+      turn.state.pending = null;
+      return { content: c.cancelled, intent: "cancel" };
+    }
     return null;
   }
   if (p?.kind === "command_choice") {
@@ -75,7 +92,7 @@ export async function resolveCommandPending(turn: Turn, text: string, u: Underst
     if (!chosen) {
       if (u.intent === "deny") {
         turn.state.pending = null;
-        return { content: "Okay, never mind.", intent: "cancel" };
+        return { content: c.neverMind, intent: "cancel" };
       }
       return null;
     }
@@ -85,11 +102,18 @@ export async function resolveCommandPending(turn: Turn, text: string, u: Underst
   return null;
 }
 
-/** "Yes" to a confirm_command: runs exactly the resolved args that were previewed. */
-export async function confirmCommand(turn: Turn, name: string, args: CommandArgs): Promise<Out> {
+/**
+ * "Yes" to a confirm_command: runs exactly the resolved args that were previewed, if the preview is less than
+ * 10 minutes old. Older: nothing runs (the tasks may have changed since), and the reply offers to show it again.
+ */
+export async function confirmPending(turn: Turn, p: Extract<Pending, { kind: "confirm_command" }>): Promise<Out> {
   turn.state.pending = null;
-  const command = getCommand(name);
-  return command ? command.execute(turn, args) : { content: "That request has expired.", intent: "noop" };
+  const c = commandText(turn.settings.language);
+  if (p.at && turn.now.getTime() - Date.parse(p.at) > CONFIRM_TTL_MS) {
+    return { content: c.expired, actions: p.text ? [{ label: c.showAgain, text: p.text, style: "primary" }] : [], intent: "confirm_expired" };
+  }
+  const command = getCommand(p.command);
+  return command ? command.execute(turn, p.args) : { content: c.unknown, intent: "noop" };
 }
 
 const DAY = 86400000;
@@ -183,5 +207,5 @@ export async function applyCommandUndo(turn: Turn): Promise<Out | null> {
       break;
     }
   }
-  return { content: `↩ Undone: ${rec.label}.`, intent: "undone" };
+  return { content: commandText(turn.settings.language).undone(rec.label), intent: "undone" };
 }
