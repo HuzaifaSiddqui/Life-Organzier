@@ -17,6 +17,8 @@ export const MAX_SCANNED_PAGES = 10;
 const SCANNED_PDF_BUDGET_MS = 90_000;
 /** One image: all OCR passes together. */
 const IMAGE_BUDGET_MS = 45_000;
+/** A job that reaches the front of the queue with less time than this before its document's deadline is refused. */
+export const MIN_OCR_START_MS = 8_000;
 /** Images narrower than this are upscaled before OCR (Tesseract reads small text poorly). */
 const MIN_OCR_WIDTH = 2000;
 const MAX_OCR_WIDTH = 4000;
@@ -117,9 +119,13 @@ type Pass = { text: string; confidence: number; label: string };
  * modes (whole page, one block, sparse text such as tables and tickets), and the raw image as a fallback in
  * case preprocessing made it worse. Stops early when time runs out or a pass is already very confident.
  */
-export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAGE_BUDGET_MS): Promise<Pass> {
+/**
+ * `deadline` (epoch ms): the whole document's limit. Time spent waiting in the queue counts against it: when the
+ * job finally starts with less than MIN_OCR_START_MS left, it is refused as busy instead of running past the limit.
+ * The image's own budget counts from when the job starts (not from the queue), capped by the deadline.
+ */
+export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAGE_BUDGET_MS, deadline = Infinity): Promise<Pass> {
   const lang = ocrLanguages(language);
-  const started = Date.now();
   const prepared = await preprocessForOcr(buffer).catch(() => null);
   const plan: Array<{ image: Buffer; psm: PSM; label: string }> = [
     ...(prepared
@@ -133,6 +139,9 @@ export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAG
     { image: buffer, psm: PSM.SPARSE_TEXT, label: "raw/sparse" },
   ];
   return withWorker(lang, async (worker) => {
+    const started = Date.now();
+    if (deadline - started < MIN_OCR_START_MS) throw new OcrBusyError(); // waited too long in the queue
+    budgetMs = Math.min(budgetMs, deadline - started);
     let best: Pass = { text: "", confidence: -1, label: "none" };
     for (const step of plan) {
       if (best.confidence >= 0 && Date.now() - started > budgetMs) break;
@@ -177,8 +186,9 @@ function ocrResult(text: string, confidence: number, language: string, method: "
 }
 
 /** A PDF without a text layer: render the first pages on the server and OCR them. */
-async function ocrScannedPdf(buffer: Buffer, language: string): Promise<TextResult> {
+async function ocrScannedPdf(buffer: Buffer, language: string, deadline = Infinity): Promise<TextResult> {
   const started = Date.now();
+  const end = Math.min(started + SCANNED_PDF_BUDGET_MS, deadline);
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
   try {
     const info = await parser.getInfo().catch(() => null);
@@ -191,9 +201,13 @@ async function ocrScannedPdf(buffer: Buffer, language: string): Promise<TextResu
     const texts: string[] = [];
     const confidences: number[] = [];
     for (const page of shots.pages) {
-      const left = SCANNED_PDF_BUDGET_MS - (Date.now() - started);
-      if (left <= 0) break;
-      const pass = await ocrImage(Buffer.from(page.data), language, Math.min(IMAGE_BUDGET_MS, left));
+      if (end - Date.now() <= 0) break;
+      // Each page queues again; one that would start too late ends the PDF with the pages read so far.
+      const pass = await ocrImage(Buffer.from(page.data), language, IMAGE_BUDGET_MS, end).catch((error: unknown) => {
+        if (error instanceof OcrBusyError && texts.length) return null;
+        throw error;
+      });
+      if (!pass) break;
       texts.push(pass.text);
       confidences.push(pass.confidence);
     }
@@ -207,7 +221,8 @@ async function ocrScannedPdf(buffer: Buffer, language: string): Promise<TextResu
   }
 }
 
-export async function extractText(buffer: Buffer, mimeType: string, fileName: string, language = "eng"): Promise<TextResult> {
+/** `deadline` (epoch ms): the document's time limit; OCR doesn't start a job that would run past it. */
+export async function extractText(buffer: Buffer, mimeType: string, fileName: string, language = "eng", deadline = Infinity): Promise<TextResult> {
   const lower = fileName.toLowerCase();
   if (mimeType === "application/pdf" || lower.endsWith(".pdf")) {
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
@@ -218,7 +233,7 @@ export async function extractText(buffer: Buffer, mimeType: string, fileName: st
       await parser.destroy().catch(() => undefined);
     }
     const letters = (text.match(/[A-Za-z؀-ۿ]/g) ?? []).length;
-    if (letters < 40) return ocrScannedPdf(buffer, language); // scanned: no text layer
+    if (letters < 40) return ocrScannedPdf(buffer, language, deadline); // scanned: no text layer
     return { text, confidence: 100, method: "pdf", warning: null, needsLanguage: false };
   }
   if (mimeType.includes("wordprocessingml") || lower.endsWith(".docx")) {
@@ -229,7 +244,7 @@ export async function extractText(buffer: Buffer, mimeType: string, fileName: st
     return { text: buffer.toString("utf8"), confidence: 100, method: "text", warning: null, needsLanguage: false };
   }
   // Images → Tesseract OCR (FR-DP-001 §3)
-  const pass = await ocrImage(buffer, language);
+  const pass = await ocrImage(buffer, language, IMAGE_BUDGET_MS, deadline);
   return ocrResult(pass.text, pass.confidence, language, "ocr");
 }
 

@@ -52,6 +52,8 @@ export type CourseInfo = {
 };
 
 export type ProcessResult = {
+  /** The same file was read within the last 24 h: this is that saved result (nothing was created again). */
+  reused?: boolean;
   document: { id: string; fileName: string; docType: DocType; ocrConfidence: number | null; createdAt: string };
   extracted: {
     deadlines: ExtractedDeadline[];

@@ -104,9 +104,11 @@ export function DocumentsScreen({ navigation }: Props) {
     // Fast extractions finish in under a second — say so and scroll to the results, or it looks like nothing happened.
     const { deadlines: d, schedules: s } = r.extracted;
     setToast(
-      d.length || s.length
-        ? `Found ${d.length} deadline${d.length === 1 ? "" : "s"} and ${s.length} schedule${s.length === 1 ? "" : "s"}`
-        : "No deadlines or classes found in this file",
+      r.reused
+        ? "You uploaded this file earlier, so here's what I found then. Nothing was added twice."
+        : d.length || s.length
+          ? `Found ${d.length} deadline${d.length === 1 ? "" : "s"} and ${s.length} schedule${s.length === 1 ? "" : "s"}`
+          : "No deadlines or classes found in this file",
     );
     setTimeout(() => scrollRef.current?.scrollTo({ y: resultsY.current, animated: true }), 300);
     setDeadlines(

@@ -70,6 +70,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **A document gets at most 150 seconds** (`DOCUMENT_TIME_LIMIT_MS`: OCR plus the AI pass). When time runs out the
   rules' items come back with a warning that the AI check wasn't finished; nothing fails. The phone waits up to 4
   minutes for an upload (3 for pasted text).
+- **The 150 s limit covers the OCR queue too**: an image that only reaches the front with less than 8 s left is
+  refused as busy rather than read past the limit; a scanned PDF stops at the limit with the pages read so far.
+  A pass already running can't be interrupted, so a document can overrun by one OCR pass (a few seconds).
+- **If the phone gives up waiting, the server still finishes and saves** (document and auto-created tasks). Sending
+  the same file again within 24 hours returns that saved result instead of reading it again (the document is
+  identified by a hash of its content, type and language); after 24 hours it is read again, and auto-created tasks
+  are still not duplicated (same title, date and time).
 - **One OCR job runs at a time per language, and at most 3 may wait.** A fourth upload at that moment gets "I'm
   reading other documents right now, try again in a minute" (also on WhatsApp) instead of queuing.
 - **The upload status after the file is sent is timed, not reported.** "Reading the document" then "Finding dates and

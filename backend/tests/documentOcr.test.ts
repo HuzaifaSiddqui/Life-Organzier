@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import sharp from "sharp";
-import { estimateSkew, extractText, MAX_OCR_WAITING, OcrBusyError, ocrLanguages, preprocessForOcr, shutdownOcr, withWorker } from "../src/modules/documents/textExtraction.js";
+import { estimateSkew, extractText, MAX_OCR_WAITING, MIN_OCR_START_MS, OcrBusyError, ocrImage, ocrLanguages, preprocessForOcr, shutdownOcr, withWorker } from "../src/modules/documents/textExtraction.js";
 
 const img = (name: string) => readFileSync(new URL(`./eval/documents/images/${name}`, import.meta.url));
 
@@ -46,4 +46,24 @@ test("OCR queue: one job runs, at most MAX_OCR_WAITING wait, the next is refused
   await running;
   assert.deepEqual(await Promise.all(waiting), Array(MAX_OCR_WAITING).fill("done"));
   assert.equal(await withWorker("eng", async () => "room again"), "room again");
+});
+
+test("OCR deadline: time waiting in the queue counts; a job that would start too late is refused, not run past the limit", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let started!: () => void;
+  const isRunning = new Promise<void>((r) => (started = r));
+  const blocker = withWorker("eng", async () => {
+    started();
+    await gate;
+  });
+  await isRunning;
+  // Queued behind the blocker with a deadline that passes while it waits.
+  const late = ocrImage(img("table-pipe.clean.png"), "eng", 45000, Date.now() + MIN_OCR_START_MS + 200);
+  await new Promise((r) => setTimeout(r, 400)); // the blocker holds the worker past that deadline
+  release();
+  await blocker;
+  await assert.rejects(late, OcrBusyError);
+  // No deadline: the same image is read normally.
+  assert.match((await ocrImage(img("table-pipe.clean.png"), "eng")).text, /Assignment 1/);
 });

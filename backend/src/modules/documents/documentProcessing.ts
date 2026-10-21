@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
 import { getAi } from "../../ai/llm.js";
 import { prisma } from "../../config/db.js";
@@ -96,7 +97,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   let timedOut = false;
   const raw = input.text !== undefined
     ? { text: input.text, confidence: 100, method: "text" as const, warning: null, needsLanguage: false }
-    : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language);
+    : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language, started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS));
   const text = maskPersonalNumbers(cleanDocumentText(raw.text));
   const now = input.now ?? new Date();
   let deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
@@ -135,11 +136,49 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : aiNote), needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method, grid };
 }
 
-export async function processDocument(
-  user: User,
-  settings: UserSettings,
-  input: { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean },
-) {
+type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean };
+
+/** A retry of the same file within this long gets the saved result instead of a second document. */
+export const REUSE_WITHIN_MS = 24 * 3600000;
+
+/** Same bytes (or pasted text), same type and language → same hash. */
+export function documentHash(input: Pick<ProcessInput, "buffer" | "text" | "docType" | "language">): string {
+  const h = crypto.createHash("sha256");
+  h.update(input.buffer ?? Buffer.from(input.text ?? "", "utf8"));
+  h.update(`|${input.docType}|${input.language}`);
+  return h.digest("hex");
+}
+
+// ponytail: per server process; a second instance would not see the other's in-flight uploads (the 24 h reuse
+// still works through the database).
+const inFlight = new Map<string, ReturnType<typeof reuseOrProcess>>();
+
+/**
+ * Reads and saves a document. The server finishes even if the phone gave up waiting (its tasks are saved), so
+ * a retry of the same file must not do it again: while the first upload is still running the retry shares its
+ * result, and within 24 h it gets the saved document back (`reused: true`). No duplicate documents or tasks.
+ */
+export function processDocument(user: User, settings: UserSettings, input: ProcessInput) {
+  const hash = documentHash(input);
+  const key = `${user.id}:${hash}`;
+  const running = inFlight.get(key);
+  if (running) return running;
+  // Registered before any await, so a second identical request arriving meanwhile joins this one.
+  const job = reuseOrProcess(user, settings, input, hash).finally(() => inFlight.delete(key));
+  inFlight.set(key, job);
+  return job;
+}
+
+async function reuseOrProcess(user: User, settings: UserSettings, input: ProcessInput, hash: string) {
+  const recent = await prisma.document.findFirst({ where: { userId: user.id, contentHash: hash, createdAt: { gte: new Date(Date.now() - REUSE_WITHIN_MS) } }, orderBy: { createdAt: "desc" } });
+  if (recent?.extracted) {
+    const { text, ...doc } = recent;
+    return { document: doc, extracted: recent.extracted as unknown as Extracted, createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
+  }
+  return processDocumentOnce(user, settings, input, hash);
+}
+
+async function processDocumentOnce(user: User, settings: UserSettings, input: ProcessInput, contentHash: string) {
   const tz = settings.timezone;
   const a = await analyzeDocument({ ...input, tz });
   const { text, deadlines, schedules, course } = a;
@@ -155,6 +194,7 @@ export async function processDocument(
       language: input.language,
       text: text.slice(0, 200000),
       ocrConfidence: a.ocrConfidence,
+      contentHash,
     },
   });
 
@@ -235,6 +275,6 @@ export async function processDocument(
 
   const updated = await prisma.document.update({ where: { id: document.id }, data: { extracted: extracted as unknown as Prisma.InputJsonValue } });
   const { text: _t, ...doc } = updated;
-  return { document: doc, extracted, createdTasks, createdRoutines, textPreview: text.slice(0, 1500) };
+  return { document: doc, extracted, createdTasks, createdRoutines, textPreview: text.slice(0, 1500), reused: false };
 }
 
