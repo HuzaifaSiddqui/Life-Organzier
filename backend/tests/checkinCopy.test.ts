@@ -20,6 +20,7 @@ import { ACK_TEMPLATES, FIRST_STEP_LIBRARY, TEMPLATES, type CopyKind, type Lang,
 import { prisma } from "../src/config/db.js";
 import { createTask, updateTask } from "../src/modules/tasks/taskService.js";
 import { dbAvailable } from "./fixtures.js";
+import { backgroundSettled } from "../src/lib/background.js";
 
 const task = { id: "t1", title: "Physics assignment", durationMinutes: 120, scheduledStart: new Date("2026-10-05T11:00:00Z") };
 const long = { ...task, id: "t2", title: "Prepare the final presentation for software engineering", durationMinutes: 150 };
@@ -247,13 +248,10 @@ test("copy: stored when a task gets a scheduled start and replaced after resched
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `copy-${randomUUID()}@example.test` } });
   await prisma.userSettings.create({ data: { userId: user.id, timezone: "Asia/Karachi" } });
   const copyOf = async (id: string, slot: Date) => {
-    for (let i = 0; i < 50; i += 1) {
-      const t = await prisma.task.findUnique({ where: { id }, select: { checkinCopy: true } });
-      const c = t?.checkinCopy as { slotStart?: string; firstStepSource?: string } | null;
-      if (c?.slotStart === slot.toISOString()) return c;
-      await new Promise((r) => setTimeout(r, 20));
-    }
-    return null;
+    await backgroundSettled(); // copy is written in the background: wait for it, don't poll
+    const t = await prisma.task.findUnique({ where: { id }, select: { checkinCopy: true } });
+    const c = t?.checkinCopy as { slotStart?: string; firstStepSource?: string } | null;
+    return c?.slotStart === slot.toISOString() ? c : null;
   };
   try {
     const ctx = { userId: user.id, tz: "Asia/Karachi" };

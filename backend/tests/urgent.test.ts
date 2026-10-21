@@ -87,7 +87,6 @@ async function makeUser(opts: { lastMessageAgoMs?: number; quietNow?: boolean } 
 
 const urgentTask = (userId: string, dueInMs = 2 * H) => prisma.task.create({ data: { userId, title: `Submit report ${randomUUID().slice(0, 4)}`, priority: Priority.URGENT, dueAt: new Date(Date.now() + dueInMs) } });
 const msg = (from: string, body: string) => ({ sid: `SMtest${randomUUID()}`, from: `whatsapp:${from}`, body, numMedia: 0, mediaType: "", mediaUrl: "" });
-const settle = () => new Promise((r) => setTimeout(r, 60));
 
 test.after(async () => {
   if (!dbAvailable) return;

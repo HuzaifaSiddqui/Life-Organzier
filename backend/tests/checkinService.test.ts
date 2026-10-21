@@ -11,6 +11,7 @@ import { understand } from "../src/modules/assistant/nlu.js";
 import { handleAssistantMessage } from "../src/modules/assistant/dialogue.js";
 import { createTask, updateTask } from "../src/modules/tasks/taskService.js";
 import { dbAvailable, opts } from "./fixtures.js";
+import { backgroundSettled } from "../src/lib/background.js";
 
 class Mock implements LlmProvider {
   calls: number[] = [];
@@ -251,15 +252,10 @@ test("retry: Gemini is retried for library steps only when the start is > 30 min
     const later = minute(new Date(Date.now() + 3 * 3600000));
     assert.equal(queueFirstStepRetry(await withCopy(later, 2), settings), false, "retries used up");
     assert.equal(queueFirstStepRetry(await withCopy(later, 0), settings), true);
-    for (let i = 0; i < 50; i += 1) {
-      const c = (await prisma.task.findUnique({ where: { id: t.id } }))?.checkinCopy as { firstStepSource?: string; retries?: number } | null;
-      if (c?.firstStepSource === "GEMINI") {
-        assert.equal(c.retries, 1);
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 20));
-    }
-    assert.fail("retry result was not saved");
+    await backgroundSettled(); // the retry runs in the background: wait for it, don't poll
+    const c = (await prisma.task.findUnique({ where: { id: t.id } }))?.checkinCopy as { firstStepSource?: string; retries?: number } | null;
+    assert.equal(c?.firstStepSource, "GEMINI", "retry result was saved");
+    assert.equal(c?.retries, 1);
   });
 });
 
