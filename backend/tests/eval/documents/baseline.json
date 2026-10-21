@@ -1,14 +1,14 @@
 {
   "All": {
-    "recall": "44.3%",
-    "precision": "92.6%"
+    "recall": "44.8%",
+    "precision": "92.1%"
   },
   "Text fixtures": {
-    "recall": "44.6%",
+    "recall": "48.8%",
     "precision": "87.2%"
   },
   "Image fixtures (OCR)": {
-    "recall": "43.9%",
+    "recall": "40.3%",
     "precision": "100.0%"
   },
   "blur": {
@@ -24,7 +24,7 @@
     "precision": "100.0%"
   },
   "image": {
-    "recall": "43.9%",
+    "recall": "40.3%",
     "precision": "100.0%"
   },
   "invoice": {
@@ -75,6 +75,10 @@
     "recall": "27.3%",
     "precision": "100.0%"
   },
+  "scanned-pdf": {
+    "recall": "0.0%",
+    "precision": "n/a"
+  },
   "small": {
     "recall": "54.5%",
     "precision": "100.0%"
@@ -108,7 +112,7 @@
     "precision": "100.0%"
   },
   "year-inference": {
-    "recall": "55.6%",
-    "precision": "71.4%"
+    "recall": "70.6%",
+    "precision": "80.0%"
   }
 }

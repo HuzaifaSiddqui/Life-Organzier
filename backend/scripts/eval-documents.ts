@@ -1,7 +1,8 @@
 /**
  * Document extraction evaluation: `npm run eval:documents`.
  *   --private        your own documents in tests/eval/documents/private/ (gitignored; results stay in that folder)
- *   --ai             let the model run too (default: AI off, the rules and OCR only)
+ *   --ai             also run every fixture with the model on, reported in its own section (default: rules and
+ *                    OCR only; CI has no model). Needs Ollama or Gemini configured as for the server.
  *   --text-only      skip the image (OCR) fixtures
  *   --save-baseline  store this run as the baseline the report compares against
  * Recall = expected items found with the right date (and time / days / room when given).
@@ -17,6 +18,7 @@ if (!flags.has("--ai")) {
   process.env.GEMINI_API_KEY = "";
 }
 const { analyzeDocument } = await import("../src/modules/documents/documentProcessing.js");
+const { AiService, setAi } = await import("../src/ai/llm.js");
 const { shutdownOcr } = await import("../src/modules/documents/textExtraction.js");
 
 type ExpDeadline = { titleContains: string; date: string | null; time?: string };
@@ -40,75 +42,87 @@ const lower = (s: string | null | undefined) => (s ?? "").toLowerCase();
 const sameDays = (a: number[], b: number[]) => [...new Set(a)].sort().join() === [...new Set(b)].sort().join();
 
 type Row = { file: string; categories: string[]; expected: number; found: number; extracted: number; correct: number; ocr: number; method: string; failures: string[]; ms: number };
-const rows: Row[] = [];
 
-for (const doc of manifest.documents) {
-  if (flags.has("--text-only") && doc.from) continue;
-  const source = doc.from ? manifest.documents.find((d) => d.file === `fixtures/${doc.from}.txt`) : doc;
-  const expD = source?.expectedDeadlines ?? [];
-  const expS = source?.expectedSchedules ?? [];
-  const started = Date.now();
-  const a = await analyzeDocument({
-    buffer: readFileSync(join(dir, doc.file)),
-    fileName: doc.file,
-    mimeType: MIME[extname(doc.file).toLowerCase()] ?? "application/octet-stream",
-    docType: doc.docType,
-    language: doc.language ?? "eng",
-    tz,
-    now,
-  });
-  const failures: string[] = [];
-  let found = 0;
-  let correct = 0;
+async function evaluate(): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (const doc of manifest.documents) {
+    if (flags.has("--text-only") && doc.from) continue;
+    const source = doc.from ? manifest.documents.find((d) => d.file === `fixtures/${doc.from}.txt`) : doc;
+    const expD = source?.expectedDeadlines ?? [];
+    const expS = source?.expectedSchedules ?? [];
+    const started = Date.now();
+    const a = await analyzeDocument({
+      buffer: readFileSync(join(dir, doc.file)),
+      fileName: doc.file,
+      mimeType: MIME[extname(doc.file).toLowerCase()] ?? "application/octet-stream",
+      docType: doc.docType,
+      language: doc.language ?? "eng",
+      tz,
+      now,
+    });
+    const failures: string[] = [];
+    let found = 0;
+    let correct = 0;
 
-  // Deadlines: one extracted item per expected item.
-  const used = new Set<number>();
-  for (const e of expD) {
-    const titled = a.deadlines.filter((d, i) => !used.has(i) && lower(d.title).includes(lower(e.titleContains)));
-    const hit = titled.find((d) => d.date === e.date && (!e.time || d.time === e.time));
-    if (hit) {
-      used.add(a.deadlines.indexOf(hit));
-      found += 1;
-      correct += 1;
-      continue;
+    // Deadlines: one extracted item per expected item.
+    const used = new Set<number>();
+    for (const e of expD) {
+      const titled = a.deadlines.filter((d, i) => !used.has(i) && lower(d.title).includes(lower(e.titleContains)));
+      const hit = titled.find((d) => d.date === e.date && (!e.time || d.time === e.time));
+      if (hit) {
+        used.add(a.deadlines.indexOf(hit));
+        found += 1;
+        correct += 1;
+        continue;
+      }
+      const near = titled.find((d) => d.date === e.date) ?? titled[0];
+      failures.push(
+        !near
+          ? `missed deadline "${e.titleContains || "(any)"}" ${e.date ?? "(undated)"}${e.time ? ` ${e.time}` : ""}`
+          : near.date !== e.date
+            ? `wrong date for "${e.titleContains || near.title}": got ${near.date ?? "none"}, expected ${e.date ?? "none"}`
+            : `wrong time for "${e.titleContains || near.title}": got ${near.time ?? "none"}, expected ${e.time}`,
+      );
     }
-    const near = titled.find((d) => d.date === e.date) ?? titled[0];
-    failures.push(
-      !near
-        ? `missed deadline "${e.titleContains || "(any)"}" ${e.date ?? "(undated)"}${e.time ? ` ${e.time}` : ""}`
-        : near.date !== e.date
-          ? `wrong date for "${e.titleContains || near.title}": got ${near.date ?? "none"}, expected ${e.date ?? "none"}`
-          : `wrong time for "${e.titleContains || near.title}": got ${near.time ?? "none"}, expected ${e.time}`,
-    );
-  }
-  a.deadlines.forEach((d, i) => {
-    if (!used.has(i)) failures.push(`extra deadline "${d.title}" ${d.date ?? "(undated)"}${d.time ? ` ${d.time}` : ""}`);
-  });
+    a.deadlines.forEach((d, i) => {
+      if (!used.has(i)) failures.push(`extra deadline "${d.title}" ${d.date ?? "(undated)"}${d.time ? ` ${d.time}` : ""}`);
+    });
 
-  // Schedules: rows with the same title and time are combined (a class on Mon and Wed may be two rows).
-  const usedS = new Set<number>();
-  for (const e of expS) {
-    const group = a.schedules.map((s, i) => ({ s, i })).filter(({ s }) => lower(s.title).includes(lower(e.titleContains)) && s.time === e.time);
-    const days = group.flatMap(({ s }) => s.daysOfWeek);
-    const roomOk = !e.room || group.some(({ s }) => lower(s.room) === lower(e.room));
-    if (group.length && sameDays(days, e.days) && roomOk) {
-      found += 1;
-      group.forEach(({ i }) => usedS.add(i));
-      correct += group.length;
-      continue;
+    // Schedules: rows with the same title and time are combined (a class on Mon and Wed may be two rows).
+    const usedS = new Set<number>();
+    for (const e of expS) {
+      const group = a.schedules.map((s, i) => ({ s, i })).filter(({ s }) => lower(s.title).includes(lower(e.titleContains)) && s.time === e.time);
+      const days = group.flatMap(({ s }) => s.daysOfWeek);
+      const roomOk = !e.room || group.some(({ s }) => lower(s.room) === lower(e.room));
+      if (group.length && sameDays(days, e.days) && roomOk) {
+        found += 1;
+        group.forEach(({ i }) => usedS.add(i));
+        correct += group.length;
+        continue;
+      }
+      const titled = a.schedules.filter((s) => lower(s.title).includes(lower(e.titleContains)));
+      failures.push(
+        !titled.length
+          ? `missed class "${e.titleContains}" ${e.days.join(",")} ${e.time}`
+          : `wrong class "${e.titleContains}": got ${titled.map((s) => `${s.daysOfWeek.join(",")} ${s.time ?? "?"}${s.room ? ` ${s.room}` : ""}`).join(" + ")}, expected ${e.days.join(",")} ${e.time}${e.room ? ` ${e.room}` : ""}`,
+      );
     }
-    const titled = a.schedules.filter((s) => lower(s.title).includes(lower(e.titleContains)));
-    failures.push(
-      !titled.length
-        ? `missed class "${e.titleContains}" ${e.days.join(",")} ${e.time}`
-        : `wrong class "${e.titleContains}": got ${titled.map((s) => `${s.daysOfWeek.join(",")} ${s.time ?? "?"}${s.room ? ` ${s.room}` : ""}`).join(" + ")}, expected ${e.days.join(",")} ${e.time}${e.room ? ` ${e.room}` : ""}`,
-    );
-  }
-  a.schedules.forEach((s, i) => {
-    if (!usedS.has(i)) failures.push(`extra class "${s.title}" ${s.daysOfWeek.join(",")} ${s.time ?? ""}`);
-  });
+    a.schedules.forEach((s, i) => {
+      if (!usedS.has(i)) failures.push(`extra class "${s.title}" ${s.daysOfWeek.join(",")} ${s.time ?? ""}`);
+    });
 
-  rows.push({ file: doc.file, categories: doc.categories ?? [], expected: expD.length + expS.length, found, extracted: a.deadlines.length + a.schedules.length, correct, ocr: a.ocrConfidence, method: a.method, failures, ms: Date.now() - started });
+    rows.push({ file: doc.file, categories: doc.categories ?? [], expected: expD.length + expS.length, found, extracted: a.deadlines.length + a.schedules.length, correct, ocr: a.ocrConfidence, method: a.method, failures, ms: Date.now() - started });
+  }
+  return rows;
+}
+
+// Rules only (AI off) always; with --ai the same fixtures again with the model on.
+setAi(new AiService([]));
+const rulesRows = await evaluate();
+let aiRows: Row[] | null = null;
+if (flags.has("--ai")) {
+  setAi(null); // the configured providers, as the server uses them
+  aiRows = await evaluate();
 }
 await shutdownOcr();
 
@@ -120,52 +134,90 @@ const pct = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(1)}%` : "n
 const recall = (s: Score) => pct(s.found, s.expected);
 const precision = (s: Score) => pct(s.correct, s.extracted);
 
-const text = rows.filter((r) => !r.file.startsWith("images/"));
-const images = rows.filter((r) => r.file.startsWith("images/"));
-const all = sum(rows);
-const categories = [...new Set(rows.flatMap((r) => r.categories))].sort();
 const baselinePath = join(root, "tests/eval/documents/baseline.json");
 type Baseline = Record<string, { recall: string; precision: string }>;
 const baseline: Baseline | null = !isPrivate && existsSync(baselinePath) ? (JSON.parse(readFileSync(baselinePath, "utf8")) as Baseline) : null;
 
-const summary: Array<[string, Score]> = [["All", all], ["Text fixtures", sum(text)], ["Image fixtures (OCR)", sum(images)], ...categories.map((c) => [c, sum(rows.filter((r) => r.categories.includes(c)))] as [string, Score])];
+function summaryOf(rows: Row[]): Array<[string, Score]> {
+  const categories = [...new Set(rows.flatMap((r) => r.categories))].sort();
+  return [
+    ["All", sum(rows)],
+    ["Text fixtures", sum(rows.filter((r) => !r.file.startsWith("images/")))],
+    ["Image fixtures (OCR)", sum(rows.filter((r) => r.file.startsWith("images/")))],
+    ...categories.map((c) => [c, sum(rows.filter((r) => r.categories.includes(c)))] as [string, Score]),
+  ];
+}
+
+function section(title: string, rows: Row[], compare: Baseline | null): string[] {
+  const summary = summaryOf(rows);
+  const md = [
+    `## ${title}`,
+    "",
+    `| Set | Expected | Found | Recall | Extracted | Precision |${compare ? " Baseline recall | Baseline precision |" : ""}`,
+    `|---|---|---|---|---|---|${compare ? "---|---|" : ""}`,
+    ...summary.map(([name, s]) => `| ${name} | ${s.expected} | ${s.found} | ${recall(s)} | ${s.extracted} | ${precision(s)} |${compare ? ` ${compare[name]?.recall ?? "–"} | ${compare[name]?.precision ?? "–"} |` : ""}`),
+    "",
+    "### Per document",
+    "",
+    "| Document | Found / expected | Extracted (correct) | OCR conf. | Method | Time |",
+    "|---|---|---|---|---|---|",
+    ...rows.map((r) => `| ${r.file} | ${r.found}/${r.expected} | ${r.extracted} (${r.correct}) | ${r.ocr} | ${r.method} | ${(r.ms / 1000).toFixed(1)} s |`),
+    "",
+    "### Failures by category",
+    "",
+  ];
+  const categories = [...new Set(rows.flatMap((r) => r.categories))].sort();
+  let any = false;
+  for (const c of categories) {
+    const fails = rows.filter((r) => r.categories.includes(c) && r.failures.length);
+    if (!fails.length) continue;
+    any = true;
+    md.push(`#### ${c}`, "");
+    for (const r of fails) md.push(`- **${r.file}**: ${r.failures.join("; ")}`);
+    md.push("");
+  }
+  if (!any) md.push("None.", "");
+  return md;
+}
+
 const md: string[] = [
   "# Document extraction evaluation",
   "",
-  isPrivate ? "Private documents (not committed)." : "Synthetic fixtures in `backend/tests/eval/documents/` (no personal data). Generated by `npm run eval:documents`; do not edit by hand.",
+  isPrivate
+    ? "Private documents (not committed)."
+    : "Synthetic fixtures in `backend/tests/eval/documents/` (no personal data). Generated by `npm run eval:documents`; do not edit by hand.",
   "",
-  `Run: ${new Date().toISOString().slice(0, 10)}, AI ${flags.has("--ai") ? "on" : "off"}, ${rows.length} documents, document date ${manifest.now} (${tz}).`,
+  ...(isPrivate
+    ? []
+    : [
+        "**Read these numbers as a regression suite, not an accuracy estimate.** The fixtures were written together with the rules (each one targets a failure mode the rules were then built to handle), so a high score shows the rules still do what they were made for. Real accuracy has to be measured on documents nobody tuned against (`npm run eval:documents -- --private`).",
+        "",
+        aiRows
+          ? "The model was on for the second section (`--ai`)."
+          : "**The AI pass and its merge with the rules are not covered here**: this run had AI off (CI has no model). Run `npm run eval:documents -- --ai` with a model configured to add that section.",
+        "",
+      ]),
+  `Run: ${new Date().toISOString().slice(0, 10)}, ${rulesRows.length} documents, document date ${manifest.now} (${tz}).`,
   "",
-  `| Set | Expected | Found | Recall | Extracted | Precision |${baseline ? " Baseline recall | Baseline precision |" : ""}`,
-  `|---|---|---|---|---|---|${baseline ? "---|---|" : ""}`,
-  ...summary.map(([name, s]) => `| ${name} | ${s.expected} | ${s.found} | ${recall(s)} | ${s.extracted} | ${precision(s)} |${baseline ? ` ${baseline[name]?.recall ?? "–"} | ${baseline[name]?.precision ?? "–"} |` : ""}`),
-  "",
-  "## Per document",
-  "",
-  "| Document | Found / expected | Extracted (correct) | OCR conf. | Method | Time |",
-  "|---|---|---|---|---|---|",
-  ...rows.map((r) => `| ${r.file} | ${r.found}/${r.expected} | ${r.extracted} (${r.correct}) | ${r.ocr} | ${r.method} | ${(r.ms / 1000).toFixed(1)} s |`),
-  "",
-  "## Failures by category",
-  "",
+  ...section("Rules only (AI off)", rulesRows, baseline),
+  ...(aiRows ? section("With the model (AI on)", aiRows, null) : []),
 ];
-for (const c of categories) {
-  const fails = rows.filter((r) => r.categories.includes(c) && r.failures.length);
-  if (!fails.length) continue;
-  md.push(`### ${c}`, "");
-  for (const r of fails) md.push(`- **${r.file}**: ${r.failures.join("; ")}`);
-  md.push("");
-}
 
 const out = isPrivate ? join(dir, "results.md") : join(root, "../docs/document-eval-results.md");
 writeFileSync(out, `${md.join("\n").trimEnd()}\n`);
 if (flags.has("--save-baseline") && !isPrivate) {
-  writeFileSync(baselinePath, `${JSON.stringify(Object.fromEntries(summary.map(([n, s]) => [n, { recall: recall(s), precision: precision(s) }])), null, 2)}\n`);
+  writeFileSync(baselinePath, `${JSON.stringify(Object.fromEntries(summaryOf(rulesRows).map(([n, s]) => [n, { recall: recall(s), precision: precision(s) }])), null, 2)}\n`);
 }
 
-console.log(`\nRecall ${recall(all)} (${all.found}/${all.expected}), precision ${precision(all)} (${all.correct}/${all.extracted}) over ${rows.length} documents.`);
-for (const [name, s] of summary.slice(1)) console.log(`  ${name.padEnd(22)} recall ${recall(s).padStart(6)}  precision ${precision(s).padStart(6)}`);
-const failing = rows.filter((r) => r.failures.length);
-if (failing.length) console.log(`\nFailures:\n${failing.map((r) => `  ${r.file}\n    ${r.failures.join("\n    ")}`).join("\n")}`);
+function print(title: string, rows: Row[]): void {
+  const summary = summaryOf(rows);
+  const all = summary[0][1];
+  console.log(`\n${title}: recall ${recall(all)} (${all.found}/${all.expected}), precision ${precision(all)} (${all.correct}/${all.extracted}) over ${rows.length} documents.`);
+  for (const [name, s] of summary.slice(1)) console.log(`  ${name.padEnd(22)} recall ${recall(s).padStart(6)}  precision ${precision(s).padStart(6)}`);
+  const failing = rows.filter((r) => r.failures.length);
+  if (failing.length) console.log(`Failures:\n${failing.map((r) => `  ${r.file}\n    ${r.failures.join("\n    ")}`).join("\n")}`);
+}
+print("Rules only (AI off)", rulesRows);
+if (aiRows) print("With the model (AI on)", aiRows);
 console.log(`\nReport: ${out}`);
 process.exit(0);
