@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SavedLocation } from "../../types/models";
 import { distanceM } from "../geofence";
-import { centerForPlaces, clampLatitude, clampLongitude, clampZoom, commandScript, defaultCenter, homePlace, initialCenter, isCoords, parseMapMessage, presetRadius, PRESET_RADIUS_M } from "../map";
+import { centerForPlaces, clampLatitude, clampLongitude, clampZoom, commandScript, isMapPageUrl, defaultCenter, homePlace, initialCenter, isCoords, parseMapMessage, presetRadius, PRESET_RADIUS_M } from "../map";
 
 const place = (name: string, latitude = 31.5, longitude = 74.3): SavedLocation => ({ id: name, name, latitude, longitude, preset: "NEARBY", radiusM: 350, usageCount: 0, displayAddress: null }) as SavedLocation;
 
@@ -95,5 +95,21 @@ describe("saved places overview", () => {
     expect(near?.latitude).toBeCloseTo(31.5205, 4);
     expect(centerForPlaces([{ latitude: 31.52, longitude: 74.35 }, { latitude: 31.6, longitude: 74.35 }], distanceM)?.zoom).toBe(13);
     expect(centerForPlaces([{ latitude: 31.52, longitude: 74.35 }, { latitude: 24.86, longitude: 67.0 }], distanceM)?.zoom).toBe(6);
+  });
+});
+
+describe("which URLs the map WebView may load", () => {
+  const base = "https://github.com/HuzaifaSiddqui/Life-Organzier";
+  it("allows only the map page itself", () => {
+    expect(isMapPageUrl(base, base)).toBe(true);
+    expect(isMapPageUrl(`${base}/`, base)).toBe(true);
+    expect(isMapPageUrl(`${base}#map`, base)).toBe(true);
+    expect(isMapPageUrl("about:blank", base)).toBe(true);
+  });
+  it("blocks everything else, including other pages on the same site", () => {
+    expect(isMapPageUrl("https://www.openstreetmap.org/copyright", base)).toBe(false);
+    expect(isMapPageUrl(`${base}/issues`, base)).toBe(false);
+    expect(isMapPageUrl("https://github.com/HuzaifaSiddqui/Life-Organzier-evil", base)).toBe(false);
+    expect(isMapPageUrl("https://github.com/", base)).toBe(false);
   });
 });

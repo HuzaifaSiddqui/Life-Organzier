@@ -9,7 +9,10 @@ export type Coords = { latitude: number; longitude: number };
 export type Center = Coords & { zoom: number };
 export type Preset = SavedLocation["preset"];
 
-/** Radius of each preset in metres (the server stores the same values). */
+/**
+ * Radius of each preset in metres. Must equal the backend's PRESETS (backend/src/modules/locations/locationService.ts);
+ * backend/tests/presetRadius.test.ts fails if they differ. Geofences use the radius the server sends (radiusM).
+ */
 export const PRESET_RADIUS_M: Record<Preset, number> = { PRECISE: 200, NEARBY: 350, AREA: 750 };
 
 export function presetRadius(preset: Preset | null | undefined): number {
@@ -64,6 +67,16 @@ export function parseMapMessage(raw: unknown): MapEvent | null {
     default:
       return null;
   }
+}
+
+/**
+ * The WebView may load only the map page itself: its base URL (with or without a trailing slash or a #fragment)
+ * or about:blank. Everything else, even another page on the same site, is blocked and opened in the browser.
+ */
+export function isMapPageUrl(url: string, base: string): boolean {
+  if (url === "about:blank") return true;
+  const strip = (u: string) => u.replace(/#.*$/, "").replace(/\/+$/, "");
+  return strip(url) === strip(base);
 }
 
 /* ------------------------------------------------------------------ app → map */

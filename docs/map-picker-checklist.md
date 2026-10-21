@@ -25,8 +25,14 @@ account with location reminders on. Tick each line in light and dark mode, and o
 - [ ] Close the keyboard: the map comes back where it was (it doesn't reload).
 
 ## Offline
-- [ ] Airplane mode, open the picker: after a few seconds a short note replaces the map; "Use current location",
-      "Enter name manually" and Save still work. No crash.
+- [ ] Airplane mode, open the picker: after a few seconds a short note with "Try again" replaces the map;
+      "Use current location", "Enter name manually" and Save still work. No crash.
+- [ ] Still in the picker, turn airplane mode off: the map comes back by itself within a few seconds.
+- [ ] Airplane mode on again → note → airplane mode off → tap "Try again": the map loads.
+
+## Theme
+- [ ] With the picker open and a pin placed, switch the phone between light and dark: the map reloads briefly with
+      the new colours; pin, circle and result dots are still there.
 
 ## Editing and saving
 - [ ] Task detail → tap a location chip → change it: the map opens on that place with its circle; change the radius, Save.

@@ -5,7 +5,8 @@
  * its usage policy (https://operations.osmfoundation.org/policies/tiles/) requires
  *   - the attribution "© OpenStreetMap contributors" visible on the map at all times (the map shows ATTRIBUTION),
  *   - a valid User-Agent and Referer: the WebView sends its own browser User-Agent, and the map page is loaded
- *     with REFERER_BASE_URL as its base URL so every tile request carries that Referer,
+ *     with REFERER_BASE_URL (the project's GitHub repository, which identifies the app and how to reach us) as its
+ *     base URL, so every tile request carries that Referer,
  *   - no bulk downloading or offline caching of tiles (the app doesn't).
  *
  * To switch to a keyed provider (MapTiler, Stadia, Thunderforest, …) for a real release, change the three values
@@ -22,5 +23,9 @@ export const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright"
 /** Highest zoom the tile server provides. */
 export const MAX_ZOOM = 19;
 
-/** Base URL of the map page: tile requests send it as the Referer, which the OSM policy asks for. */
-export const REFERER_BASE_URL = "https://life-organizer.app/";
+/**
+ * Base URL of the map page: tile requests send it as the Referer, which the OSM policy asks for. It is the
+ * project's repository (a page we own). MapPicker lets the WebView load only this URL; any other navigation
+ * (e.g. the attribution link) opens in the browser.
+ */
+export const REFERER_BASE_URL = "https://github.com/HuzaifaSiddqui/Life-Organzier";
