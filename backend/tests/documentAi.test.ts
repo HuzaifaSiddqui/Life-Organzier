@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AiService, setAi } from "../src/ai/llm.js";
-import { analyzeDocument } from "../src/modules/documents/documentProcessing.js";
+import { analyzeDocument, TIME_LIMIT_WARNING } from "../src/modules/documents/documentProcessing.js";
 import { AI_ONLY_MAX, aiDeadlines, chunkText, mergeDeadlines, type ExtractedDeadline } from "../src/modules/documents/extraction.js";
 import { NOW, TZ } from "./fixtures.js";
 
@@ -43,11 +43,11 @@ test("merge: agreement raises confidence (reviewed items stay at most 90); AI-on
 test("AI pass: every chunk is read, invented dates are dropped, AI off returns nothing", async () => {
   const text = "Course notes\nLibrary book return by 20 November 2026.";
   const seen = scripted([{ title: "Return library book", date: "2026-11-20" }, { title: "Made-up exam", date: "2026-12-25" }]);
-  const found = await aiDeadlines(text, "2026-10-05", TZ);
+  const { items: found } = await aiDeadlines(text, "2026-10-05", TZ);
   assert.equal(seen.length, 1);
   assert.deepEqual(found.map((f) => f.date), ["2026-11-20"]);
   setAi(new AiService([]));
-  assert.deepEqual(await aiDeadlines(text, "2026-10-05", TZ), []);
+  assert.deepEqual(await aiDeadlines(text, "2026-10-05", TZ), { items: [], cutShort: false });
 });
 
 test("analyzeDocument runs the AI pass on documents the rules already understand; only masked text is sent", async () => {
@@ -73,4 +73,15 @@ test("merge: the model reading a line the rules already read differently adds no
   assert.equal(flight.length, 1);
   assert.equal(flight[0].aiAgrees, true);
   assert.equal(flight[0].time, "6:45 AM");
+});
+
+test("time cap: with too little time left the AI pass is skipped, the rules' items come back with a warning", async () => {
+  const seen = scripted([{ title: "Midterm exam", date: "2026-11-15" }]);
+  const a = await analyzeDocument({ text: "Midterm Exam\nDate: 15 Nov 2026\nTime: 10 AM", fileName: "n.txt", mimeType: "text/plain", docType: "SYLLABUS", language: "eng", tz: TZ, now: NOW, timeLimitMs: 1000 });
+  assert.equal(seen.length, 0, "no model call without time for it");
+  assert.equal(a.deadlines.length, 1);
+  assert.equal(a.deadlines[0].date, "2026-11-15");
+  assert.equal(a.warning, TIME_LIMIT_WARNING);
+  const cut = await aiDeadlines("Library book return by 20 November 2026.", "2026-10-05", TZ, { budgetMs: 3000 });
+  assert.deepEqual(cut, { items: [], cutShort: true });
 });

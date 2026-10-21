@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import sharp from "sharp";
-import { estimateSkew, extractText, ocrLanguages, preprocessForOcr, shutdownOcr } from "../src/modules/documents/textExtraction.js";
+import { estimateSkew, extractText, MAX_OCR_WAITING, OcrBusyError, ocrLanguages, preprocessForOcr, shutdownOcr, withWorker } from "../src/modules/documents/textExtraction.js";
 
 const img = (name: string) => readFileSync(new URL(`./eval/documents/images/${name}`, import.meta.url));
 
@@ -28,4 +28,22 @@ test("OCR: a noisy photo and a scanned PDF (no text layer) are read; no 'upload 
   assert.equal(scanned.method, "pdf-ocr");
   assert.match(scanned.text, /Assignment 1\s*\|?\s*14 Oct 2026/);
   assert.doesNotMatch(scanned.warning ?? "", /photos/);
+});
+
+test("OCR queue: one job runs, at most MAX_OCR_WAITING wait, the next is refused as busy (not queued)", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let started!: () => void;
+  const isRunning = new Promise<void>((r) => (started = r));
+  const running = withWorker("eng", async () => {
+    started();
+    await gate;
+  });
+  await isRunning; // it counts as waiting until the worker has started it
+  const waiting = Array.from({ length: MAX_OCR_WAITING }, () => withWorker("eng", async () => "done"));
+  await assert.rejects(withWorker("eng", async () => "too many"), OcrBusyError);
+  release();
+  await running;
+  assert.deepEqual(await Promise.all(waiting), Array(MAX_OCR_WAITING).fill("done"));
+  assert.equal(await withWorker("eng", async () => "room again"), "room again");
 });

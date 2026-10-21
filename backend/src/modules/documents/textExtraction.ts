@@ -21,7 +21,18 @@ const IMAGE_BUDGET_MS = 45_000;
 const MIN_OCR_WIDTH = 2000;
 const MAX_OCR_WIDTH = 4000;
 
-const workers = new Map<string, { worker: Promise<Worker>; queue: Promise<unknown> }>();
+const workers = new Map<string, { worker: Promise<Worker>; queue: Promise<unknown>; waiting: number }>();
+
+/** OCR jobs allowed to wait per language (one runs at a time). More are refused with OcrBusyError. */
+export const MAX_OCR_WAITING = 3;
+
+/** The OCR queue is full: the caller answers "busy, try again in a minute" instead of piling up work. */
+export class OcrBusyError extends Error {
+  constructor() {
+    super("OCR is busy");
+    this.name = "OcrBusyError";
+  }
+}
 
 /** Anything that isn't English is read as English + that language: documents here mix both. */
 export function ocrLanguages(language: string): string {
@@ -32,16 +43,22 @@ export function ocrLanguages(language: string): string {
  * Runs `job` on the worker for `lang`, one job at a time: the page-segmentation mode is a worker-wide
  * setting, so two uploads must not interleave their passes.
  */
-function withWorker<T>(lang: string, job: (w: Worker) => Promise<T>): Promise<T> {
+export function withWorker<T>(lang: string, job: (w: Worker) => Promise<T>): Promise<T> {
   let entry = workers.get(lang);
   if (!entry) {
     const worker = createWorker(lang);
     worker.catch(() => workers.delete(lang));
-    entry = { worker, queue: Promise.resolve() };
+    entry = { worker, queue: Promise.resolve(), waiting: 0 };
     workers.set(lang, entry);
   }
-  const run = entry.queue.then(async () => job(await entry.worker));
-  entry.queue = run.catch(() => undefined);
+  if (entry.waiting >= MAX_OCR_WAITING) return Promise.reject(new OcrBusyError());
+  const e = entry;
+  e.waiting += 1;
+  const run = e.queue.then(async () => {
+    e.waiting -= 1;
+    return job(await e.worker);
+  });
+  e.queue = run.catch(() => undefined);
   return run;
 }
 

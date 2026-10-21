@@ -41,6 +41,15 @@ type Picked = { uri: string; name: string; mimeType: string; size: number };
 type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags };
 type EditableSchedule = { index: number; title: string; room: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
 
+/**
+ * Staged status, in the order the server works (upload → read the text → find dates). The server doesn't report
+ * its stage, so after the upload the switch from "Reading" to "Finding dates" is timed, not measured.
+ */
+function processingStage(progress: number, elapsedS: number): string {
+  if (progress < 1) return `Uploading… ${Math.round(progress * 100)}%`;
+  return elapsedS < 8 ? "Reading the document…" : "Finding dates and classes…";
+}
+
 function confColor(c: number): string {
   return c >= 90 ? palette.success : c >= 80 ? palette.warning : palette.danger;
 }
@@ -62,9 +71,13 @@ export function DocumentsScreen({ navigation }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const [elapsed, setElapsed] = useState(0);
   const busy = progress !== null;
+  /** Seconds on the busy timer when the upload finished (the server's work is timed from there). */
+  const uploadedAt = useRef<number | null>(null);
+  if (busy && progress! >= 1 && uploadedAt.current === null) uploadedAt.current = elapsed;
   useEffect(() => {
     if (!busy) return;
     setElapsed(0);
+    uploadedAt.current = null;
     const id = setInterval(() => setElapsed((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [busy]);
@@ -247,14 +260,13 @@ export function DocumentsScreen({ navigation }: Props) {
                 <View style={styles.busy}>
                   <View style={styles.rowBetween}>
                     <ActivityIndicator color={palette.ai} />
-                    <Text style={[ui.body, { flex: 1 }]}>
-                      {progress! < 1 ? `Uploading… ${Math.round(progress! * 100)}%` : "Reading and extracting deadlines…"}
-                    </Text>
+                    <Text style={[ui.body, { flex: 1 }]}>{processingStage(progress!, elapsed - (uploadedAt.current ?? elapsed))}</Text>
                     <Text style={styles.meta}>{elapsed}s</Text>
                   </View>
+                  {/* A real percentage only while uploading; the server's work has no honest percentage. */}
                   {progress! < 1 ? <ProgressBar value={Math.round(progress! * 100)} color={palette.ai} /> : null}
-                  {progress! >= 1 && elapsed >= 10 ? (
-                    <Text style={styles.meta}>Photos are read with OCR, which can take up to a minute. Please keep the app open.</Text>
+                  {progress! >= 1 && elapsed - (uploadedAt.current ?? elapsed) >= 20 ? (
+                    <Text style={styles.meta}>Photos and scanned PDFs are read with OCR and checked again; this can take up to 2½ minutes. Please keep the app open.</Text>
                   ) : null}
                 </View>
               ) : (

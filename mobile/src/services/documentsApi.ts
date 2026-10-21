@@ -97,7 +97,9 @@ export async function uploadDocument(
   const send = () => new Promise<{ success: boolean; data: ProcessResult; message?: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${api.defaults.baseURL}/documents`);
-    xhr.timeout = 180000;
+    // The server spends at most 150 s on a document (DOCUMENT_TIME_LIMIT_MS: OCR + AI) and then answers with
+    // what it found; 4 minutes also covers a 10 MB upload on a slow connection.
+    xhr.timeout = 240000;
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("X-Timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
     xhr.setRequestHeader("X-Device-Id", deviceId);
@@ -132,7 +134,8 @@ export async function uploadDocument(
 }
 
 export async function processText(text: string, docType: DocType, title: string): Promise<ProcessResult> {
-  const result = await apiPost<ProcessResult>("/documents/text", { text, docType, title }, { timeout: 120000 });
+  // No OCR for pasted text, but the AI pass can use most of the server's 150 s limit.
+  const result = await apiPost<ProcessResult>("/documents/text", { text, docType, title }, { timeout: 180000 });
   void syncNow();
   scheduleReminderSync();
   return result;

@@ -1,4 +1,5 @@
 import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
+import { getAi } from "../../ai/llm.js";
 import { prisma } from "../../config/db.js";
 import { dueDateFromYmd, localYmd } from "../../lib/time.js";
 import { rememberFact } from "../memory/memoryService.js";
@@ -57,6 +58,8 @@ export type AnalyzeInput = {
   language: string;
   tz: string;
   now?: Date;
+  /** Test hook: a shorter DOCUMENT_TIME_LIMIT_MS. */
+  timeLimitMs?: number;
 };
 
 export type Analysis = {
@@ -73,11 +76,24 @@ export type Analysis = {
 };
 
 /**
+ * Time allowed per document, OCR plus the AI pass. OCR has its own limits (45 s an image, 90 s a scanned PDF);
+ * the AI pass and the topics call get what is left. When it runs out, what the rules found is returned with a
+ * warning instead of failing. The phone's upload timeout (mobile documentsApi.ts) is longer than this.
+ */
+export const DOCUMENT_TIME_LIMIT_MS = 150_000;
+/** Not worth starting a model call with less time than this. */
+const MIN_AI_MS = 10_000;
+export const TIME_LIMIT_WARNING = "This document took long to read, so I didn't finish checking it with AI. The items below come from the rules; please check them.";
+
+/**
  * Reads a document and extracts deadlines, schedules and course info. No database writes, so the
  * evaluation (`npm run eval:documents`) runs exactly what an upload runs.
  */
 export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   const { tz } = input;
+  const started = Date.now();
+  const left = () => (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS) - (Date.now() - started);
+  let timedOut = false;
   const raw = input.text !== undefined
     ? { text: input.text, confidence: 100, method: "text" as const, warning: null, needsLanguage: false }
     : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language);
@@ -101,19 +117,22 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   let aiNote: string | null = null;
   const todayYmd = localYmd(now, tz);
   if (input.docType !== "NOTES" && !raw.needsLanguage) {
-    deadlines = mergeDeadlines(deadlines, await aiDeadlines(text, todayYmd, tz));
+    const aiOn = getAi().enabled && getAi().available;
+    const pass = aiOn && left() >= MIN_AI_MS ? await aiDeadlines(text, todayYmd, tz, { budgetMs: left() }) : { items: [], cutShort: aiOn };
+    timedOut = pass.cutShort;
+    deadlines = mergeDeadlines(deadlines, pass.items);
     const dated = deadlines.filter((d) => d.date);
     if (dated.length && !schedules.length && dated.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
   }
   // A grid lists many courses — picking one as "the course" would store a wrong memory.
   const course = extractCourseInfo(grid ? "" : text);
-  if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200) course.topics = await llmTopics(text);
+  if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200 && left() >= MIN_AI_MS) course.topics = await llmTopics(text, Math.min(45000, left()));
   if (course.code) {
     for (const s of schedules) {
       if (/^(?:lectures?|class(?:es)?|labs?|tutorials?|sessions?|sections?)$/i.test(s.title)) s.title = `${course.code} ${s.title}`;
     }
   }
-  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? aiNote, needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method, grid };
+  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : aiNote), needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method, grid };
 }
 
 export async function processDocument(

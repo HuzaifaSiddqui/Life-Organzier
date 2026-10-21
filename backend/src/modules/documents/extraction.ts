@@ -366,14 +366,14 @@ export function extractCourseInfo(text: string): CourseInfo {
 const topicSchema = z.object({ topics: z.array(z.string().min(2).max(60)).max(10) });
 
 /** Optional LLM pass to recover topics when the document has no clear "Topics" section. */
-export async function llmTopics(text: string): Promise<string[]> {
+export async function llmTopics(text: string, timeoutMs = 45000): Promise<string[]> {
   const result = await getAi().json(
     [
       { role: "system", content: "List the main learning topics covered in this course document (max 8, 1-4 words each). Return JSON {\"topics\": [...]}." },
       { role: "user", content: text.slice(0, 2500) },
     ],
     topicSchema,
-    { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs: 45000 },
+    { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs },
   );
   return result?.topics ?? [];
 }
@@ -413,7 +413,7 @@ export function dateGrounded(ymd: string, text: string): boolean {
  * appears in the document survive. Confidence stays below the auto-create threshold, so the user
  * always confirms them.
  */
-export async function llmActionItems(text: string, todayYmd: string, tz: string): Promise<ExtractedDeadline[]> {
+export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000): Promise<ExtractedDeadline[]> {
   if (text.replace(/\s+/g, "").length < 30) return [];
   const result = await getAi().json(
     [
@@ -443,7 +443,7 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
         required: ["items"],
       },
       maxTokens: 500,
-      timeoutMs: 60000,
+      timeoutMs,
     },
   );
   const out: ExtractedDeadline[] = [];
@@ -535,15 +535,20 @@ export function mergeDeadlines(rules: ExtractedDeadline[], ai: ExtractedDeadline
   return out.slice(0, 60).map((d, index) => ({ ...d, index }));
 }
 
-/** The AI pass: llmActionItems per chunk, within a chunk cap and a total time budget. [] with AI off. */
-export async function aiDeadlines(text: string, todayYmd: string, tz: string, opts: { maxChunks?: number; budgetMs?: number } = {}): Promise<ExtractedDeadline[]> {
+/**
+ * The AI pass: llmActionItems per chunk, within a chunk cap and a total time budget (each call's timeout shrinks
+ * to what is left). `cutShort`: the budget ran out before every chunk was read. Nothing with AI off.
+ */
+export async function aiDeadlines(text: string, todayYmd: string, tz: string, opts: { maxChunks?: number; budgetMs?: number } = {}): Promise<{ items: ExtractedDeadline[]; cutShort: boolean }> {
   const ai = getAi();
-  if (!ai.enabled || !ai.available) return [];
-  const started = Date.now();
+  if (!ai.enabled || !ai.available) return { items: [], cutShort: false };
+  const deadline = Date.now() + (opts.budgetMs ?? 120_000);
   const items: ExtractedDeadline[] = [];
-  for (const chunk of chunkText(text, 2500, 200, opts.maxChunks ?? 6)) {
-    if (Date.now() - started > (opts.budgetMs ?? 120_000)) break;
-    items.push(...(await llmActionItems(chunk, todayYmd, tz)));
+  const chunks = chunkText(text, 2500, 200, opts.maxChunks ?? 6);
+  for (let i = 0; i < chunks.length; i += 1) {
+    const left = deadline - Date.now();
+    if (left < 5000) return { items, cutShort: true };
+    items.push(...(await llmActionItems(chunks[i], todayYmd, tz, Math.min(60000, left))));
   }
-  return items;
+  return { items, cutShort: false };
 }

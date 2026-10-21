@@ -10,12 +10,23 @@ import { sendSuccess } from "../../utils/apiResponse.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
 import { DOC_TYPES, existingRoutineId, existingTaskId, processDocument } from "./documentProcessing.js";
+import { OcrBusyError } from "./textExtraction.js";
 import { SUPPORTED_MIME } from "./textExtraction.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES, files: 1 } });
 
 const LANGS = ["eng", "urd", "ara", "spa", "fra", "hin", "chi_sim"] as const;
+
+/** The OCR queue is full: 503 with a plain "try again in a minute" (the phone shows the message). */
+async function busyAsHttp<T>(work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (error) {
+    if (error instanceof OcrBusyError) throw new HttpError(503, "OCR_BUSY", "I'm reading other documents right now. Please try again in a minute.");
+    throw error;
+  }
+}
 
 export const documentRouter = Router();
 documentRouter.use(requireFirebaseUser, requireUser);
@@ -53,14 +64,14 @@ documentRouter.post(
     } catch {
       // not encoded
     }
-    const result = await processDocument(req.user, req.settings, {
+    const result = await busyAsHttp(processDocument(req.user, req.settings, {
       buffer: file.buffer,
       fileName,
       mimeType: mime,
       docType: body.docType,
       language: body.language,
       autoCreate: body.autoCreate === "true",
-    });
+    }));
     sendSuccess(res, result, "Document processed", 201);
   }),
 );

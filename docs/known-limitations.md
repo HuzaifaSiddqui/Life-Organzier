@@ -67,6 +67,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Dates without a year** take the year of the document's term ("Fall 2026": Aug–Dec 2026, Jan–Jul 2027) or of
   its other full dates; with neither, the next occurrence is used.
 - **Numeric dates are day-first** (07-09-2026 = 7 September). US-style month-first documents are misread.
+- **A document gets at most 150 seconds** (`DOCUMENT_TIME_LIMIT_MS`: OCR plus the AI pass). When time runs out the
+  rules' items come back with a warning that the AI check wasn't finished; nothing fails. The phone waits up to 4
+  minutes for an upload (3 for pasted text).
+- **One OCR job runs at a time per language, and at most 3 may wait.** A fourth upload at that moment gets "I'm
+  reading other documents right now, try again in a minute" (also on WhatsApp) instead of queuing.
+- **The upload status after the file is sent is timed, not reported.** "Reading the document" then "Finding dates and
+  classes" follow the server's order of work, but the server doesn't stream its stage; only the upload has a real
+  percentage.
 - **The AI pass on documents reads at most 6 chunks (about 15,000 characters) within 2 minutes**; later pages
   get the rules only. Model-only items are never created automatically.
 - **OCR preprocessing** auto-rotates (EXIF), deskews up to ±10°, denoises, normalises contrast, sharpens and
