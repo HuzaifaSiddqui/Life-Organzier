@@ -457,3 +457,22 @@ test("registry: every command's examples are understood by its own rules (help n
   for (const c of COMMANDS) for (const ex of c.examples) if (classify(ex, ctx).command !== c.name) wrong.push(`${c.name}: "${ex}" → ${classify(ex, ctx).command}`);
   assert.deepEqual(wrong, []);
 });
+
+test("Urdu users get Urdu replies from settings and bulk commands (confirm buttons and re-ask too)", { skip }, async () => {
+  await withChatUser("FREE", async (say, tap, user) => {
+    await prisma.userSettings.update({ where: { userId: user.id }, data: { language: "ur" } });
+    const quiet = await say("set quiet hours from 11 PM to 7 AM");
+    assert.match(quiet.message.content, /خاموش اوقات اب 11 PM سے 7 AM تک ہیں۔/);
+    assert.equal(quiet.message.actions?.[0]?.label, "واپس کریں");
+    assert.match((await say("turn off DND")).message.content, /پہلے ہی بند/);
+    assert.match((await say("show my settings")).message.content, /^آپ کی سیٹنگز:/);
+
+    await prisma.task.create({ data: { userId: user.id, title: "Old quiz", priority: "LOW", source: "CHAT", status: "COMPLETED", completedAt: new Date() } });
+    const ask = await say("delete all completed tasks");
+    assert.match(ask.message.content, /^1 مکمل کام حذف کر دوں؟/);
+    assert.deepEqual(ask.message.actions?.map((a) => a.label), ["ہاں", "منسوخ"]);
+    assert.equal((await say("done")).message.content, "براہِ کرم ہاں یا نہیں میں جواب دیں۔");
+    assert.match((await say("haan")).message.content, /^1 مکمل کام حذف کر دیے۔/);
+    assert.equal((await tap({ type: "undo_command" })).message.content, "↩ آخری تبدیلی واپس کر دی گئی۔");
+  });
+});

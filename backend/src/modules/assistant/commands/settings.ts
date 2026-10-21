@@ -8,7 +8,8 @@ import { STYLE_NAMES } from "../../checkins/templates.js";
 import { isPro, type Turn } from "../dialogue.js";
 import { extractEntities, extractTimeRange } from "../entities.js";
 import { ASK, has, norm } from "./lexicon.js";
-import { recordUndo, UNDO_ACTION } from "./runtime.js";
+import { commandText, dayLabelFor } from "./copy.js";
+import { recordUndo, undoAction } from "./runtime.js";
 import type { Command } from "./types.js";
 
 /** Settings changed from chat: the phone reloads its preferences when a reply's intent starts with "settings_". */
@@ -30,15 +31,15 @@ const hhmm = (text: string) => {
 function whenLabel(turn: Turn, at: Date): string {
   const p = localParts(at, turn.tz);
   const day = localYmd(at, turn.tz);
-  return `${day === turn.todayYmd ? "" : `${relativeDayLabel(day, turn.todayYmd)} `}${formatClock(p.h, p.mi)}`.trim();
+  return `${day === turn.todayYmd ? "" : `${dayLabelFor(turn.settings.language, relativeDayLabel(day, turn.todayYmd))} `}${formatClock(p.h, p.mi)}`.trim();
 }
 
 function dndLine(turn: Turn): string {
   const until = turn.settings.dndUntil;
-  return until && until > turn.now ? `Do Not Disturb is on until ${whenLabel(turn, until)}.` : "Do Not Disturb is off.";
+  const c = commandText(turn.settings.language);
+  return until && until > turn.now ? c.dndOnUntil(whenLabel(turn, until)) : c.dndOff;
 }
 
-const DEVICE_LABEL: Record<string, string> = { ALL: "your phone and WhatsApp", PHONE: "your phone only", WHATSAPP: "WhatsApp only", DESKTOP: "desktop only" };
 
 /* ------------------------------------------------------------------ quiet hours */
 
@@ -66,15 +67,16 @@ const quietHours: Command = {
   },
   async execute(turn, args) {
     const s = turn.settings;
+    const c = commandText(s.language);
     const start = typeof args.start === "string" ? hhmm(args.start) : null;
     const end = typeof args.end === "string" ? hhmm(args.end) : null;
     if (!start && !end) {
-      return { content: `Your quiet hours are ${clock(s.quietStart)} to ${clock(s.quietEnd)}. No reminders then, except critical ones${s.criticalOverridesDnd ? "" : " (off for you)"}.`, actions: [{ label: "Change them", text: "Set quiet hours from 11 PM to 7 AM" }], intent: "settings_quiet_hours" };
+      return { content: c.quietRead(clock(s.quietStart), clock(s.quietEnd), !s.criticalOverridesDnd), actions: [{ label: c.quietChange, text: "Set quiet hours from 11 PM to 7 AM" }], intent: "settings_quiet_hours" };
     }
     const data = { quietStart: start ?? s.quietStart, quietEnd: end ?? s.quietEnd };
-    if (data.quietStart === data.quietEnd) return { content: "Quiet hours need different start and end times.", intent: "settings_invalid" };
+    if (data.quietStart === data.quietEnd) return { content: c.quietSame, intent: "settings_invalid" };
     await save(turn, data, { quietStart: s.quietStart, quietEnd: s.quietEnd }, "quiet hours change");
-    return { content: `Quiet hours are now ${clock(data.quietStart)} to ${clock(data.quietEnd)}.`, actions: [UNDO_ACTION], intent: "settings_quiet_hours_set" };
+    return { content: c.quietSet(clock(data.quietStart), clock(data.quietEnd)), actions: [undoAction(s.language)], intent: "settings_quiet_hours_set" };
   },
 };
 
@@ -102,12 +104,13 @@ const dnd: Command = {
     return { action: "on" };
   },
   async execute(turn, args) {
+    const tx = commandText(turn.settings.language);
     if (args.action === "status") return { content: dndLine(turn), intent: "settings_dnd" };
     const before = { dndUntil: turn.settings.dndUntil?.toISOString() ?? null };
     if (args.action === "off") {
-      if (!turn.settings.dndUntil || turn.settings.dndUntil <= turn.now) return { content: "Do Not Disturb is already off.", intent: "settings_dnd" };
+      if (!turn.settings.dndUntil || turn.settings.dndUntil <= turn.now) return { content: tx.dndAlreadyOff, intent: "settings_dnd" };
       await save(turn, { dndUntil: null }, before, "Do Not Disturb turned off");
-      return { content: "Do Not Disturb is off. Reminders are back on.", actions: [UNDO_ACTION], intent: "settings_dnd_off" };
+      return { content: tx.dndTurnedOff, actions: [undoAction(turn.settings.language)], intent: "settings_dnd_off" };
     }
     let until: Date;
     const c = typeof args.until === "string" ? parseClock(args.until) : null;
@@ -120,10 +123,9 @@ const dnd: Command = {
     const minutes = Math.round((until.getTime() - turn.now.getTime()) / 60000);
     if (minutes > MAX_DND_MINUTES) until = new Date(turn.now.getTime() + MAX_DND_MINUTES * 60000);
     await save(turn, { dndUntil: until }, before, "Do Not Disturb");
-    const critical = turn.settings.criticalOverridesDnd ? " Critical reminders still come through." : "";
     return {
-      content: `Do Not Disturb is on until ${whenLabel(turn, until)} (${formatDuration(Math.min(minutes, MAX_DND_MINUTES))}).${args.minutes || args.until ? "" : " Say \"DND for 2 hours\" for longer."}${critical}`,
-      actions: [UNDO_ACTION, { label: "Turn off", text: "Turn off DND" }],
+      content: tx.dndOn(whenLabel(turn, until), formatDuration(Math.min(minutes, MAX_DND_MINUTES)), !(args.minutes || args.until), turn.settings.criticalOverridesDnd),
+      actions: [undoAction(turn.settings.language), { label: tx.turnOff, text: "Turn off DND" }],
       intent: "settings_dnd_on",
     };
   },
@@ -158,16 +160,18 @@ const notifyDevices: Command = {
     return { devices: off ? "WHATSAPP" : "PHONE" };
   },
   async execute(turn, args) {
+    const c = commandText(turn.settings.language);
+    const where = (d: string) => c.devices[d] ?? d;
     const current = turn.settings.notificationDevices;
-    if (!args.devices) return { content: `Reminders go to ${DEVICE_LABEL[current] ?? current}.`, intent: "settings_notify_devices" };
+    if (!args.devices) return { content: c.devicesRead(where(current)), intent: "settings_notify_devices" };
     const devices = String(args.devices);
-    if (devices !== "PHONE" && !isPro(turn.settings)) return { content: "WhatsApp reminders are part of Pro. Your reminders stay on your phone.", intent: "settings_pro_only" };
+    if (devices !== "PHONE" && !isPro(turn.settings)) return { content: c.devicesPro, intent: "settings_pro_only" };
     if (devices !== "PHONE" && !(turn.user.phoneNumber && turn.user.phoneVerifiedAt)) {
-      return { content: "Link WhatsApp first: open Settings → WhatsApp and send me the LINK code shown there.", actions: [{ label: "Open settings", payload: { type: "navigate", screen: "Settings" } }], intent: "settings_whatsapp_unlinked" };
+      return { content: c.devicesUnlinked, actions: [{ label: c.openSettings, payload: { type: "navigate", screen: "Settings" } }], intent: "settings_whatsapp_unlinked" };
     }
-    if (devices === current) return { content: `Reminders already go to ${DEVICE_LABEL[devices]}.`, intent: "settings_notify_devices" };
+    if (devices === current) return { content: c.devicesAlready(where(devices)), intent: "settings_notify_devices" };
     await save(turn, { notificationDevices: devices }, { notificationDevices: current }, "reminder devices change");
-    return { content: `Reminders now go to ${DEVICE_LABEL[devices]}.${devices !== "PHONE" ? " WhatsApp can only message you within 24 hours of your last message there." : ""}`, actions: [UNDO_ACTION], intent: "settings_notify_devices_set" };
+    return { content: c.devicesSet(where(devices), devices !== "PHONE"), actions: [undoAction(turn.settings.language)], intent: "settings_notify_devices_set" };
   },
 };
 
@@ -183,7 +187,6 @@ const LANG_PATTERNS: RegExp[] = [
   /زبان\s+(اردو|انگریزی|انگلش)/,
   /(اردو|انگریزی|انگلش)\s+میں\s+(?:بات|جواب|لکھو|لکھیں|بولو)/,
 ];
-const LANG_NAME = { en: "English", ur: "اردو (Urdu)" };
 
 const language: Command = {
   name: "settings_language",
@@ -201,11 +204,12 @@ const language: Command = {
   },
   async execute(turn, args) {
     const current = turn.settings.language === "ur" ? "ur" : "en";
-    if (!args.language) return { content: `I'm replying in ${LANG_NAME[current]}. Say "switch to ${current === "ur" ? "English" : "Urdu"}" to change it.`, intent: "settings_language" };
+    const c = commandText(turn.settings.language);
+    if (!args.language) return { content: c.languageRead(c.languageNames[current], current === "ur" ? "English" : "Urdu"), intent: "settings_language" };
     const next = args.language as "en" | "ur";
     if (next === current) return { content: next === "ur" ? "میں پہلے ہی اردو میں جواب دے رہا ہوں۔" : "I'm already replying in English.", intent: "settings_language" };
     await save(turn, { language: next }, { language: turn.settings.language }, "language change");
-    return { content: next === "ur" ? "زبان اردو کر دی گئی ہے۔ اب میں اردو میں جواب دوں گا۔" : "Language set to English. I'll reply in English now.", actions: [UNDO_ACTION], intent: "settings_language_set" };
+    return { content: next === "ur" ? "زبان اردو کر دی گئی ہے۔ اب میں اردو میں جواب دوں گا۔" : "Language set to English. I'll reply in English now.", actions: [undoAction(next)], intent: "settings_language_set" };
   },
 };
 
@@ -226,16 +230,19 @@ const settingsShow: Command = {
   async execute(turn) {
     const s = turn.settings;
     const lang = s.language === "ur" ? "ur" : "en";
+    const c = commandText(lang);
+    const L = c.settingsLines;
+    const style = STYLE_NAMES[lang][s.checkinTone as "FUNNY" | "SERIOUS" | "GENTLE"] ?? s.checkinTone;
     const lines = [
-      `Language: ${LANG_NAME[lang]}`,
-      `Quiet hours: ${clock(s.quietStart)} to ${clock(s.quietEnd)}`,
+      `${L.language}: ${c.languageNames[lang]}`,
+      `${L.quiet}: ${clock(s.quietStart)} ${c.to} ${clock(s.quietEnd)}`,
       dndLine(turn),
-      `Reminders go to: ${DEVICE_LABEL[s.notificationDevices] ?? s.notificationDevices}`,
-      `Check-ins: ${s.checkinsEnabled ? `on, ${STYLE_NAMES.en[s.checkinTone as "FUNNY" | "SERIOUS" | "GENTLE"] ?? s.checkinTone}` : "off"}`,
-      `Daily capacity: ${formatDuration(s.dailyCapacityMinutes)} (work hours ${clock(s.workStart)} to ${clock(s.workEnd)})`,
-      `Plan: ${isPro(s) ? "Pro" : "Free"}`,
+      `${L.devices}: ${c.devices[s.notificationDevices] ?? s.notificationDevices}`,
+      `${L.checkins}: ${s.checkinsEnabled ? `${L.on}, ${style}` : L.off}`,
+      `${L.capacity}: ${formatDuration(s.dailyCapacityMinutes)} (${L.work} ${clock(s.workStart)} ${c.to} ${clock(s.workEnd)})`,
+      `${L.plan}: ${isPro(s) ? "Pro" : "Free"}`,
     ];
-    return { content: ["Your settings:", ...lines].join("\n"), actions: [{ label: "Open settings", payload: { type: "navigate", screen: "Settings" } }], intent: "settings_show" };
+    return { content: [c.settingsTitle, ...lines].join("\n"), actions: [{ label: c.openSettings, payload: { type: "navigate", screen: "Settings" } }], intent: "settings_show" };
   },
 };
 

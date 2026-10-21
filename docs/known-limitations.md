@@ -223,8 +223,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **One question per multi-request reply.** If two parts of a message both need an answer, the first is asked and
   the reply names the other to send again. Parts are split only at and / aur / then / also / phir (and the Urdu
   words), not at commas alone.
-- **Command replies are in English** (the language switch confirms in Urdu, and crisis and check-in texts follow the
-  language setting as before). The rules understand English, Urdu script and Roman Urdu; Urdu-script clock times
-  are only read inside ranges such as "رات 11 سے صبح 7 تک".
+- **Some command replies are still English for Urdu users.** In Urdu (`commands/copy.ts`): every settings and bulk
+  reply, confirm buttons, "answer yes or no" / "pick a number" re-asks, the expired-preview reply and the undo reply.
+  Still English: routine commands (list, change, pause/resume, delete, done/skip today, move once), task-field
+  commands (notes, reminder mode, start, reopen, tags, category, subtasks), insights, help and the "here's what I can
+  do" suggestions, "Which routine / task do you mean?", and the "Send this again after answering" line of a
+  multi-request reply. Task titles, routine names and times are shown as written. The rules understand English,
+  Urdu script and Roman Urdu; Urdu-script clock times are only read inside ranges such as "رات 11 سے صبح 7 تک".
 - **The LLM router adds up to two model calls** when the rules are unsure (on top of the existing intent call), so
   those messages are slower with a local model. It never runs with AI off.

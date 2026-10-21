@@ -9,7 +9,8 @@ import type { Turn } from "../dialogue.js";
 import { extractTargetDay } from "../entities.js";
 import { WHATSAPP_LIST_CAP } from "../queryAnswers.js";
 import { ALL, DO_IT, TASK_WORD, TODAY, has, norm } from "./lexicon.js";
-import { recordUndo, snapshots, UNDO_ACTION } from "./runtime.js";
+import { commandText, dayLabelFor } from "./copy.js";
+import { recordUndo, snapshots, undoAction } from "./runtime.js";
 import type { Command, CommandArgs, Prepared } from "./types.js";
 
 /** A bulk change acts on at most this many tasks per confirmation. */
@@ -47,15 +48,16 @@ export function nonUrgentSoon(turn: Turn, tasks: Task[]): Task[] {
 
 /** The preview: one question, the titles (WhatsApp: first 8 + "…and N more"), one confirmation. */
 function preview(turn: Turn, question: string, tasks: Task[], total: number): Prepared {
+  const c = commandText(turn.settings.language);
   const whatsapp = turn.channel === "WHATSAPP";
   const shownTitles = tasks.slice(0, whatsapp ? WHATSAPP_LIST_CAP : BULK_CAP).map((t) => `• ${t.title}`);
   const extra = tasks.length - shownTitles.length;
-  const capped = total > tasks.length ? `\nThat's the first ${BULK_CAP} of ${total}; ask again for the rest.` : "";
+  const capped = total > tasks.length ? `\n${c.bulkCapped(BULK_CAP, total)}` : "";
   return {
     args: { taskIds: tasks.map((t) => t.id) },
     confirm: {
-      question: [question, ...shownTitles, ...(extra > 0 ? [`…and ${extra} more`] : [])].join("\n") + capped,
-      cards: whatsapp ? [] : [{ type: "task_list", title: "Will change", tasks: tasks.map((t) => serializeTask(t, turn.now)) }],
+      question: [question, ...shownTitles, ...(extra > 0 ? [c.bulkMore(extra)] : [])].join("\n") + capped,
+      cards: whatsapp ? [] : [{ type: "task_list", title: c.cardWillChange, tasks: tasks.map((t) => serializeTask(t, turn.now)) }],
     },
   };
 }
@@ -67,6 +69,8 @@ async function tasksByIds(turn: Turn, args: CommandArgs): Promise<Task[]> {
 }
 
 const nothing = (content: string, intent: string): Prepared => ({ out: { content, intent } });
+const tx = (turn: Turn) => commandText(turn.settings.language);
+const day = (turn: Turn, ymd: string) => dayLabelFor(turn.settings.language, relativeDayLabel(ymd, turn.todayYmd));
 
 /* ------------------------------------------------------------------ commands */
 
@@ -93,10 +97,10 @@ const moveToday: Command = {
     const end = startOfLocalDay(addDaysYmd(turn.todayYmd, 1), turn.tz);
     const start = startOfLocalDay(turn.todayYmd, turn.tz);
     const today = (await listActiveTasks(turn.user.id)).filter((t) => (t.dueAt && t.dueAt >= start && t.dueAt < end) || (t.scheduledStart && t.scheduledStart >= start && t.scheduledStart < end));
-    if (!today.length) return nothing("Nothing is due or planned today, so there's nothing to move.", "bulk_nothing");
+    if (!today.length) return nothing(tx(turn).bulkNothingToday, "bulk_nothing");
     const toYmd = String(args.toYmd);
     const list = today.slice(0, BULK_CAP);
-    const p = preview(turn, `Move ${plural(list.length, "task")} from today to ${relativeDayLabel(toYmd, turn.todayYmd)}?`, list, today.length);
+    const p = preview(turn, tx(turn).bulkMovePreview(list.length, day(turn, toYmd)), list, today.length);
     return "args" in p ? { ...p, args: { ...p.args, toYmd } } : p;
   },
   async execute(turn, args) {
@@ -104,7 +108,7 @@ const moveToday: Command = {
     const toYmd = String(args.toYmd);
     const moved = await shiftTasks(turn, tasks, diffDaysYmd(turn.todayYmd, toYmd), "bulk_move_today");
     recordUndo(turn, { kind: "tasks", op: "edit", taskIds: moved.map((t) => t.id), before: snapshots(tasks), label: `${plural(moved.length, "task")} moved` });
-    return { content: `Moved ${plural(moved.length, "task")} to ${relativeDayLabel(toYmd, turn.todayYmd)}.`, cards: [{ type: "task_list", title: "Moved", tasks: moved.map((t) => serializeTask(t, turn.now)) }], actions: [UNDO_ACTION], intent: "bulk_moved" };
+    return { content: tx(turn).bulkMoved(moved.length, day(turn, toYmd)), cards: [{ type: "task_list", title: tx(turn).cardMoved, tasks: moved.map((t) => serializeTask(t, turn.now)) }], actions: [undoAction(turn.settings.language)], intent: "bulk_moved" };
   },
 };
 
@@ -128,9 +132,9 @@ const completeTag: Command = {
   async prepare(turn, args) {
     const tag = String(args.tag).toLowerCase();
     const tagged = (await listActiveTasks(turn.user.id)).filter((t) => Array.isArray(t.tags) && (t.tags as string[]).includes(tag));
-    if (!tagged.length) return nothing(`No open tasks are tagged #${tag}.`, "bulk_nothing");
+    if (!tagged.length) return nothing(tx(turn).bulkNoTag(tag), "bulk_nothing");
     const list = tagged.slice(0, BULK_CAP);
-    const p = preview(turn, `Mark ${plural(list.length, "task")} tagged #${tag} as done?`, list, tagged.length);
+    const p = preview(turn, tx(turn).bulkTagPreview(list.length, tag), list, tagged.length);
     return "args" in p ? { ...p, args: { ...p.args, tag } } : p;
   },
   async execute(turn, args) {
@@ -141,7 +145,7 @@ const completeTag: Command = {
       if (u) done.push(u);
     }
     recordUndo(turn, { kind: "tasks", op: "edit", taskIds: done.map((t) => t.id), before: snapshots(tasks), label: `${plural(done.length, "task")} completed` });
-    return { content: `Done: ${plural(done.length, "task")} tagged #${args.tag}. Nice work!`, cards: [{ type: "task_list", title: "Completed", tasks: done.map((t) => serializeTask(t, turn.now)) }], actions: [UNDO_ACTION], intent: "bulk_completed" };
+    return { content: tx(turn).bulkTagDone(done.length, String(args.tag)), cards: [{ type: "task_list", title: tx(turn).cardCompleted, tasks: done.map((t) => serializeTask(t, turn.now)) }], actions: [undoAction(turn.settings.language)], intent: "bulk_completed" };
   },
 };
 
@@ -160,16 +164,16 @@ const deleteCompleted: Command = {
   },
   async prepare(turn) {
     const done = await prisma.task.findMany({ where: { userId: turn.user.id, status: TaskStatus.COMPLETED }, orderBy: { completedAt: "asc" }, take: 200 });
-    if (!done.length) return nothing("You have no completed tasks to delete.", "bulk_nothing");
+    if (!done.length) return nothing(tx(turn).bulkNoCompleted, "bulk_nothing");
     const list = done.slice(0, BULK_CAP);
-    return preview(turn, `Delete ${plural(list.length, "completed task")}? You can undo this for 24 hours.`, list, done.length);
+    return preview(turn, tx(turn).bulkDeletePreview(list.length), list, done.length);
   },
   async execute(turn, args) {
     const tasks = await tasksByIds(turn, args);
     const deleted: string[] = [];
     for (const t of tasks) if (await softDeleteTask(turn.task, t.id)) deleted.push(t.id);
     recordUndo(turn, { kind: "tasks", op: "delete", taskIds: deleted, label: `${plural(deleted.length, "completed task")} deleted` });
-    return { content: `Deleted ${plural(deleted.length, "completed task")}. You can undo this for 24 hours.`, actions: [UNDO_ACTION], intent: "bulk_deleted" };
+    return { content: tx(turn).bulkDeleted(deleted.length), actions: [undoAction(turn.settings.language)], intent: "bulk_deleted" };
   },
 };
 
@@ -186,15 +190,15 @@ const postponeNonUrgent: Command = {
   },
   async prepare(turn) {
     const all = nonUrgentSoon(turn, await listActiveTasks(turn.user.id));
-    if (!all.length) return nothing("There's nothing non-urgent due by tomorrow. You're all clear.", "bulk_nothing");
+    if (!all.length) return nothing(tx(turn).bulkNoNonUrgent, "bulk_nothing");
     const list = all.slice(0, BULK_CAP);
-    return preview(turn, `Move ${plural(list.length, "non-urgent task")} one day later?`, list, all.length);
+    return preview(turn, tx(turn).bulkPostponePreview(list.length), list, all.length);
   },
   async execute(turn, args) {
     const tasks = await tasksByIds(turn, args);
     const moved = await shiftTasks(turn, tasks, 1, "nonurgent");
     recordUndo(turn, { kind: "tasks", op: "edit", taskIds: moved.map((t) => t.id), before: snapshots(tasks), label: `${plural(moved.length, "task")} postponed` });
-    return { content: `Moved ${plural(moved.length, "task")} one day later. Take care of yourself first.`, cards: [{ type: "task_list", title: "Postponed", tasks: moved.map((t) => serializeTask(t, turn.now)) }], actions: [UNDO_ACTION], intent: "bulk_postponed" };
+    return { content: tx(turn).bulkPostponed(moved.length), cards: [{ type: "task_list", title: tx(turn).cardPostponed, tasks: moved.map((t) => serializeTask(t, turn.now)) }], actions: [undoAction(turn.settings.language)], intent: "bulk_postponed" };
   },
 };
 
