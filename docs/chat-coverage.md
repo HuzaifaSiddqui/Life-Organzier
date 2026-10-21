@@ -9,9 +9,14 @@ wording, **no** = only in the app screens. **Command** is the registry command t
 (`backend/src/modules/assistant/commands/`); "—" means it stays app-only, with the reason.
 
 **Status:** every command in the Command column is implemented, with rules in English, Urdu script and Roman
-Urdu, and works with AI off. Rules-only eval (`npm run eval:assistant`, 211 utterances): 54/211 (25.6 %) before
-the registry, 207/211 (98.1 %) after. The 4 misses are existing intent rules in `nlu.ts` (three mood / completion
-phrasings in Roman Urdu and English, one "how far am I with X" progress question), left unchanged.
+Urdu, and works with AI off.
+
+**Tuned set, not accuracy.** `npm run eval:assistant` scores 211 utterances: 54/211 (25.6 %) with the rules before
+the registry, 207/211 (98.1 %) after. The command rules were written against these rows, so 98.1 % only shows the
+rules do what they were written to do (a regression check); it is not an estimate of accuracy on new messages.
+The 4 misses are existing intent rules in `nlu.ts` (three mood / completion phrasings in Roman Urdu and English, one
+"how far am I with X" progress question), left unchanged. The held-out set (`tests/eval/chat-holdout.json`) that
+would give an honest accuracy number is still empty: it needs a teammate who hasn't read the rules to fill it.
 
 ## Tasks (FR-TM-001…008)
 

@@ -1,8 +1,9 @@
 # Evaluation sets
 
 - `assistant-eval.json` — fixed set for `scripts/model-benchmark.ts` (intent, titles, first steps, deterministic fields). The Roman Urdu date/time rules in `entities.ts` were tuned against it, so its Roman Urdu scores are not an unbiased estimate.
-- `assistant-eval.json` → `commands` — 169 chat-command rows (English, Urdu script, Roman Urdu) with the expected registry command and arguments, scored together with the `messages` intents by `npm run eval:assistant` (rules only, AI off; `-- --baseline` = the rules before the command registry). The command rules were written against these rows, so they are not an unbiased estimate either.
-- `chat-holdout.json` — **held-out** chat commands, currently empty (two `"example": true` rows show the schema). Scored separately by `npm run eval:assistant`.
+- `assistant-eval.json` → `commands` — 169 chat-command rows (English, Urdu script, Roman Urdu) with the expected registry command and arguments, scored together with the `messages` intents by `npm run eval:assistant` (rules only, AI off; `-- --baseline` = the rules before the command registry). **Tuned set (rules written against these rows)**: its score (207/211) is a regression check, not accuracy.
+- `assistant-eval.json` → `pending` — replies sent while a question is open (every pending kind × short answers such as "2", "tomorrow", "haan", plus new requests that may replace the question). Also tuned.
+- `chat-holdout.json` — **held-out** chat commands, **still empty** (two `"example": true` rows show the schema), so there is no accuracy number for chat commands yet. Scored separately by `npm run eval:assistant` once filled.
 - `roman-urdu-holdout.json` — **held-out** Roman Urdu messages, currently empty (two `"example": true` rows show the schema and are not scored).
 
 ## Adding to the held-out set
