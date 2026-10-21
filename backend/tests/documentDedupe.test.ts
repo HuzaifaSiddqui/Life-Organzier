@@ -51,3 +51,47 @@ test("two identical uploads at the same time (phone re-sent it) share one run: o
     assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1);
   });
 });
+
+test("two users uploading identical bytes each get their own document and tasks; neither sees the other's", { skip }, async () => {
+  await withUser(async (alice, aliceSettings) => {
+    await withUser(async (bob, bobSettings) => {
+      const text = "Final project due 10 December 2026 at 5 PM";
+      const [a, b] = await Promise.all([processDocument(alice, aliceSettings, upload(text)), processDocument(bob, bobSettings, upload(text))]);
+      assert.notEqual(a.document.id, b.document.id);
+      assert.equal(a.reused, false);
+      assert.equal(b.reused, false, "another user's upload is never reused");
+      assert.equal(await prisma.document.count({ where: { userId: alice.id } }), 1);
+      assert.equal(await prisma.document.count({ where: { userId: bob.id } }), 1);
+      const aliceTasks = await prisma.task.findMany({ where: { userId: alice.id } });
+      const bobTasks = await prisma.task.findMany({ where: { userId: bob.id } });
+      assert.equal(aliceTasks.length, 1);
+      assert.equal(bobTasks.length, 1);
+      assert.equal(a.extracted.deadlines[0].taskId, aliceTasks[0].id);
+      assert.equal(b.extracted.deadlines[0].taskId, bobTasks[0].id);
+      // Bob uploads it again: he gets his own document back, not Alice's.
+      const again = await processDocument(bob, bobSettings, upload(text));
+      assert.equal(again.document.id, b.document.id);
+    });
+  });
+});
+
+test("reused result after deleting the auto-created task: not claimed as created, offered again, not re-created", { skip }, async () => {
+  await withUser(async (user, settings) => {
+    const text = "Assignment 3 due 25 November 2026 at 5 PM";
+    const first = await processDocument(user, settings, upload(text));
+    const taskId = first.extracted.deadlines[0].taskId as string;
+    assert.ok(taskId);
+    await prisma.task.update({ where: { id: taskId }, data: { status: "DELETED", deletedAt: new Date() } });
+    const again = await processDocument(user, settings, upload(text));
+    assert.equal(again.reused, true);
+    const d = again.extracted.deadlines[0];
+    assert.equal(d.created, false);
+    assert.equal(d.existing, false);
+    assert.equal(d.taskId, undefined);
+    assert.equal(d.removedSinceUpload, true);
+    assert.equal(await prisma.task.count({ where: { userId: user.id, status: { not: "DELETED" } } }), 0, "not re-created automatically");
+    // The saved document itself is unchanged (a later reuse recomputes again).
+    const stored = (await prisma.document.findUniqueOrThrow({ where: { id: first.document.id } })).extracted as { deadlines: Array<{ taskId?: string }> };
+    assert.equal(stored.deadlines[0].taskId, taskId);
+  });
+});

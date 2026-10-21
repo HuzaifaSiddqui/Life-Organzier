@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import sharp from "sharp";
-import { estimateSkew, extractText, MAX_OCR_WAITING, MIN_OCR_START_MS, OcrBusyError, ocrImage, ocrLanguages, preprocessForOcr, shutdownOcr, withWorker } from "../src/modules/documents/textExtraction.js";
+import { estimateSkew, extractText, MAX_OCR_WAITING, MAX_OCR_WIDTH, MIN_OCR_START_MS, OcrBusyError, ocrImage, ocrLanguages, preprocessForOcr, shutdownOcr, withWorker } from "../src/modules/documents/textExtraction.js";
 
 const img = (name: string) => readFileSync(new URL(`./eval/documents/images/${name}`, import.meta.url));
 
@@ -66,4 +66,11 @@ test("OCR deadline: time waiting in the queue counts; a job that would start too
   await assert.rejects(late, OcrBusyError);
   // No deadline: the same image is read normally.
   assert.match((await ocrImage(img("table-pipe.clean.png"), "eng")).text, /Assignment 1/);
+});
+
+test("OCR width cap: a phone-sized photo is scaled down to MAX_OCR_WIDTH (passes at 4000 px took up to 53 s)", async () => {
+  const photo = await sharp(img("table-pipe.clean.png")).resize({ width: 4032 }).png().toBuffer();
+  const out = await sharp(await preprocessForOcr(photo)).metadata();
+  assert.equal(MAX_OCR_WIDTH, 2500);
+  assert.equal(out.width, 2500);
 });

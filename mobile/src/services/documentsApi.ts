@@ -22,6 +22,8 @@ export type ExtractedDeadline = {
   yearInferred?: boolean;
   aiOnly?: boolean;
   aiAgrees?: boolean;
+  /** Added from this file before, then deleted: offered again, unticked. */
+  removedSinceUpload?: boolean;
   created?: boolean;
   existing?: boolean;
 };

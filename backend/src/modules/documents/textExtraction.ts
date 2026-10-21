@@ -21,7 +21,12 @@ const IMAGE_BUDGET_MS = 45_000;
 export const MIN_OCR_START_MS = 8_000;
 /** Images narrower than this are upscaled before OCR (Tesseract reads small text poorly). */
 const MIN_OCR_WIDTH = 2000;
-const MAX_OCR_WIDTH = 4000;
+/**
+ * Wider images are scaled down to this. Measured on the noisiest fixture (Apple M1): the longest single pass took
+ * 0.46 s at 2500 px, 0.54 s at 3000 px but 17–53 s at 4000 px, and a pass can't be interrupted, so a 12 MP phone
+ * photo (≈4000 px) could overrun the time limit by most of a minute. 2500 px still gives letters plenty of pixels.
+ */
+export const MAX_OCR_WIDTH = 2500;
 
 const workers = new Map<string, { worker: Promise<Worker>; queue: Promise<unknown>; waiting: number }>();
 

@@ -14,6 +14,7 @@ export type ReviewFlags = {
   aiOnly?: boolean;
   rangeStart?: string | null;
   yearInferred?: boolean;
+  removedSinceUpload?: boolean;
 };
 
 /** "h:mm AM" (the format the server reads), independent of the phone's locale. */
@@ -59,6 +60,7 @@ export function DeadlineReviewItem({
   const notes: Array<{ key: StringKey; vars?: Record<string, string>; tone: "warning" | "info" }> = [];
   if (!date) notes.push({ key: flags.needsSemesterStart ? "docReview.needsSemesterStart" : "docReview.noDate", tone: "warning" });
   if (date && flags.assumedTime) notes.push({ key: "docReview.assumedTime", tone: "warning" });
+  if (flags.removedSinceUpload) notes.push({ key: "docReview.removedSinceUpload", tone: "info" });
   if (flags.aiOnly) notes.push({ key: "docReview.aiOnly", tone: "info" });
   if (flags.rangeStart) notes.push({ key: "docReview.range", vars: { start: flags.rangeStart }, tone: "info" });
   if (flags.yearInferred) notes.push({ key: "docReview.yearInferred", tone: "info" });

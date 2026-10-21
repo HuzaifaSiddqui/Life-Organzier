@@ -119,11 +119,11 @@ export function DocumentsScreen({ navigation }: Props) {
         time: d.time ?? "",
         confidence: d.confidence,
         // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
-        include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly,
+        include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload,
         created: Boolean(d.created),
         existing: Boolean(d.existing),
         source: d.source,
-        flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred },
+        flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, removedSinceUpload: d.removedSinceUpload },
       })),
     );
     setSchedules(

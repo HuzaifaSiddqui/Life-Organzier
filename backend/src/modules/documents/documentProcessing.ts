@@ -41,8 +41,9 @@ const DEADLINE_AUTO = 95;
 const SCHEDULE_AUTO = 90;
 
 type Extracted = {
-  deadlines: Array<ExtractedDeadline & { created?: boolean; existing?: boolean; taskId?: string }>;
-  schedules: Array<ExtractedSchedule & { created?: boolean; existing?: boolean; routineId?: string }>;
+  /** removedSinceUpload: it was added from this document but has been deleted since (a reused result says so). */
+  deadlines: Array<ExtractedDeadline & { created?: boolean; existing?: boolean; taskId?: string; removedSinceUpload?: boolean }>;
+  schedules: Array<ExtractedSchedule & { created?: boolean; existing?: boolean; routineId?: string; removedSinceUpload?: boolean }>;
   course: CourseInfo;
   ocrConfidence: number;
   warning: string | null;
@@ -173,9 +174,33 @@ async function reuseOrProcess(user: User, settings: UserSettings, input: Process
   const recent = await prisma.document.findFirst({ where: { userId: user.id, contentHash: hash, createdAt: { gte: new Date(Date.now() - REUSE_WITHIN_MS) } }, orderBy: { createdAt: "desc" } });
   if (recent?.extracted) {
     const { text, ...doc } = recent;
-    return { document: doc, extracted: recent.extracted as unknown as Extracted, createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
+    return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
   }
   return processDocumentOnce(user, settings, input, hash);
+}
+
+/**
+ * A saved result's created / existing flags as of now: an item whose task or routine was deleted (or archived)
+ * since is offered again (not created, no id, removedSinceUpload) instead of claiming a task that is gone.
+ * Nothing is re-created automatically: the user deleted it, so they decide.
+ */
+async function withCurrentState(userId: string, saved: Extracted): Promise<Extracted> {
+  const extracted = structuredClone(saved);
+  const taskIds = extracted.deadlines.map((d) => d.taskId).filter((id): id is string => Boolean(id));
+  const routineIds = extracted.schedules.map((s) => s.routineId).filter((id): id is string => Boolean(id));
+  const [tasks, routines] = await Promise.all([
+    prisma.task.findMany({ where: { id: { in: taskIds }, userId, status: { not: TaskStatus.DELETED }, archived: false }, select: { id: true } }),
+    prisma.routine.findMany({ where: { id: { in: routineIds }, userId }, select: { id: true } }),
+  ]);
+  const liveTasks = new Set(tasks.map((t) => t.id));
+  const liveRoutines = new Set(routines.map((r) => r.id));
+  for (const d of extracted.deadlines) {
+    if (d.taskId && !liveTasks.has(d.taskId)) Object.assign(d, { created: false, existing: false, taskId: undefined, removedSinceUpload: true });
+  }
+  for (const s of extracted.schedules) {
+    if (s.routineId && !liveRoutines.has(s.routineId)) Object.assign(s, { created: false, existing: false, routineId: undefined, removedSinceUpload: true });
+  }
+  return extracted;
 }
 
 async function processDocumentOnce(user: User, settings: UserSettings, input: ProcessInput, contentHash: string) {

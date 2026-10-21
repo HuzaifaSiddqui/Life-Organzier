@@ -72,7 +72,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   minutes for an upload (3 for pasted text).
 - **The 150 s limit covers the OCR queue too**: an image that only reaches the front with less than 8 s left is
   refused as busy rather than read past the limit; a scanned PDF stops at the limit with the pages read so far.
-  A pass already running can't be interrupted, so a document can overrun by one OCR pass (a few seconds).
+  A pass already running can't be interrupted, so a document can overrun by one OCR pass: about 1 s on the largest
+  fixture, and images are scaled to at most 2500 px wide because at 4000 px a single pass took up to 53 s.
 - **If the phone gives up waiting, the server still finishes and saves** (document and auto-created tasks). Sending
   the same file again within 24 hours returns that saved result instead of reading it again (the document is
   identified by a hash of its content, type and language); after 24 hours it is read again, and auto-created tasks
