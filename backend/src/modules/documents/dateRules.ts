@@ -135,7 +135,8 @@ export function withDocumentYear(date: DateEntity, ctx: YearContext): { ymd: str
   if (hasExplicitYear(date.text) || !isCalendarDate(date.text)) return { ymd: date.ymd, inferred: false };
   const [, mm, dd] = date.ymd.split("-");
   const year = ctx.yearFor(Number(mm));
-  return year ? { ymd: `${year}-${mm}-${dd}`, inferred: `${year}` !== date.ymd.slice(0, 4) } : { ymd: date.ymd, inferred: false };
+  // inferred: the date had no year and the document supplied it (even when "next occurrence" would agree).
+  return year ? { ymd: `${year}-${mm}-${dd}`, inferred: true } : { ymd: date.ymd, inferred: false };
 }
 
 /* ------------------------------------------------------------------ semester weeks */

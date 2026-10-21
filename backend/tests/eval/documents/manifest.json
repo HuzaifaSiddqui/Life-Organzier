@@ -716,6 +716,59 @@
       "expectedSchedules": []
     },
     {
+      "file": "fixtures/year-fall-january.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 1",
+          "date": "2026-09-14"
+        },
+        {
+          "titleContains": "Quiz 3",
+          "date": "2026-11-18"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2027-01-12",
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Project report",
+          "date": "2027-01-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/year-two-years.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 4",
+          "date": "2026-12-14"
+        },
+        {
+          "titleContains": "Revision quiz",
+          "date": "2026-12-28"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2027-01-11"
+        },
+        {
+          "titleContains": "Project",
+          "date": "2027-01-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
       "file": "images/multiline-exam.clean.png",
       "from": "multiline-exam",
       "docType": "SYLLABUS",

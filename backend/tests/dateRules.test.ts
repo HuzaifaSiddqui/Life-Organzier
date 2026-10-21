@@ -79,3 +79,23 @@ test("tickets and notices: the departure time wins; a month-year period is not a
   assert.ok(flight.confidence < 95, "non-academic items are always reviewed");
   assert.deepEqual(extractDeadlines("Electricity Bill\nBill Month: Oct 2026", NOW, TZ), []);
 });
+
+test("year inference: Fall 2026 puts September and November in 2026 and January in 2027, and says so", () => {
+  const d = extractDeadlines("CS-401 - Fall 2026\nQuiz 1 on 14 Sep\nQuiz 3 on 18 Nov\nFinal exam: 12 Jan at 9 AM\nProject report due Jan 20", NOW, TZ);
+  const by = (t: string) => d.find((x) => x.title.toLowerCase().includes(t));
+  assert.equal(by("quiz 1")?.date, "2026-09-14", "past in the term, not next year");
+  assert.equal(by("quiz 3")?.date, "2026-11-18");
+  assert.equal(by("final")?.date, "2027-01-12");
+  assert.equal(by("project")?.date, "2027-01-20");
+  assert.ok(d.every((x) => x.yearInferred), "every date took its year from the term");
+});
+
+test("year inference: no term, dates in two years; a date without a year joins the nearer one", () => {
+  const d = extractDeadlines("Quiz 4: 14 Dec 2026\nRevision quiz Dec 28\nFinal exam: 11 Jan 2027\nProject due Jan 20", NOW, TZ);
+  const by = (t: string) => d.find((x) => x.title.toLowerCase().includes(t));
+  assert.equal(by("revision")?.date, "2026-12-28");
+  assert.equal(by("revision")?.yearInferred, true);
+  assert.equal(by("project")?.date, "2027-01-20");
+  assert.equal(by("project")?.yearInferred, true);
+  assert.equal(by("quiz 4")?.yearInferred, undefined, "a written year is not inferred");
+});
