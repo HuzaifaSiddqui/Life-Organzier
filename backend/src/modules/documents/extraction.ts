@@ -4,7 +4,7 @@ import { getAi } from "../../ai/llm.js";
 import { formatClock } from "../../lib/time.js";
 import { fuzzySimilarity } from "../../lib/text.js";
 import { cleanTitle, extractEntities } from "../assistant/entities.js";
-import { documentYear, joinRecords, normalizeDocumentText, rangeToEnd, readTables, semesterStart, urduActivityHint, urduWeekdayStart, WEEK_RE, weekToDate, withDocumentYear } from "./dateRules.js";
+import { documentYear, isHeaderRow, joinRecords, normalizeDocumentText, rangeToEnd, readTables, semesterStart, urduActivityHint, urduWeekdayStart, WEEK_RE, weekToDate, withDocumentYear } from "./dateRules.js";
 
 export type ExtractedDeadline = {
   index: number;
@@ -171,6 +171,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     let title = c.title?.trim()
       ? cleanTitle(c.title)
       : cleanTitle(e.residual.replace(/\b(?:is\s+)?(?:due|deadline|on|by|at|will be held|scheduled for)\b/gi, " ").replace(WEEK_RE, " ").replace(/[|:]+/g, " ")).replace(/\s{2,}/g, " ").trim();
+    if (isHeaderRow(title)) continue; // a table's header row joined with the row below it
     if (WEAK_TITLE.test(title.replace(/[^\p{L}\p{N}\s]/gu, "").trim()) || title.length < 3) {
       title = event && heading ? `${event.charAt(0).toUpperCase()}${event.slice(1)}: ${heading}` : activity ? activity.charAt(0).toUpperCase() + activity.slice(1) : (heading ?? "Deadline");
     }

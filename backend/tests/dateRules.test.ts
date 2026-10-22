@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { documentYear, joinRecords, normalizeDocumentText, rangeToEnd, readTables, repairOcr, semesterStart, urduWeekdayStart, weekToDate } from "../src/modules/documents/dateRules.js";
+import { capOcrConfidence, DEADLINE_AUTO } from "../src/modules/documents/documentProcessing.js";
+import { documentYear, isHeaderRow, joinRecords, normalizeDocumentText, rangeToEnd, readTables, repairOcr, semesterStart, urduWeekdayStart, weekToDate } from "../src/modules/documents/dateRules.js";
 import { extractDeadlines, extractSchedules } from "../src/modules/documents/extraction.js";
 import { NOW, TZ } from "./fixtures.js";
 
@@ -98,4 +99,35 @@ test("year inference: no term, dates in two years; a date without a year joins t
   assert.equal(by("project")?.date, "2027-01-20");
   assert.equal(by("project")?.yearInferred, true);
   assert.equal(by("quiz 4")?.yearInferred, undefined, "a written year is not inferred");
+});
+
+test("OCR auto-create guard: a misread title with a clear date and time is not auto-created below OCR 90", () => {
+  const text = "Item | Due | Time\nBroject | 30 Nov 2026 | 5:00 PM";
+  const [item] = extractDeadlines(text, NOW, TZ);
+  assert.equal(item.title, "Broject");
+  assert.equal(item.time, "5 PM");
+  assert.ok(item.confidence >= DEADLINE_AUTO, `rules alone would auto-create (${item.confidence})`);
+  const read = (method: string, ocr: number) => capOcrConfidence(extractDeadlines(text, NOW, TZ), method, ocr)[0].confidence;
+  assert.equal(read("ocr", 84), DEADLINE_AUTO - 1);
+  assert.equal(read("pdf-ocr", 89), DEADLINE_AUTO - 1);
+  assert.equal(read("ocr", 94), item.confidence);
+  assert.equal(read("ocr", 90), item.confidence);
+  assert.equal(read("text", 84), item.confidence);
+  assert.equal(read("pdf", 84), item.confidence);
+});
+
+test("header rows: a misread header is not an item; the real row keeps its own time", () => {
+  assert.ok(isHeaderRow("Te | Day | Paper | Time"));
+  assert.ok(isHeaderRow("Date   Day   Paper   Time"));
+  assert.ok(isHeaderRow("Tareekh | Din | Parcha | Waqt"));
+  assert.ok(isHeaderRow("تاریخ | دن | پرچہ | وقت"));
+  for (const keep of ["Due Date", "Paper", "Calculus Paper", "Assignment 1 | Due", "Date | Physics"]) assert.equal(isHeaderRow(keep), false, keep);
+
+  const sheet = ["Final Examination Date Sheet", "Te | Day | Paper | Time", "02-11-2026 | Monday | Calculus | 9:00 AM", "04-11-2026 | Wednesday | Physics | 1:00 PM"].join("\n");
+  const items = extractDeadlines(sheet, NOW, TZ);
+  assert.deepEqual(items.map((d) => [d.title, d.date, d.time]), [["Calculus", "2026-11-02", "9 AM"], ["Physics", "2026-11-04", "1 PM"]]);
+
+  // The OCR'd photo: rows too broken to read as a table. The header line must not become an item.
+  const photo = "Final E\n\nination: Date.\n\nte | Day | Paper | Time\n\n02-11-2026 f Monday | Cal\n\n00 AM";
+  assert.ok(!extractDeadlines(photo, NOW, TZ).some((d) => /day|time/i.test(d.title)), "no header-row item");
 });

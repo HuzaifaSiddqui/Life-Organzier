@@ -87,6 +87,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   get the rules only. Model-only items are never created automatically.
 - **OCR preprocessing** auto-rotates (EXIF), deskews up to ±10°, denoises, normalises contrast, sharpens and
   upscales to at least 2000 px. Pages upside down or rotated 90° without EXIF data are not corrected.
+- **Deadlines from a photo or scanned PDF that read below 90 % OCR confidence are never created automatically**
+  (capped at 94, under the 95 needed): a misread title ("Broject") can come with a clear date and time. They are
+  listed for review instead. Schedules are not capped (they auto-create at 90).
+- **Table header rows** ("Date | Day | Paper | Time", English, Roman Urdu or Urdu column names) never become items.
+  When OCR garbles one header cell ("Te" for "Date"), the date column is taken from the first row, but only if
+  that row has the same number of cells; otherwise the rows are skipped rather than guessed.
 - Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
 
 ## Task classification

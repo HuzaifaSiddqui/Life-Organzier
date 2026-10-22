@@ -37,8 +37,18 @@ export async function existingRoutineId(userId: string, title: string, daysOfWee
 }
 
 /** Auto-creation thresholds from FR-DP-002 §4 and FR-DP-003 §4. */
-const DEADLINE_AUTO = 95;
+export const DEADLINE_AUTO = 95;
 const SCHEDULE_AUTO = 90;
+/** Below this OCR confidence a title may be misread ("Broject"), so OCR'd deadlines always go to review. */
+export const OCR_AUTO_MIN = 90;
+
+/** Caps deadlines read by OCR at less than DEADLINE_AUTO when the page read poorly. Typed text and text-layer PDFs are unchanged. */
+export function capOcrConfidence<T extends { confidence: number }>(deadlines: T[], method: string, ocrConfidence: number): T[] {
+  if ((method === "ocr" || method === "pdf-ocr") && ocrConfidence < OCR_AUTO_MIN) {
+    for (const d of deadlines) d.confidence = Math.min(d.confidence, DEADLINE_AUTO - 1);
+  }
+  return deadlines;
+}
 
 type Extracted = {
   /** removedSinceUpload: it was added from this document but has been deleted since (a reused result says so). */
@@ -126,6 +136,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
     const dated = deadlines.filter((d) => d.date);
     if (dated.length && !schedules.length && dated.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
   }
+  capOcrConfidence(deadlines, raw.method, raw.confidence);
   // A grid lists many courses — picking one as "the course" would store a wrong memory.
   const course = extractCourseInfo(grid ? "" : text);
   if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200 && left() >= MIN_AI_MS) course.topics = await llmTopics(text, Math.min(45000, left()));
