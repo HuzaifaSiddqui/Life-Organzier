@@ -250,7 +250,32 @@ function cells(line: string): { cells: string[]; sep: "pipe" | "tab" | "spaces" 
   return parts.length >= 2 ? { cells: parts, sep: "spaces" } : null;
 }
 
-export type TableRow = { title: string; date: string; time: string | null; line: string; examTable: boolean };
+/** Column names (English, Roman Urdu, Urdu). A title made only of these is a header row, not an item. */
+const HEADER_WORD = /^(?:days?|dates?|papers?|times?|timings?|subjects?|courses?|due|weights?|weightage|marks|din|tareekh|tarikh|parcha|parchay|waqt|mazmoon|mazmun|wazan|nambar|دن|تاریخ|پرچہ|وقت|مضمون|کورس|وزن|نمبر)$/iu;
+const COLUMN_SEP = /\||\t|\s{2,}/;
+
+/**
+ * "Date | Day | Paper | Time" (or an OCR'd "Te | Day | Paper | Time"): every word is a column name, ignoring
+ * 1–2 letter OCR fragments. Needs three column names, or two with a column separator ("Due Date" alone is a label).
+ */
+export function isHeaderRow(text: string): boolean {
+  const words = text.split(/[\s|,:;/\\–-]+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+  const named = words.filter((w) => HEADER_WORD.test(w));
+  if (named.length < 2 || words.some((w) => !HEADER_WORD.test(w) && w.length > 2)) return false;
+  return named.length >= 3 || COLUMN_SEP.test(text);
+}
+
+/** OCR misread one header cell ("Te" for "Date"): the date column is the one where the first row has a date. */
+function inferDateColumn(names: string[], lines: string[], i: number, sep: string): number {
+  const unknown = names.map((n, k) => (n && !HEADER_WORD.test(n) && !DATE_COL.test(n) && !TITLE_COL.test(n) && !TIME_COL.test(n) ? k : -1)).filter((k) => k >= 0);
+  if (unknown.length !== 1 || names.filter(Boolean).length < 3) return -1;
+  const next = lines.slice(i + 1).find((l) => l.trim());
+  const row = next ? cells(next) : null;
+  if (!row || row.sep !== sep || row.cells.length !== names.length) return -1;
+  return DATE_ONLY.test(row.cells[unknown[0]] ?? "") ? unknown[0] : -1;
+}
+
+export type TableRow ={ title: string; date: string; time: string | null; line: string; examTable: boolean };
 export type DayColumnCell = { title: string; day: number; time: string; line: string };
 
 /**
@@ -283,7 +308,8 @@ export function readTables(lines: string[]): { rows: TableRow[]; classes: DayCol
       }
       continue;
     }
-    const dateCol = names.findIndex((n) => DATE_COL.test(n));
+    let dateCol = names.findIndex((n) => DATE_COL.test(n));
+    if (dateCol < 0) dateCol = inferDateColumn(names, lines, i, head.sep);
     if (dateCol < 0) continue;
     let titleCol = names.findIndex((n) => TITLE_COL.test(n));
     if (titleCol < 0) titleCol = names.findIndex((n, k) => k !== dateCol && n && !TIME_COL.test(n) && !/^(?:day|weight|marks?|%|weightage|points)$/i.test(n));
