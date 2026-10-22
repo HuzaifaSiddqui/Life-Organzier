@@ -202,6 +202,10 @@ Saved places are reusable; tasks link to them. The phone monitors geofences; the
 - **`PUT /api/settings/phone` was removed.** The number is set only by the LINK flow. `GET /api/settings` returns `whatsapp: { linked, maskedNumber }` (last 3 digits) instead of the number; `/auth/sync-user` and `/users/me` mask it the same way.
 - **Routines** accept and return `location` (room/venue, max 60). `POST /api/documents/:id/confirm` schedules accept `location`.
 
+### Push (P2)
+
+- **`POST /api/push/register`** (auth) `{ token, platform: "android"|"ios", deviceId? }` saves the device's Expo push token (a token used by another account on the same phone moves to this one). **`DELETE /api/push/register`** `{ token }` removes it (only the owner's). **`POST /api/push/unregister-device`** `{ token, deviceId }` (no login) is used by the phone's sign-out retry queue: it deletes the token only when the device id matches the one it was registered with. Tokens are never logged.
+
 ### Check-ins (FR-RN-004)
 
 **`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):

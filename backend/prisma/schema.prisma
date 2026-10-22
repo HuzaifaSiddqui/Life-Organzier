@@ -38,6 +38,7 @@ model User {
   checkinLogs          CheckinLog[]
   savedLocations       SavedLocation[]
   whatsappLinkCode     WhatsappLinkCode?
+  pushTokens           PushToken[]
 }
 
 model Task {
@@ -334,7 +335,7 @@ model ReminderLog {
   fireAt              DateTime
   level               String
   category            String?
-  /// SCHEDULED | ACTED | IGNORED | SENDING | SENT_WHATSAPP | SKIPPED | FAILED
+  /// SCHEDULED | ACTED | IGNORED | SENDING | SENT_WHATSAPP | SKIPPED | FAILED | SNOOZED (a WhatsApp snooze; recordPlan never deletes it)
   status              String    @default("SCHEDULED")
   action              String?
   actedAt             DateTime?
@@ -528,4 +529,18 @@ model WhatsappInbound {
   createdAt  DateTime @default(now())
 
   @@index([status, createdAt])
+}
+
+/// Expo push token of a signed-in device (P2: tasks added on WhatsApp appear on the phone). Never logged.
+model PushToken {
+  token     String   @id
+  userId    String
+  platform  String
+  deviceId  String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

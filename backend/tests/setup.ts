@@ -5,7 +5,8 @@
  *   backend/.env by itself, so tests wrote to whatever DATABASE_URL pointed at (the dev database).
  *   npm test refuses to run without TEST_DATABASE_URL, or if its database name doesn't contain "test".
  * - No real WhatsApp messages or pushes: Twilio and Expo credentials are blanked (blank, not deleted, so
- *   Prisma's own .env loading can't fill them back in) and any request to their hosts throws.
+ *   Prisma's own .env loading can't fill them back in), any request to their hosts throws, and pushes go
+ *   to a fake provider.
  * - No real model: AI is switched off (AI_ENABLED=false, as in CI) and GEMINI_API_KEY is blanked, so the
  *   provider chain is empty and replies come from the rules. Requests to Gemini or Ollama throw too. A test
  *   that needs a model injects a fake one with setAi(new AiService([...])).
@@ -47,3 +48,10 @@ globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeo
   }
   return realFetch(input, init);
 }) as typeof fetch;
+
+// Pushes go to a fake provider unless a test installs its own (setPushProvider); Expo is never called.
+const { setPushProvider } = await import("../src/modules/push/pushService.js");
+setPushProvider({
+  send: async (messages) => messages.map((_, i) => ({ id: `test-ticket-${Date.now()}-${i}` })),
+  receipts: async () => ({}),
+});

@@ -3,8 +3,9 @@ import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
 import { computeDueAt } from "../lib/time.js";
 import { expireCheckins } from "../modules/checkins/checkinService.js";
+import { checkPushReceipts } from "../modules/push/pushService.js";
 import { purgeOldInbound, recoverStuckInbound } from "../modules/whatsapp/inbound.js";
-import { replanStaleWhatsappUsers, sendDueWhatsappReminders } from "../modules/whatsapp/whatsappService.js";
+import { replanStaleWhatsappUsers, sendDueWhatsappReminders, sendUrgentWhatsappAlerts } from "../modules/whatsapp/whatsappService.js";
 
 /** Permanent deletion & retention rules from the FRD (FR-TM-005, FR-MS-004, FR-AP-001). */
 export async function runMaintenance(now = new Date()): Promise<void> {
@@ -43,11 +44,13 @@ export async function backfillDueAt(): Promise<void> {
   if (tasks.length) console.info(`Backfilled deadlines for ${tasks.length} tasks`);
 }
 
-/** Every 5 minutes: lost inbound messages, then fresh reminder plans for WhatsApp users, then due reminders. */
+/** Every 5 minutes: lost inbound messages, fresh reminder plans for WhatsApp users, due reminders and snoozes, urgent alerts, push receipts. */
 export async function runWhatsappJobs(now = new Date()): Promise<void> {
   await recoverStuckInbound(now);
   await replanStaleWhatsappUsers(now);
   await sendDueWhatsappReminders(now);
+  await sendUrgentWhatsappAlerts(now);
+  await checkPushReceipts(now.getTime());
 }
 
 export function startJobs(): () => void {
