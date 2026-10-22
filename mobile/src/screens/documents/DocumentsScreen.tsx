@@ -4,6 +4,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as Network from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineReviewItem";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
@@ -37,8 +38,17 @@ const LANGS = [
 const MAX_BYTES = 10 * 1024 * 1024;
 
 type Picked = { uri: string; name: string; mimeType: string; size: number };
-type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; assumedTime: boolean };
+type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags };
 type EditableSchedule = { index: number; title: string; room: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
+
+/**
+ * Staged status, in the order the server works (upload → read the text → find dates). The server doesn't report
+ * its stage, so after the upload the switch from "Reading" to "Finding dates" is timed, not measured.
+ */
+function processingStage(progress: number, elapsedS: number): string {
+  if (progress < 1) return `Uploading… ${Math.round(progress * 100)}%`;
+  return elapsedS < 8 ? "Reading the document…" : "Finding dates and classes…";
+}
 
 function confColor(c: number): string {
   return c >= 90 ? palette.success : c >= 80 ? palette.warning : palette.danger;
@@ -61,9 +71,13 @@ export function DocumentsScreen({ navigation }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const [elapsed, setElapsed] = useState(0);
   const busy = progress !== null;
+  /** Seconds on the busy timer when the upload finished (the server's work is timed from there). */
+  const uploadedAt = useRef<number | null>(null);
+  if (busy && progress! >= 1 && uploadedAt.current === null) uploadedAt.current = elapsed;
   useEffect(() => {
     if (!busy) return;
     setElapsed(0);
+    uploadedAt.current = null;
     const id = setInterval(() => setElapsed((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [busy]);
@@ -90,9 +104,11 @@ export function DocumentsScreen({ navigation }: Props) {
     // Fast extractions finish in under a second — say so and scroll to the results, or it looks like nothing happened.
     const { deadlines: d, schedules: s } = r.extracted;
     setToast(
-      d.length || s.length
-        ? `Found ${d.length} deadline${d.length === 1 ? "" : "s"} and ${s.length} schedule${s.length === 1 ? "" : "s"}`
-        : "No deadlines or classes found in this file",
+      r.reused
+        ? "You uploaded this file earlier, so here's what I found then. Nothing was added twice."
+        : d.length || s.length
+          ? `Found ${d.length} deadline${d.length === 1 ? "" : "s"} and ${s.length} schedule${s.length === 1 ? "" : "s"}`
+          : "No deadlines or classes found in this file",
     );
     setTimeout(() => scrollRef.current?.scrollTo({ y: resultsY.current, animated: true }), 300);
     setDeadlines(
@@ -102,10 +118,12 @@ export function DocumentsScreen({ navigation }: Props) {
         date: d.date ?? "",
         time: d.time ?? "",
         confidence: d.confidence,
-        include: !d.created && d.confidence >= 80 && Boolean(d.date),
+        // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
+        include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload,
         created: Boolean(d.created),
         existing: Boolean(d.existing),
-        assumedTime: d.assumedTime,
+        source: d.source,
+        flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, removedSinceUpload: d.removedSinceUpload },
       })),
     );
     setSchedules(
@@ -244,14 +262,13 @@ export function DocumentsScreen({ navigation }: Props) {
                 <View style={styles.busy}>
                   <View style={styles.rowBetween}>
                     <ActivityIndicator color={palette.ai} />
-                    <Text style={[ui.body, { flex: 1 }]}>
-                      {progress! < 1 ? `Uploading… ${Math.round(progress! * 100)}%` : "Reading and extracting deadlines…"}
-                    </Text>
+                    <Text style={[ui.body, { flex: 1 }]}>{processingStage(progress!, elapsed - (uploadedAt.current ?? elapsed))}</Text>
                     <Text style={styles.meta}>{elapsed}s</Text>
                   </View>
+                  {/* A real percentage only while uploading; the server's work has no honest percentage. */}
                   {progress! < 1 ? <ProgressBar value={Math.round(progress! * 100)} color={palette.ai} /> : null}
-                  {progress! >= 1 && elapsed >= 10 ? (
-                    <Text style={styles.meta}>Photos are read with OCR, which can take up to a minute. Please keep the app open.</Text>
+                  {progress! >= 1 && elapsed - (uploadedAt.current ?? elapsed) >= 20 ? (
+                    <Text style={styles.meta}>Photos and scanned PDFs are read with OCR and checked again; this can take up to 2½ minutes. Please keep the app open.</Text>
                   ) : null}
                 </View>
               ) : (
@@ -303,14 +320,17 @@ export function DocumentsScreen({ navigation }: Props) {
                     </Pressable>
                     <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, title } : x)))} />
                   </View>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.date} placeholder="YYYY-MM-DD" placeholderTextColor="#646A78" editable={!d.created} onChangeText={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date } : x)))} />
-                    <TextInput style={[ui.input, { width: 110, paddingVertical: 8 }]} value={d.time} placeholder="11:59 PM" placeholderTextColor="#646A78" editable={!d.created} onChangeText={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
-                  </View>
+                  <DeadlineReviewItem
+                    date={d.date}
+                    time={d.time}
+                    source={d.source}
+                    flags={d.created ? { assumedTime: false } : d.flags}
+                    disabled={d.created}
+                    onChangeDate={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date, include: true, flags: { ...x.flags, needsSemesterStart: false } } : x)))}
+                    onChangeTime={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time, flags: { ...x.flags, assumedTime: false } } : x)))}
+                  />
                   <Text style={[styles.meta, { color: confColor(d.confidence) }]}>
                     {d.existing ? "Already in your tasks · " : d.created ? "Added automatically · " : ""}Confidence {d.confidence}%
-                    {d.assumedTime && !d.created ? " · time assumed 11:59 PM — OK?" : ""}
-                    {!d.date ? " · too vague — enter a date" : ""}
                   </Text>
                 </Card>
               ))

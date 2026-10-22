@@ -1,0 +1,5 @@
+CS-401 Compiler Construction - Fall 2026
+Quiz 1 on 14 Sep
+Quiz 3 on 18 Nov
+Final exam: 12 Jan at 9 AM
+Project report due Jan 20

@@ -1,0 +1,10 @@
+CS-301 Operating Systems
+Fall 2026
+Instructor: Dr. Ayesha Malik
+Prerequisites: CS-201 Data Structures
+
+Grading: Assignments 20%, Midterm 30%, Final 50%
+
+Assignment 1 is due on Oct 15.
+Midterm exam: Nov 2 at 9 AM.
+Final project due December 10, 2026 by 11:59 PM.

@@ -4,6 +4,7 @@ import { getAi } from "../../ai/llm.js";
 import { prisma } from "../../config/db.js";
 import { formatDuration } from "../../lib/text.js";
 import { ACK_TEMPLATES, FIRST_STEP_LIBRARY, TEMPLATES, type CopyKind, type Lang, type Tone } from "./templates.js";
+import { background } from "../../lib/background.js";
 
 /**
  * FR-RN-004 check-in copy. Message text always comes from the reviewed templates; only the first
@@ -301,7 +302,7 @@ export function messageFor(copy: CheckinCopy, kind: CopyKind, tone: Tone, task: 
  * stores the result only if the slot is still the same. Never blocks the caller.
  */
 export function refreshCheckinCopy(task: TaskForCopy & { userId: string }): void {
-  void (async () => {
+  background((async () => {
     try {
       if (!task.scheduledStart) return;
       const settings = await prisma.userSettings.findUnique({ where: { userId: task.userId }, select: { language: true, checkinTone: true, checkinsEnabled: true } });
@@ -314,5 +315,5 @@ export function refreshCheckinCopy(task: TaskForCopy & { userId: string }): void
     } catch (error) {
       console.warn("Check-in copy generation failed", error instanceof Error ? error.message : error);
     }
-  })();
+  })());
 }

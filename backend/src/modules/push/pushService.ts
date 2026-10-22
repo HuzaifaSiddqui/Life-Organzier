@@ -1,5 +1,6 @@
 import { prisma } from "../../config/db.js";
 import { setBounded } from "../../lib/boundedMap.js";
+import { background } from "../../lib/background.js";
 
 /**
  * Push notifications to the user's phones (P2). Used so a task added on WhatsApp shows up on the phone
@@ -140,5 +141,5 @@ export async function checkPushReceipts(now = Date.now(), minAgeMs = 15 * 60000)
 export function notifyAddedFromWhatsapp(userId: string, titles: string[]): void {
   if (!titles.length) return;
   const body = titles.length === 1 ? titles[0] : `${titles.length} items: ${titles.slice(0, 3).join(", ")}${titles.length > 3 ? "…" : ""}`;
-  void sendPushToUser(userId, { title: "Added from WhatsApp", body: body.slice(0, 180), data: { type: "sync" } });
+  background(sendPushToUser(userId, { title: "Added from WhatsApp", body: body.slice(0, 180), data: { type: "sync" } }));
 }

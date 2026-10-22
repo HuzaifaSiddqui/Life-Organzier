@@ -1,0 +1,1060 @@
+{
+  "description": "Synthetic documents for `npm run eval:documents` (no personal data). Dates are relative to 'now' in 'timezone'. expectedDeadlines: titleContains (case-insensitive; empty = any title), date (YYYY-MM-DD, or null = should appear as an undated item for review), time (optional, '5 PM' style). expectedSchedules: titleContains, days (0=Sun..6=Sat; days of rows with the same title and time are combined), time, room (optional). Image rows reuse a text row's expectations ('from').",
+  "now": "2026-10-05T05:00:00.000Z",
+  "timezone": "Asia/Karachi",
+  "documents": [
+    {
+      "file": "fixtures/multiline-exam.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "multi-line"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Midterm",
+          "date": "2026-11-15",
+          "time": "10 AM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/multiline-assignments.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "multi-line"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 1",
+          "date": "2026-10-12"
+        },
+        {
+          "titleContains": "Assignment 2",
+          "date": "2026-10-26",
+          "time": "5 PM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/multiline-quiz-split.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "multi-line",
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 3",
+          "date": "2026-10-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/multiline-ocr-labels.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "multi-line",
+        "ordinal"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Mid",
+          "date": "2026-11-10",
+          "time": "9 AM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/table-pipe.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "table"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 1",
+          "date": "2026-10-14"
+        },
+        {
+          "titleContains": "Assignment 2",
+          "date": "2026-10-28"
+        },
+        {
+          "titleContains": "Project",
+          "date": "2026-11-30"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/table-tabs-dayfirst.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "table",
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Lab Report 1",
+          "date": "2026-10-09"
+        },
+        {
+          "titleContains": "Lab Report 2",
+          "date": "2026-10-23"
+        },
+        {
+          "titleContains": "Lab Report 3",
+          "date": "2026-11-06"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/table-spaces.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "table"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Proposal",
+          "date": "2026-10-16"
+        },
+        {
+          "titleContains": "Progress Report",
+          "date": "2026-11-06"
+        },
+        {
+          "titleContains": "Final Report",
+          "date": "2026-12-04"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/table-datesheet.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "table",
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Calculus",
+          "date": "2026-11-02",
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Physics",
+          "date": "2026-11-04",
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "English",
+          "date": "2026-11-06",
+          "time": "1 PM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/week-numbers.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "week-number"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 2",
+          "date": "2026-10-12"
+        },
+        {
+          "titleContains": "Midterm",
+          "date": "2026-10-26"
+        },
+        {
+          "titleContains": "Project presentation",
+          "date": "2026-12-07"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/week-numbers-no-start.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "week-number"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 1",
+          "date": null
+        },
+        {
+          "titleContains": "Midterm",
+          "date": null
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/week-with-range.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "week-number",
+        "range"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 2",
+          "date": "2026-10-09"
+        },
+        {
+          "titleContains": "Assignment 3",
+          "date": "2026-10-23"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/range-dash.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "range"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Midterm",
+          "date": "2026-10-24"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2026-12-18"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/range-to.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "range"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "presentation",
+          "date": "2026-12-11"
+        },
+        {
+          "titleContains": "Viva",
+          "date": "2026-11-25"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/two-digit-year.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "two-digit-year",
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 3",
+          "date": "2026-11-18"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2026-12-21",
+          "time": "9 AM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/sept-abbrev.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "month-abbrev",
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 1",
+          "date": "2026-09-29"
+        },
+        {
+          "titleContains": "Assignment 1",
+          "date": "2026-09-30"
+        },
+        {
+          "titleContains": "Quiz 2",
+          "date": "2026-10-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/ocr-slips.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "ocr-slip"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 2",
+          "date": "2026-10-12"
+        },
+        {
+          "titleContains": "Quiz 4",
+          "date": "2026-11-12"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2026-12-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/ocr-noise.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "ocr-slip"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assign",
+          "date": "2026-10-14"
+        },
+        {
+          "titleContains": "Quiz",
+          "date": "2026-10-21"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/day-first-numeric.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "lab report",
+          "date": "2026-11-07"
+        },
+        {
+          "titleContains": "Quiz",
+          "date": "2026-12-03"
+        },
+        {
+          "titleContains": "Project",
+          "date": "2026-12-11"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/ordinals.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "ordinal"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "project",
+          "date": "2026-12-03"
+        },
+        {
+          "titleContains": "Quiz 2",
+          "date": "2026-10-21"
+        },
+        {
+          "titleContains": "Presentation",
+          "date": "2026-11-02"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/ticket-train.txt",
+      "docType": "OTHER",
+      "categories": [
+        "ticket"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "",
+          "date": "2026-11-07",
+          "time": "10 PM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/ticket-flight.txt",
+      "docType": "OTHER",
+      "categories": [
+        "ticket"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "",
+          "date": "2026-10-14",
+          "time": "6:45 AM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/invoice-electric.txt",
+      "docType": "OTHER",
+      "categories": [
+        "invoice"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "",
+          "date": "2026-10-22"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/invoice-fee.txt",
+      "docType": "OTHER",
+      "categories": [
+        "invoice",
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "fee",
+          "date": "2026-10-15"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/notice-scholarship.txt",
+      "docType": "OTHER",
+      "categories": [
+        "notice",
+        "ordinal"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "scholarship",
+          "date": "2026-10-30"
+        },
+        {
+          "titleContains": "Interview",
+          "date": "2026-11-05",
+          "time": "11 AM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/notice-invitation.txt",
+      "docType": "OTHER",
+      "categories": [
+        "notice",
+        "ordinal"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Dinner",
+          "date": "2026-10-24",
+          "time": "7:30 PM"
+        },
+        {
+          "titleContains": "RSVP",
+          "date": "2026-10-15"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/notice-appointment.txt",
+      "docType": "OTHER",
+      "categories": [
+        "notice",
+        "day-first"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "appointment",
+          "date": "2026-11-12",
+          "time": "4:15 PM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/roman-urdu.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "roman-urdu"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 2",
+          "date": "2026-10-20"
+        },
+        {
+          "titleContains": "Quiz 3",
+          "date": "2026-10-12"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/urdu.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "urdu"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "اسائنمنٹ",
+          "date": "2026-10-20"
+        },
+        {
+          "titleContains": "امتحان",
+          "date": "2026-11-09"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/timetable-rows.txt",
+      "docType": "SCHEDULE",
+      "categories": [
+        "timetable"
+      ],
+      "expectedDeadlines": [],
+      "expectedSchedules": [
+        {
+          "titleContains": "Calculus",
+          "days": [
+            1,
+            3
+          ],
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Physics",
+          "days": [
+            1
+          ],
+          "time": "11 AM"
+        },
+        {
+          "titleContains": "Physics Lab",
+          "days": [
+            5
+          ],
+          "time": "2 PM"
+        }
+      ]
+    },
+    {
+      "file": "fixtures/timetable-course-list.txt",
+      "docType": "SCHEDULE",
+      "categories": [
+        "timetable"
+      ],
+      "expectedDeadlines": [],
+      "expectedSchedules": [
+        {
+          "titleContains": "Data Structures",
+          "days": [
+            1,
+            3
+          ],
+          "time": "11 AM",
+          "room": "B-12"
+        },
+        {
+          "titleContains": "Linear Algebra",
+          "days": [
+            2,
+            4
+          ],
+          "time": "2 PM",
+          "room": "C-3"
+        }
+      ]
+    },
+    {
+      "file": "fixtures/timetable-day-columns.txt",
+      "docType": "SCHEDULE",
+      "categories": [
+        "timetable",
+        "table"
+      ],
+      "expectedDeadlines": [],
+      "expectedSchedules": [
+        {
+          "titleContains": "Calculus",
+          "days": [
+            1,
+            3
+          ],
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Physics",
+          "days": [
+            2
+          ],
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "English",
+          "days": [
+            1
+          ],
+          "time": "10 AM"
+        },
+        {
+          "titleContains": "Chemistry",
+          "days": [
+            3
+          ],
+          "time": "10 AM"
+        }
+      ]
+    },
+    {
+      "file": "fixtures/timetable-roman-urdu.txt",
+      "docType": "SCHEDULE",
+      "categories": [
+        "timetable",
+        "roman-urdu"
+      ],
+      "expectedDeadlines": [],
+      "expectedSchedules": [
+        {
+          "titleContains": "Calculus",
+          "days": [
+            1
+          ],
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Physics",
+          "days": [
+            3
+          ],
+          "time": "11 AM"
+        }
+      ]
+    },
+    {
+      "file": "fixtures/syllabus-full.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "syllabus",
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Assignment 1",
+          "date": "2026-10-15"
+        },
+        {
+          "titleContains": "Midterm",
+          "date": "2026-11-02",
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Final project",
+          "date": "2026-12-10",
+          "time": "11:59 PM"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/syllabus-past-dates.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 1",
+          "date": "2026-09-20"
+        },
+        {
+          "titleContains": "Assignment 1",
+          "date": "2026-09-25"
+        },
+        {
+          "titleContains": "Quiz 2",
+          "date": "2026-10-25"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/no-deadlines.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "precision"
+      ],
+      "expectedDeadlines": [],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/year-fall-january.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 1",
+          "date": "2026-09-14"
+        },
+        {
+          "titleContains": "Quiz 3",
+          "date": "2026-11-18"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2027-01-12",
+          "time": "9 AM"
+        },
+        {
+          "titleContains": "Project report",
+          "date": "2027-01-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "fixtures/year-two-years.txt",
+      "docType": "SYLLABUS",
+      "categories": [
+        "year-inference"
+      ],
+      "expectedDeadlines": [
+        {
+          "titleContains": "Quiz 4",
+          "date": "2026-12-14"
+        },
+        {
+          "titleContains": "Revision quiz",
+          "date": "2026-12-28"
+        },
+        {
+          "titleContains": "Final",
+          "date": "2027-01-11"
+        },
+        {
+          "titleContains": "Project",
+          "date": "2027-01-20"
+        }
+      ],
+      "expectedSchedules": []
+    },
+    {
+      "file": "images/multiline-exam.clean.png",
+      "from": "multiline-exam",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "clean"
+      ]
+    },
+    {
+      "file": "images/multiline-exam.lowcontrast.png",
+      "from": "multiline-exam",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "lowcontrast"
+      ]
+    },
+    {
+      "file": "images/multiline-exam.blur.png",
+      "from": "multiline-exam",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "blur"
+      ]
+    },
+    {
+      "file": "images/multiline-exam.rotate.png",
+      "from": "multiline-exam",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "rotate"
+      ]
+    },
+    {
+      "file": "images/multiline-exam.noise.jpg",
+      "from": "multiline-exam",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "noise"
+      ]
+    },
+    {
+      "file": "images/multiline-exam.small.png",
+      "from": "multiline-exam",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "small"
+      ]
+    },
+    {
+      "file": "images/table-pipe.clean.png",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "clean"
+      ]
+    },
+    {
+      "file": "images/table-pipe.lowcontrast.png",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "lowcontrast"
+      ]
+    },
+    {
+      "file": "images/table-pipe.blur.png",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "blur"
+      ]
+    },
+    {
+      "file": "images/table-pipe.rotate.png",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "rotate"
+      ]
+    },
+    {
+      "file": "images/table-pipe.noise.jpg",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "noise"
+      ]
+    },
+    {
+      "file": "images/table-pipe.small.png",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "small"
+      ]
+    },
+    {
+      "file": "images/ticket-train.clean.png",
+      "from": "ticket-train",
+      "docType": "OTHER",
+      "categories": [
+        "image",
+        "clean"
+      ]
+    },
+    {
+      "file": "images/ticket-train.lowcontrast.png",
+      "from": "ticket-train",
+      "docType": "OTHER",
+      "categories": [
+        "image",
+        "lowcontrast"
+      ]
+    },
+    {
+      "file": "images/ticket-train.blur.png",
+      "from": "ticket-train",
+      "docType": "OTHER",
+      "categories": [
+        "image",
+        "blur"
+      ]
+    },
+    {
+      "file": "images/ticket-train.rotate.png",
+      "from": "ticket-train",
+      "docType": "OTHER",
+      "categories": [
+        "image",
+        "rotate"
+      ]
+    },
+    {
+      "file": "images/ticket-train.noise.jpg",
+      "from": "ticket-train",
+      "docType": "OTHER",
+      "categories": [
+        "image",
+        "noise"
+      ]
+    },
+    {
+      "file": "images/ticket-train.small.png",
+      "from": "ticket-train",
+      "docType": "OTHER",
+      "categories": [
+        "image",
+        "small"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.clean.png",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "clean"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.lowcontrast.png",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "lowcontrast"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.blur.png",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "blur"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.rotate.png",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "rotate"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.noise.jpg",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "noise"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.small.png",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "small"
+      ]
+    },
+    {
+      "file": "images/table-datesheet.clean.png",
+      "from": "table-datesheet",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "clean"
+      ]
+    },
+    {
+      "file": "images/table-datesheet.lowcontrast.png",
+      "from": "table-datesheet",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "lowcontrast"
+      ]
+    },
+    {
+      "file": "images/table-datesheet.blur.png",
+      "from": "table-datesheet",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "blur"
+      ]
+    },
+    {
+      "file": "images/table-datesheet.rotate.png",
+      "from": "table-datesheet",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "rotate"
+      ]
+    },
+    {
+      "file": "images/table-datesheet.noise.jpg",
+      "from": "table-datesheet",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "noise"
+      ]
+    },
+    {
+      "file": "images/table-datesheet.small.png",
+      "from": "table-datesheet",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "small"
+      ]
+    },
+    {
+      "file": "images/table-pipe.scanned.pdf",
+      "from": "table-pipe",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "scanned-pdf"
+      ]
+    },
+    {
+      "file": "images/syllabus-full.scanned.pdf",
+      "from": "syllabus-full",
+      "docType": "SYLLABUS",
+      "categories": [
+        "image",
+        "scanned-pdf"
+      ]
+    }
+  ]
+}

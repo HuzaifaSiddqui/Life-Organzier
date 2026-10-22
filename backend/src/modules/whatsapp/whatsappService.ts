@@ -6,6 +6,7 @@ import { processDocument } from "../documents/documentProcessing.js";
 import { logEvent } from "../events/eventService.js";
 import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { planReminders, stillAllowedAt, type ReminderLevel } from "../reminders/reminderService.js";
+import { OcrBusyError } from "../documents/textExtraction.js";
 
 export function twilioConfigured(): boolean {
   return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM);
@@ -77,7 +78,11 @@ export async function processDocumentForWhatsapp(user: User, settings: UserSetti
     docType: "OTHER",
     language: "eng",
     autoCreate: true,
+  }).catch((error: unknown) => {
+    if (error instanceof OcrBusyError) return null;
+    throw error;
   });
+  if (!result) return "I'm reading other documents right now. Please send it again in a minute.";
   const created = result.createdTasks.length + result.createdRoutines.length;
   notifyAddedFromWhatsapp(user.id, [...result.createdTasks, ...result.createdRoutines].map((x) => x.title));
   const pending = result.extracted.deadlines.filter((d) => !d.created).length + result.extracted.schedules.filter((s) => !s.created).length;

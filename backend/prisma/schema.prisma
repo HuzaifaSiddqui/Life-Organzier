@@ -359,11 +359,14 @@ model Document {
   text          String
   ocrConfidence Int?
   extracted     Json?
+  /// sha256 of the file (or pasted text) + docType + language: a retry of the same upload reuses this document.
+  contentHash   String?
   createdAt     DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([userId, contentHash])
 }
 
 model Conversation {

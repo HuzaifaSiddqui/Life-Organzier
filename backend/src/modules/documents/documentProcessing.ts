@@ -1,10 +1,12 @@
+import crypto from "node:crypto";
 import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
+import { getAi } from "../../ai/llm.js";
 import { prisma } from "../../config/db.js";
 import { dueDateFromYmd, localYmd } from "../../lib/time.js";
 import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
-import { cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmActionItems, llmTopics, maskPersonalNumbers, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
+import { aiDeadlines, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
 import { gridSchedulesFromPdf } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
@@ -39,8 +41,9 @@ const DEADLINE_AUTO = 95;
 const SCHEDULE_AUTO = 90;
 
 type Extracted = {
-  deadlines: Array<ExtractedDeadline & { created?: boolean; existing?: boolean; taskId?: string }>;
-  schedules: Array<ExtractedSchedule & { created?: boolean; existing?: boolean; routineId?: string }>;
+  /** removedSinceUpload: it was added from this document but has been deleted since (a reused result says so). */
+  deadlines: Array<ExtractedDeadline & { created?: boolean; existing?: boolean; taskId?: string; removedSinceUpload?: boolean }>;
+  schedules: Array<ExtractedSchedule & { created?: boolean; existing?: boolean; routineId?: string; removedSinceUpload?: boolean }>;
   course: CourseInfo;
   ocrConfidence: number;
   warning: string | null;
@@ -48,17 +51,56 @@ type Extracted = {
   method: string;
 };
 
-export async function processDocument(
-  user: User,
-  settings: UserSettings,
-  input: { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean },
-) {
-  const tz = settings.timezone;
+export type AnalyzeInput = {
+  buffer?: Buffer;
+  text?: string;
+  fileName: string;
+  mimeType: string;
+  docType: (typeof DOC_TYPES)[number];
+  language: string;
+  tz: string;
+  now?: Date;
+  /** Test hook: a shorter DOCUMENT_TIME_LIMIT_MS. */
+  timeLimitMs?: number;
+};
+
+export type Analysis = {
+  /** Cleaned and masked text (what is stored and what a model may see). */
+  text: string;
+  deadlines: ExtractedDeadline[];
+  schedules: ExtractedSchedule[];
+  course: CourseInfo;
+  ocrConfidence: number;
+  warning: string | null;
+  needsLanguage: boolean;
+  method: string;
+  grid: boolean;
+};
+
+/**
+ * Time allowed per document, OCR plus the AI pass. OCR has its own limits (45 s an image, 90 s a scanned PDF);
+ * the AI pass and the topics call get what is left. When it runs out, what the rules found is returned with a
+ * warning instead of failing. The phone's upload timeout (mobile documentsApi.ts) is longer than this.
+ */
+export const DOCUMENT_TIME_LIMIT_MS = 150_000;
+/** Not worth starting a model call with less time than this. */
+const MIN_AI_MS = 10_000;
+export const TIME_LIMIT_WARNING = "This document took long to read, so I didn't finish checking it with AI. The items below come from the rules; please check them.";
+
+/**
+ * Reads a document and extracts deadlines, schedules and course info. No database writes, so the
+ * evaluation (`npm run eval:documents`) runs exactly what an upload runs.
+ */
+export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
+  const { tz } = input;
+  const started = Date.now();
+  const left = () => (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS) - (Date.now() - started);
+  let timedOut = false;
   const raw = input.text !== undefined
     ? { text: input.text, confidence: 100, method: "text" as const, warning: null, needsLanguage: false }
-    : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language);
+    : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language, started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS));
   const text = maskPersonalNumbers(cleanDocumentText(raw.text));
-  const now = new Date();
+  const now = input.now ?? new Date();
   let deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
   let schedules = input.docType === "NOTES" ? [] : extractSchedules(text, now, tz);
   // Grid timetables lose their layout as plain text; read them by position instead.
@@ -73,21 +115,99 @@ export async function processDocument(
       grid = true;
     }
   }
-  // Tickets, bills, invitations… don't match the syllabus rules: let the model find dated action items.
+  // AI pass on every document when AI is on (masked text only), merged with the rules.
   let aiNote: string | null = null;
-  if (input.docType !== "NOTES" && !deadlines.length && !schedules.length && !raw.needsLanguage) {
-    deadlines = await llmActionItems(text, localYmd(now, tz), tz);
-    const todayYmd = localYmd(now, tz);
-    if (deadlines.length && deadlines.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
+  const todayYmd = localYmd(now, tz);
+  if (input.docType !== "NOTES" && !raw.needsLanguage) {
+    const aiOn = getAi().enabled && getAi().available;
+    const pass = aiOn && left() >= MIN_AI_MS ? await aiDeadlines(text, todayYmd, tz, { budgetMs: left() }) : { items: [], cutShort: aiOn };
+    timedOut = pass.cutShort;
+    deadlines = mergeDeadlines(deadlines, pass.items);
+    const dated = deadlines.filter((d) => d.date);
+    if (dated.length && !schedules.length && dated.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
   }
   // A grid lists many courses — picking one as "the course" would store a wrong memory.
   const course = extractCourseInfo(grid ? "" : text);
-  if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200) course.topics = await llmTopics(text);
+  if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200 && left() >= MIN_AI_MS) course.topics = await llmTopics(text, Math.min(45000, left()));
   if (course.code) {
     for (const s of schedules) {
       if (/^(?:lectures?|class(?:es)?|labs?|tutorials?|sessions?|sections?)$/i.test(s.title)) s.title = `${course.code} ${s.title}`;
     }
   }
+  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : aiNote), needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method, grid };
+}
+
+type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean };
+
+/** A retry of the same file within this long gets the saved result instead of a second document. */
+export const REUSE_WITHIN_MS = 24 * 3600000;
+
+/** Same bytes (or pasted text), same type and language → same hash. */
+export function documentHash(input: Pick<ProcessInput, "buffer" | "text" | "docType" | "language">): string {
+  const h = crypto.createHash("sha256");
+  h.update(input.buffer ?? Buffer.from(input.text ?? "", "utf8"));
+  h.update(`|${input.docType}|${input.language}`);
+  return h.digest("hex");
+}
+
+// ponytail: per server process; a second instance would not see the other's in-flight uploads (the 24 h reuse
+// still works through the database).
+const inFlight = new Map<string, ReturnType<typeof reuseOrProcess>>();
+
+/**
+ * Reads and saves a document. The server finishes even if the phone gave up waiting (its tasks are saved), so
+ * a retry of the same file must not do it again: while the first upload is still running the retry shares its
+ * result, and within 24 h it gets the saved document back (`reused: true`). No duplicate documents or tasks.
+ */
+export function processDocument(user: User, settings: UserSettings, input: ProcessInput) {
+  const hash = documentHash(input);
+  const key = `${user.id}:${hash}`;
+  const running = inFlight.get(key);
+  if (running) return running;
+  // Registered before any await, so a second identical request arriving meanwhile joins this one.
+  const job = reuseOrProcess(user, settings, input, hash).finally(() => inFlight.delete(key));
+  inFlight.set(key, job);
+  return job;
+}
+
+async function reuseOrProcess(user: User, settings: UserSettings, input: ProcessInput, hash: string) {
+  const recent = await prisma.document.findFirst({ where: { userId: user.id, contentHash: hash, createdAt: { gte: new Date(Date.now() - REUSE_WITHIN_MS) } }, orderBy: { createdAt: "desc" } });
+  if (recent?.extracted) {
+    const { text, ...doc } = recent;
+    return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
+  }
+  return processDocumentOnce(user, settings, input, hash);
+}
+
+/**
+ * A saved result's created / existing flags as of now: an item whose task or routine was deleted (or archived)
+ * since is offered again (not created, no id, removedSinceUpload) instead of claiming a task that is gone.
+ * Nothing is re-created automatically: the user deleted it, so they decide.
+ */
+async function withCurrentState(userId: string, saved: Extracted): Promise<Extracted> {
+  const extracted = structuredClone(saved);
+  const taskIds = extracted.deadlines.map((d) => d.taskId).filter((id): id is string => Boolean(id));
+  const routineIds = extracted.schedules.map((s) => s.routineId).filter((id): id is string => Boolean(id));
+  const [tasks, routines] = await Promise.all([
+    prisma.task.findMany({ where: { id: { in: taskIds }, userId, status: { not: TaskStatus.DELETED }, archived: false }, select: { id: true } }),
+    prisma.routine.findMany({ where: { id: { in: routineIds }, userId }, select: { id: true } }),
+  ]);
+  const liveTasks = new Set(tasks.map((t) => t.id));
+  const liveRoutines = new Set(routines.map((r) => r.id));
+  for (const d of extracted.deadlines) {
+    if (d.taskId && !liveTasks.has(d.taskId)) Object.assign(d, { created: false, existing: false, taskId: undefined, removedSinceUpload: true });
+  }
+  for (const s of extracted.schedules) {
+    if (s.routineId && !liveRoutines.has(s.routineId)) Object.assign(s, { created: false, existing: false, routineId: undefined, removedSinceUpload: true });
+  }
+  return extracted;
+}
+
+async function processDocumentOnce(user: User, settings: UserSettings, input: ProcessInput, contentHash: string) {
+  const tz = settings.timezone;
+  const a = await analyzeDocument({ ...input, tz });
+  const { text, deadlines, schedules, course } = a;
+  const raw = { confidence: a.ocrConfidence, needsLanguage: a.needsLanguage };
 
   const document = await prisma.document.create({
     data: {
@@ -98,11 +218,12 @@ export async function processDocument(
       docType: input.docType,
       language: input.language,
       text: text.slice(0, 200000),
-      ocrConfidence: raw.confidence,
+      ocrConfidence: a.ocrConfidence,
+      contentHash,
     },
   });
 
-  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? aiNote, needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method };
+  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method };
   const createdTasks = [];
   const createdRoutines = [];
   if (input.autoCreate && !raw.needsLanguage && raw.confidence >= 70) {
@@ -179,6 +300,6 @@ export async function processDocument(
 
   const updated = await prisma.document.update({ where: { id: document.id }, data: { extracted: extracted as unknown as Prisma.InputJsonValue } });
   const { text: _t, ...doc } = updated;
-  return { document: doc, extracted, createdTasks, createdRoutines, textPreview: text.slice(0, 1500) };
+  return { document: doc, extracted, createdTasks, createdRoutines, textPreview: text.slice(0, 1500), reused: false };
 }
 

@@ -2,7 +2,9 @@ import { RoutineFrequency } from "@prisma/client";
 import { z } from "zod";
 import { getAi } from "../../ai/llm.js";
 import { formatClock } from "../../lib/time.js";
+import { fuzzySimilarity } from "../../lib/text.js";
 import { cleanTitle, extractEntities } from "../assistant/entities.js";
+import { documentYear, joinRecords, normalizeDocumentText, rangeToEnd, readTables, semesterStart, urduActivityHint, urduWeekdayStart, WEEK_RE, weekToDate, withDocumentYear } from "./dateRules.js";
 
 export type ExtractedDeadline = {
   index: number;
@@ -13,6 +15,18 @@ export type ExtractedDeadline = {
   assumedTime: boolean;
   confidence: number;
   source: string;
+  /** A week number with no semester start in the document: undated until the user picks the date. */
+  needsSemesterStart?: boolean;
+  /** For a date range, its first day (the deadline is the last day). */
+  rangeStart?: string | null;
+  /** The year came from the document ("Fall 2026", its other dates), not from the date itself. */
+  yearInferred?: boolean;
+  /** Always confirmed by the user, even when the model agrees (tickets, bills, dates from week numbers). */
+  review?: boolean;
+  /** The AI pass found the same item (same date, similar title). */
+  aiAgrees?: boolean;
+  /** Found only by the AI pass: shown for review, never created automatically. */
+  aiOnly?: boolean;
 };
 
 export type ExtractedSchedule = {
@@ -66,54 +80,133 @@ export function maskPersonalNumbers(text: string): string {
     .replace(/\+\d{1,3}[\s-]?\d{3,4}[\s-]?\d{3,4}[\s-]?\d{3,4}(?!\d)/g, "[PHONE]");
 }
 
-const ACTIVITY_RE = /\b(assignment|homework|quiz|exam|midterm|mid-term|final(?:\s+exam)?|project|presentation|report|lab(?:\s+report)?|submission|paper|essay|proposal|thesis|test|viva|deliverable)\b/i;
+const ACTIVITY_RE = /\b(assignment|homework|quiz|exams?|examination|midterm|mid-term|mid term|final(?:\s+exam)?|project|presentation|report|lab(?:\s+report)?|submission|paper|essay|proposal|thesis|test|viva|deliverable)\b/i;
+/** Non-academic documents (tickets, bills, notices, invitations): things to attend or pay. */
+const EVENT_RE = /\b(due date|last date|deadline|departure|departs?|boarding|appointment|interviews?|rsvp|invited|invitation|held|meeting|event|dinner|ceremony|wedding|party|payment|payable|bill|fee|challan|submit|submission|form|reporting|flight|train|bus|check-?in)\b/i;
 const CLASS_RE = /\b(lecture|class|lab|tutorial|seminar|section|recitation|course|session)\b/i;
 
 function splitSentences(text: string): string[] {
   return text
-    .split(/\n|(?<=[.;])\s+(?=[A-Z])/)
+    // Not after a title or abbreviation: "appointment with Dr. Khan is on 12/11" is one sentence.
+    .split(/\n|(?<=[.;])(?<!\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr|St|No|Rs|vs|Sec|Dept)\.)\s+(?=[A-Z])/)
     .map((s) => s.trim())
     .filter((s) => s.length >= 4 && s.length <= 300);
 }
 
+/** Heading used when a ticket or bill line has no title of its own ("Departure: 07-11-2026 22:00"). */
+function docHeading(lines: string[]): string | null {
+  const vehicle = lines.find((l) => /^(?:train|flight|bus)\s*[:#-]/i.test(l.trim()));
+  if (vehicle) return vehicle.trim().replace(/\s*:\s*/, " ");
+  return lines.map((l) => l.trim()).find((l) => l.length >= 3 && l.length <= 60 && !/\d{1,2}[-/.]\d{1,2}/.test(l)) ?? null;
+}
+
+/** A clock written after a start label wins over others on the line ("Boarding: 06:15 Departure: 06:45"). */
+function labelledTime(line: string, now: Date, tz: string): string | null {
+  const m = /\b(?:departure|departs?|dep\.?|start(?:s| time)?|reporting time|begins?)\s*[:\-]?\s*(\d{1,2}[:.]\d{2}(?:\s*[ap]\.?m\.?)?|\d{1,2}\s*[ap]\.?m\.?)/i.exec(line);
+  return m ? extractEntities(m[1].replace(".", ":"), { now, tz }).time : null;
+}
+
+const WEAK_TITLE = /^(?:date|due|due date|deadline|departure|time|last date|on|by|at|-|—)?$/i;
+const TIMETABLE_ROW = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b[:\s|,-]*.*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|to)\s*\d{1,2}/i;
+
+type Candidate = { text: string; source: string; title?: string; activity?: string; fromTable?: boolean };
+
+/**
+ * Deadlines from a document (FR-DP-002). Header tables first, then records (a heading joined with its
+ * labelled lines) and sentences. Dates are read by entities.ts after dateRules.ts prepared the text; the
+ * document's year, semester start and ranges are applied here.
+ */
 export function extractDeadlines(text: string, now: Date, tz: string): ExtractedDeadline[] {
+  const prepared = normalizeDocumentText(text);
+  const lines = prepared.split("\n");
+  const year = documentYear(prepared, now, tz);
+  const start = semesterStart(prepared, now, tz, year);
+  const heading = docHeading(lines);
+  const tables = readTables(lines);
+  const candidates: Candidate[] = tables.rows.map((r) => ({
+    text: `${r.date}${r.time ? ` ${r.time}` : ""}`,
+    source: r.line,
+    title: r.title,
+    activity: r.examTable ? "exam" : (r.title.match(ACTIVITY_RE)?.[1] ?? "deadline"),
+    fromTable: true,
+  }));
+  const hasDate = (l: string) => Boolean(extractEntities(l, { now, tz }).date) || WEEK_RE.test(l);
+  const isHead = (l: string) => ACTIVITY_RE.test(l) || EVENT_RE.test(l) || Boolean(urduActivityHint(l));
+  const rest = lines.map((l, i) => (tables.used.has(i) ? "" : l));
+  for (const rec of joinRecords(rest, isHead, hasDate)) {
+    if (rec.lines > 1) {
+      const title = cleanTitle(rec.head) + (rec.subject ? ` (${rec.subject})` : "");
+      candidates.push({ text: rec.text, source: rec.text, title });
+    } else for (const sentence of splitSentences(rec.text)) candidates.push({ text: sentence, source: sentence });
+  }
+
   const out: ExtractedDeadline[] = [];
   const seen = new Set<string>();
-  for (const sentence of splitSentences(text)) {
-    const activity = sentence.match(ACTIVITY_RE);
-    if (!activity) continue;
-    const e = extractEntities(sentence, { now, tz });
-    const fuzzyDate = !e.date && /\b(next|this)\s+(month|week|semester)|\bsoon\b|\blater\b/i.test(sentence);
-    if (!e.date && !fuzzyDate) continue;
+  for (const c of candidates) {
+    if (!c.fromTable && TIMETABLE_ROW.test(c.text)) continue; // a class, not a deadline
+    const hint = urduActivityHint(c.text);
+    const activity = c.activity ?? c.text.match(ACTIVITY_RE)?.[1] ?? hint;
+    const event = !activity ? c.text.match(EVENT_RE)?.[1] : undefined;
+    if (!activity && !event && !c.fromTable) continue;
+    const range = rangeToEnd(c.text);
+    const e = extractEntities(range.line, { now, tz });
     if (e.frequency) continue;
-    let title = cleanTitle(e.residual.replace(/\b(?:is\s+)?(?:due|deadline|on|by|at|will be held|scheduled for)\b/gi, " "))
-      .replace(/\s{2,}/g, " ")
-      .trim();
-    if (!title || title.length < 3) title = activity[1].charAt(0).toUpperCase() + activity[1].slice(1);
+    // "Bill Month: Oct 2026" is a period, not a date.
+    if (e.date && /^[a-z]+\.?,?\s+\d{4}$/i.test(e.date.text.trim())) continue;
+    const week = !e.date ? WEEK_RE.exec(c.text) : null;
+    const fuzzyDate = !e.date && !week && /\b(next|this)\s+(month|week|semester)|\bsoon\b|\blater\b/i.test(c.text);
+    if (!e.date && !week && !fuzzyDate) continue;
+
+    let date: string | null = null;
+    let yearInferred = false;
+    if (e.date && !e.date.fuzzy) {
+      // "next month" is fuzzy: it stays undated for review (FR-DP-002), never a silent deadline.
+      const y = withDocumentYear(e.date, year);
+      date = y.ymd;
+      yearInferred = y.inferred;
+    } else if (week && start) date = weekToDate(Number(week[1]), start);
+    const needsSemesterStart = Boolean(week && !start && !e.date);
+    const time = labelledTime(range.line, now, tz) ?? e.time;
+
+    let title = c.title?.trim()
+      ? cleanTitle(c.title)
+      : cleanTitle(e.residual.replace(/\b(?:is\s+)?(?:due|deadline|on|by|at|will be held|scheduled for)\b/gi, " ").replace(WEEK_RE, " ").replace(/[|:]+/g, " ")).replace(/\s{2,}/g, " ").trim();
+    if (WEAK_TITLE.test(title.replace(/[^\p{L}\p{N}\s]/gu, "").trim()) || title.length < 3) {
+      title = event && heading ? `${event.charAt(0).toUpperCase()}${event.slice(1)}: ${heading}` : activity ? activity.charAt(0).toUpperCase() + activity.slice(1) : (heading ?? "Deadline");
+    }
     if (title.length > 80) title = `${title.slice(0, 77).replace(/\s+\S*$/, "")}…`;
+
     let confidence = 60;
     if (e.date && !e.date.fuzzy) confidence += /\d/.test(e.date.text) ? 20 : 12;
+    if (week && date) confidence += 15;
     if (e.date?.fuzzy || fuzzyDate) confidence -= 15;
-    if (e.time) confidence += 10;
-    if (/\b(?:assignment|quiz|project|lab|homework)\s*#?\d+\b/i.test(sentence) || /\bfinal|midterm/i.test(sentence)) confidence += 8;
-    if (/\bdue\b|\bdeadline\b|\bsubmit/i.test(sentence)) confidence += 2;
-    const vague = !e.date || e.date.fuzzy;
-    const assumedTime = !vague && !e.time;
+    if (time) confidence += 10;
+    if (/\b(?:assignment|quiz|project|lab|homework)\s*#?\d+\b/i.test(c.text) || /\bfinal|midterm|mid term/i.test(c.text) || c.fromTable) confidence += 8;
+    if (/\bdue\b|\bdeadline\b|\bsubmit/i.test(c.text)) confidence += 2;
+    const vague = !date;
+    const assumedTime = !vague && !time;
     if (assumedTime) confidence = Math.min(confidence, 90);
-    if (vague) confidence = Math.min(confidence, 45);
+    if (week && date) confidence = Math.min(confidence, 85); // computed from the semester start: confirm first
+    if (event) confidence = Math.min(confidence, 90); // tickets, bills, notices: always reviewed
+    if (vague) confidence = Math.min(confidence, needsSemesterStart ? 40 : 45);
     confidence = Math.max(5, Math.min(99, confidence));
-    const key = `${title.toLowerCase()}|${e.date?.ymd ?? ""}`;
+
+    const key = `${title.toLowerCase()}|${date ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
       index: out.length,
       title,
-      activity: activity[1].toLowerCase(),
-      date: vague ? null : (e.date?.ymd ?? null),
-      time: e.time ?? (vague ? null : "11:59 PM"),
+      activity: (activity ?? event ?? "deadline").toLowerCase(),
+      date,
+      time: time ?? (vague ? null : "11:59 PM"),
       assumedTime,
       confidence,
-      source: sentence,
+      source: c.source.slice(0, 300),
+      ...(needsSemesterStart ? { needsSemesterStart: true } : {}),
+      ...(range.start ? { rangeStart: range.start } : {}),
+      ...(yearInferred ? { yearInferred: true } : {}),
+      ...(event || (week && date) ? { review: true } : {}),
     });
   }
   return out.slice(0, 60);
@@ -169,8 +262,17 @@ function scheduleFrom(segment: string, now: Date, tz: string, forcedDay?: number
 }
 
 export function extractSchedules(text: string, now: Date, tz: string): ExtractedSchedule[] {
-  const out: ExtractedSchedule[] = [];
-  for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+  const lines = normalizeDocumentText(text).split("\n");
+  const tables = readTables(lines);
+  const found: Array<Omit<ExtractedSchedule, "index">> = [];
+  // "Time | Monday | Tuesday" timetables: each cell is a class on that day at the row's time.
+  for (const cell of tables.classes) {
+    const s = scheduleFrom(`${cell.title} ${cell.time}`, now, tz, cell.day);
+    if (s && s.time) found.push({ ...s, source: cell.line });
+  }
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line || tables.used.has(i)) return;
     const dayMatch = line.match(WEEKDAY_START);
     const ranges = line.match(RANGE_RE) ?? [];
     if (dayMatch && ranges.length >= 1 && !/\b(?:and|&|,|\/)\s*(?:mon|tue|wed|thu|fri|sat|sun)/i.test(line.slice(dayMatch[0].length, dayMatch[0].length + 12))) {
@@ -180,16 +282,33 @@ export function extractSchedules(text: string, now: Date, tz: string): Extracted
       const cells = rest.split(/\s*\|\s*|(?<![\d:])(?=\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|to)\s*\d{1,2})/i).map((c) => c.replace(/^[|,;\s]+|[|,;\s]+$/g, "")).filter((c) => c.length > 3);
       for (const cell of cells) {
         const s = scheduleFrom(cell, now, tz, day);
-        if (s && s.time) out.push({ ...s, index: out.length });
+        if (s && s.time) found.push(s);
       }
-      continue;
+      return;
     }
-    if (!/\b(mon|tue|wed|thu|fri|sat|sun|weekday|daily|every|MWF|TTh|morning|evening)\w*/i.test(line)) continue;
-    if (ACTIVITY_RE.test(line) && /\bdue|deadline|submit/i.test(line)) continue;
+    // "Peer subah 9 baje Calculus class" (Roman Urdu / Urdu weekday first)
+    const ur = urduWeekdayStart(line);
+    if (ur) {
+      const s = scheduleFrom(ur.rest, now, tz, ur.day);
+      if (s && s.time) found.push({ ...s, source: line });
+      return;
+    }
+    if (!/\b(mon|tue|wed|thu|fri|sat|sun|weekday|daily|every|MWF|TTh|morning|evening)\w*/i.test(line)) return;
+    if (ACTIVITY_RE.test(line) && /\bdue|deadline|submit/i.test(line)) return;
     const s = scheduleFrom(line, now, tz);
-    if (s) out.push({ ...s, index: out.length });
+    if (s) found.push(s);
+  });
+  // The same class on several rows (Monday and Wednesday) becomes one schedule with both days.
+  const merged: Array<Omit<ExtractedSchedule, "index">> = [];
+  for (const s of found) {
+    const same = merged.find((m) => m.title.toLowerCase() === s.title.toLowerCase() && m.time === s.time && m.room === s.room && m.daysOfWeek.length && s.daysOfWeek.length);
+    if (same) {
+      same.daysOfWeek = [...new Set([...same.daysOfWeek, ...s.daysOfWeek])].sort((a, b) => a - b);
+      same.frequency = same.daysOfWeek.length === 7 ? RoutineFrequency.DAILY : RoutineFrequency.WEEKLY;
+      same.confidence = Math.max(same.confidence, s.confidence);
+    } else merged.push({ ...s, daysOfWeek: [...s.daysOfWeek] });
   }
-  return out.slice(0, 60);
+  return merged.slice(0, 60).map((s, index) => ({ ...s, index }));
 }
 
 function section(text: string, header: RegExp): string[] {
@@ -247,14 +366,14 @@ export function extractCourseInfo(text: string): CourseInfo {
 const topicSchema = z.object({ topics: z.array(z.string().min(2).max(60)).max(10) });
 
 /** Optional LLM pass to recover topics when the document has no clear "Topics" section. */
-export async function llmTopics(text: string): Promise<string[]> {
+export async function llmTopics(text: string, timeoutMs = 45000): Promise<string[]> {
   const result = await getAi().json(
     [
       { role: "system", content: "List the main learning topics covered in this course document (max 8, 1-4 words each). Return JSON {\"topics\": [...]}." },
       { role: "user", content: text.slice(0, 2500) },
     ],
     topicSchema,
-    { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs: 45000 },
+    { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs },
   );
   return result?.topics ?? [];
 }
@@ -294,7 +413,7 @@ export function dateGrounded(ymd: string, text: string): boolean {
  * appears in the document survive. Confidence stays below the auto-create threshold, so the user
  * always confirms them.
  */
-export async function llmActionItems(text: string, todayYmd: string, tz: string): Promise<ExtractedDeadline[]> {
+export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000): Promise<ExtractedDeadline[]> {
   if (text.replace(/\s+/g, "").length < 30) return [];
   const result = await getAi().json(
     [
@@ -324,7 +443,7 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
         required: ["items"],
       },
       maxTokens: 500,
-      timeoutMs: 60000,
+      timeoutMs,
     },
   );
   const out: ExtractedDeadline[] = [];
@@ -344,4 +463,92 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
     });
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ AI pass on every document */
+
+/** Chunks of at most `size` characters on line boundaries, each starting with the last ~`overlap` characters of the previous one. */
+export function chunkText(text: string, size = 2500, overlap = 200, max = 6): string[] {
+  const lines = text.split("\n");
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    const piece = line.slice(0, size);
+    if (length + piece.length + 1 > size && current.length) {
+      chunks.push(current.join("\n"));
+      if (chunks.length >= max) return chunks;
+      const carry: string[] = [];
+      let carried = 0;
+      for (let i = current.length - 1; i >= 0 && carried + current[i].length <= overlap; i -= 1) {
+        carry.unshift(current[i]);
+        carried += current[i].length + 1;
+      }
+      current = carry;
+      length = carried;
+    }
+    current.push(piece);
+    length += piece.length + 1;
+  }
+  if (current.join("").trim()) chunks.push(current.join("\n"));
+  return chunks.slice(0, max);
+}
+
+function sameItem(a: string, b: string): boolean {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  if (x.includes(y) || y.includes(x) || fuzzySimilarity(x, y) >= 0.5) return true;
+  const words = (s: string) => new Set(s.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4));
+  const wx = words(x);
+  return [...words(y)].some((w) => wx.has(w));
+}
+
+export const AI_ONLY_MAX = 80;
+
+/**
+ * Rules + the model, on every document when AI is on (FR-DP-002). Agreement (same date, similar title)
+ * raises a rule item's confidence (still capped for items that are always reviewed or have no time);
+ * model-only items stay below the auto-create threshold; duplicates across chunks are dropped.
+ */
+/** The model's evidence comes from the line a rule item was read from (long enough to be specific). */
+function sameLine(rule: ExtractedDeadline, item: ExtractedDeadline): boolean {
+  const ev = item.source.trim().toLowerCase();
+  const src = rule.source.toLowerCase();
+  return ev.length >= 12 && (src.includes(ev) || ev.includes(src.slice(0, 40)));
+}
+
+export function mergeDeadlines(rules: ExtractedDeadline[], ai: ExtractedDeadline[]): ExtractedDeadline[] {
+  const out = rules.map((r) => ({ ...r }));
+  for (const item of ai) {
+    // Agreement is with what the rules found; a second model-only copy is a duplicate, not a confirmation.
+    const match = out.find((r) => !r.aiOnly && r.date && r.date === item.date && (sameItem(r.title, item.title) || sameLine(r, item)));
+    if (match) {
+      if (!match.aiAgrees) match.confidence = Math.min(match.review || match.assumedTime ? 90 : 99, match.confidence + 5);
+      match.aiAgrees = true;
+      continue;
+    }
+    // The rules already read that line (e.g. the model took a range's start or the boarding time): theirs wins.
+    if (out.some((r) => !r.aiOnly && sameLine(r, item))) continue;
+    if (out.some((r) => r.aiOnly && r.date === item.date && sameItem(r.title, item.title))) continue; // same item from an overlapping chunk
+    out.push({ ...item, confidence: Math.min(item.confidence, AI_ONLY_MAX), aiOnly: true });
+  }
+  return out.slice(0, 60).map((d, index) => ({ ...d, index }));
+}
+
+/**
+ * The AI pass: llmActionItems per chunk, within a chunk cap and a total time budget (each call's timeout shrinks
+ * to what is left). `cutShort`: the budget ran out before every chunk was read. Nothing with AI off.
+ */
+export async function aiDeadlines(text: string, todayYmd: string, tz: string, opts: { maxChunks?: number; budgetMs?: number } = {}): Promise<{ items: ExtractedDeadline[]; cutShort: boolean }> {
+  const ai = getAi();
+  if (!ai.enabled || !ai.available) return { items: [], cutShort: false };
+  const deadline = Date.now() + (opts.budgetMs ?? 120_000);
+  const items: ExtractedDeadline[] = [];
+  const chunks = chunkText(text, 2500, 200, opts.maxChunks ?? 6);
+  for (let i = 0; i < chunks.length; i += 1) {
+    const left = deadline - Date.now();
+    if (left < 5000) return { items, cutShort: true };
+    items.push(...(await llmActionItems(chunks[i], todayYmd, tz, Math.min(60000, left))));
+  }
+  return { items, cutShort: false };
 }

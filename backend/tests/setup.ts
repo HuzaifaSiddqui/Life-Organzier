@@ -14,6 +14,7 @@
  * load .env themselves and never run this file.
  */
 import { existsSync, readFileSync } from "node:fs";
+import { isMainThread } from "node:worker_threads";
 import { parse } from "dotenv";
 
 const envFile = new URL("../.env", import.meta.url);
@@ -50,8 +51,11 @@ globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeo
 }) as typeof fetch;
 
 // Pushes go to a fake provider unless a test installs its own (setPushProvider); Expo is never called.
-const { setPushProvider } = await import("../src/modules/push/pushService.js");
-setPushProvider({
-  send: async (messages) => messages.map((_, i) => ({ id: `test-ticket-${Date.now()}-${i}` })),
-  receipts: async () => ({}),
-});
+// Worker threads (Tesseract OCR) inherit --import but run no app code, so they skip this.
+if (isMainThread) {
+  const { setPushProvider } = await import("../src/modules/push/pushService.js");
+  setPushProvider({
+    send: async (messages) => messages.map((_, i) => ({ id: `test-ticket-${Date.now()}-${i}` })),
+    receipts: async () => ({}),
+  });
+}

@@ -55,7 +55,38 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   - To bundle Urdu: download `https://cdn.jsdelivr.net/npm/@tesseract.js-data/urd/4.0.0_best_int/urd.traineddata.gz`
     (~1.0 MB compressed), gunzip it into `backend/` as `urd.traineddata` (a few MB), and commit it — or set
     `langPath`/`cachePath` in `createWorker` (`documents/textExtraction.ts`) to a dedicated `tessdata/` folder.
-- Scanned PDFs without a text layer must be uploaded as images.
+- **Urdu documents are read as English + Urdu** (`eng+urd`, likewise for the other languages), since most mix
+  both. Urdu-script text is OCR'd, but only English and Roman Urdu dates are extracted by the rules (Urdu month
+  names are not).
+- **Scanned PDFs** (no text layer) are rendered on the server and OCR'd: at most the first 10 pages, within about
+  90 seconds; the reply says how many pages were skipped. Each image gets up to 5 OCR passes (preprocessed in three
+  page-segmentation modes, raw in two) within 45 seconds, so a large photo can take several seconds.
+- **Week numbers** ("Week 7: Quiz 2") get a date only when the document states the semester start ("Semester starts:
+  31 August 2026", "Week 1 (31 Aug…)"); otherwise the item is listed undated with "needs the semester start".
+  Week N is the Monday of that week.
+- **Dates without a year** take the year of the document's term ("Fall 2026": Aug–Dec 2026, Jan–Jul 2027) or of
+  its other full dates; with neither, the next occurrence is used.
+- **Numeric dates are day-first** (07-09-2026 = 7 September). US-style month-first documents are misread.
+- **A document gets at most 150 seconds** (`DOCUMENT_TIME_LIMIT_MS`: OCR plus the AI pass). When time runs out the
+  rules' items come back with a warning that the AI check wasn't finished; nothing fails. The phone waits up to 4
+  minutes for an upload (3 for pasted text).
+- **The 150 s limit covers the OCR queue too**: an image that only reaches the front with less than 8 s left is
+  refused as busy rather than read past the limit; a scanned PDF stops at the limit with the pages read so far.
+  A pass already running can't be interrupted, so a document can overrun by one OCR pass: about 1 s on the largest
+  fixture, and images are scaled to at most 2500 px wide because at 4000 px a single pass took up to 53 s.
+- **If the phone gives up waiting, the server still finishes and saves** (document and auto-created tasks). Sending
+  the same file again within 24 hours returns that saved result instead of reading it again (the document is
+  identified by a hash of its content, type and language); after 24 hours it is read again, and auto-created tasks
+  are still not duplicated (same title, date and time).
+- **One OCR job runs at a time per language, and at most 3 may wait.** A fourth upload at that moment gets "I'm
+  reading other documents right now, try again in a minute" (also on WhatsApp) instead of queuing.
+- **The upload status after the file is sent is timed, not reported.** "Reading the document" then "Finding dates and
+  classes" follow the server's order of work, but the server doesn't stream its stage; only the upload has a real
+  percentage.
+- **The AI pass on documents reads at most 6 chunks (about 15,000 characters) within 2 minutes**; later pages
+  get the rules only. Model-only items are never created automatically.
+- **OCR preprocessing** auto-rotates (EXIF), deskews up to ±10°, denoises, normalises contrast, sharpens and
+  upscales to at least 2000 px. Pages upside down or rotated 90° without EXIF data are not corrected.
 - Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
 
 ## Task classification

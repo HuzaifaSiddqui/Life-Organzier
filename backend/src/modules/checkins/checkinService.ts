@@ -21,6 +21,7 @@ import {
   type CheckinCopy,
 } from "./copy.js";
 import { RESPONSE_TEXT, type CopyKind, type Lang } from "./templates.js";
+import { background } from "../../lib/background.js";
 
 /**
  * FR-RN-004 integration: turns the pure planner + pre-written copy into persisted CheckinLog rows
@@ -86,7 +87,7 @@ export function queueFirstStepRetry(task: Task, settings: Pick<UserSettings, "la
   retrying.add(key);
   const slot = task.scheduledStart;
   const save = (c: CheckinCopy) => prisma.task.updateMany({ where: { id: task.id, scheduledStart: slot }, data: { checkinCopy: c as unknown as Prisma.InputJsonValue } });
-  void (async () => {
+  background((async () => {
     try {
       const retries = (copy.retries ?? 0) + 1;
       await save({ ...copy, retries }); // count the attempt even if it fails
@@ -97,7 +98,7 @@ export function queueFirstStepRetry(task: Task, settings: Pick<UserSettings, "la
     } finally {
       retrying.delete(key);
     }
-  })();
+  })());
   return true;
 }
 

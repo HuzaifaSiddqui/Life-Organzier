@@ -180,6 +180,7 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 | `LocationOnboardingSheet` | First time Location reminders are turned on and allowed | One `Sheet` of `ListItem` rows: Home, University, Office and every other saved place (address, or "Tap to set location"; a check when saved). A row opens `LocationPickerSheet`, which saves at once. "Add another place" (no limit) and "Done". No text fields, no wizard |
 | `WhatsappLinkCard` | Settings → WhatsApp | `Card`. Free: lock icon + "WhatsApp is a Pro feature". Pro, not linked: "Get link code" → the `LINK XXXXXXXX` message in a selectable `accentSoft` box, the bot number, "works for 10 minutes", "Open WhatsApp" (wa.me deep link with the message filled in) and "I've sent it" (re-checks). Linked: check icon + "Linked to ••••••567" and ghost "Unlink" (confirm alert). No phone-number field |
 | `LocationSnackbar` | App-level location messages (permission hint, "Location removed · Undo") | `Snackbar` mounted next to `CheckinSheet`, fed by `showLocationSnackbar` |
+| `DeadlineReviewItem` | Documents → each extracted deadline under review | Notes on a `warning`/`info` soft background, each with an icon (colour is never the only signal): no date / "needs the semester start" (a week number), "11:59 PM assumed", "found by AI", range start, year from the document. Two secondary `sm` buttons with `calendar` / `clock` icons open the native date / time picker (Android dialog, iOS `Sheet` with Done); picking a date ticks the item, picking a time clears "assumed". The source words below as a `caption` (3 lines max). Nothing is created until "Create selected" |
 | `SavedPlacesScreen` | Settings → Saved places | `ListItem` rows (name, radius, use count), trash `IconButton` with confirm, skeleton / empty / error states |
 
 Icon added: `pin` (map pin, same 1.8 stroke line style).
@@ -247,7 +248,7 @@ Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), 
 | Task list | ⏳ (legacy `Animated` + `PanResponder` swipe) |
 | Task detail / Add / Edit (TaskForm) | ⏳ |
 | Routines | ⏳ |
-| Documents (upload & extraction review) | ⏳ |
+| Documents (upload & extraction review) | ⏳ (the deadline review row is migrated: `DeadlineReviewItem`, copy in `strings.ts` en + ur; the rest of the screen is legacy) |
 | Mood | ⏳ |
 | Insights / Memory (analytics) | ⏳ |
 | Auth: Welcome, Login, Signup, Forgot password, Email verification | ⏳ |
