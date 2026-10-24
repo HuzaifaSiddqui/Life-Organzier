@@ -276,3 +276,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   Urdu script and Roman Urdu; Urdu-script clock times are only read inside ranges such as "رات 11 سے صبح 7 تک".
 - **The LLM router adds up to two model calls** when the rules are unsure (on top of the existing intent call), so
   those messages are slower with a local model. It never runs with AI off.
+
+## Repeating every N days
+
+- **Routines that repeat every other day or every N days are not supported yet.** Chat ("every other day",
+  "alternate days", "alternative day", "every 2nd day", "every 3 days", "har doosre din", "ek din chhor kar",
+  "har teesre din") replies "Repeating every other day or every N days isn't supported yet" with the daily or
+  weekday alternative; a document or pasted text with these phrases makes no routine and says why. Other
+  phrasings are not guessed.
+- **English only:** this reply has no Urdu text yet, and Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر")
+  are not recognised (planned after the deadline; scope until 1 Nov: no new Urdu-script work).
+

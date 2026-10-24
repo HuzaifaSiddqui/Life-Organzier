@@ -72,7 +72,7 @@ import {
   fillDraft,
   VERY_LOW_CLARITY,
 } from "./draft.js";
-import { extractEntities, isHabitLike, isVagueTitle, titleWithoutPlace, type ExtractOptions } from "./entities.js";
+import { extractEntities, extractInterval, isHabitLike, isVagueTitle, titleWithoutPlace, type ExtractOptions } from "./entities.js";
 import { understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
@@ -260,6 +260,10 @@ async function learnInBackground(turn: Turn, messageId: string | null, text: str
 
 /* ======================================================================== text turns */
 
+/** English only for now (no new Urdu strings before the deadline; see known-limitations "Urdu coverage"). */
+export const INTERVAL_UNSUPPORTED =
+  "Repeating every other day or every N days isn't supported yet. You can add it as a daily routine, or on chosen weekdays (for example Mon, Wed, Fri).";
+
 const STRONG_SWITCH = new Set(["set_checkin_style", "query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
 
 /** Text turns. The crisis check is the first step, ahead of open questions, NLU and every handler. */
@@ -275,6 +279,12 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
       actions: [{ label: turn.settings.language === "ur" ? "آج کے غیر ضروری کام ہٹا دیں" : "Clear today's non-urgent tasks", payload: { type: "postpone_nonurgent" } }],
       intent: "crisis",
     };
+  }
+
+  // Repeating every other day / every N days isn't supported yet: say so instead of a wrong routine or task.
+  if (extractInterval(text)) {
+    turn.state.pending = null;
+    return { content: INTERVAL_UNSUPPORTED, intent: "interval_unsupported" };
   }
 
   const ctx = parseCtx(extractOpts(turn));
