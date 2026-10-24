@@ -497,6 +497,20 @@ async function blockLines(worker: Worker, upright: Buffer, scale: number, r: Blo
     .filter((l) => (l.match(/[\p{L}\p{N}]/gu) ?? []).length >= 2); // "D-8", "O-3" are rooms
 }
 
+/**
+ * A room read from an image. "D118" / "D 8" get their hyphen ("D-118", "D-8"). The usual shapes pass: a capital,
+ * hyphen and digits ("D-8", "N-25-A", "C-5") or a named lab with a code ("SE Lab-J (C-9)"). Anything else keeps
+ * its text exactly as read and is flagged for checking; characters are never guessed ("p17" is not made "D-17").
+ */
+export function normalizeRoom(room: string | null): { room: string | null; check: boolean } {
+  if (!room) return { room: null, check: false };
+  const r = room.replace(/\s+/g, " ").trim();
+  const bare = /^([A-Z])\s?(\d{1,3})(-[A-Z])?$/.exec(r);
+  if (bare) return { room: `${bare[1]}-${bare[2]}${bare[3] ?? ""}`, check: false };
+  const usual = /^[A-Z]-\d{1,3}(?:-[A-Z])?$/.test(r) || /^[A-Z][\w ]*\bLab\b[-\w ]*\([A-Z]-\d{1,3}\)$/.test(r);
+  return { room: r, check: !usual };
+}
+
 /** Image coordinates (y down, pixels) → page points (y up), like a PDF text layer. */
 function toPage(s: number, height: number) {
   return {
@@ -564,9 +578,14 @@ export async function gridSchedulesFromImage(buffer: Buffer, language: string, d
     lines.map((text, i) => ({ text: i ? text : text.replace(/^([A-Z]{2,5}\d{3}[A-Z]?)\s*-?\s*(G\d+)?.*$/, (_m, c: string, g?: string) => (g ? `${c} - ${g}` : c)), conf: 90, line: -1, x0: rect.x1 + 8, x1: rect.x1 + 18, y0: rect.y1 + 4 + i * lineH, y1: rect.y1 + 4 + i * lineH + lineH - 4 })),
   );
   const scale = toPage(PAGE_WIDTH / width, height);
-  return classesFromLayout([...page, ...fromBlocks].map(scale.item), labelled.map((b) => scale.rect(b.rect))).map((c) => ({
-    ...c,
-    confidence: Math.min(c.confidence, IMAGE_GRID_MAX),
-    source: c.source.replace("grid", "grid photo"),
-  }));
+  return classesFromLayout([...page, ...fromBlocks].map(scale.item), labelled.map((b) => scale.rect(b.rect))).map((c) => {
+    const room = normalizeRoom(c.room);
+    return {
+      ...c,
+      room: room.room,
+      ...(room.check ? { roomCheck: true } : {}),
+      confidence: Math.min(c.confidence, IMAGE_GRID_MAX),
+      source: c.source.replace("grid", "grid photo"),
+    };
+  });
 }

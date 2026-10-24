@@ -8,6 +8,7 @@ import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineR
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
+import { useLocale } from "../../i18n/LocaleProvider";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
 import {
@@ -39,7 +40,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 type Picked = { uri: string; name: string; mimeType: string; size: number };
 type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags };
-type EditableSchedule = { index: number; title: string; room: string; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
+type EditableSchedule = { index: number; title: string; room: string; roomCheck: boolean; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
 
 /**
  * Staged status, in the order the server works (upload → read the text → find dates). The server doesn't report
@@ -55,6 +56,7 @@ function confColor(c: number): string {
 }
 
 export function DocumentsScreen({ navigation }: Props) {
+  const { t } = useLocale();
   const [picked, setPicked] = useState<Picked | null>(null);
   const [docType, setDocType] = useState<DocType | null>(null);
   const [lang, setLang] = useState("eng");
@@ -131,6 +133,7 @@ export function DocumentsScreen({ navigation }: Props) {
         index: s.index,
         title: s.title,
         room: s.room ?? "",
+        roomCheck: Boolean(s.roomCheck),
         days: s.daysOfWeek,
         time: s.time ?? "",
         durationMinutes: s.durationMinutes,
@@ -366,7 +369,9 @@ export function DocumentsScreen({ navigation }: Props) {
                   </View>
                   <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
                   {/* Room only as read from the document (empty when the document has none); the user may correct it. */}
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, room } : x)))} accessibilityLabel="Room" />
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, room, roomCheck: false } : x)))} accessibilityLabel="Room" />
+                  {/* Read from an image and not shaped like a room code: ask, don't guess. Editing it clears the note. */}
+                  {s.roomCheck && !s.created ? <Text style={[styles.meta, { color: palette.warning }]}>{t("docReview.checkRoom")}</Text> : null}
                   <Text style={[styles.meta, { color: confColor(s.confidence) }]}>
                     {s.existing ? "Already in your routines · " : s.created ? "Added automatically · " : ""}Confidence {s.confidence}%{!s.days.length ? " · pick the days" : ""}
                   </Text>

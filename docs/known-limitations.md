@@ -108,9 +108,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Grid timetables: light-coloured block fills only.** Blocks must be a light fill (grey, blue, orange, …)
   on a white page; dark or saturated fills, outline-only boxes, dark-mode screenshots, handwritten or
   skewed photos are not read as a grid and fall back to the line-based rules.
-- **Grid timetables: rooms are the weak part.** On the real COMSATS screenshot every class's day, course,
-  start and length were right (12/12) but only 6/12 rooms exact: small labels like "D-117" read as
-  "p-117" or "D117", "O-3" as "0-3". Rooms can be corrected in review.
+- **Grid timetables: rooms are the weak part.** Rooms read from an image get their hyphen back ("D118" →
+  "D-118"); one that doesn't look like a room code (capital-hyphen-digits, or a named lab with a code) keeps
+  its text as read and the review row says "Check the room" (characters are never guessed). A misread that
+  still has a valid shape isn't caught. On the real COMSATS screenshot: 12/12 classes right; rooms 8/12
+  exact, 3 flagged ("p17", "p-117", "0-3"), 1 wrong unflagged ("N-115" for D-115). PDF rooms are exact text
+  and are not changed.
 
 ## Task classification
 

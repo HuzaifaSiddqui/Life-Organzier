@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { analyzeDocument } from "../src/modules/documents/documentProcessing.js";
-import { fillMissingSlots, findBlocks, gridSchedulesFromImage, hasClockGrid, IMAGE_GRID_MAX, looksLikeTimetable, weekdayLabels } from "../src/modules/documents/gridTimetable.js";
+import { fillMissingSlots, findBlocks, gridSchedulesFromImage, hasClockGrid, IMAGE_GRID_MAX, looksLikeTimetable, normalizeRoom, weekdayLabels } from "../src/modules/documents/gridTimetable.js";
 import { shutdownOcr } from "../src/modules/documents/textExtraction.js";
 
 test.after(() => shutdownOcr());
@@ -81,4 +81,12 @@ test("grid timetable image: each class with its day, start, length and room; rev
   assert.equal(byTitle("CSE499", 6)?.room, "FYP Lab");
   assert.equal(byTitle("MTH231", 3)?.instructor, "Dr Sana Ali");
   assert.ok(found.every((s) => s.confidence <= IMAGE_GRID_MAX));
+});
+
+test("rooms read from an image: hyphen restored for 'D118'; odd ones flagged for checking, never guessed", () => {
+  assert.deepEqual(normalizeRoom("D118"), { room: "D-118", check: false });
+  assert.deepEqual(normalizeRoom("D 8"), { room: "D-8", check: false });
+  for (const ok of ["D-8", "N-25-A", "C-5", "SE Lab-J (C-9)", "CS Lab-FYP (C-12)"]) assert.deepEqual(normalizeRoom(ok), { room: ok, check: false }, ok);
+  for (const odd of ["p17", "p-117", "0-3", "Nn-1158", "CS Lob-FYP FYP (C12)"]) assert.deepEqual(normalizeRoom(odd), { room: odd, check: true }, odd);
+  assert.deepEqual(normalizeRoom(null), { room: null, check: false });
 });
