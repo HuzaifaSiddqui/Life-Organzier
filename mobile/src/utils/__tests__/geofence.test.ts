@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task, TaskLocation } from "../../types/models";
-import { buildNotificationBody, DEDUP_MS, distanceM, groupTasksByLocation, isDedupActive, selectTopLocations, tasksToAnnounce, type GeofencePlace, type GeofenceTask } from "../geofence";
+import { buildNotificationBody, DEDUP_MS, distanceM, groupTasksByLocation, isDedupActive, locatedTaskIds, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace, type GeofenceTask } from "../geofence";
 
 const NOW = Date.parse("2026-10-13T10:00:00Z");
 
@@ -103,5 +103,20 @@ describe("distanceM", () => {
   it("is about 1.1 km for 0.01° of latitude and 0 for the same point", () => {
     expect(Math.round(distanceM({ latitude: 31.5, longitude: 74.3 }, { latitude: 31.51, longitude: 74.3 }))).toBe(1112);
     expect(distanceM({ latitude: 31.5, longitude: 74.3 }, { latitude: 31.5, longitude: 74.3 })).toBe(0);
+  });
+});
+
+describe("asking for location access", () => {
+  it("asks at the first check of a launch and for each new task with a place, only while reminders can't fire", () => {
+    expect(shouldAskForLocation(null, ["a"], false)).toBe(true); // relaunch with a located task
+    expect(shouldAskForLocation(new Set(["a"]), ["a"], false)).toBe(false); // nothing new: no nag
+    expect(shouldAskForLocation(new Set(["a"]), ["a", "b"], false)).toBe(true); // "add a task … at home"
+    expect(shouldAskForLocation(null, ["a"], true)).toBe(false); // already allowed and on
+    expect(shouldAskForLocation(null, [], false)).toBe(false); // no task uses a place
+  });
+
+  it("watched tasks: open, with an active place, each once", () => {
+    const ids = locatedTaskIds([task("a", [loc("home"), loc("uni")]), task("done", [loc("home")], { status: "COMPLETED" }), task("none", [])]);
+    expect(ids).toEqual(["a"]);
   });
 });

@@ -26,6 +26,20 @@ export function groupTasksByLocation(tasks: Task[]): GeofencePlace[] {
   return [...byPlace.values()];
 }
 
+/** Open tasks with an active place: the ones location reminders watch. */
+export function locatedTaskIds(tasks: Task[]): string[] {
+  return [...new Set(groupTasksByLocation(tasks).flatMap((p) => p.tasks.map((t) => t.taskId)))];
+}
+
+/**
+ * Ask for location access when reminders can't fire (toggle off or permission denied) and a watched task is
+ * new since the last check, or this is the first check since the app started. Asking once per new task never nags.
+ */
+export function shouldAskForLocation(seen: ReadonlySet<string> | null, located: string[], ready: boolean): boolean {
+  if (ready || !located.length) return false;
+  return !seen || located.some((id) => !seen.has(id));
+}
+
 /** The most-used places first, at most `max`; reports how many were left out. */
 export function selectTopLocations(places: GeofencePlace[], max = MAX_REGIONS): { places: GeofencePlace[]; dropped: number } {
   const sorted = [...places].sort((a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name));

@@ -5,7 +5,7 @@ import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
 import { dictionaries, type Language, type StringKey } from "../i18n/strings";
 import type { Task } from "../types/models";
-import { buildNotificationBody, distanceM, groupTasksByLocation, selectTopLocations, tasksToAnnounce, type GeofencePlace } from "../utils/geofence";
+import { buildNotificationBody, distanceM, groupTasksByLocation, locatedTaskIds, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace } from "../utils/geofence";
 import { CATEGORY_LOCATION, DEFAULT_CHANNEL_ID, ensureNotificationCategories } from "./reminders";
 import { auth } from "../lib/firebase";
 import { readTasks, subscribeTasks } from "./syncEngine";
@@ -311,19 +311,34 @@ export async function setLocationRemindersEnabled(on: boolean): Promise<Permissi
 
 /**
  * Called when the signed-in user's settings are known. Geofences follow the task cache (sync pulls,
- * creates, edits and deletes all write it) while the user is Pro and has the toggle on. Never prompts.
+ * creates, edits and deletes all write it) while the user is Pro and has the toggle on. Never opens the
+ * permission dialog itself: a task with a place while reminders can't fire shows a "Grant" snackbar.
  */
 export function startLocationReminders(opts: { isPro: boolean }): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let seen: Set<string> | null = null;
+  // A task with a place (from chat, the form, WhatsApp or sync) while reminders can't fire: offer "Grant".
+  // A snackbar, not the system dialog, so the user chooses; the dialog opens from its button.
+  const askIfNeeded = async () => {
+    if (!opts.isPro) return;
+    const located = locatedTaskIds(await readTasks());
+    const ready = enabled && (await getLocationPermission()) !== "denied";
+    const ask = shouldAskForLocation(seen, located, ready);
+    seen = new Set(located);
+    if (!ask) return;
+    const label = await tr("location.grant");
+    showLocationSnackbar({ text: await tr("location.grantHint"), action: { label, onPress: () => void setLocationRemindersEnabled(true) } });
+  };
   const resync = () => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void syncGeofences(), 1000);
+    timer = setTimeout(() => void syncGeofences().then(askIfNeeded), 1000);
   };
   void (async () => {
     await cleanupGeofenceDedup();
     enabled = opts.isPro && (await isLocationRemindersEnabled());
     await syncGeofences(); // stops monitoring when not enabled
     await foregroundCheck();
+    await askIfNeeded();
   })();
   const stopTasks = subscribeTasks(resync);
   const app = AppState.addEventListener("change", (s) => {

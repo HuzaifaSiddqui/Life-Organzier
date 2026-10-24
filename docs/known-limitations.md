@@ -161,6 +161,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **iOS 20-region limit.** If a user has more than 20 active location-linked tasks across
   different places, only the 20 most-used places are monitored. Tasks at other places are
   still shown in the app but won't trigger arrival notifications.
+- **The app never opens the location dialog by itself.** A task that gets a place (chat, form, WhatsApp)
+  while location access or the Settings toggle is off shows a "Grant" snackbar, once after launch and once
+  per new such task; nothing fires until the user taps it (or turns the toggle on in Settings).
 - **Background permission required.** On Android, geofence triggers only fire with "Allow all
   the time" location permission. With "While using the app", the app checks position once on
   each foreground entry — no exit detection, no background triggers.
