@@ -234,9 +234,48 @@ export async function gridSchedulesFromPdf(buffer: Buffer): Promise<ExtractedSch
 
 /* ------------------------------------------------------------------ images (photos, screenshots) */
 
-/** A photo of a timetable: worth the positional pass when its plain OCR text has this many clock times. */
+/** Distinct clock times written with ":" ("08:30"); decimals like "1200.00" or "3.50" don't count. */
+function distinctClockTimes(text: string): number {
+  return new Set(text.match(/\b\d{1,2}:\d{2}\b/g) ?? []).size;
+}
+
+const WEEKDAY_WORD: Array<[RegExp, number]> = [
+  [/\b(?:mon(?:day)?|peer|pir|somwaa?r)\b|پیر|سوموار/i, 1],
+  [/\b(?:tue(?:s(?:day)?)?|mangal(?:waa?r)?)\b|منگل/i, 2],
+  [/\b(?:wed(?:nesday)?|budh(?:waa?r)?)\b|بدھ/i, 3],
+  [/\b(?:thu(?:rs?(?:day)?)?|jum[ea]ra{1,2}t)\b|جمعرات/i, 4],
+  [/\b(?:fri(?:day)?|jumm?(?:a|ah|e))\b|جمعہ/i, 5],
+  [/\b(?:sat(?:urday)?|hafta)\b|ہفتہ/i, 6],
+  [/\b(?:sun(?:day)?|a?itwaa?r)\b|اتوار/i, 0],
+];
+/** Two-letter labels ("Mo", "Tu", "We") count only on a line of their own: "We" in a sentence is not Wednesday. */
+const TWO_LETTER_DAY: Record<string, number> = { mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6, su: 0 };
+
+/** Weekdays named in the text (English, Roman Urdu, Urdu), each counted once. */
+export function weekdayLabels(text: string): Set<number> {
+  const days = new Set<number>();
+  for (const [re, day] of WEEKDAY_WORD) if (re.test(text)) days.add(day);
+  for (const line of text.split("\n")) {
+    const day = TWO_LETTER_DAY[line.trim().toLowerCase()];
+    if (day !== undefined) days.add(day);
+  }
+  return days;
+}
+
+/**
+ * A timetable: at least 3 different weekdays and 6 different ":" clock times. A bill (decimals), a mark sheet or
+ * a datesheet (a few repeated slots) is not one.
+ */
 export function looksLikeTimetable(text: string): boolean {
-  return (text.match(/\b\d{1,2}[:.]\d{2}\b/g) ?? []).length >= 6;
+  return weekdayLabels(text).size >= 3 && distinctClockTimes(text) >= 6;
+}
+
+/**
+ * Worth starting the image grid reader: 6+ different ":" times. Weekday labels are checked inside it, on the
+ * header read with ruling lines removed: plain OCR of a grid often misses "Mo", "Tu" between the lines.
+ */
+export function hasClockGrid(text: string): boolean {
+  return distinctClockTimes(text) >= 6;
 }
 
 /** Highest image grid confidence: classes read from a photo are reviewed, never created on their own. */
@@ -458,6 +497,20 @@ async function blockLines(worker: Worker, upright: Buffer, scale: number, r: Blo
     .filter((l) => (l.match(/[\p{L}\p{N}]/gu) ?? []).length >= 2); // "D-8", "O-3" are rooms
 }
 
+/**
+ * A room read from an image. "D118" / "D 8" get their hyphen ("D-118", "D-8"). The usual shapes pass: a capital,
+ * hyphen and digits ("D-8", "N-25-A", "C-5") or a named lab with a code ("SE Lab-J (C-9)"). Anything else keeps
+ * its text exactly as read and is flagged for checking; characters are never guessed ("p17" is not made "D-17").
+ */
+export function normalizeRoom(room: string | null): { room: string | null; check: boolean } {
+  if (!room) return { room: null, check: false };
+  const r = room.replace(/\s+/g, " ").trim();
+  const bare = /^([A-Z])\s?(\d{1,3})(-[A-Z])?$/.exec(r);
+  if (bare) return { room: `${bare[1]}-${bare[2]}${bare[3] ?? ""}`, check: false };
+  const usual = /^[A-Z]-\d{1,3}(?:-[A-Z])?$/.test(r) || /^[A-Z][\w ]*\bLab\b[-\w ]*\([A-Z]-\d{1,3}\)$/.test(r);
+  return { room: r, check: !usual };
+}
+
 /** Image coordinates (y down, pixels) → page points (y up), like a PDF text layer. */
 function toPage(s: number, height: number) {
   return {
@@ -486,6 +539,7 @@ export async function gridSchedulesFromImage(buffer: Buffer, language: string, d
   const blocks = findBlocks(new Uint8Array(rgb), width, height);
   const words: OcrWord[] = [];
   const labelled: Array<{ rect: Block; lines: string[] }> = [];
+  let timetable = false;
   await withWorker(ocrLanguages(language), async (worker) => {
     let line = 0;
     for (const page of pages) {
@@ -501,6 +555,11 @@ export async function gridSchedulesFromImage(buffer: Buffer, language: string, d
             }
           }
         }
+        // After the first read: no weekday rows and clock headers → not a timetable; skip the rest.
+        if (!timetable && !(timetable = looksLikeTimetable(words.map((w) => w.text).join("\n")))) {
+          await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+          return;
+        }
       }
     }
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
@@ -511,6 +570,7 @@ export async function gridSchedulesFromImage(buffer: Buffer, language: string, d
     }
     await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
   });
+  if (!timetable) return [];
   // Days and header times from the page; each block becomes its label plus the lines under it, inside its box.
   const page = phrases(dedupeWords(cleanWords(words))).filter((w) => DAY_RE.test(w.text) || TIME_RE.test(w.text));
   const lineH = 24;
@@ -518,9 +578,14 @@ export async function gridSchedulesFromImage(buffer: Buffer, language: string, d
     lines.map((text, i) => ({ text: i ? text : text.replace(/^([A-Z]{2,5}\d{3}[A-Z]?)\s*-?\s*(G\d+)?.*$/, (_m, c: string, g?: string) => (g ? `${c} - ${g}` : c)), conf: 90, line: -1, x0: rect.x1 + 8, x1: rect.x1 + 18, y0: rect.y1 + 4 + i * lineH, y1: rect.y1 + 4 + i * lineH + lineH - 4 })),
   );
   const scale = toPage(PAGE_WIDTH / width, height);
-  return classesFromLayout([...page, ...fromBlocks].map(scale.item), labelled.map((b) => scale.rect(b.rect))).map((c) => ({
-    ...c,
-    confidence: Math.min(c.confidence, IMAGE_GRID_MAX),
-    source: c.source.replace("grid", "grid photo"),
-  }));
+  return classesFromLayout([...page, ...fromBlocks].map(scale.item), labelled.map((b) => scale.rect(b.rect))).map((c) => {
+    const room = normalizeRoom(c.room);
+    return {
+      ...c,
+      room: room.room,
+      ...(room.check ? { roomCheck: true } : {}),
+      confidence: Math.min(c.confidence, IMAGE_GRID_MAX),
+      source: c.source.replace("grid", "grid photo"),
+    };
+  });
 }

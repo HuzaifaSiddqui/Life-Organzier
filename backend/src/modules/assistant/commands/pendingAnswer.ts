@@ -1,5 +1,5 @@
 import { fuzzySimilarity } from "../../../lib/text.js";
-import { extractEntities } from "../entities.js";
+import { cleanTitle, extractEntities } from "../entities.js";
 import type { Pending, QuickAction } from "../types.js";
 import { commandText } from "./copy.js";
 import { matchCommand } from "./registry.js";
@@ -28,6 +28,21 @@ function optionLabels(p: Pending): string[] {
   return [];
 }
 
+const PRONOUN = /^(?:it|its|her|him|his|them|their|this|that|there|wo|woh|usse|use|isko|usko|unko)$/i;
+
+/**
+ * A longer reply still answers when it adds nothing new: once the date, time and filler are gone, what is left is
+ * only pronouns and words of the draft's title ("I'll call her tomorrow", "we will do it in the evening",
+ * "I need it by Friday"). "I need to call mom's doctor tomorrow" adds "doctor": a new task, not Call mom's date.
+ */
+export function refersBack(p: Pending, text: string, ctx: ParseCtx): boolean {
+  const title = "draft" in p && p.draft && typeof p.draft === "object" && "title" in p.draft ? String(p.draft.title ?? "") : "";
+  const words = (s: string) => (s.toLowerCase().replace(/['’]s\b/g, "").match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+  const own = new Set(words(title));
+  const said = words(cleanTitle(extractEntities(text, ctx.opts).residual));
+  return said.every((w) => PRONOUN.test(w) || own.has(w));
+}
+
 export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): boolean {
   const t = text.trim();
   if (!t) return false;
@@ -41,7 +56,7 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
   }
   if (SLOT_KINDS.has(p.kind)) {
     const e = extractEntities(t, ctx.opts);
-    if ((e.date || e.time || e.durationMinutes || e.frequency || e.flexibleTime || e.priority) && words <= 6) return true;
+    if ((e.date || e.time || e.durationMinutes || e.frequency || e.flexibleTime || e.priority) && (words <= 6 || (words <= 12 && refersBack(p, t, ctx)))) return true;
     // A title or a free answer ("pick another day", "add anyway"), unless it is a specific new command.
     if (p.kind === "task_draft" && p.awaiting.includes("title")) return words <= 8 && !matchCommand(t, ctx);
     if (p.kind === "routine_draft" && p.awaiting.includes("title")) return words <= 6 && !matchCommand(t, ctx);

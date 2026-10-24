@@ -510,3 +510,28 @@ test("free user names a place: the task is added and the reply invites them to P
     assert.doesNotMatch(plain.message.content, /Pro/, "no nudge without a place");
   });
 });
+
+test("Free users see the Pro invitation at most once a day", { skip }, async () => {
+  await withChatUser("FREE", async (say) => {
+    const pro = /Location reminders come with Pro/;
+    const now = new Date();
+    assert.match((await say("Add a task to do 10 push ups at home today", "APP", now)).message.content, pro);
+    const again = await say("Add a task to water the plants at home today", "APP", now);
+    assert.equal(again.message.intent, "task_created");
+    assert.doesNotMatch(again.message.content, pro, "second place the same day: no invitation");
+    assert.ok(!again.message.actions?.some((a) => a.label === "Go to Settings"));
+    const tomorrow = new Date(now.getTime() + 24 * 3600000);
+    assert.match((await say("Add a task to fold clothes at home tomorrow", "APP", tomorrow)).message.content, pro, "next day: shown again");
+  });
+});
+
+test("open 'Call mom' question: 'I need to call mom's doctor tomorrow' is its own task, not Call mom's date", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    assert.equal((await say("Call mom")).message.intent, "clarify");
+    const r = await say("I need to call mom's doctor tomorrow");
+    assert.equal(r.message.answered, undefined, "not taken as the answer");
+    assert.match(r.message.content, /doctor/i);
+    assert.doesNotMatch(r.message.content, /"Call mom"/);
+    assert.equal(await prisma.task.count({ where: { userId: user.id, title: "Call mom" } }), 0, "Call mom got no date and wasn't created");
+  });
+});

@@ -7,7 +7,7 @@ import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
 import { aiDeadlines, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
-import { gridSchedulesFromImage, gridSchedulesFromPdf, looksLikeTimetable } from "./gridTimetable.js";
+import { gridSchedulesFromImage, gridSchedulesFromPdf, hasClockGrid } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
 export const DOC_TYPES = ["SYLLABUS", "SCHEDULE", "NOTES", "OTHER"] as const;
@@ -59,7 +59,15 @@ type Extracted = {
   warning: string | null;
   needsLanguage: boolean;
   method: string;
+  /** EXTRACTOR_VERSION that produced it; a saved result from another version is read again, not reused. */
+  extractorVersion?: number;
 };
+
+/**
+ * Bump when the readers change what a document yields (new formats, new rules): a re-upload within the reuse
+ * window is then read again instead of replaying the old result. 2 = grid timetables from images.
+ */
+export const EXTRACTOR_VERSION = 2;
 
 export type AnalyzeInput = {
   buffer?: Buffer;
@@ -124,7 +132,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
       schedules = fromGrid;
       grid = true;
     }
-  } else if (input.docType !== "NOTES" && input.buffer && /^image\//i.test(input.mimeType) && looksLikeTimetable(raw.text)) {
+  } else if (input.docType !== "NOTES" && input.buffer && /^image\//i.test(input.mimeType) && hasClockGrid(raw.text)) {
     // A photo or screenshot of a grid timetable: plain OCR text loses which class sits in which day and slot.
     const fromGrid = await gridSchedulesFromImage(input.buffer, input.language, started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS)).catch((error) => {
       console.warn("Grid timetable image parse failed", error instanceof Error ? error.message : error);
@@ -193,9 +201,9 @@ export function processDocument(user: User, settings: UserSettings, input: Proce
 
 async function reuseOrProcess(user: User, settings: UserSettings, input: ProcessInput, hash: string) {
   const recent = await prisma.document.findFirst({ where: { userId: user.id, contentHash: hash, createdAt: { gte: new Date(Date.now() - REUSE_WITHIN_MS) } }, orderBy: { createdAt: "desc" } });
-  // Reuse avoids duplicate tasks. A result that found nothing created nothing: read it again (a newer reader may do better).
-  const found = recent?.extracted as unknown as Extracted | null;
-  if (recent && found && (found.deadlines?.length || found.schedules?.length)) {
+  // Reuse avoids duplicate tasks, but only for a result from the current readers: an older one may have missed things.
+  const saved = recent?.extracted as unknown as Extracted | null;
+  if (recent && saved && saved.extractorVersion === EXTRACTOR_VERSION) {
     const { text, ...doc } = recent;
     return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
   }
@@ -246,7 +254,7 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
     },
   });
 
-  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method };
+  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method, extractorVersion: EXTRACTOR_VERSION };
   const createdTasks = [];
   const createdRoutines = [];
   if (input.autoCreate && !raw.needsLanguage && raw.confidence >= 70) {

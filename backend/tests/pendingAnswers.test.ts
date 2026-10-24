@@ -85,6 +85,34 @@ test("pending questions consume short replies: every kind × yes / no / ok / tom
   });
 });
 
+/** Answers said as a sentence, as people do. Each must fill the open "when?" question, never start a new task. */
+export const SENTENCE_REPLIES = ["I'll call her tomorrow", "we will do it in the evening", "I need it by Friday"];
+
+test("open 'when?' questions consume natural-sentence answers; no duplicate task", { skip }, async () => {
+  await withUser(async (user) => {
+    const call = (o: Partial<TaskDraft> = {}) => draft({ title: "Call mom", ...o });
+    const asks: Pending[] = [
+      { kind: "task_draft", draft: call(), awaiting: ["date", "time"], source: "CHAT", clarity: 40 },
+      { kind: "past_date", draft: call({ dueYmd: "2026-10-01" }), source: "CHAT" },
+      { kind: "routine_draft", draft: { ...routineDraft, title: "Call mom" }, awaiting: ["time"] },
+      { kind: "capacity", draft: call({ dueYmd: "2026-10-30", durationMinutes: 600 }), source: "CHAT", ymd: "2026-10-30" },
+      { kind: "conflict", draft: call({ dueYmd: "2026-10-30", dueTime: "7 PM" }), source: "CHAT", routine: "Gym" },
+    ];
+    const misses: string[] = [];
+    for (const pending of asks) {
+      for (const reply of SENTENCE_REPLIES) {
+        await prisma.task.deleteMany({ where: { userId: user.id, title: { notIn: ["Essay", "Essay draft"] } } });
+        await prisma.routine.deleteMany({ where: { userId: user.id, title: { notIn: ["Morning reading", "Night reading"] } } });
+        const out = await ask(user, structuredClone(pending), reply);
+        const stray = await prisma.task.findMany({ where: { userId: user.id, title: { notIn: ["Essay", "Essay draft", "Call mom"] } }, select: { title: true } });
+        if (out.message.answered !== pending.kind) misses.push(`${pending.kind} + "${reply}" → ${out.message.intent}: ${out.message.content.slice(0, 60)}`);
+        if (stray.length) misses.push(`${pending.kind} + "${reply}" created ${JSON.stringify(stray.map((t) => t.title))}`);
+      }
+    }
+    assert.deepEqual(misses, []);
+  });
+});
+
 test("a clear new command (not an answer) still drops the pending question", { skip }, async () => {
   await withUser(async (user, ids) => {
     const all = pendings(ids, new Date());
