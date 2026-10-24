@@ -3,6 +3,7 @@ import type { ExtractOptions } from "../entities.js";
 import { rulesUnderstand } from "../nlu.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 import { bulkCommands } from "./bulk.js";
+import { findItemsCommand } from "./find.js";
 import { insightCommands } from "./insights.js";
 import { parseMulti } from "./multi.js";
 import { routineCommands } from "./routines.js";
@@ -15,7 +16,7 @@ import { wrappedCommands } from "./wrapped.js";
  * goes to the first whose rule parse accepts it. Wrapped existing intents come last and are matched by
  * nlu.ts. Everything here works with AI off; the LLM router (router.ts) only picks from this list.
  */
-export const COMMANDS: Command[] = [...bulkCommands, ...settingsCommands, ...insightCommands, ...routineCommands, ...taskCommands, ...wrappedCommands];
+export const COMMANDS: Command[] = [...bulkCommands, ...settingsCommands, ...insightCommands, ...routineCommands, findItemsCommand, ...taskCommands, ...wrappedCommands];
 
 const byName = new Map(COMMANDS.map((c) => [c.name, c]));
 

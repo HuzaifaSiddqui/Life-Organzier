@@ -312,3 +312,19 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Other phrasings are not guessed** ("thrice a week", "every alternate Monday").
 - **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
   Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).
+
+## Finding tasks by topic
+
+- **Typos are caught in tiers.** Exact word, then substring, then fuzzy (trigram similarity ≥ 0.75, which
+  catches light typos such as "asignment"), then same Soundex code (catches "kentuky", "phisics", "grocries",
+  "multaan"). Not caught: a dropped letter that changes the sound code ("libary" for library) and typos in
+  words of 3 letters or fewer ("gim" for gym), where sound matching would match too much. Eval: 49/51 exact,
+  precision 100 %, recall 94.9 %, negatives 10/10.
+- **Every word must match somewhere.** "tasks about physics lab" needs both words in the same task (in any
+  field). Question words ("due", "today", "koi", "kaam") are not search words.
+- **Urdu-script words don't match English titles.** "KFC کے بارے میں کوئی کام" works because "KFC" is in Latin
+  letters; "بینک کے بارے میں" will not find "Call the bank" (no transliteration).
+- **"KFC wala kaam" is a search only when nothing but question words follow it**; "KFC wala kaam kal karna hai"
+  adds a task.
+- **Voice hints** (task titles, places, course codes, tags; at most 100) help only on Android 13+ and iOS;
+  older Android ignores them. Routine titles are not in the hints (routines aren't cached on the phone).
