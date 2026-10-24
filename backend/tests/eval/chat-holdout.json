@@ -1,0 +1,9 @@
+{
+  "description": "HELD-OUT chat commands for `npm run eval:assistant`. To be written by a teammate who has NOT read backend/src/modules/assistant/commands/ or entities.ts: messages the way students really type them (English, Urdu script, Roman Urdu). Rows with \"example\": true only show the schema and are NOT scored. command = a registry name from docs/chat-coverage.md (or an intent such as create_task); args = only what a human reads from the message (absent fields are not scored). Dates are relative to 'now' in the timezone. Never change the rules to fix a row here; add new rows instead.",
+  "now": "2026-10-05T05:00:00.000Z",
+  "timezone": "Asia/Karachi",
+  "commands": [
+    { "id": "h-example-1", "example": true, "lang": "ru", "text": "gym wali routine ab band kar do", "command": "routine_pause", "args": { "ref": "gym wali" } },
+    { "id": "h-example-2", "example": true, "lang": "en", "text": "push everything I had today to tomorrow", "command": "bulk_move_today", "args": { "toYmd": "2026-10-06" } }
+  ]
+}

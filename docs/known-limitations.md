@@ -204,3 +204,31 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   `backend/src/modules/mood/crisis.ts`. It must be reviewed by a native Urdu speaker before release, and the
   helpline numbers in `CRISIS_RESOURCES` must be verified (`// VERIFY BEFORE RELEASE`). A mental-health helpline
   is intentionally left as a placeholder (not shown) until someone verifies one.
+
+## Chat commands
+
+- **Undoing a routine delete restores the routine, not its history.** Deleting removes its past occurrences
+  (done/skipped marks); undo recreates the routine with the same id and settings and fresh upcoming occurrences.
+  The confirmation says so.
+- **One undo step per conversation.** "Undo" reverts the newest chat change (a command or a task edit); older
+  command changes can't be undone from chat. Settings and routine changes undo for 15 minutes, deletes for 24 hours.
+- **Routine names without the word "routine".** "Skip gym today" and "move today's gym to 8 PM" look for a routine
+  first; when no routine matches (and the message didn't say "routine"), the message is handled as a task instead.
+- **Insights from chat use the analytics ranges**: "this week" is the last 7 days and "this month" the last 30, not
+  calendar weeks. "Time per category" is the planned duration of completed tasks (tasks have no time tracking);
+  tasks without a duration are counted but not timed. The streak counts days with a completed task or routine.
+- **Bulk changes act on at most 25 tasks per confirmation**; the preview says how many more there are, and the
+  same request again handles the next ones. Moving a parent task moves its subtasks with it, so a subtask whose
+  parent is in the same batch isn't moved twice.
+- **One question per multi-request reply.** If two parts of a message both need an answer, the first is asked and
+  the reply names the other to send again. Parts are split only at and / aur / then / also / phir (and the Urdu
+  words), not at commas alone.
+- **Some command replies are still English for Urdu users.** In Urdu (`commands/copy.ts`): every settings and bulk
+  reply, confirm buttons, "answer yes or no" / "pick a number" re-asks, the expired-preview reply and the undo reply.
+  Still English: routine commands (list, change, pause/resume, delete, done/skip today, move once), task-field
+  commands (notes, reminder mode, start, reopen, tags, category, subtasks), insights, help and the "here's what I can
+  do" suggestions, "Which routine / task do you mean?", and the "Send this again after answering" line of a
+  multi-request reply. Task titles, routine names and times are shown as written. The rules understand English,
+  Urdu script and Roman Urdu; Urdu-script clock times are only read inside ranges such as "رات 11 سے صبح 7 تک".
+- **The LLM router adds up to two model calls** when the rules are unsure (on top of the existing intent call), so
+  those messages are slower with a local model. It never runs with AI off.

@@ -93,17 +93,57 @@ requests, so it never adds latency.
 
 ## Turn pipeline (`backend/src/modules/assistant`)
 
-`crisis check → working-memory resolution (answer to the open question, or topic switch) →
-NLU (rules → LLM if unsure) → handler → reply with cards + one-tap actions → background learning`.
+`crisis check → chat command rules (registry) → working-memory resolution (answer to the open question, or
+topic switch) → NLU (rules → LLM if unsure) → handler → reply with cards + one-tap actions → background learning`.
 
 The same engine serves the app chat, voice, and WhatsApp, so memory is shared across channels.
+
+### Chat commands (`assistant/commands/`)
+
+What chat can do, per feature: [chat-coverage.md](chat-coverage.md). Each command in `registry.ts` has a name,
+rule patterns (English, Urdu script, Roman Urdu; pure, no I/O), a zod argument schema, a reference resolver,
+`execute` (reusing the services the REST routes use), a confirmation policy and an undo step. The intents that
+existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline still runs them through `nlu.ts`.
+
+- **Rules first, AI off works.** A new command is matched by its own rules right after the crisis check; dates and
+  times come only from `entities.ts` (`extractTimeRange` and `extractWeekdays` were added for commands).
+- **References** ("my gym routine", "the essay") resolve by fuzzy match; several matches ask "which one?" with
+  numbered options (`command_choice`), none says so.
+- **Confirmation**: deletes, bulk changes and skipping a mandatory routine ask once (`confirm_command`); the
+  resolved arguments are stored, so "yes" runs exactly what was shown. A confirmation expires after 10 minutes: a later
+  "yes" runs nothing and offers "Show it again" (the original words, re-run for a fresh preview).
+- **Open questions come first** (`pendingAnswer.ts`): while a question is open, a plausible answer to it (yes / no in
+  English, Urdu or Roman Urdu, a number, "done", "cancel", a date or time for a draft, a name from the list) goes to
+  that question and never starts a command; if the question can't use it, it is asked again. Only a reply that is
+  not an answer (e.g. "mark all done" to a time question) can replace the question. The reply's `answered` field
+  says which question took it. Eval group: `pending` in `assistant-eval.json`.
+- **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
+  deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
+  command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.
+- **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, postpone
+  non-urgent. One preview with the titles (at most 25 tasks per confirmation; WhatsApp shows 8 and "…and N
+  more"), one "yes", undone as one batch from per-task snapshots.
+- **Several requests in one message** (`multi.ts`): split only at clause boundaries (and / aur / then / also /
+  phir / اور / پھر) and only when every part parses on its own (a new task needs an explicit "add / remind me",
+  so "buy bread and eggs" stays one task). Parts run in order with one summary reply; a part that has to ask
+  (which one? confirm?) is asked, and at most one question per reply.
+- **Fallback router** (`router.ts`, AI on and rules unsure, i.e. rule confidence below 0.75): two small
+  schema-constrained calls, area then command, over the registry. The model returns a command name and argument
+  words only; dates, times, durations and weekdays are re-extracted by `entities.ts`, the arguments are
+  validated with the command's zod schema, and references resolve in code. If the rules accept the text after
+  all, they win. No match → `capabilities.ts` replies with 4–5 things I can do closest to the message (never a
+  generic chat answer); the same happens for chit-chat when no model is available. Help is built from the registry.
+- **WhatsApp**: command replies are plain text; options become a numbered list (`formatReply`), "1" answers them,
+  app-only buttons (open a screen) are dropped, lists cap at 8.
+- **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
+  `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
 
 ## FR coverage
 
 | Area | Status |
 |---|---|
-| FR-TM-001..008 tasks (Clarity Index, mandatory clarifications, type classification, chat edits, soft delete 24h, undo, scheduling, overload, splitting, progress, missed/overdue handling) | Implemented |
-| FR-RM-001..004 routines (frequency, priority, mandatory confirm, time-locked vs flexible, contexts) | Implemented |
+| FR-TM-001..008 tasks (Clarity Index, mandatory clarifications, type classification, chat edits, soft delete 24h, undo, scheduling, overload, splitting, progress, missed/overdue handling) | Implemented. From chat also: notes/description, per-task reminder mode, start, reopen, add/remove tags, category, add/list/complete subtasks (each undoable) |
+| FR-RM-001..004 routines (frequency, priority, mandatory confirm, time-locked vs flexible, contexts) | Implemented. From chat: list, change time/days/title/priority/duration, pause/resume, delete (confirmed, undo 24 h), done/skip today, move one occurrence |
 | FR-RN-001..003 reminders (escalating, peak-hour critical reminder, quiet hours, DND, adaptive on ignored reminders, per-task overrides, OS notifications with Done/Snooze) | Implemented |
 | FR-DP-001..004 documents (PDF/DOCX/OCR, cleaning, deadlines/schedules/timetables with confidence thresholds, course info, prerequisite question, grid timetable PDFs, AI action items for other documents with date grounding, re-upload dedupe, CNIC/phone masking) | Implemented — scanned PDFs are rendered on the server and OCR'd (first 10 pages); images are preprocessed with sharp (EXIF rotate, deskew, denoise, contrast, upscale) and read in several page-segmentation modes, keeping the most confident; only English OCR works offline. Deadline rules (`documents/dateRules.ts`, dates still read by `entities.ts`): multi-line records joined, table columns mapped from the header row, week numbers from the semester start in the document (else undated, "needs the semester start"), ranges keep the end date, 2-digit years, OCR slips repaired inside date tokens only, day-first numbers, the year inferred from the term or the document's other dates; tickets, bills and notices found by event words and always reviewed; header rows are never items; deadlines OCR'd at below 90 % confidence are always reviewed. With AI on, every document also gets a model pass (masked text, chunks of 2,500 characters with overlap, at most 6 chunks / 2 minutes): items it agrees with gain confidence (reviewed kinds stay ≤ 90), model-only items are review-only (≤ 80), and its dates must appear in the document. Each document gets at most 150 s (OCR + AI, `DOCUMENT_TIME_LIMIT_MS`); past that the rules' result comes back with a warning. The OCR queue refuses work (503 "try again in a minute") when 3 jobs are already waiting. Accuracy is measured by `npm run eval:documents` on synthetic fixtures: [document-eval-results.md](document-eval-results.md) |
 | FR-MH-001..004 mood (detection + confirmation, check-in, mood→task mapping, stress chunking/postpone, coping memories, crisis safety, Pro conversation) | Implemented |
@@ -115,9 +155,9 @@ The same engine serves the app chat, voice, and WhatsApp, so memory is shared ac
 | Deadline and class questions ("what's due today", "when is X due", overdue, most urgent, today's/next class, where is my class; en/ur/Roman Urdu) | Implemented, rule-based (`assistant/queries.ts`, answers in `assistant/queryAnswers.ts`); classes come from routines (`Routine.location` holds the room, only when it appears in the timetable), never from raw document text. Short plain-text replies; WhatsApp lists cap at 8 with "…and N more" |
 | FR-VF-001..002 voice in/out (confidence < 80 % re-ask, 2 s silence, 2 min cap, TTS with rate/language) | Implemented with on-device STT (not Whisper) |
 | FR-MS-001..004 sync (offline queue, idempotent creates, field-level merge, versions/history 90 days, backoff) | Implemented for tasks only — local store is AsyncStorage, not SQLite; conflicts resolve last-write-wins without UI (see known-limitations.md) |
-| FR-AN-001..002 analytics (ranges, comparison, categories, heatmap, routines, insights, CSV export) | Implemented — PDF export not implemented |
+| FR-AN-001..002 analytics (ranges, comparison, categories, heatmap, routines, insights, CSV export) | Implemented — PDF export not implemented. From chat (read-only, deterministic): completed this week/month, streak, busiest weekday, planned time per category, overdue count, this week vs last week |
 | FR-CT-001..002 categories & tags | Implemented |
-| FR-AP-001..004 account, preferences, context scheduling | Implemented — UI is English-only (assistant replies follow the language setting; no RTL UI translation) |
+| FR-AP-001..004 account, preferences, context scheduling | Implemented — UI is English-only (assistant replies follow the language setting; no RTL UI translation). From chat: quiet hours, Do Not Disturb (on / off / for N hours / until a time, max 24 h), where reminders go (WhatsApp needs Pro and a linked number), language, check-ins, settings summary; each change echoes the new value and is undoable, and the app reloads its preferences |
 | FR-OB-001..002 onboarding & tutorials | Implemented |
 | FR-VF-003 voice conversation (Phase 2) | Not implemented |
 | FR-LB-001 location-based (geofence) reminders | Implemented (Pro tier, expo-location geofencing, Nominatim geocoding searched near the user first, 350m default radius, saved places named in a chat task title attached automatically) — device test pending |

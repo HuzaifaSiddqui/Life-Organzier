@@ -39,6 +39,8 @@ export type Intent = (typeof INTENTS)[number];
 export type Understanding = {
   intent: Intent;
   confidence: number;
+  /** Confidence of the rules alone (below 0.75 the rules were unsure). */
+  ruleConfidence: number;
   source: "rules" | "llm";
   entities: Entities;
   title: string;
@@ -49,8 +51,8 @@ export type Understanding = {
   contextTarget: string | null;
 };
 
-const CONFIRM = /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|correct|right|confirm(?:ed)?|do it|sounds good|go ahead|that'?s right|exactly|perfect|y|absolutely|of course|please do|yes please)\b[\s.!]*$/i;
-const DENY = /^(?:no|nope|nah|not really|cancel|never ?mind|stop|don'?t|wrong|incorrect|n|no thanks|not now|skip)\b[\s.!]*$/i;
+const CONFIRM = /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|correct|right|confirm(?:ed)?|do it|sounds good|go ahead|that'?s right|exactly|perfect|y|absolutely|of course|please do|yes please|haa?n|han ji|haan ji|ji|jee|ji haan|theek(?: hai)?|thik(?: hai)?|bilkul|zaroor|ہاں|جی|جی ہاں|ٹھیک ہے|بالکل)[\s.!]*$/i;
+const DENY = /^(?:no|nope|nah|not really|cancel|never ?mind|stop|don'?t|wrong|incorrect|n|no thanks|not now|skip|nahi?n?|nai|na|mat|rehne do|chhor do|chor do|نہیں|نہ|رہنے دو)[\s.!]*$/i;
 const GREETING = /^(?:hi|hello|hey|hiya|yo|salam|assalam\w*|aoa|good (?:morning|afternoon|evening))\b[\s!.,]*(?:there|assistant)?[\s!.]*$/i;
 const THANKS = /^(?:thanks|thank you|thx|ty|great,? thanks|awesome,? thanks|cool,? thanks|perfect,? thanks|ok thanks)\b[\s!.]*$/i;
 const HELP = /^(?:help|what can you do|how (?:do|can) (?:i|you) (?:use|work)|what do you do|commands)\??[\s!.]*$/i;
@@ -246,6 +248,26 @@ export function nluMessages(text: string, opts: { history: ChatMessage[]; pendin
 export const NLU_LLM_OPTIONS = { json: LLM_JSON_SCHEMA, maxTokens: 80, timeoutMs: 20000 };
 export { llmSchema as NLU_LLM_SCHEMA, LLM_INTENTS };
 
+/** Rules only: no LLM, no I/O (the chat command registry and the eval script use it). */
+export function rulesUnderstand(text: string, opts: ExtractOptions): Understanding {
+  const entities = extractEntities(text, opts);
+  const mood = detectMood(text);
+  const rule = rulesIntent(text, entities, mood);
+  const contextMatch = text.match(SWITCH_CONTEXT);
+  return {
+    intent: rule.intent,
+    confidence: rule.confidence,
+    ruleConfidence: rule.confidence,
+    source: "rules",
+    entities,
+    title: cleanTitle(entities.residual),
+    targetRef: targetFromText(targetFromText(entities.residual, rule.intent), rule.intent),
+    mood,
+    splitParts: rule.intent === "split_task" ? splitParts(text) : [],
+    contextTarget: contextMatch ? contextMatch[1].trim() : null,
+  };
+}
+
 export async function understand(
   text: string,
   opts: ExtractOptions & { history: ChatMessage[]; pendingHint?: string | null; memoryHint?: string | null; allowLlm: boolean },
@@ -287,6 +309,7 @@ export async function understand(
   return {
     intent,
     confidence,
+    ruleConfidence: rule.confidence,
     source,
     entities,
     title,

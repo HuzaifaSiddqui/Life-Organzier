@@ -50,7 +50,7 @@ const CLIENT_SCREENS: Record<string, keyof MainStackParamList> = {
 
 export function AssistantScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { settings } = usePreferences();
+  const { settings, reload } = usePreferences();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -130,6 +130,8 @@ export function AssistantScreen({ navigation, route }: Props) {
           ...m.map((x) => (x.id === tempId && reply.userMessage ? { ...x, id: reply.userMessage.id, pending: false } : x)),
           reply.message,
         ]);
+        // Settings changed (or undone) from chat: refresh what the app shows and plans with.
+        if (/^(?:settings_|checkin|undone)/.test(reply.message.intent ?? "")) void reload();
         const shouldSpeak = speakReplies || input.voice || reply.message.intent === "read_back";
         if (shouldSpeak) speak(reply.message.speak ?? reply.message.content, { language: settings?.language, rate: settings?.ttsRate });
       } catch (e) {
@@ -141,7 +143,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         scrollToEnd();
       }
     },
-    [busy, conversationId, scrollToEnd, settings?.language, settings?.ttsRate, speakReplies],
+    [busy, conversationId, reload, scrollToEnd, settings?.language, settings?.ttsRate, speakReplies],
   );
 
   const { start, stop, listening, speechSupported } = useDeviceSpeechRecognition({

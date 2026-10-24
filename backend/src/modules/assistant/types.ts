@@ -64,7 +64,21 @@ export type Pending =
   | { kind: "past_date"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP" }
   | { kind: "typo"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; corrected: string }
   | { kind: "capacity"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; ymd: string }
-  | { kind: "conflict"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; routine: string };
+  | { kind: "conflict"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; routine: string }
+  /** Chat command waiting for "yes" (destructive or bulk); args are already resolved. */
+  | { kind: "confirm_command"; command: string; args: Record<string, unknown>; summary: string; at?: string; text?: string }
+  /** Chat command waiting for "which one?"; the answer fills args[field] with the chosen id. */
+  | { kind: "command_choice"; command: string; args: Record<string, unknown>; field: string; candidates: Array<{ id: string; label: string }> };
+
+/** The last chat command's undo step (settings, routines, bulk task changes). Task edits also keep their own version history. */
+export type UndoRecord = { at: string; label: string } & (
+  | { kind: "settings"; before: Record<string, unknown> }
+  | { kind: "routine"; routineId: string; before: Record<string, unknown> }
+  | { kind: "routine_deleted"; snapshot: Record<string, unknown> }
+  | { kind: "occurrence"; occurrenceId: string; before: { status: string; occurrenceDate: string; dueTime: string | null } }
+  /** `before`: each task's fields before an edit (restored as they were; version history is the fallback). */
+  | { kind: "tasks"; op: "edit" | "delete" | "create"; taskIds: string[]; before?: Record<string, Record<string, unknown>> }
+);
 
 export type DialogueState = {
   pending: Pending | null;
@@ -72,6 +86,7 @@ export type DialogueState = {
   focus: string[];
   prereqAsked: string[];
   turn: number;
+  undo?: UndoRecord | null;
 };
 
 export type ActionPayload =
@@ -81,6 +96,7 @@ export type ActionPayload =
   | { type: "complete_task"; taskId: string }
   | { type: "snooze_task"; taskId: string; minutes: number }
   | { type: "undo_task"; taskId: string }
+  | { type: "undo_command" }
   | { type: "restore_task"; taskId: string }
   | { type: "accept_slot"; taskId: string; start: string; end: string }
   | { type: "suggest_slot"; taskId: string }
@@ -131,6 +147,8 @@ export type AssistantMessageMeta = {
   mood?: string | null;
   memoriesUsed?: number;
   learned?: string[];
+  /** The kind of open question this reply answered (it went to that question, not to a new command). */
+  answered?: string;
 };
 
 export type AssistantReply = {

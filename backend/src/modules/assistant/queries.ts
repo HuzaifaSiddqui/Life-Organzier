@@ -18,7 +18,7 @@ export type ParsedQuery =
  * Not reused directly: that one also collapses repeated Latin letters ("assignment" -> "asignment"),
  * which would corrupt the when_due ref. Letters only, so it is also safe on regex sources below.
  */
-function unify(s: string): string {
+export function unify(s: string): string {
   return s
     .normalize("NFC")
     .replace(/[ً-ٰٟـ‌‍]/g, "") // harakat, superscript alef, tatweel, ZWNJ/ZWJ
@@ -32,7 +32,7 @@ function unify(s: string): string {
 }
 
 /** Lowercase, unify Urdu letters, drop "'s" ("what's" -> "what"), punctuation -> space. */
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return unify(text.toLowerCase())
     .replace(/['’`´]s\b/g, "")
     .replace(/['’`´]/g, "")
@@ -56,7 +56,7 @@ function asWritten(text: string): string[] {
 }
 
 /** True when any alternative appears as whole word(s) in normalised text. */
-function has(t: string, alts: string): boolean {
+export function has(t: string, alts: string): boolean {
   return new RegExp(`(?:^| )(?:${unify(alts)})(?= |$)`).test(t);
 }
 

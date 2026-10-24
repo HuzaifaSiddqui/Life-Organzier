@@ -595,6 +595,89 @@ export function extractLocation(text: string, places: string[] = []): string | n
   return null;
 }
 
+/* ---- chat command helpers: time ranges and weekday lists ------------------------------------------ */
+
+const UR_SCRIPT_PART: Record<string, "subah" | "dopahar" | "shaam" | "raat"> = { صبح: "subah", دوپہر: "dopahar", شام: "shaam", رات: "raat" };
+const PART_ANY = `${UR_PART_RE}|morning|evening|night|صبح|دوپہر|شام|رات`;
+
+/** One reading inside a range ("11 pm", "raat 11", "صبح 7 بجے", "23:00"); `part` from the word next to it. */
+function rangeClock(h: string, mi: string | undefined, suffix: string | undefined, part: string | undefined): string | null {
+  const hour = Number(h);
+  const minute = mi ? Number(mi) : 0;
+  if (minute >= 60) return null;
+  const s = suffix?.toLowerCase().replace(/\./g, "");
+  if (s === "am" || s === "pm") {
+    if (hour < 1 || hour > 12) return null;
+    return formatClock((hour % 12) + (s === "pm" ? 12 : 0), minute);
+  }
+  const p = part?.toLowerCase();
+  const named = p ? (UR_SCRIPT_PART[p] ?? urduPart(p === "morning" ? "subah" : p === "evening" ? "shaam" : p === "night" ? "raat" : p)) : null;
+  if (!named) return hour <= 23 && (hour >= 13 || hour === 0 || mi !== undefined) ? formatClock(hour, minute) : null;
+  const h24 = urduHour(hour, named);
+  return h24 === null ? null : formatClock(h24, minute);
+}
+
+/**
+ * A start–end clock range: "from 11 PM to 7 AM", "10pm-6am", "raat 11 se subah 7 tak", "رات 11 سے صبح 7 تک".
+ * Null unless both ends are clear (the time lives in each end, never guessed by the LLM).
+ */
+export function extractTimeRange(text: string): { start: string; end: string } | null {
+  const t = text.replace(/\s+/g, " ").trim();
+  const end = `(?:(${PART_ANY})\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(a\\.?m\\.?|p\\.?m\\.?|baje|bje|بجے)?(?:\\s+(${PART_ANY}))?`;
+  const re = new RegExp(`${end}\\s*(?:-|–|to|till|until|se|سے)\\s*${end}`, "i");
+  const m = re.exec(t);
+  if (!m) return null;
+  const [, p1, h1, m1, s1, q1, p2, h2, m2, s2, q2] = m;
+  const isAmPm = (s: string | undefined) => Boolean(s && /^[ap]/i.test(s));
+  // "10-11 PM" style: one suffix covers both ends (the existing range rule in extractTime).
+  const suffixEnd = isAmPm(s2) ? s2 : undefined;
+  const suffixStart = isAmPm(s1) ? s1 : !p1 && !q1 && suffixEnd ? (Number(h1) > Number(h2) && /^p/i.test(suffixEnd) ? "am" : suffixEnd) : undefined;
+  const start = rangeClock(h1, m1, suffixStart, p1 ?? q1);
+  const finish = rangeClock(h2, m2, suffixEnd, p2 ?? q2);
+  return start && finish && start !== finish ? { start, end: finish } : null;
+}
+
+const UR_SCRIPT_DAYS: Array<{ re: RegExp; day: number }> = [
+  { re: /اتوار/, day: 0 }, { re: /پیر|سوموار/, day: 1 }, { re: /منگل/, day: 2 }, { re: /بدھ/, day: 3 },
+  { re: /جمعرات/, day: 4 }, { re: /جمعہ(?!رات)|جمعے/, day: 5 }, { re: /ہفتہ|ہفتے/, day: 6 },
+];
+
+/**
+ * Days named for a routine change: "Mon Wed Fri", "on Mondays and Thursdays", "weekdays", "weekends",
+ * "every day", "peer aur jumma", "پیر اور جمعہ". Null when none. ("hafta"/"ہفتہ" after "is/har/agle" is "week".)
+ */
+export function extractWeekdays(text: string): number[] | null {
+  const t = text.toLowerCase();
+  if (/\b(?:every\s*day|everyday|daily|roz|rozana|har roz)\b|ہر روز|روزانہ/.test(t)) return [0, 1, 2, 3, 4, 5, 6];
+  if (/\bweekdays?\b|\bweek days\b/.test(t)) return [1, 2, 3, 4, 5];
+  if (/\bweekends?\b/.test(t)) return [0, 6];
+  const days = new Set<number>();
+  for (const m of t.matchAll(new RegExp(`\\b${WEEKDAY_RE}s?\\b`, "gi"))) {
+    const d = WEEKDAY_NAMES[m[1].toLowerCase()];
+    if (d !== undefined) days.add(d);
+  }
+  for (const m of t.matchAll(new RegExp(`(?<!\\b(?:is|iss|har|agle|agla|pichle|next|this)\\s)\\b${UR_WEEKDAY_RE}\\b`, "gi"))) {
+    const hit = UR_WEEKDAY_TESTS.find((w) => w.re.test(m[1]));
+    if (hit) days.add(hit.day);
+  }
+  const ur = t.replace(/(?:اس|ہر|اگلے|پچھلے)\s+ہفت[ہے]/g, " ");
+  for (const { re, day } of UR_SCRIPT_DAYS) if (re.test(ur)) days.add(day);
+  return days.size ? [...days].sort((a, b) => a - b) : null;
+}
+
+/**
+ * Target day of a command ("move everything to Friday", "سارے کام کل کر دو"): extractEntities' date, else
+ * Urdu-script آج / کل / پرسوں (کل read forward, as a command target is never in the past). Kept out of
+ * extractEntities so task and mood parsing of Urdu text does not change.
+ */
+export function extractTargetDay(text: string, opts: ExtractOptions): string | null {
+  const e = extractEntities(text, opts);
+  if (e.date) return e.date.ymd;
+  const m = /(?:^|\s)(پرسوں|آج|کل)(?=\s|$|[،۔؟!])/.exec(text);
+  if (!m) return null;
+  return addDaysYmd(localYmd(opts.now, opts.tz), m[1] === "آج" ? 0 : m[1] === "کل" ? 1 : 2);
+}
+
 export type LocationCommand = { kind: "remove"; taskRef: string } | { kind: "change"; taskRef: string; place: string | null };
 
 /** "remove the location (from X)", "X ki location hata do", "change the location (of X) to Y", "jagah badal do". */

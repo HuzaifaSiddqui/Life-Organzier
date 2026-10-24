@@ -1,4 +1,4 @@
-import { Priority, RoutineOccurrenceStatus, TaskStatus, TaskType, type Task } from "@prisma/client";
+import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
 import { addDaysYmd, dueDateFromYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, startOfLocalDay } from "../../lib/time.js";
@@ -53,6 +53,9 @@ import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
+import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, snapshots, UNDO_ACTION } from "./commands/runtime.js";
+import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
+import { capabilityReply, helpReply } from "./commands/capabilities.js";
 
 /* ======================================================================== intents */
 
@@ -104,7 +107,7 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
     case "thanks":
       return { content: "Anytime! I'm here whenever you need me.", intent: "thanks" };
     case "help":
-      return help();
+      return helpReply(turn);
     case "set_checkin_style":
       return setCheckinStyle(turn, text);
     case "snooze_task":
@@ -117,18 +120,9 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
     case "smalltalk":
       return conversationalReply(turn, text, "chat");
     case "unclear":
-    default: {
-      turn.state.pending = { kind: "clarify_intent", text };
-      return {
-        content: "I'm not sure what you'd like me to do. Is this a task, or are you just telling me?",
-        actions: [
-          { label: "Create a task", text: `Add a task: ${truncate(text, 60)}` },
-          { label: "Add a routine", text: `Add a daily routine: ${truncate(text, 60)}` },
-          { label: "Just telling you", text: "I'm just telling you" },
-        ],
-        intent: "unclear",
-      };
-    }
+    default:
+      // Nothing matched (rules, and the LLM router when AI is on): what I can do that is closest to the words.
+      return capabilityReply(turn, text);
   }
 }
 
@@ -213,7 +207,8 @@ async function resolveLocationChoice(turn: Turn, text: string, p: Extract<NonNul
         : undefined;
   if (!chosen) return null;
   turn.state.pending = null;
-  const task = await prisma.task.findFirst({ where: { id: p.taskId, userId: turn.user.id } });
+  // Deleted meanwhile (e.g. from the app): say so instead of failing on the attach.
+  const task = await prisma.task.findFirst({ where: { id: p.taskId, userId: turn.user.id, status: { not: "DELETED" } } });
   if (!task) return { content: "That task no longer exists.", intent: "not_found" };
   const place = await attachGeoResult(turn.user.id, task.id, p.place, chosen);
   return { content: L.set(truncate(chosen.displayName, 70), L.range[place.preset] ?? L.range.NEARBY), intent: "location_set" };
@@ -235,36 +230,23 @@ export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
   if (req.kind === "ask") {
     return { content: t.STYLE_ASK, actions: (["FUNNY", "SERIOUS", "GENTLE"] as const).map((s) => ({ label: STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), text: STYLE_CHIP_TEXT[s] })), intent: "checkin_style_ask" };
   }
+  const before = { checkinsEnabled: turn.settings.checkinsEnabled, checkinTone: turn.settings.checkinTone };
   if (req.kind === "off" || req.kind === "on") {
     const checkinsEnabled = req.kind === "on";
     turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinsEnabled } });
+    recordUndo(turn, { kind: "settings", before, label: checkinsEnabled ? "check-ins turned on" : "check-ins turned off" });
     logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinsEnabled });
     return {
       content: checkinsEnabled ? t.CHECKINS_ON : t.CHECKINS_OFF,
-      actions: checkinsEnabled ? others(turn.settings.checkinTone) : [{ label: lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", text: "Turn check-ins back on" }],
+      actions: checkinsEnabled ? [...others(turn.settings.checkinTone), UNDO_ACTION] : [{ label: lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", text: "Turn check-ins back on" }],
       intent: checkinsEnabled ? "checkins_on" : "checkins_off",
     };
   }
   const wasOff = !turn.settings.checkinsEnabled;
   turn.settings = await prisma.userSettings.update({ where: { userId: turn.user.id }, data: { checkinTone: req.tone, checkinsEnabled: true } });
+  recordUndo(turn, { kind: "settings", before, label: `check-in style set to ${STYLE_NAMES.en[req.tone]}` });
   logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinTone: req.tone, reenabled: wasOff });
-  return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: others(req.tone), intent: "checkin_style_set" };
-}
-
-function help(): Out {
-  return {
-    content:
-      "I'm your personal assistant. I learn how you work and plan around it. You can talk to me naturally — for example:",
-    actions: [
-      { label: "Math assignment due Friday 3 PM", text: "Complete math assignment by Friday 3 PM" },
-      { label: "Daily meditation at 6 AM", text: "Daily meditation at 6 AM for 10 minutes" },
-      { label: "What do I have today?", text: "What do I have today?" },
-      { label: "Plan my day", text: "Plan my day" },
-      { label: "I'm feeling stressed", text: "I'm feeling stressed" },
-      { label: "I'm 50% done with it", text: "I'm 50% done with it" },
-    ],
-    intent: "help",
-  };
+  return { content: (wasOff ? t.STYLE_SET_AND_ON : t.STYLE_SET).replace("{style}", STYLE_NAMES[lang][req.tone]), actions: [...others(req.tone), UNDO_ACTION], intent: "checkin_style_set" };
 }
 
 async function greet(turn: Turn): Promise<Out> {
@@ -635,6 +617,11 @@ async function readBack(turn: Turn): Promise<Out> {
 }
 
 async function undoIntent(turn: Turn): Promise<Out> {
+  // A chat command (settings, routine, bulk) newer than the last task edit is undone first.
+  if (await commandUndoIsNewest(turn)) {
+    const r = await applyCommandUndo(turn);
+    if (r) return r;
+  }
   for (const id of turn.state.focus) {
     const r = await undoTask(turn, id);
     if (r) return r;
@@ -747,6 +734,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       if (!p) return { content: "There's nothing waiting for confirmation.", intent: "noop" };
       if (p.kind === "task_review") return proceedWithDraft(turn, p.draft, p.source, { clarified: true, reviewed: true });
       if (p.kind === "confirm_delete") return confirmDelete(turn, p.taskId);
+      if (p.kind === "confirm_command") return confirmPending(turn, p);
       if (p.kind === "mood_confirm" && isMood(p.mood)) return confirmMood(turn, p.mood, p.confidence);
       if (p.kind === "typo") {
         const u = await understand("yes", { now: turn.now, tz: turn.tz, history: [], allowLlm: false });
@@ -773,6 +761,8 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     }
     case "undo_task":
       return (await undoTask(turn, payload.taskId)) ?? { content: "That change can't be undone anymore.", intent: "undo_none" };
+    case "undo_command":
+      return (await applyCommandUndo(turn)) ?? { content: "That change can't be undone anymore.", intent: "undo_none" };
     case "restore_task": {
       const restored = await restoreTask(turn.task, payload.taskId);
       return restored
@@ -812,11 +802,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     case "postpone_task":
       return postpone(turn, [payload.taskId], payload.days);
     case "postpone_nonurgent": {
-      const ids = payload.taskIds?.length
-        ? payload.taskIds
-        : (await listActiveTasks(turn.user.id))
-            .filter((t) => t.priority !== Priority.URGENT && t.taskType !== TaskType.FIXED && t.dueAt && t.dueAt < startOfLocalDay(addDaysYmd(turn.todayYmd, 2), turn.tz))
-            .map((t) => t.id);
+      const ids = payload.taskIds?.length ? payload.taskIds : nonUrgentSoon(turn, await listActiveTasks(turn.user.id)).map((t) => t.id);
       return postpone(turn, ids, 1);
     }
     case "log_mood":
@@ -895,21 +881,9 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
 }
 
 async function postpone(turn: Turn, ids: string[], days: number): Promise<Out> {
-  const moved: Task[] = [];
-  for (const id of ids.slice(0, 15)) {
-    const t = await getTaskForUser(turn.user.id, id);
-    if (!t) continue;
-    const shift = days * 86400000;
-    const updated = await updateTask(turn.task, id, {
-      dueDate: t.dueDate ? new Date(t.dueDate.getTime() + shift) : dueDateFromYmd(addDaysYmd(turn.todayYmd, days), turn.tz),
-      scheduledStart: t.scheduledStart ? new Date(t.scheduledStart.getTime() + shift) : null,
-      scheduledEnd: t.scheduledEnd ? new Date(t.scheduledEnd.getTime() + shift) : null,
-    });
-    if (updated) {
-      moved.push(updated);
-      logEvent(turn.user.id, "TASK_POSTPONED", id, { days });
-    }
-  }
+  const tasks = (await Promise.all(ids.slice(0, 15).map((id) => getTaskForUser(turn.user.id, id)))).filter((t): t is Task => Boolean(t));
+  const moved = await shiftTasks(turn, tasks, days);
+  if (moved.length) recordUndo(turn, { kind: "tasks", op: "edit", taskIds: moved.map((t) => t.id), before: snapshots(tasks), label: `${plural(moved.length, "task")} postponed` });
   if (!moved.length) return { content: "There was nothing to postpone. You're all clear.", intent: "postponed" };
   return {
     content: `Moved ${plural(moved.length, "task")} ${days === 1 ? "to tomorrow" : `by ${days} days`}. Take care of yourself first.`,

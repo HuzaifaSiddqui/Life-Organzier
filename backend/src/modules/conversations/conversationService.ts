@@ -33,6 +33,7 @@ export function readState(conversation: Conversation): DialogueState {
     focus: Array.isArray(s.focus) ? (s.focus as string[]).slice(0, 8) : [],
     prereqAsked: Array.isArray(s.prereqAsked) ? (s.prereqAsked as string[]) : [],
     turn: typeof s.turn === "number" ? s.turn : 0,
+    undo: s.undo && typeof s.undo === "object" ? (s.undo as DialogueState["undo"]) : null,
   };
 }
 
