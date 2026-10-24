@@ -15,6 +15,16 @@ export const ROUTINE = "routine|routines|rotine|rotines|routeen|روٹین|رو�
 export const TASK_WORD = "task|tasks|todo|todos|kaam|kam|کام|ٹاسک";
 export const ALL = "all|every|everything|each|saare|sare|saari|sari|sab|tamam|tamaam|تمام|سارے|ساری|سب";
 export const TODAY = "today|todays|tonight|aaj|aj|آج";
+/** Move / postpone verbs. "push ups" is an exercise, not "push it to Friday". */
+export const MOVE_WORDS = "move|shift|push(?! ups?(?: |$))|reschedule|postpone|delay";
+
+/** "Let's add a task to do 4 push ups today": an add before the move word is a new item, not a move. */
+export function addBeforeMove(t: string): boolean {
+  const add = /(?:^| )(?:add|create|new task|remind me|yaad dila\w*)(?= |$)/.exec(t);
+  const move = new RegExp(`(?:^| )(?:${MOVE_WORDS})(?= |$)`).exec(t);
+  return Boolean(add && (!move || add.index < move.index));
+}
+
 /** Roman Urdu / Urdu verb endings that turn a phrase into a request ("… kar do"). */
 export const DO_IT = "kar do|kardo|kr do|krdo|karo|kro|kar dein|kar den|kar dain|kijiye|کر دو|کرو|کر دیں|کیجیے";
 
