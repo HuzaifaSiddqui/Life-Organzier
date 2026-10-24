@@ -8,7 +8,7 @@ import { deleteRoutine, listRoutines, occurrencesForDay, rescheduleOccurrence, u
 import { extractEntities, extractWeekdays } from "../entities.js";
 import type { Out, Turn } from "../dialogue.js";
 import { APP_LIST_CAP, WHATSAPP_LIST_CAP } from "../queryAnswers.js";
-import { ASK, DO_IT, TODAY, ROUTINE, capture, has, norm, refFrom } from "./lexicon.js";
+import { ASK, DO_IT, MOVE_WORDS, TODAY, ROUTINE, addBeforeMove, capture, has, norm, refFrom } from "./lexicon.js";
 import { askChoice, recordUndo, runCommand, UNDO_ACTION } from "./runtime.js";
 import type { Command, CommandArgs, ParseCtx, Prepared } from "./types.js";
 
@@ -22,7 +22,7 @@ const DONE = "done|did|completed|finished|complete|ho gaya|ho gayi|ho gya|ho gyi
 const UPDATE = `change|move|set|make|update|shift|reschedule|rename|edit|switch|badal|badlo|بدل|بدلو|${DO_IT}`;
 /** One occurrence only ("today's gym", "just this once", "sirf aaj"). */
 const ONCE = "todays|today|just today|only today|this once|just this once|for today|this time|is baar|iss baar|sirf aaj|aaj ki|aaj ka|aaj ke|aaj wali|aaj wala|آج کی|آج کا|صرف آج|اس بار";
-const MOVE = `move|shift|push|reschedule|postpone|delay|${DO_IT}`;
+const MOVE = `${MOVE_WORDS}|${DO_IT}`;
 const FIELD_WORDS = "time|timing|waqt|وقت|duration|days|day|priority|title|name|naam|minutes|minute|mins|hours|hour|only|instead|weekdays|weekends|mandatory|compulsory|important|normal|optional";
 const WEEKDAY_WORDS =
   "sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sundays|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|and|aur|or";
@@ -307,7 +307,7 @@ const routineRescheduleOnce: Command = {
   undoable: true,
   parse(text, ctx) {
     const t = norm(text);
-    if (!has(t, MOVE) || !has(t, ONCE) || has(t, `${DELETE}|${SKIP}|${PAUSE}`) || has(t, "all|everything|saare|sare|sab|tamam|تمام|سارے|سب")) return null;
+    if (!has(t, MOVE) || !has(t, ONCE) || addBeforeMove(t) || has(t, `${DELETE}|${SKIP}|${PAUSE}`) || has(t, "all|everything|saare|sare|sab|tamam|تمام|سارے|سب")) return null;
     // The source day ("today's") is not the target: dates come from what is left after removing it.
     const rest = text.replace(/\b(?:today'?s|todays|aaj\s+(?:ki|ka|ke|wali|wala))\b|آج\s+(?:کی|کا|کے)/gi, " ");
     const e = extractEntities(rest, ctx.opts);
