@@ -1,111 +1,559 @@
 {
-  "about": "Seeded search eval for find_items (npm run eval:queries). Synthetic data only. `expect` lists every task/routine title that should come back; [] means nothing may (and today's list must not) be shown.",
+  "about": "Seeded search eval for find_items (npm run eval:queries). Synthetic data only. `expect` lists every task/routine title that should come back; [] means nothing may (and today's list must not) be shown. English and Roman Urdu only (Urdu-script questions are planned after the deadline).",
   "seed": {
     "places": [
-      { "key": "kfc", "name": "KFC", "address": "KFC, Kalma Chowk, Gulberg III, Lahore" },
-      { "key": "imtiaz", "name": "Imtiaz Supermarket", "address": "Imtiaz Super Market, Model Town, Lahore" },
-      { "key": "unilib", "name": "University Library", "address": "Main Library, COMSATS University, Lahore" },
-      { "key": "uni", "name": "University", "address": "COMSATS University, Defence Road, Lahore" },
-      { "key": "shapes", "name": "Shapes Gym", "address": "Shapes, MM Alam Road, Gulberg, Lahore" },
-      { "key": "home", "name": "Home", "address": "Johar Town, Lahore" },
-      { "key": "salon", "name": "Toni & Guy", "address": "Toni & Guy, DHA Phase 5, Lahore" }
+      {
+        "key": "kfc",
+        "name": "KFC",
+        "address": "KFC, Kalma Chowk, Gulberg III, Lahore"
+      },
+      {
+        "key": "imtiaz",
+        "name": "Imtiaz Supermarket",
+        "address": "Imtiaz Super Market, Model Town, Lahore"
+      },
+      {
+        "key": "unilib",
+        "name": "University Library",
+        "address": "Main Library, COMSATS University, Lahore"
+      },
+      {
+        "key": "uni",
+        "name": "University",
+        "address": "COMSATS University, Defence Road, Lahore"
+      },
+      {
+        "key": "shapes",
+        "name": "Shapes Gym",
+        "address": "Shapes, MM Alam Road, Gulberg, Lahore"
+      },
+      {
+        "key": "home",
+        "name": "Home",
+        "address": "Johar Town, Lahore"
+      },
+      {
+        "key": "salon",
+        "name": "Toni & Guy",
+        "address": "Toni & Guy, DHA Phase 5, Lahore"
+      }
     ],
     "tasks": [
-      { "title": "Eat burger", "place": "kfc", "dueInDays": 0 },
-      { "title": "Pick up coupons", "notes": "the kfc deal ends Friday" },
-      { "title": "Read about Kentucky history" },
-      { "title": "Submit physics lab report", "tags": ["physics", "lab"], "category": "Academic", "dueInDays": 1, "priority": "HIGH" },
-      { "title": "Physics quiz 2 revision", "category": "Academic", "dueInDays": 3 },
-      { "title": "Buy groceries", "subtasks": ["milk", "eggs", "bread"], "place": "imtiaz" },
-      { "title": "Pay electricity bill", "tags": ["bills"], "dueInDays": 2, "priority": "URGENT" },
-      { "title": "Call the bank about card", "notes": "Meezan bank helpline" },
-      { "title": "Return library books", "place": "unilib" },
-      { "title": "Visa appointment documents", "notes": "passport, photos, bank statement", "dueInDays": 5 },
-      { "title": "Gym membership renewal", "place": "shapes" },
-      { "title": "Mom's birthday gift", "notes": "order from Daraz" },
-      { "title": "CSC461 assignment 3", "category": "Academic", "tags": ["csc461"], "dueInDays": 4 },
-      { "title": "Print FYP poster", "place": "uni", "notes": "print shop near the library" },
-      { "title": "Car service", "notes": "Honda workshop on Ferozepur road", "dueInDays": -2 },
-      { "title": "Water the plants", "place": "home" },
-      { "title": "Book train ticket to Multan", "notes": "Pakistan Railways app" },
-      { "title": "Clean the room" },
-      { "title": "Send invoice to client", "notes": "Upwork", "status": "COMPLETED" },
-      { "title": "Haircut", "place": "salon" }
+      {
+        "title": "Eat burger",
+        "place": "kfc",
+        "dueInDays": 0
+      },
+      {
+        "title": "Pick up coupons",
+        "notes": "the kfc deal ends Friday"
+      },
+      {
+        "title": "Read about Kentucky history"
+      },
+      {
+        "title": "Submit physics lab report",
+        "tags": [
+          "physics",
+          "lab"
+        ],
+        "category": "Academic",
+        "dueInDays": 1,
+        "priority": "HIGH"
+      },
+      {
+        "title": "Physics quiz 2 revision",
+        "category": "Academic",
+        "dueInDays": 3
+      },
+      {
+        "title": "Buy groceries",
+        "subtasks": [
+          "milk",
+          "eggs",
+          "bread"
+        ],
+        "place": "imtiaz"
+      },
+      {
+        "title": "Pay electricity bill",
+        "tags": [
+          "bills"
+        ],
+        "dueInDays": 2,
+        "priority": "URGENT"
+      },
+      {
+        "title": "Call the bank about card",
+        "notes": "Meezan bank helpline"
+      },
+      {
+        "title": "Return library books",
+        "place": "unilib"
+      },
+      {
+        "title": "Visa appointment documents",
+        "notes": "passport, photos, bank statement",
+        "dueInDays": 5
+      },
+      {
+        "title": "Gym membership renewal",
+        "place": "shapes"
+      },
+      {
+        "title": "Mom's birthday gift",
+        "notes": "order from Daraz"
+      },
+      {
+        "title": "CSC461 assignment 3",
+        "category": "Academic",
+        "tags": [
+          "csc461"
+        ],
+        "dueInDays": 4
+      },
+      {
+        "title": "Print FYP poster",
+        "place": "uni",
+        "notes": "print shop near the library"
+      },
+      {
+        "title": "Car service",
+        "notes": "Honda workshop on Ferozepur road",
+        "dueInDays": -2
+      },
+      {
+        "title": "Water the plants",
+        "place": "home"
+      },
+      {
+        "title": "Book train ticket to Multan",
+        "notes": "Pakistan Railways app"
+      },
+      {
+        "title": "Clean the room"
+      },
+      {
+        "title": "Send invoice to client",
+        "notes": "Upwork",
+        "status": "COMPLETED"
+      },
+      {
+        "title": "Haircut",
+        "place": "salon"
+      }
     ],
     "routines": [
-      { "title": "Morning walk", "location": "Jilani Park", "dueTime": "6 AM" },
-      { "title": "Namaz at masjid", "location": "Masjid", "dueTime": "1 PM" },
-      { "title": "Physics lecture", "location": "N-23", "dueTime": "11 AM" },
-      { "title": "Gym workout", "location": "Shapes Gym", "dueTime": "7 PM" }
+      {
+        "title": "Morning walk",
+        "location": "Jilani Park",
+        "dueTime": "6 AM"
+      },
+      {
+        "title": "Namaz at masjid",
+        "location": "Masjid",
+        "dueTime": "1 PM"
+      },
+      {
+        "title": "Physics lecture",
+        "location": "N-23",
+        "dueTime": "11 AM"
+      },
+      {
+        "title": "Gym workout",
+        "location": "Shapes Gym",
+        "dueTime": "7 PM"
+      }
     ]
   },
   "questions": [
-    { "type": "english", "q": "is there any task related to KFC", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "english", "q": "any task about kalma chowk", "expect": ["Eat burger"] },
-    { "type": "english", "q": "tasks about physics", "expect": ["Submit physics lab report", "Physics quiz 2 revision", "Physics lecture"] },
-    { "type": "english", "q": "anything with the bank", "expect": ["Call the bank about card", "Visa appointment documents"] },
-    { "type": "english", "q": "do I have a task for the visa", "expect": ["Visa appointment documents"] },
-    { "type": "english", "q": "what do I have at the university", "expect": ["Return library books", "Print FYP poster"] },
-    { "type": "english", "q": "any task about groceries", "expect": ["Buy groceries"] },
-    { "type": "english", "q": "is there anything about eggs", "expect": ["Buy groceries"] },
-    { "type": "english", "q": "tasks about Daraz", "expect": ["Mom's birthday gift"] },
-    { "type": "english", "q": "any task related to Multan", "expect": ["Book train ticket to Multan"] },
-    { "type": "english", "q": "anything with Shapes Gym", "expect": ["Gym membership renewal", "Gym workout"] },
-    { "type": "english", "q": "any task about the gym", "expect": ["Gym membership renewal", "Gym workout"] },
-    { "type": "english", "q": "find csc461", "expect": ["CSC461 assignment 3"] },
-    { "type": "english", "q": "any task about the library", "expect": ["Return library books", "Print FYP poster"] },
-    { "type": "english", "q": "anything at Imtiaz", "expect": ["Buy groceries"] },
-
-    { "type": "roman-urdu", "q": "KFC wala kaam", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "roman-urdu", "q": "KFC se related koi task hai?", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "roman-urdu", "q": "physics ke bare mein koi kaam", "expect": ["Submit physics lab report", "Physics quiz 2 revision", "Physics lecture"] },
-    { "type": "roman-urdu", "q": "bank wala kaam", "expect": ["Call the bank about card", "Visa appointment documents"] },
-    { "type": "roman-urdu", "q": "visa ka koi kaam", "expect": ["Visa appointment documents"] },
-    { "type": "roman-urdu", "q": "gym se related koi kaam", "expect": ["Gym membership renewal", "Gym workout"] },
-    { "type": "roman-urdu", "q": "groceries wala task", "expect": ["Buy groceries"] },
-    { "type": "roman-urdu", "q": "library ke bare mein koi task", "expect": ["Return library books", "Print FYP poster"] },
-    { "type": "roman-urdu", "q": "Multan wala kaam hai?", "expect": ["Book train ticket to Multan"] },
-    { "type": "roman-urdu", "q": "masjid wala kaam", "expect": ["Namaz at masjid"] },
-
-    { "type": "urdu", "q": "KFC کے بارے میں کوئی کام", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "urdu", "q": "physics سے متعلق کوئی کام", "expect": ["Submit physics lab report", "Physics quiz 2 revision", "Physics lecture"] },
-    { "type": "urdu", "q": "gym والا کام", "expect": ["Gym membership renewal", "Gym workout"] },
-    { "type": "urdu", "q": "visa کا کوئی کام", "expect": ["Visa appointment documents"] },
-    { "type": "urdu", "q": "bank کے بارے میں کوئی کام", "expect": ["Call the bank about card", "Visa appointment documents"] },
-    { "type": "urdu", "q": "Multan والا کام", "expect": ["Book train ticket to Multan"] },
-
-    { "type": "spelled", "q": "any task about k f c", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "spelled", "q": "tasks about kay ef see", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "spelled", "q": "is there any task related to K.F.C", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "spelled", "q": "K F C wala kaam", "expect": ["Eat burger", "Pick up coupons"] },
-    { "type": "spelled", "q": "anything about f y p", "expect": ["Print FYP poster"] },
-    { "type": "spelled", "q": "any task about c s c 461", "expect": ["CSC461 assignment 3"] },
-
-    { "type": "typo", "q": "any task about kentuky", "expect": ["Read about Kentucky history"] },
-    { "type": "typo", "q": "tasks about grocries", "expect": ["Buy groceries"] },
-    { "type": "typo", "q": "any task about phisics", "expect": ["Submit physics lab report", "Physics quiz 2 revision", "Physics lecture"] },
-    { "type": "typo", "q": "anything about the libary", "expect": ["Return library books", "Print FYP poster"] },
-    { "type": "typo", "q": "any task about Multaan", "expect": ["Book train ticket to Multan"] },
-    { "type": "typo", "q": "tasks about Kalma chok", "expect": ["Eat burger"] },
-    { "type": "typo", "q": "any task about vissa", "expect": ["Visa appointment documents"] },
-    { "type": "typo", "q": "gim wala kaam", "expect": ["Gym membership renewal", "Gym workout"] },
-
-    { "type": "negative", "q": "tasks about Walmart", "expect": [] },
-    { "type": "negative", "q": "any task related to McDonalds", "expect": [] },
-    { "type": "negative", "q": "anything with Karachi", "expect": [] },
-    { "type": "negative", "q": "is there any task about swimming", "expect": [] },
-    { "type": "negative", "q": "Pizza Hut wala kaam", "expect": [] },
-    { "type": "negative", "q": "any task about Tesla", "expect": [] },
-    { "type": "negative", "q": "tasks about piano lessons", "expect": [] },
-    { "type": "negative", "q": "any task related to Islamabad", "expect": [] },
-    { "type": "negative", "q": "anything about the dentist", "expect": [] },
-    { "type": "negative", "q": "football ke bare mein koi kaam", "expect": [] },
-
-    { "type": "filter", "q": "any urgent task about the electricity bill", "expect": ["Pay electricity bill"] },
-    { "type": "filter", "q": "any completed task about the invoice", "expect": ["Send invoice to client"] },
-    { "type": "filter", "q": "tasks about physics due tomorrow", "expect": ["Submit physics lab report"] },
-    { "type": "filter", "q": "any overdue task about the car", "expect": ["Car service"] },
-    { "type": "filter", "q": "what do I have at home", "expect": ["Water the plants"] },
-    { "type": "filter", "q": "any tasks with #bills", "expect": ["Pay electricity bill"] }
+    {
+      "type": "english",
+      "q": "is there any task related to KFC",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "any task about kalma chowk",
+      "expect": [
+        "Eat burger"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "tasks about physics",
+      "expect": [
+        "Submit physics lab report",
+        "Physics quiz 2 revision",
+        "Physics lecture"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "anything with the bank",
+      "expect": [
+        "Call the bank about card",
+        "Visa appointment documents"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "do I have a task for the visa",
+      "expect": [
+        "Visa appointment documents"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "what do I have at the university",
+      "expect": [
+        "Return library books",
+        "Print FYP poster"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "any task about groceries",
+      "expect": [
+        "Buy groceries"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "is there anything about eggs",
+      "expect": [
+        "Buy groceries"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "tasks about Daraz",
+      "expect": [
+        "Mom's birthday gift"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "any task related to Multan",
+      "expect": [
+        "Book train ticket to Multan"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "anything with Shapes Gym",
+      "expect": [
+        "Gym membership renewal",
+        "Gym workout"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "any task about the gym",
+      "expect": [
+        "Gym membership renewal",
+        "Gym workout"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "find csc461",
+      "expect": [
+        "CSC461 assignment 3"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "any task about the library",
+      "expect": [
+        "Return library books",
+        "Print FYP poster"
+      ]
+    },
+    {
+      "type": "english",
+      "q": "anything at Imtiaz",
+      "expect": [
+        "Buy groceries"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "KFC wala kaam",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "KFC se related koi task hai?",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "physics ke bare mein koi kaam",
+      "expect": [
+        "Submit physics lab report",
+        "Physics quiz 2 revision",
+        "Physics lecture"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "bank wala kaam",
+      "expect": [
+        "Call the bank about card",
+        "Visa appointment documents"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "visa ka koi kaam",
+      "expect": [
+        "Visa appointment documents"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "gym se related koi kaam",
+      "expect": [
+        "Gym membership renewal",
+        "Gym workout"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "groceries wala task",
+      "expect": [
+        "Buy groceries"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "library ke bare mein koi task",
+      "expect": [
+        "Return library books",
+        "Print FYP poster"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "Multan wala kaam hai?",
+      "expect": [
+        "Book train ticket to Multan"
+      ]
+    },
+    {
+      "type": "roman-urdu",
+      "q": "masjid wala kaam",
+      "expect": [
+        "Namaz at masjid"
+      ]
+    },
+    {
+      "type": "spelled",
+      "q": "any task about k f c",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "spelled",
+      "q": "tasks about kay ef see",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "spelled",
+      "q": "is there any task related to K.F.C",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "spelled",
+      "q": "K F C wala kaam",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "spelled",
+      "q": "anything about f y p",
+      "expect": [
+        "Print FYP poster"
+      ]
+    },
+    {
+      "type": "spelled",
+      "q": "any task about c s c 461",
+      "expect": [
+        "CSC461 assignment 3"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "any task about kentuky",
+      "expect": [
+        "Read about Kentucky history"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "tasks about grocries",
+      "expect": [
+        "Buy groceries"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "any task about phisics",
+      "expect": [
+        "Submit physics lab report",
+        "Physics quiz 2 revision",
+        "Physics lecture"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "anything about the libary",
+      "expect": [
+        "Return library books",
+        "Print FYP poster"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "any task about Multaan",
+      "expect": [
+        "Book train ticket to Multan"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "tasks about Kalma chok",
+      "expect": [
+        "Eat burger"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "any task about vissa",
+      "expect": [
+        "Visa appointment documents"
+      ]
+    },
+    {
+      "type": "typo",
+      "q": "gim wala kaam",
+      "expect": [
+        "Gym membership renewal",
+        "Gym workout"
+      ]
+    },
+    {
+      "type": "negative",
+      "q": "tasks about Walmart",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "any task related to McDonalds",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "anything with Karachi",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "is there any task about swimming",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "Pizza Hut wala kaam",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "any task about Tesla",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "tasks about piano lessons",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "any task related to Islamabad",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "anything about the dentist",
+      "expect": []
+    },
+    {
+      "type": "negative",
+      "q": "football ke bare mein koi kaam",
+      "expect": []
+    },
+    {
+      "type": "filter",
+      "q": "any urgent task about the electricity bill",
+      "expect": [
+        "Pay electricity bill"
+      ]
+    },
+    {
+      "type": "filter",
+      "q": "any completed task about the invoice",
+      "expect": [
+        "Send invoice to client"
+      ]
+    },
+    {
+      "type": "filter",
+      "q": "tasks about physics due tomorrow",
+      "expect": [
+        "Submit physics lab report"
+      ]
+    },
+    {
+      "type": "filter",
+      "q": "any overdue task about the car",
+      "expect": [
+        "Car service"
+      ]
+    },
+    {
+      "type": "filter",
+      "q": "what do I have at home",
+      "expect": [
+        "Water the plants"
+      ]
+    },
+    {
+      "type": "filter",
+      "q": "any tasks with #bills",
+      "expect": [
+        "Pay electricity bill"
+      ]
+    }
   ]
 }
