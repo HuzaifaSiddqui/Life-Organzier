@@ -4,8 +4,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  /// Scratch database for `prisma migrate dev` / `migrate diff`: its own database, never the dev or test one
+  /// (Prisma wipes it). Not needed by `migrate deploy` or `generate`.
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model User {
