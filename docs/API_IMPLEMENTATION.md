@@ -203,8 +203,9 @@ Saved places are reusable; tasks link to them. The phone monitors geofences; the
 - **Documents** (`POST /api/documents/upload`, `POST /api/documents/text`): the same file (or text) with the same type and language, sent again within 24 h, returns the saved document with `reused: true` instead of a new one; a second identical request while the first is still processing gets the first one's result. `503 OCR_BUSY` ("try again in a minute") when the OCR queue is full or a queued image would start too late for the 150 s limit.
 - **Routines** accept and return `intervalDays` (2..30, or null) and `anchorDate` (local `YYYY-MM-DD`, required with
   `intervalDays`): the routine repeats every N days counted from the anchor; frequency/days are then ignored for
-  which days count (the server decides). Changing `frequency`, `daysOfWeek` or `dayOfMonth` without `intervalDays`
-  drops the interval. An interval change replaces future pending occurrences; completed ones stay.
+  which days count (the server decides). Changing `frequency`, `daysOfWeek` or `dayOfMonth` to a different value
+  without `intervalDays` drops the interval; resending the same values (the routine form sends the whole schedule
+  on every save) keeps it. An interval change replaces future pending occurrences; completed ones stay.
 - **Routines** accept and return `location` (room/venue, max 60). `POST /api/documents/:id/confirm` schedules accept `location`.
 
 ### Push (P2)

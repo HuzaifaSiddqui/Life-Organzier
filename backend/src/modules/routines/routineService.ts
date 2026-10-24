@@ -164,8 +164,13 @@ export async function markTodayDone(userId: string, tz: string, routineId: strin
 export async function updateRoutine(userId: string, tz: string, id: string, input: Partial<RoutineInput>): Promise<Routine | null> {
   const existing = await prisma.routine.findFirst({ where: { id, userId } });
   if (!existing) return null;
-  // New weekdays or frequency without an interval: the routine follows those (the interval is dropped).
-  const scheduleChanged = input.frequency !== undefined || input.daysOfWeek !== undefined || input.dayOfMonth !== undefined;
+  // New weekdays or frequency without an interval: the routine follows those (the interval is dropped). Compared
+  // with what is stored, not by presence: the routine form resends the whole schedule on every save.
+  const days = (d: unknown) => (Array.isArray(d) ? [...(d as number[])].sort().join(",") : "");
+  const scheduleChanged =
+    (input.frequency !== undefined && input.frequency !== existing.frequency) ||
+    (input.daysOfWeek !== undefined && days(input.daysOfWeek) !== days(existing.daysOfWeek)) ||
+    (input.dayOfMonth !== undefined && (input.dayOfMonth ?? null) !== existing.dayOfMonth);
   const intervalDays = input.intervalDays !== undefined ? input.intervalDays : scheduleChanged ? null : existing.intervalDays;
   const anchorDate = intervalDays ? (input.anchorDate !== undefined ? input.anchorDate : existing.anchorDate) : null;
   const merged: RoutineInput = {

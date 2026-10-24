@@ -210,3 +210,22 @@ test("the time question is asked once: an unrelated reply drops it; an explicit 
     assert.equal((await prisma.routine.findFirstOrThrow({ where: { userId: user.id, title: { contains: "chapter", mode: "insensitive" } } })).dueTime, "9:30 PM");
   });
 });
+
+test("updates that don't change the schedule keep the interval: title only, time only, the same schedule resent, the form's full payload", { skip }, async () => {
+  await withUser(async (_say, user) => {
+    const today = localYmd(new Date(), TZ);
+    const r = await createRoutine(user.id, TZ, { title: "Medicine", frequency: "DAILY", intervalDays: 2, anchorDate: today });
+    const keeps = async (label: string, input: Parameters<typeof updateRoutine>[3]) => {
+      const u = await updateRoutine(user.id, TZ, r.id, input);
+      assert.deepEqual([u?.intervalDays, u?.anchorDate], [2, today], label);
+    };
+    await keeps("title only", { title: "Take medicine" });
+    await keeps("time only", { dueTime: "9 PM" });
+    // A client that resends the unchanged schedule without the interval fields (presence alone must not drop it).
+    await keeps("same schedule resent", { frequency: "DAILY", daysOfWeek: null, dayOfMonth: null });
+    // What the routine form sends on every save (the whole schedule, interval included).
+    await keeps("form payload", { title: "Take medicine", frequency: "DAILY", daysOfWeek: null, dayOfMonth: null, intervalDays: 2, anchorDate: today, dueTime: "9 PM", priority: "NORMAL", timeLocked: true });
+    const weekly = await updateRoutine(user.id, TZ, r.id, { frequency: "WEEKLY", daysOfWeek: [1, 3] });
+    assert.deepEqual([weekly?.intervalDays, weekly?.anchorDate], [null, null], "a real change to weekdays drops it");
+  });
+});
