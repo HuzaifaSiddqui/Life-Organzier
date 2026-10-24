@@ -28,6 +28,18 @@ function optionLabels(p: Pending): string[] {
   return [];
 }
 
+/**
+ * A longer reply still answers when it points back at what was asked: a pronoun ("we will do it in the evening",
+ * "I'll call her tomorrow") or a word of the draft's title. "I need to finish my report by Friday" does neither.
+ */
+export function refersBack(p: Pending, text: string): boolean {
+  if (/\b(?:it|her|him|them|this|that|there|wo|usse|use|isko|usko)\b/i.test(text)) return true;
+  const title = "draft" in p && p.draft && typeof p.draft === "object" && "title" in p.draft ? String(p.draft.title ?? "") : "";
+  const words = (s: string) => new Set(s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+  const said = words(text);
+  return [...words(title)].some((w) => said.has(w));
+}
+
 export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): boolean {
   const t = text.trim();
   if (!t) return false;
@@ -41,7 +53,7 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
   }
   if (SLOT_KINDS.has(p.kind)) {
     const e = extractEntities(t, ctx.opts);
-    if ((e.date || e.time || e.durationMinutes || e.frequency || e.flexibleTime || e.priority) && words <= 6) return true;
+    if ((e.date || e.time || e.durationMinutes || e.frequency || e.flexibleTime || e.priority) && (words <= 6 || (words <= 12 && refersBack(p, t)))) return true;
     // A title or a free answer ("pick another day", "add anyway"), unless it is a specific new command.
     if (p.kind === "task_draft" && p.awaiting.includes("title")) return words <= 8 && !matchCommand(t, ctx);
     if (p.kind === "routine_draft" && p.awaiting.includes("title")) return words <= 6 && !matchCommand(t, ctx);
