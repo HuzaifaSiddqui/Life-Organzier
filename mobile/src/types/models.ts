@@ -100,6 +100,9 @@ export type Routine = {
   /** Room or venue of a class, as written in the timetable. */
   location?: string | null;
   wellnessType?: string | null;
+  /** Every N days from anchorDate (local YYYY-MM-DD); the server decides which days count. */
+  intervalDays?: number | null;
+  anchorDate?: string | null;
   active: boolean;
   occurrences: RoutineOccurrence[];
 };

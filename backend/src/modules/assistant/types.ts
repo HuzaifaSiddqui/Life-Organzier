@@ -45,6 +45,11 @@ export type RoutineDraft = {
   category: string | null;
   timeLocked: boolean;
   context: string | null;
+  /** Every N days from anchorDate (local YYYY-MM-DD); absent for weekday/daily/monthly routines. */
+  intervalDays?: number | null;
+  anchorDate?: string | null;
+  /** "I already took it today": today's occurrence is marked done when the routine is created. */
+  doneToday?: boolean;
 };
 
 export type TaskSlot = "title" | "date" | "time" | "duration";

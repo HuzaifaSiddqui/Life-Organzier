@@ -819,3 +819,30 @@ function clampInterval(n: number): number | null {
   return n >= 2 && n <= 30 ? n : null;
 }
 
+/** The interval phrase removed (for the title): "I take medicine on every alternative day" → "I take medicine on". */
+export function withoutInterval(text: string): string {
+  return text
+    .replace(/\bevery\s+other\s+day\b|\b(?:on\s+)?(?:every\s+)?(?:alternate|alternative)\s+days?\b/gi, " ")
+    .replace(/\bhar\s+(?:doosre|dusre|doosray|dusray|dosre|teesre|tisre|teesray|tisray)\s+din\b|\bek\s+din\s+(?:chhor|chor|chhod|chod)\s+(?:kar|ke)\b/gi, " ")
+    .replace(/\bevery\s+(?:\d{1,2}(?:st|nd|rd|th)?|second|third|fourth|fifth|sixth|seventh|two|three|four|five|six|seven)\s+days?\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * "I already took it today", "I have taken today's", "I have already taken medicine of today", Roman Urdu
+ * "aaj ki le li hai": today's dose is done. The clause is also dropped from the title.
+ */
+const DONE_TODAY = /\b(?:i\s+)?(?:have\s+|i'?ve\s+)?(?:already\s+)?(?:took|taken|had|done|did)\b[^.!?,]*\btoday'?s?\b|\baaj\s+(?:ki|ka|ke|wali|wala)?\s*(?:\w+\s+)?(?:le\s+li|kha\s+li|kar\s+li|ho\s+gay[ai])\b/i;
+export function saysDoneToday(text: string): boolean {
+  return DONE_TODAY.test(text);
+}
+export function withoutDoneToday(text: string): string {
+  return text
+    .split(/(?:[,.;!?]|\s+and\s+|\s+aur\s+)/i)
+    .filter((clause) => !DONE_TODAY.test(clause))
+    .join(", ")
+    .replace(/[,\s]+$/, "")
+    .trim();
+}
+

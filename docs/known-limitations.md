@@ -279,11 +279,16 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Repeating every N days
 
-- **Routines that repeat every other day or every N days are not supported yet.** Chat ("every other day",
-  "alternate days", "alternative day", "every 2nd day", "every 3 days", "har doosre din", "ek din chhor kar",
-  "har teesre din") replies "Repeating every other day or every N days isn't supported yet" with the daily or
-  weekday alternative; a document or pasted text with these phrases makes no routine and says why. Other
-  phrasings are not guessed.
-- **English only:** this reply has no Urdu text yet, and Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر")
-  are not recognised (planned after the deadline; scope until 1 Nov: no new Urdu-script work).
-
+- **Supported:** routines that repeat every N days (2..30) from a start date, created by chat ("every other day",
+  "alternate days", "alternative day", "every 2nd day", "every 3 days", Roman Urdu "har doosre din", "ek din
+  chhor kar", "har teesre din") or in the routine form ("Every few days", 2–7 offered there; the server accepts up
+  to 30). Which days count is decided on the server (calendar days from the start date, in the user's timezone).
+  "I already took it today" / "I have taken today's" marks today done, so the next one is in N days. With no time
+  given, the routine has a flexible time (no follow-up question).
+- **Not by chat:** changing how often an existing routine repeats ("change my gym routine to every other day")
+  gets "open it on the Routines screen"; the routine is not changed. Changing a routine's weekdays (chat or form)
+  drops its interval.
+- **Documents:** a document or pasted text with these phrases still makes no routine and says why.
+- **Other phrasings are not guessed** ("thrice a week", "every alternate Monday").
+- **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
+  Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).

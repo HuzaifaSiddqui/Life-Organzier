@@ -96,8 +96,8 @@ export type Analysis = {
 export const DOCUMENT_TIME_LIMIT_MS = 150_000;
 /** Not worth starting a model call with less time than this. */
 const MIN_AI_MS = 10_000;
-/** A document that says "every other day" / "every N days": nothing is created for it, and it says why (English only for now). */
-export const INTERVAL_WARNING = "This mentions repeating every other day or every N days, which isn't supported yet, so no routine was made for it. Add it in chat as a daily routine or on chosen weekdays.";
+/** A document that says "every other day" / "every N days": no routine is made from it here, and it says how (English only for now). */
+export const INTERVAL_WARNING = "This mentions repeating every other day or every N days. Documents don't make those routines, so add it in chat (e.g. \"take medicine every other day\") or on the Routines screen.";
 export const TIME_LIMIT_WARNING = "This document took long to read, so I didn't finish checking it with AI. The items below come from the rules; please check them.";
 
 /**
