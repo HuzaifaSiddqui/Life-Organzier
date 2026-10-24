@@ -72,7 +72,7 @@ import {
   fillDraft,
   VERY_LOW_CLARITY,
 } from "./draft.js";
-import { extractEntities, isHabitLike, isVagueTitle, type ExtractOptions } from "./entities.js";
+import { extractEntities, isHabitLike, isVagueTitle, titleWithoutPlace, type ExtractOptions } from "./entities.js";
 import { understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
@@ -742,6 +742,13 @@ export async function proceedWithDraft(
   const place = draft.location ?? savedPlaceInTitle(task.title, turn.placeNames ?? []);
   const setup = place && isPro(turn.settings) ? await proPlace(turn, task, place) : null;
   if (setup) lines.push(setup.line);
+  // The place is now the task's location: the title needn't say it ("Eat burger from KFC Gulberg" → "Eat burger").
+  let shown = task;
+  const shorter = setup?.attached && place ? titleWithoutPlace(task.title, place) : task.title;
+  if (shorter !== task.title) {
+    shown = (await updateTask(turn.task, task.id, { title: shorter })) ?? task;
+    lines[0] = lines[0].replace(task.title, shorter);
+  }
   // Free users: the place stays in the task text; tell them what Pro would add (Pro is switched on in Settings).
   const proNudge = Boolean(place && !isPro(turn.settings));
   if (proNudge) lines.push(locationText(turn).proNeeded(place!.charAt(0).toUpperCase() + place!.slice(1)));
@@ -760,7 +767,7 @@ export async function proceedWithDraft(
     actions.unshift({ label: "Break into chunks", payload: { type: "chunk_task", taskId: task.id }, style: "primary" });
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
-  return { content: lines.join("\n"), cards: [taskCard(task, undefined, true), ...(setup?.card ? [setup.card] : [])], actions, intent: "task_created" };
+  return { content: lines.join("\n"), cards: [taskCard(shown, undefined, true), ...(setup?.card ? [setup.card] : [])], actions, intent: "task_created" };
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -770,13 +777,14 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  * that isn't saved (home, uni, office, hostel) is never searched on the map: the card asks the user to set
  * it. Other places are searched as before. With the phone's toggle off, the card offers to turn it on first.
  */
-export async function proPlace(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; card: Card | null }> {
+export async function proPlace(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; card: Card | null; attached: boolean }> {
   const L = locationText(turn);
   const remindersOff = turn.locationReminders === false;
   const saved = await findSavedPlace(turn.user.id, place);
   let needsPlace = !saved && isPersonalPlace(place);
   const shown = saved?.name ?? capitalize(place);
   let line: string;
+  let attached = Boolean(saved);
   if (saved) {
     await attachLocation(turn.user.id, task.id, saved.id);
     line = remindersOff ? L.turnOn(shown) : L.set(saved.name, L.range[saved.preset] ?? L.range.NEARBY);
@@ -784,13 +792,14 @@ export async function proPlace(turn: Turn, task: { id: string; title: string }, 
     line = remindersOff ? L.turnOn(shown) : turn.channel === "WHATSAPP" ? L.whereIsApp(shown) : L.whereIs(shown);
   } else {
     const r = await placeLine(turn, task, place);
+    attached = r.attached;
     // Not on the map ("KFC kalma chowk"): the picker searches near the user, or they drop the pin.
     needsPlace = !r.found;
     line = r.found ? r.line : turn.channel === "WHATSAPP" ? r.line : L.notFoundSet(shown);
     if (remindersOff) line += `\n${L.turnOn(shown)}`;
   }
   const card: Card | null = turn.channel !== "WHATSAPP" && (remindersOff || needsPlace) ? { type: "location_setup", taskId: task.id, place: shown, saved: !needsPlace, remindersOn: !remindersOff } : null;
-  return { line, card };
+  return { line, card, attached };
 }
 
 /** FR-LB-001 chat replies (English + Urdu). */
@@ -845,22 +854,22 @@ export function locationChoiceList(turn: Turn, results: Array<{ displayName: str
  * Attaches the place named in chat and returns the reply line. Several geocoding matches → nothing is
  * attached yet; the numbered choices are asked and remembered in working memory (`location_choice`).
  */
-export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; found: boolean }> {
+export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; found: boolean; attached: boolean }> {
   const L = locationText(turn);
   try {
     const r = await attachPlaceByName(turn.user.id, task.id, place, turn.tz);
-    if (r.kind === "not_found") return { line: L.notFound(place), found: false };
+    if (r.kind === "not_found") return { line: L.notFound(place), found: false, attached: false };
     if (r.kind === "choices") {
       const results = r.results.slice(0, 4);
       const more = r.results.length > 4;
       turn.state.pending = { kind: "location_choice", taskId: task.id, taskTitle: task.title, place, results, more };
-      return { line: `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`, found: true };
+      return { line: `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`, found: true, attached: false };
     }
     const shown = r.kind === "saved" ? r.place.name : truncate(r.result.displayName, 70);
-    return { line: L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY), found: true };
+    return { line: L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY), found: true, attached: true };
   } catch (error) {
     console.warn("Could not attach place from chat", error instanceof Error ? error.message : error);
-    return { line: L.notFound(place), found: false };
+    return { line: L.notFound(place), found: false, attached: false };
   }
 }
 

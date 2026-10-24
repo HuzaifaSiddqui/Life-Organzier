@@ -595,6 +595,16 @@ export function extractLocation(text: string, places: string[] = []): string | n
   return null;
 }
 
+/**
+ * The title without "from/at/in/near <place>" once that place is the task's location: "Eat burger from KFC
+ * kalma chowk" → "Eat burger". Unchanged when the place isn't there or nothing would be left.
+ */
+export function titleWithoutPlace(title: string, place: string): string {
+  const escaped = place.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const out = title.replace(new RegExp(`\\s+(?:at|from|in|near)\\s+(?:the\\s+)?${escaped}(?=\\s|$|[,.!?])`, "i"), "").trim();
+  return out.length >= 2 ? out : title;
+}
+
 /* ---- chat command helpers: time ranges and weekday lists ------------------------------------------ */
 
 const UR_SCRIPT_PART: Record<string, "subah" | "dopahar" | "shaam" | "raat"> = { صبح: "subah", دوپہر: "dopahar", شام: "shaam", رات: "raat" };
@@ -681,8 +691,11 @@ export function extractTargetDay(text: string, opts: ExtractOptions): string | n
 export type LocationCommand = { kind: "remove"; taskRef: string } | { kind: "change"; taskRef: string; place: string | null };
 
 /** "remove the location (from X)", "X ki location hata do", "change the location (of X) to Y", "jagah badal do". */
+/** "Ok", "so", "also" … before a command: not part of it ("Ok change the location to KFC Gulberg"). */
+const COMMAND_LEAD_IN = /^(?:(?:ok(?:ay)?|k|so|also|and|then|now|yes|yeah|yep|alright|right|hey|hi|well|great|cool|fine|acha|achha|theek(?:\s+hai)?)[,!.\s]+)+/i;
+
 export function parseLocationCommand(text: string): LocationCommand | null {
-  const t = text.trim().replace(/[.!?]+$/, "");
+  const t = text.trim().replace(/[.!?]+$/, "").replace(COMMAND_LEAD_IN, "");
   let m = /^(?:please\s+)?(?:remove|delete|clear|drop)\s+(?:the\s+)?(?:location|place)(?:\s+(?:from|of|on)\s+(.+))?$/i.exec(t);
   if (m) return { kind: "remove", taskRef: (m[1] ?? "").trim() };
   m = /^(?:(.+?)\s+(?:ki|ka|ke|se)\s+)?(?:location|jagah)\s+(?:hata|hatao|hata\s*do|hata\s*dein|nikal\s*do)$/i.exec(t);

@@ -248,3 +248,32 @@ test("location by chat: not found → set-on-map card; 'its location' is the tas
     assert.deepEqual(links.map((l) => l.savedLocation.name), ["Kalma chowk gulberg"]);
   });
 });
+
+test("'Ok change the location to …' works; the title drops the place only once it is the task's location", { skip }, async () => {
+  const row = (name: string, area: string) => [{ name, display_name: `${name}, ${area}, Lahore, Pakistan`, lat: "31.51", lon: "74.34" }];
+  await withUser("PRO", async (say, userId) => {
+    let r!: Awaited<ReturnType<typeof say>>;
+    await withNominatim(row("KFC", "Kalma Chowk"), async () => {
+      r = await say("I want to eat burger from KFC kalma chowk today", true);
+    });
+    assert.match(r.message.content, /^Added: Eat burger due today/);
+    const task = await prisma.task.findFirstOrThrow({ where: { userId } });
+    assert.equal(task.title, "Eat burger");
+
+    await withNominatim(row("KFC", "Gulberg"), async () => {
+      r = await say("Ok change the location to KFC gulberg", true);
+    });
+    assert.equal(r.message.intent, "location_changed", r.message.content);
+    assert.match(r.message.content, /Location set: KFC, Gulberg/);
+
+    // Not found: the place stays in the title (it's the only record of it).
+    await withNominatim([], async () => {
+      r = await say("I want to eat pizza from Pizza Planet Johar today", true);
+    });
+    assert.ok(await prisma.task.findFirst({ where: { userId, title: "Eat pizza from Pizza Planet Johar" } }));
+  });
+  await withUser("FREE", async (say, userId) => {
+    await say("buy medicine from Ali Medical Store tomorrow");
+    assert.ok(await prisma.task.findFirst({ where: { userId, title: { contains: "Ali Medical Store" } } }), "Free: the place stays in the title");
+  });
+});

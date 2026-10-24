@@ -171,6 +171,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   searched as before.
 - **"The 2nd task" means the last list the chat showed** (Show my tasks, most urgent, top 3), in that order.
   Without a list in the conversation, an ordinal isn't understood and the chat asks which task.
+- **A place in a new task needs a place word or a saved name.** "from KFC kalma chowk" (chowk), "from Ali
+  Medical Store" (store) or a saved place are recognised; "from KFC Gulberg" alone is not (it could be a
+  person or a thing), so the task is added without a location; "change its location to KFC Gulberg" works.
 - **A place the map search can't find** (e.g. "KFC kalma chowk") gets a "Set it on the map" card; the
   picker searches near the user, or the pin can be dropped by hand.
 - **The chat knows the toggle only from the app.** The app sends its Location reminders state with each
