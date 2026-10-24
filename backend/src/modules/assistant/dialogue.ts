@@ -50,7 +50,7 @@ import {
 import { attachLocation, attachPlaceByName, findSavedPlace, isPersonalPlace, savedPlaceInTitle } from "../locations/locationService.js";
 import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
-import { createRoutine, mandatoryConflicts, markTodayDone, occurrencesForDay } from "../routines/routineService.js";
+import { createRoutine, mandatoryConflicts, markTodayDone, occurrencesForDay, updateRoutine } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   createTask,
@@ -260,6 +260,8 @@ async function learnInBackground(turn: Turn, messageId: string | null, text: str
 
 /* ======================================================================== text turns */
 
+/** After an every-N-days routine without a time (English only, see "Urdu coverage"). */
+export const ASK_ROUTINE_TIME = "Morning, afternoon, evening, or pick a time?";
 /** Changing how often an existing routine repeats is a routine-screen job. English only (see "Urdu coverage"). */
 export const USE_ROUTINE_SCREEN = "To change how often a routine repeats, open it on the Routines screen and set \"Repeat every N days\".";
 /** "Change / switch / update my … routine to every other day", "make it every 3 days": an existing routine. */
@@ -463,6 +465,16 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
       const r = await resolveCommandPending(turn, text, u);
       if (r) return r;
       break;
+    }
+    case "routine_time": {
+      // Asked once: a time or part of day ("evening", "shaam", "9:30 pm") sets it; anything else drops the question.
+      turn.state.pending = null;
+      const time = extractEntities(text, extractOpts(turn)).time;
+      if (!time) return null;
+      const updated = await updateRoutine(turn.user.id, turn.tz, p.routineId, { dueTime: time });
+      if (!updated) return { content: "That routine no longer exists.", intent: "not_found" };
+      const every = updated.intervalDays ? intervalLabel(updated.intervalDays).toLowerCase() : "";
+      return { content: `Okay: ${updated.title} at ${time}${every ? `, ${every}` : ""}. I'll remind you then.`, cards: [{ type: "routine", routine: updated as unknown as Record<string, unknown> }], intent: "routine_time_set" };
     }
     case "confirm_delete":
     case "confirm_update":
@@ -1168,15 +1180,23 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
         : `Every ${listJoin((draft.daysOfWeek ?? []).map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]))}`;
   const details = [draft.dueTime ?? "flexible time", draft.durationMinutes ? formatDuration(draft.durationMinutes) : null].filter(Boolean).join(", ");
   const lines = [`Created: ${freq} ${draft.title} (${details})`];
+  const askTime = Boolean(draft.intervalDays && !draft.dueTime);
   if (draft.intervalDays) {
     const next = addDaysYmd(turn.todayYmd, draft.doneToday ? draft.intervalDays : 0);
     lines.push(draft.doneToday ? `Today's is marked done; the next one is ${relativeDayLabel(next, turn.todayYmd)} (${next}).` : `Starting today (${turn.todayYmd}).`);
+    // No time means no reminder (the planner needs one): ask once.
+    if (askTime) {
+      lines.push(ASK_ROUTINE_TIME);
+      turn.state.pending = { kind: "routine_time", routineId: routine.id, title: routine.title };
+    }
   }
   if (draft.priority === RoutinePriority.MANDATORY) lines.push("Mandatory routine — I'll schedule around it and ask before skipping.");
   if (draft.timeLocked) lines.push("It's time-locked: if missed, I won't move it — the next one will be ready.");
   if (learnedNote) lines.push(learnedNote);
-  const actions: QuickAction[] = [{ label: "View routines", payload: { type: "navigate", screen: "Routines" } }];
-  if (draft.priority !== RoutinePriority.MANDATORY) actions.push({ label: "Make it mandatory", text: `Make ${draft.title} mandatory` });
+  const actions: QuickAction[] = askTime
+    ? ["Morning", "Afternoon", "Evening"].map((label) => ({ label, text: label.toLowerCase() }))
+    : [{ label: "View routines", payload: { type: "navigate", screen: "Routines" } }];
+  if (!askTime && draft.priority !== RoutinePriority.MANDATORY) actions.push({ label: "Make it mandatory", text: `Make ${draft.title} mandatory` });
   return { content: lines.join("\n"), cards: [{ type: "routine", routine: routine as unknown as Record<string, unknown> }], actions, intent: "routine_created" };
 }
 

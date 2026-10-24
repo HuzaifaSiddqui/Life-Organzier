@@ -59,6 +59,8 @@ export type Pending =
   | { kind: "task_draft"; draft: TaskDraft; awaiting: TaskSlot[]; source: "CHAT" | "VOICE" | "WHATSAPP"; clarity: number; reasks?: number }
   | { kind: "task_review"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; clarity: number }
   | { kind: "routine_draft"; draft: RoutineDraft; awaiting: RoutineSlot[]; reasks?: number }
+  /** Asked once after an every-N-days routine was made without a time (no time = no reminder). */
+  | { kind: "routine_time"; routineId: string; title: string }
   | { kind: "mood_confirm"; mood: string; confidence: number; text: string }
   | { kind: "confirm_update"; taskId: string; changes: Record<string, unknown>; summary: string }
   | { kind: "confirm_delete"; taskId: string; title: string }

@@ -288,6 +288,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Not by chat:** changing how often an existing routine repeats ("change my gym routine to every other day")
   gets "open it on the Routines screen"; the routine is not changed. Changing a routine's weekdays (chat or form)
   drops its interval.
+- **No time, no reminder.** The reminder planner needs a time. When chat makes an every-N-days routine without
+  one, it asks once ("Morning, afternoon, evening, or pick a time?"; morning 9 AM, afternoon 3 PM, evening 6 PM,
+  night 9 PM, or an exact time); any other reply drops the question and the routine stays at a flexible time
+  with no reminder until a time is set (chat or Routines screen).
+- **Reminders are best-effort, not a medical device.** A reminder can be late or missing (phone off, battery
+  saving, notifications blocked, Do Not Disturb, the app not opened for days). Don't rely on Life Organizer alone
+  for medicine or anything safety-critical.
 - **Documents:** a document or pasted text with these phrases still makes no routine and says why.
 - **Other phrasings are not guessed** ("thrice a week", "every alternate Monday").
 - **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
