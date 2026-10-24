@@ -388,6 +388,8 @@ test("an explicit add with an edit word inside is a new task ('push ups', 'chang
   for (const text of ["Push the essay to Friday", "Move my assignment to tomorrow", "Can you push it to 6 PM", "Change the report deadline to Monday", "Postpone the quiz prep to next week"]) {
     assert.equal(await intent(text), "update_task", text);
   }
+  for (const text of ["Do 20 push-ups tomorrow at 7 AM", "Do laundry tomorrow"]) assert.equal(await intent(text), "create_task", text);
+  for (const text of ["Do you remember my exam?", "Do I have anything tomorrow?"]) assert.notEqual(await intent(text), "create_task", text);
   for (const lead of ["Let's add a task to", "I said Add a task to", "Lets add a task to"]) assert.equal(cleanTitle(`${lead} do 4 push ups`), "Do 4 push ups", lead);
 });
 

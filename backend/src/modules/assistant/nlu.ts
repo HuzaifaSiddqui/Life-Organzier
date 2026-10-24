@@ -76,7 +76,7 @@ const PROVIDE_INFO =
 const CREATE_CUE =
   /\b(?:remind me|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
 const IMPERATIVE_START =
-  /^(?:please\s+)?(?:call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
+  /^(?:please\s+)?(?:do(?!\s+(?:i|you|we|they|he|she|it|my|your|our|their|u)\b)|call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
 const SMALLTALK =
   /^(?:(?:hi|hey|hello)[,!\s]+)?(?:how are you|how(?:'s| is) it going|how do you do|what'?s up|who are you|what are you|are you (?:there|real|a bot|human)|tell me (?:a joke|about yourself)|good (?:night|job)|nice|cool|lol|haha|ok cool)\b/i;
 const ASK_TO_UPDATE =

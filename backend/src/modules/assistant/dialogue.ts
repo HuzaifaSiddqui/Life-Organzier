@@ -321,8 +321,12 @@ const SWITCH_INTENTS = new Set([...STRONG_SWITCH, "support", "thanks"]);
 const NO_ROUTE = new Set(["confirm", "deny", "greeting", "thanks", "support", "log_mood", "provide_info"]);
 const QUESTIONISH = /\?\s*$|^(?:what|when|where|why|how|who|which|can|could|should|would|is|are|do|does|did)\b/i;
 
+/** A full new request ("I need to finish my report by Friday"), not an answer to the open question. */
+const NEW_REQUEST = /^(?:(?:please|ok|okay|also|and|let'?s)\s+)*(?:i\s+(?:need|have|want|must|should|gotta)\s+to|i'?ll|i\s+will|remind me to|add|create|new task|set a reminder to|don'?t forget to)\b/i;
+
 function isTopicSwitch(u: Understanding, text: string): boolean {
   if (SWITCH_INTENTS.has(u.intent)) return true;
+  if ((u.intent === "create_task" || u.intent === "create_routine") && NEW_REQUEST.test(text.trim()) && u.title && !isVagueTitle(u.title) && u.title.split(/\s+/).length >= 2) return true;
   if (u.intent === "smalltalk" && u.confidence >= 0.85) return true;
   if (u.intent === "log_mood" && u.mood?.explicit) return true;
   const e = u.entities;

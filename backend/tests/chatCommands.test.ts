@@ -481,3 +481,18 @@ test("Urdu users get Urdu replies from settings and bulk commands (confirm butto
     assert.equal((await tap({ type: "undo_command" })).message.content, "↩ آخری تبدیلی واپس کر دی گئی۔");
   });
 });
+
+test("open question: a full new task request is its own task, not the answer; a bare time still answers", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    const q = await say("Call mom");
+    assert.equal(q.message.intent, "clarify");
+    const r = await say("I need to finish my report by Friday");
+    assert.doesNotMatch(r.message.content, /Call mom/);
+    assert.match(r.message.content, /Finish my report/); // its own draft (asks for the time)
+    assert.equal(await prisma.task.count({ where: { userId: user.id, title: "Call mom" } }), 0, "Call mom not given Friday");
+
+    await say("Buy groceries");
+    const a = await say("tomorrow at 5 PM");
+    assert.match(a.message.content, /Buy groceries/);
+  });
+});
