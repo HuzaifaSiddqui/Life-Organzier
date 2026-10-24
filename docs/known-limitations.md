@@ -77,8 +77,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **If the phone gives up waiting, the server still finishes and saves** (document and auto-created tasks). Sending
   the same file again within 24 hours returns that saved result instead of reading it again (the document is
   identified by a hash of its content, type and language); after 24 hours it is read again, and auto-created tasks
-  are still not duplicated (same title, date and time). A saved result that found nothing is never reused: the
-  file is read again, so a better reader (e.g. a new timetable format) gets its chance.
+  are still not duplicated (same title, date and time). A saved result is reused only if it was produced by the
+  current readers (`EXTRACTOR_VERSION`, stored in the result); after the readers change, the file is read again.
 - **One OCR job runs at a time per language, and at most 3 may wait.** A fourth upload at that moment gets "I'm
   reading other documents right now, try again in a minute" (also on WhatsApp) instead of queuing.
 - **The upload status after the file is sent is timed, not reported.** "Reading the document" then "Finding dates and
@@ -95,12 +95,22 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   When OCR garbles one header cell ("Te" for "Date"), the date column is taken from the first row, but only if
   that row has the same number of cells; otherwise the rows are skipped rather than guessed.
 - **Grid timetables** (days down the side, 30-minute slots across, classes as boxes) are read by position:
-  from the PDF text layer, or, for a photo/screenshot whose OCR text has 6+ clock times, from the image
-  (ruling lines removed for the day and time headers; class blocks found by their colour fill and read one
-  by one). Image classes are capped at 85 % so they go to review, never auto-created: a section's timetable
-  lists every group (G1, G2, G3) and the student ticks theirs. Blocks need a coloured fill on a white page;
-  plain-outline grids, handwritten or skewed photos fall back to the line-based rules. Small room labels can
-  be misread ("D-117" → "p-117"); days, times and course codes are the reliable part. About 4 s extra.
+  from the PDF text layer, or from a photo/screenshot (ruling lines removed for the day and time headers;
+  class blocks found by their colour fill and read one by one). An image starts the grid reader when its
+  OCR text has 6+ different "hh:mm" times, and the reader stops after its first header read unless it sees
+  3+ different weekday labels (English, Roman Urdu, Urdu) as well. Image classes are capped at 85 % so they
+  go to review, never auto-created: a section's timetable lists every group (G1, G2, G3) and the student
+  ticks theirs. About 4–6 s extra.
+- **Grid timetables: COMSATS-style course codes only.** A class block is recognised by a code of 2–5 capital
+  letters and 3 digits, optionally a letter and a group ("CSC461", "MGT350", "CSC461 - G1", "CS-101L").
+  Codes like "MATH 1A", "EE2020" (4 digits), "BIO-1101" or blocks with only a course name are not
+  recognised, so those classes are missed.
+- **Grid timetables: light-coloured block fills only.** Blocks must be a light fill (grey, blue, orange, …)
+  on a white page; dark or saturated fills, outline-only boxes, dark-mode screenshots, handwritten or
+  skewed photos are not read as a grid and fall back to the line-based rules.
+- **Grid timetables: rooms are the weak part.** On the real COMSATS screenshot every class's day, course,
+  start and length were right (12/12) but only 6/12 rooms exact: small labels like "D-117" read as
+  "p-117" or "D117", "O-3" as "0-3". Rooms can be corrected in review.
 
 ## Task classification
 
