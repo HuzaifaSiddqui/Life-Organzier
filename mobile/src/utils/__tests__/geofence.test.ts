@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task, TaskLocation } from "../../types/models";
-import { buildNotificationBody, DEDUP_MS, distanceM, groupTasksByLocation, isDedupActive, locatedTaskIds, promptedInChat, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace, type GeofenceTask } from "../geofence";
+import { buildNotificationBody, DEDUP_MS, distanceM, groupTasksByLocation, isDedupActive, locatedTaskIds, placesToAnnounceNow, promptedInChat, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace, type GeofenceTask } from "../geofence";
 
 const NOW = Date.parse("2026-10-13T10:00:00Z");
 
@@ -124,5 +124,19 @@ describe("asking for location access", () => {
   it("watched tasks: open, with an active place, each once", () => {
     const ids = locatedTaskIds([task("a", [loc("home"), loc("uni")]), task("done", [loc("home")], { status: "COMPLETED" }), task("none", [])]);
     expect(ids).toEqual(["a"]);
+  });
+});
+
+describe("placesToAnnounceNow", () => {
+  const home: GeofencePlace = { id: "home", name: "Home", latitude: 31.5, longitude: 74.3, radiusM: 150, usageCount: 1, tasks: [gt(1), gt(2)] };
+  const uni: GeofencePlace = { id: "uni", name: "Uni", latitude: 31.6, longitude: 74.4, radiusM: 350, usageCount: 1, tasks: [gt(3)] };
+  it("announces a place at once when a task was just added to it and the user is inside", () => {
+    expect(placesToAnnounceNow([home, uni], ["t2"], { latitude: 31.5003, longitude: 74.3 })).toEqual(["home"]); // ~33 m away
+  });
+  it("not when outside the radius, not for places without a new task, not without a position", () => {
+    expect(placesToAnnounceNow([home], ["t2"], { latitude: 31.51, longitude: 74.3 })).toEqual([]); // ~1.1 km
+    expect(placesToAnnounceNow([home, uni], ["t3"], { latitude: 31.5, longitude: 74.3 })).toEqual([]);
+    expect(placesToAnnounceNow([home], ["t1"], null)).toEqual([]);
+    expect(placesToAnnounceNow([home], [], { latitude: 31.5, longitude: 74.3 })).toEqual([]);
   });
 });

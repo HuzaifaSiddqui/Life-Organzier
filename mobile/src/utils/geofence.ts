@@ -31,6 +31,16 @@ export function locatedTaskIds(tasks: Task[]): string[] {
   return [...new Set(groupTasksByLocation(tasks).flatMap((p) => p.tasks.map((t) => t.taskId)))];
 }
 
+/**
+ * A place just added to a task while the user is already there: Android's "already inside" trigger can lag
+ * by minutes, so these places are announced at once. Only places holding a newly located task, within radius.
+ */
+export function placesToAnnounceNow(places: GeofencePlace[], newTaskIds: string[], here: { latitude: number; longitude: number } | null): string[] {
+  if (!here || !newTaskIds.length) return [];
+  const fresh = new Set(newTaskIds);
+  return places.filter((p) => p.tasks.some((t) => fresh.has(t.taskId)) && distanceM(here, p) <= p.radiusM).map((p) => p.id);
+}
+
 /** Chat and voice tasks get the in-chat Location card instead of the snackbar (one prompt per task). */
 export function promptedInChat(task: Pick<Task, "source">): boolean {
   return task.source === "CHAT" || task.source === "VOICE";

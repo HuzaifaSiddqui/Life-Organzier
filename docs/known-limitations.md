@@ -173,6 +173,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   message; WhatsApp can't, so it never shows the in-chat toggle.
 - **Free users' places are text only.** Naming a place in chat adds the task without a geofence; the reply
   invites them to switch to Pro and turn on Location reminders (Pro is a demo switch in Settings).
+- **Already there when the place is added.** Android's "already inside" geofence trigger can lag by minutes,
+  so when a task gets a place while the app is open, the app checks the current position and announces at
+  once if the user is within the radius (the once-per-visit mark stops a second notification). This check
+  doesn't run on every app open, only when a task newly gets a place.
 - **Background permission required.** On Android, geofence triggers only fire with "Allow all
   the time" location permission. With "While using the app", the app checks position once on
   each foreground entry — no exit detection, no background triggers.
