@@ -184,6 +184,9 @@ async function manageLocation(turn: Turn, text: string): Promise<Out> {
 
 const NONE_RE = /^(?:none|no|nope|skip|cancel|neither|nahi|nahin|koi nahi|rehne do|chhor do|chor do)$/i;
 
+/** Longest reply read as a pick from a list by name; longer ones are new messages. */
+export const MAX_PICK_WORDS = 5;
+
 /** Answer to "I found several locations…": a number, part of the address, or "none". Null = moved on. */
 async function resolveLocationChoice(turn: Turn, text: string, p: Extract<NonNullable<Turn["state"]["pending"]>, { kind: "location_choice" }>): Promise<Out | null> {
   const L = locationText(turn);
@@ -198,10 +201,12 @@ async function resolveLocationChoice(turn: Turn, text: string, p: Extract<NonNul
     return { content: L.openHint(p.taskTitle), actions: [{ label: "Open task", payload: { type: "open_task", taskId: p.taskId } }], intent: "location_open_task" };
   }
   const lower = t.toLowerCase();
+  // A typed pick is short ("the Walton one"); a sentence that merely contains "home" is a new message.
+  const short = t.split(/\s+/).length <= MAX_PICK_WORDS;
   const chosen =
     n >= 1 && n <= p.results.length
       ? p.results[n - 1]
-      : lower.length >= 3
+      : lower.length >= 3 && short
         ? p.results.find((r) => r.displayName.toLowerCase().includes(lower)) ??
           p.results.map((r) => ({ r, s: fuzzySimilarity(t, r.name) })).sort((a, b) => b.s - a.s).find((x) => x.s >= 0.6)?.r
         : undefined;

@@ -35,7 +35,8 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
   const words = t.split(/\s+/).length;
   if (p.kind === "command_choice" || p.kind === "location_choice" || p.kind === "choose_task") {
     // A name from the list ("night reading"); task candidates are only ids here, so any short reply is a try.
-    if (optionLabels(p).some((label) => fuzzySimilarity(t, label) >= 0.45 || label.toLowerCase().includes(t.toLowerCase()))) return true;
+    // Only a short reply can be a name from the list: "Add a task … at home" is not picking "home".
+    if (words <= 5 && optionLabels(p).some((label) => fuzzySimilarity(t, label) >= 0.45 || label.toLowerCase().includes(t.toLowerCase()))) return true;
     return words <= 3 && !matchCommand(t, ctx); // a short try ("tomorrow") is asked again, never a new task
   }
   if (SLOT_KINDS.has(p.kind)) {

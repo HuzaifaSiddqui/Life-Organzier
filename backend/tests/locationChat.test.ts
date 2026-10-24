@@ -189,3 +189,28 @@ test("chat (Pro): toggle off → in-chat 'turn on' card; an unsaved home is neve
     assert.equal(setupCard(r), undefined);
   });
 });
+
+test("an old 'which location?' question never swallows a new task that mentions the place", { skip }, async () => {
+  await withUser("PRO", async (say, userId) => {
+    await say("hello");
+    const conversation = await prisma.conversation.findFirstOrThrow({ where: { userId } });
+    const old = await prisma.task.create({ data: { userId, title: "Go to wahsorm", priority: "MEDIUM", source: "CHAT" } });
+    const results = [
+      { name: "home", displayName: "home, Al-Hussain Road, Johar Town, Lahore", latitude: 31.46, longitude: 74.27 },
+      { name: "home", displayName: "home, Walton Road, Model Town, Lahore", latitude: 31.49, longitude: 74.33 },
+    ];
+    const plant = () => prisma.conversation.update({ where: { id: conversation.id }, data: { state: { pending: { kind: "location_choice", taskId: old.id, taskTitle: old.title, place: "home", results, more: false }, focus: [], prereqAsked: [], turn: 1 } } });
+
+    await plant();
+    const r = await say("Add a task to go to washroom at home today", true);
+    assert.equal(r.message.intent, "task_created", r.message.content);
+    assert.match(r.message.content, /Go to washroom/);
+    assert.doesNotMatch(r.message.content, /Al-Hussain/);
+    assert.deepEqual(await linkedPlaces(userId), [], "nothing pinned from the old list");
+
+    await plant();
+    const pick = await say("Walton Road", true);
+    assert.equal(pick.message.intent, "location_set");
+    assert.match(pick.message.content, /Walton Road/);
+  });
+});
