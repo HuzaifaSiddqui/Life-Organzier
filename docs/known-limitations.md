@@ -77,7 +77,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **If the phone gives up waiting, the server still finishes and saves** (document and auto-created tasks). Sending
   the same file again within 24 hours returns that saved result instead of reading it again (the document is
   identified by a hash of its content, type and language); after 24 hours it is read again, and auto-created tasks
-  are still not duplicated (same title, date and time).
+  are still not duplicated (same title, date and time). A saved result that found nothing is never reused: the
+  file is read again, so a better reader (e.g. a new timetable format) gets its chance.
 - **One OCR job runs at a time per language, and at most 3 may wait.** A fourth upload at that moment gets "I'm
   reading other documents right now, try again in a minute" (also on WhatsApp) instead of queuing.
 - **The upload status after the file is sent is timed, not reported.** "Reading the document" then "Finding dates and

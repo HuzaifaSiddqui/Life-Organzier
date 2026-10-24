@@ -193,7 +193,9 @@ export function processDocument(user: User, settings: UserSettings, input: Proce
 
 async function reuseOrProcess(user: User, settings: UserSettings, input: ProcessInput, hash: string) {
   const recent = await prisma.document.findFirst({ where: { userId: user.id, contentHash: hash, createdAt: { gte: new Date(Date.now() - REUSE_WITHIN_MS) } }, orderBy: { createdAt: "desc" } });
-  if (recent?.extracted) {
+  // Reuse avoids duplicate tasks. A result that found nothing created nothing: read it again (a newer reader may do better).
+  const found = recent?.extracted as unknown as Extracted | null;
+  if (recent && found && (found.deadlines?.length || found.schedules?.length)) {
     const { text, ...doc } = recent;
     return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
   }
