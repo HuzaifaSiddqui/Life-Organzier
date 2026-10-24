@@ -17,7 +17,7 @@ import { dbAvailable } from "./fixtures.js";
 const skip = !dbAvailable && "no database";
 const TZ = "Asia/Karachi";
 
-type Say = (text: string, channel?: Channel) => ReturnType<typeof handleAssistantMessage>;
+type Say = (text: string, channel?: Channel, now?: Date) => ReturnType<typeof handleAssistantMessage>;
 type Tap = (payload: ActionPayload) => ReturnType<typeof handleAssistantMessage>;
 
 /** A fresh user (rules only, AI off) talking to the real engine; removed afterwards. */
@@ -28,7 +28,7 @@ export async function withChatUser(tier: "FREE" | "PRO", fn: (say: Say, tap: Tap
   const settings = () => prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } });
   const fresh = () => prisma.user.findUniqueOrThrow({ where: { id: user.id } });
   try {
-    const say: Say = async (text, channel = "APP") => handleAssistantMessage({ user: await fresh(), settings: await settings(), deviceId: null, text, channel });
+    const say: Say = async (text, channel = "APP", now) => handleAssistantMessage({ user: await fresh(), settings: await settings(), deviceId: null, text, channel, now });
     const tap: Tap = async (payload) => handleAssistantMessage({ user: await fresh(), settings: await settings(), deviceId: null, payload, channel: "APP" });
     await fn(say, tap, user);
   } finally {
@@ -337,8 +337,13 @@ test("bulk: at most 25 tasks per confirmation; WhatsApp preview is short plain t
 
 test("multi: two requests run in order with one summary; a list of items stays one task", { skip }, async () => {
   await withChatUser("FREE", async (say, _tap, user) => {
-    await say("Submit the essay by Thursday 5 PM");
-    const r = await say("remind me to call Ali tomorrow at 5 PM and move the essay to Friday");
+    // Next Monday 10:00 Karachi: "Thursday 5 PM" and "Friday" are never already past (the real clock failed on Thursday evenings).
+    const pk = new Date(Date.now() + 5 * 3600000); // Karachi wall clock (UTC+5, no DST)
+    pk.setUTCDate(pk.getUTCDate() + ((8 - pk.getUTCDay()) % 7 || 7));
+    pk.setUTCHours(10, 0, 0, 0);
+    const at = new Date(pk.getTime() - 5 * 3600000);
+    await say("Submit the essay by Thursday 5 PM", "APP", at);
+    const r = await say("remind me to call Ali tomorrow at 5 PM and move the essay to Friday", "APP", at);
     assert.equal(r.message.intent, "multi");
     const lines = r.message.content.split("\n");
     assert.equal(lines.length, 2);
