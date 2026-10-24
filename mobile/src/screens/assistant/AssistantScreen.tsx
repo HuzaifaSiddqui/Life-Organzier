@@ -24,6 +24,7 @@ import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage, isNetworkError } from "../../services/api";
 import { loadCurrentConversation, sendToAssistant, startNewConversation } from "../../services/assistantApi";
 import { speak, stopSpeaking } from "../../services/speech";
+import { syncNow } from "../../services/syncEngine";
 import type { ActionPayload, ChatMessage, QuickAction } from "../../types/models";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Assistant">;
@@ -132,6 +133,8 @@ export function AssistantScreen({ navigation, route }: Props) {
         ]);
         // Settings changed (or undone) from chat: refresh what the app shows and plans with.
         if (/^(?:settings_|checkin|undone)/.test(reply.message.intent ?? "")) void reload();
+        // A task added or changed from chat: pull it now so geofences and the "Grant" location prompt see it.
+        if (reply.message.cards?.some((c) => c.type === "task" || c.type === "task_list") || /^(?:task_|undone|multi|bulk_)/.test(reply.message.intent ?? "")) void syncNow();
         const shouldSpeak = speakReplies || input.voice || reply.message.intent === "read_back";
         if (shouldSpeak) speak(reply.message.speak ?? reply.message.content, { language: settings?.language, rate: settings?.ttsRate });
       } catch (e) {

@@ -80,11 +80,12 @@ test("chat: Pro user's saved place is attached; 'ghar' finds Home; remove and ch
   });
 });
 
-test("chat: free users get no geofence and no location wording", { skip }, async () => {
+test("chat: free users get no geofence, only the invitation to Pro + Location reminders", { skip }, async () => {
   await withUser("FREE", async (say, userId) => {
     await createOrFindLocation(userId, { name: "Ali Medical Store", latitude: 31.5, longitude: 74.3 });
     const r = await say("buy medicine from Ali Medical Store tomorrow");
-    assert.doesNotMatch(r.message.content, /Location|map/);
+    assert.doesNotMatch(r.message.content, /Location set|map/);
+    assert.match(r.message.content, /Location reminders come with Pro/);
     assert.deepEqual(await linkedPlaces(userId), []);
     const cmd = await say("remove the location");
     assert.match(cmd.message.content, /Pro/);

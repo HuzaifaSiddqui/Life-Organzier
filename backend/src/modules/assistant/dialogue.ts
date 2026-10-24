@@ -736,10 +736,14 @@ export async function proceedWithDraft(
   // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
   const place = draft.location ?? savedPlaceInTitle(task.title, turn.placeNames ?? []);
   if (place && isPro(turn.settings)) lines.push(await placeLine(turn, task, place));
+  // Free users: the place stays in the task text; tell them what Pro would add (Pro is switched on in Settings).
+  const proNudge = Boolean(place && !isPro(turn.settings));
+  if (proNudge) lines.push(locationText(turn).proNeeded(place!.charAt(0).toUpperCase() + place!.slice(1)));
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
   ];
+  if (proNudge) actions.unshift({ label: locationText(turn).openSettings, payload: { type: "navigate", screen: "Settings" }, style: "primary" });
   if (draft.scheduledStart) actions.splice(1, 0, { label: "Change", payload: { type: "open_task", taskId: task.id } });
   if ((!draft.durationMinutes || noSlot) && task.taskType !== TaskType.FIXED) actions.push({ label: "Find time for it", payload: { type: "suggest_slot", taskId: task.id } });
 
@@ -763,6 +767,8 @@ export const LOCATION_TEXT = {
     openToSearch: "Open task to search",
     openHint: (title: string) => `Open '${title}' and tap 'Add location' to search.`,
     none: "No location set. You can add one from the task details.",
+    proNeeded: (place: string) => `Want a reminder when you get to ${place}? Location reminders come with Pro: switch to Pro and turn on Location reminders in Settings.`,
+    openSettings: "Go to Settings",
     range: { PRECISE: "Precise", NEARBY: "Nearby", AREA: "Area" } as Record<string, string>,
   },
   ur: {
@@ -773,6 +779,8 @@ export const LOCATION_TEXT = {
     openToSearch: "تلاش کے لیے کام کھولیں",
     openHint: (title: string) => `'${title}' کھولیں اور تلاش کے لیے 'مقام شامل کریں' دبائیں۔`,
     none: "کوئی مقام طے نہیں ہوا۔ آپ کام کی تفصیل سے شامل کر سکتے ہیں۔",
+    proNeeded: (place: string) => `${place} پہنچنے پر یاددہانی چاہیے؟ مقام کی یاددہانیاں Pro میں ہیں: ترتیبات میں Pro پر جائیں اور مقام کی یاددہانیاں آن کریں۔`,
+    openSettings: "ترتیبات کھولیں",
     range: { PRECISE: "قریب ترین", NEARBY: "قریب", AREA: "علاقہ" } as Record<string, string>,
   },
 };

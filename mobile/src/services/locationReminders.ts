@@ -322,12 +322,13 @@ export function startLocationReminders(opts: { isPro: boolean }): () => void {
   const askIfNeeded = async () => {
     if (!opts.isPro) return;
     const located = locatedTaskIds(await readTasks());
-    const ready = enabled && (await getLocationPermission()) !== "denied";
-    const ask = shouldAskForLocation(seen, located, ready);
+    const denied = (await getLocationPermission()) === "denied";
+    const ask = shouldAskForLocation(seen, located, enabled && !denied);
     seen = new Set(located);
     if (!ask) return;
-    const label = await tr("location.grant");
-    showLocationSnackbar({ text: await tr("location.grantHint"), action: { label, onPress: () => void setLocationRemindersEnabled(true) } });
+    // Access refused → "Grant"; access fine but the Settings toggle off → "Turn on". Both turn the toggle on.
+    const label = await tr(denied ? "location.grant" : "location.enable");
+    showLocationSnackbar({ text: await tr(denied ? "location.grantHint" : "location.enableHint"), action: { label, onPress: () => void setLocationRemindersEnabled(true) } });
   };
   const resync = () => {
     if (timer) clearTimeout(timer);
