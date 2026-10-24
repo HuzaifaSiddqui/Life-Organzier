@@ -770,11 +770,11 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  * that isn't saved (home, uni, office, hostel) is never searched on the map: the card asks the user to set
  * it. Other places are searched as before. With the phone's toggle off, the card offers to turn it on first.
  */
-async function proPlace(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; card: Card | null }> {
+export async function proPlace(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; card: Card | null }> {
   const L = locationText(turn);
   const remindersOff = turn.locationReminders === false;
   const saved = await findSavedPlace(turn.user.id, place);
-  const needsPlace = !saved && isPersonalPlace(place);
+  let needsPlace = !saved && isPersonalPlace(place);
   const shown = saved?.name ?? capitalize(place);
   let line: string;
   if (saved) {
@@ -783,7 +783,10 @@ async function proPlace(turn: Turn, task: { id: string; title: string }, place: 
   } else if (needsPlace) {
     line = remindersOff ? L.turnOn(shown) : turn.channel === "WHATSAPP" ? L.whereIsApp(shown) : L.whereIs(shown);
   } else {
-    line = await placeLine(turn, task, place);
+    const r = await placeLine(turn, task, place);
+    // Not on the map ("KFC kalma chowk"): the picker searches near the user, or they drop the pin.
+    needsPlace = !r.found;
+    line = r.found ? r.line : turn.channel === "WHATSAPP" ? r.line : L.notFoundSet(shown);
     if (remindersOff) line += `\n${L.turnOn(shown)}`;
   }
   const card: Card | null = turn.channel !== "WHATSAPP" && (remindersOff || needsPlace) ? { type: "location_setup", taskId: task.id, place: shown, saved: !needsPlace, remindersOn: !remindersOff } : null;
@@ -802,6 +805,7 @@ export const LOCATION_TEXT = {
     none: "No location set. You can add one from the task details.",
     proNeeded: (place: string) => `Want a reminder when you get to ${place}? Location reminders come with Pro: switch to Pro and turn on Location reminders in Settings.`,
     turnOn: (place: string) => `Want a reminder about this task when you get to ${place}? Turn on Location reminders below.`,
+    notFoundSet: (place: string) => `I couldn't find '${place}' on the map. Set it below and I'll remind you when you get there.`,
     whereIs: (place: string) => `Where is ${place}? Set it on the map below and I'll remind you when you get there.`,
     whereIsApp: (place: string) => `Set ${place} in the app (Settings → Saved places) and I'll remind you when you get there.`,
     openSettings: "Go to Settings",
@@ -815,6 +819,7 @@ export const LOCATION_TEXT = {
     openToSearch: "تلاش کے لیے کام کھولیں",
     openHint: (title: string) => `'${title}' کھولیں اور تلاش کے لیے 'مقام شامل کریں' دبائیں۔`,
     none: "کوئی مقام طے نہیں ہوا۔ آپ کام کی تفصیل سے شامل کر سکتے ہیں۔",
+    notFoundSet: (place: string) => `'${place}' نقشے پر نہیں ملا۔ نیچے طے کریں، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
     turnOn: (place: string) => `${place} پہنچنے پر اس کام کی یاددہانی چاہیے؟ نیچے مقام کی یاددہانیاں آن کریں۔`,
     whereIs: (place: string) => `${place} کہاں ہے؟ نیچے نقشے پر طے کریں، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
     whereIsApp: (place: string) => `ایپ میں ${place} طے کریں (ترتیبات ← محفوظ مقامات)، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
@@ -840,22 +845,22 @@ export function locationChoiceList(turn: Turn, results: Array<{ displayName: str
  * Attaches the place named in chat and returns the reply line. Several geocoding matches → nothing is
  * attached yet; the numbered choices are asked and remembered in working memory (`location_choice`).
  */
-export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<string> {
+export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; found: boolean }> {
   const L = locationText(turn);
   try {
     const r = await attachPlaceByName(turn.user.id, task.id, place, turn.tz);
-    if (r.kind === "not_found") return L.notFound(place);
+    if (r.kind === "not_found") return { line: L.notFound(place), found: false };
     if (r.kind === "choices") {
       const results = r.results.slice(0, 4);
       const more = r.results.length > 4;
       turn.state.pending = { kind: "location_choice", taskId: task.id, taskTitle: task.title, place, results, more };
-      return `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`;
+      return { line: `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`, found: true };
     }
     const shown = r.kind === "saved" ? r.place.name : truncate(r.result.displayName, 70);
-    return L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY);
+    return { line: L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY), found: true };
   } catch (error) {
     console.warn("Could not attach place from chat", error instanceof Error ? error.message : error);
-    return L.notFound(place);
+    return { line: L.notFound(place), found: false };
   }
 }
 

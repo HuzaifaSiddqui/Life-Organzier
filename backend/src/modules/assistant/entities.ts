@@ -691,6 +691,26 @@ export function parseLocationCommand(text: string): LocationCommand | null {
   if (m) return { kind: "change", taskRef: (m[1] ?? "").trim(), place: m[2].trim() };
   m = /^(?:(.+?)\s+(?:ki|ka|ke)\s+)?(?:location|jagah)\s+(?:badal|badlo|change\s*kar)\s*(?:do|dein|den)?$/i.exec(t);
   if (m) return { kind: "change", taskRef: (m[1] ?? "").trim(), place: null };
+  const lead = "^(?:(?:please|pls|let'?s|can you|could you|i want to|i'?d like to)\\s+)*";
+  const loc = "(?:the\\s+|its\\s+|a\\s+|my\\s+|her\\s+|his\\s+)?(?:location|place)";
+  // "set the location of groceries to Model Town", "add location for KFC task as Gulberg"
+  m = new RegExp(`${lead}(?:change|set|update|put|add)\\s+${loc}\\s+(?:of|for|on)\\s+(.+?)\\s+(?:to|as|at)\\s+(.+)$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: m[1].trim(), place: m[2].trim() };
+  // "change its location to KFC Gulberg", "set location to Kalma Chowk"
+  m = new RegExp(`${lead}(?:change|set|update|put|move)\\s+${loc}\\s+(?:to|as|at)\\s+(.+)$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: "", place: m[1].trim() };
+  // "add location of Kalma Chowk Gulberg", "check for location of KFC Gulberg", "search location KFC Gulberg"
+  m = new RegExp(`${lead}(?:add|set|use|put|try|check(?:\\s+for)?|search(?:\\s+for)?|find|look\\s+for)\\s+${loc}\\s+(?:of|for|at|as|to|:)?\\s*(.+)$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: "", place: m[1].trim() };
+  // "use KFC Gulberg as the location"
+  m = new RegExp(`${lead}(?:add|set|use|make)\\s+(.+?)\\s+(?:as|the)\\s+${loc}$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: "", place: m[1].trim() };
+  // A task named up front: "2nd task from today, change its location to KFC Gulberg".
+  m = /^(.+?)\s*[,:;–-]\s+(.+)$/.exec(t);
+  if (m) {
+    const rest = parseLocationCommand(m[2]);
+    if (rest && !rest.taskRef) return { ...rest, taskRef: m[1].trim() };
+  }
   return null;
 }
 

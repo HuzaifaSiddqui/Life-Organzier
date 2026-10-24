@@ -28,7 +28,7 @@ import {
   isPro,
   locationText,
   moodChips,
-  placeLine,
+  proPlace,
   proceedWithDraft,
   proceedWithRoutine,
   resolvePending,
@@ -161,7 +161,7 @@ async function manageLocation(turn: Turn, text: string): Promise<Out> {
   const cmd = parseLocationCommand(text);
   if (!cmd) return { content: "Okay.", intent: "noop" };
   if (!isPro(turn.settings)) return { content: "Location reminders are part of Pro.", intent: "location_pro" };
-  const r = await resolveTaskRef(turn.user.id, cmd.taskRef, turn.state.focus);
+  const r = await resolveTaskRef(turn.user.id, cmd.taskRef, turn.state.focus, { listed: turn.state.listed });
   if (!r.task) {
     return {
       content: "Which task do you mean? Try \"remove location from <task name>\".",
@@ -179,7 +179,8 @@ async function manageLocation(turn: Turn, text: string): Promise<Out> {
   if (cmd.kind === "remove") {
     return { content: links.length ? `Location removed from '${task.title}'.` : `'${task.title}' doesn't have a location.`, intent: "location_removed" };
   }
-  return { content: await placeLine(turn, task, cmd.place as string), intent: "location_changed" };
+  const set = await proPlace(turn, task, cmd.place as string);
+  return { content: set.line, cards: set.card ? [set.card] : undefined, intent: "location_changed" };
 }
 
 const NONE_RE = /^(?:none|no|nope|skip|cancel|neither|nahi|nahin|koi nahi|rehne do|chhor do|chor do)$/i;
@@ -273,7 +274,7 @@ async function chooseOrResolve(
   purpose: "update" | "complete" | "delete" | "progress" | "split" | "query_progress",
   data: Record<string, unknown> = {},
 ): Promise<{ task: Task } | { out: Out }> {
-  const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress" });
+  const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress", listed: turn.state.listed });
   if (r.task) return { task: r.task };
   if (r.candidates.length) {
     turn.state.pending = { kind: "choose_task", purpose, candidates: r.candidates.map((t) => t.id), data: { ...data, text: u.targetRef } };
@@ -497,7 +498,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
 
   const ref = q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null;
   if (ref && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(ref)) {
-    const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted: true });
+    const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted: true, listed: turn.state.listed });
     if (r.task) {
       focusOn(turn, r.task.id);
       const t = r.task;
@@ -554,6 +555,7 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
   const whatsapp = turn.channel === "WHATSAPP";
   const shown = list.slice(0, whatsapp ? WHATSAPP_LIST_CAP : APP_LIST_CAP);
   focusOn(turn, ...shown.slice(0, 3).map((t) => t.id).reverse());
+  turn.state.listed = shown.map((t) => t.id);
   const more = moreLine(list.length, shown.length);
   const overdue = list.filter((t) => t.dueAt && t.dueAt < turn.now).length;
   const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${label.toLowerCase()}`}.`;
@@ -575,6 +577,7 @@ async function urgentQuery(turn: Turn): Promise<Out> {
   const top = mostUrgent(await listActiveTasks(turn.user.id), turn.now);
   if (!top.length) return { content: "Nothing urgent. You have no pending tasks.", intent: "query_urgent" };
   focusOn(turn, ...top.map((t) => t.id).reverse());
+  turn.state.listed = top.map((t) => t.id);
   const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
   return { content: ["Most urgent:", ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
 }
@@ -848,6 +851,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
         .sort((a, b) => ({ URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 })[a.priority] - ({ URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 })[b.priority] || (a.dueAt?.getTime() ?? Infinity) - (b.dueAt?.getTime() ?? Infinity))
         .slice(0, 3);
       focusOn(turn, ...top.map((t) => t.id).reverse());
+      turn.state.listed = top.map((t) => t.id);
       return {
         content: top.length ? "Here are your top 3. Ignore the rest for now — one thing at a time." : "You have nothing urgent. Take a breather.",
         cards: [{ type: "task_list", title: "Top 3", tasks: top.map((t) => serializeTask(t)) }],

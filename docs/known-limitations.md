@@ -169,6 +169,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   ghar, house, uni, campus, daftar, work) come from the user's saved places; an unsaved one is set by the user
   ("Set Home on the map" in chat, or Settings → Saved places on WhatsApp). Shops and other named places are
   searched as before.
+- **"The 2nd task" means the last list the chat showed** (Show my tasks, most urgent, top 3), in that order.
+  Without a list in the conversation, an ordinal isn't understood and the chat asks which task.
+- **A place the map search can't find** (e.g. "KFC kalma chowk") gets a "Set it on the map" card; the
+  picker searches near the user, or the pin can be dropped by hand.
 - **The chat knows the toggle only from the app.** The app sends its Location reminders state with each
   message; WhatsApp can't, so it never shows the in-chat toggle.
 - **Free users' places are text only.** Naming a place in chat adds the task without a geofence; the reply

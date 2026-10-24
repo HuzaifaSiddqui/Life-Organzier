@@ -84,6 +84,8 @@ export type DialogueState = {
   pending: Pending | null;
   /** Most recently discussed tasks first — resolves "it", "this", "that". */
   focus: string[];
+  /** The last task list shown, in display order: resolves "the 2nd task". */
+  listed?: string[];
   prereqAsked: string[];
   turn: number;
   undo?: UndoRecord | null;

@@ -25,7 +25,7 @@ const cleanRef = (ref: string | null | undefined) => refFrom(ref ?? "", TASK_WOR
 async function prepareTask(turn: Turn, command: string, args: CommandArgs, opts: { includeCompleted?: boolean; fallback?: string } = {}): Promise<Prepared> {
   if (typeof args.taskId === "string" && (await getTaskForUser(turn.user.id, args.taskId))) return { args };
   const ref = String(args.ref ?? "");
-  const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted: opts.includeCompleted });
+  const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted: opts.includeCompleted, listed: turn.state.listed });
   if (r.task) return { args: { ...args, taskId: r.task.id } };
   if (r.candidates.length && ref) return { out: askChoice(turn, command, args, "taskId", r.candidates.map((t) => ({ id: t.id, label: t.title })), "Which task do you mean?") };
   if (opts.fallback && args.text) return { out: await runCommand(turn, opts.fallback, { text: args.text }) };

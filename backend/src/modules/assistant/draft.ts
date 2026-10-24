@@ -219,6 +219,22 @@ export async function applyLearnedCorrections(userId: string, title: string): Pr
 
 /* ------------------------------------------------------------------ task reference resolution */
 
+const ORDINAL_WORDS: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10 };
+/**
+ * Position in a shown list, 0-based (-1 = last), or null: "2nd", "the second task", "task 2", "number 3",
+ * "the last one", "2nd task from today". Only a reference made of the position alone counts.
+ */
+export function ordinalIndex(ref: string): number | null {
+  const t = ref.trim().toLowerCase().replace(/[.,!?]+$/, "");
+  const m =
+    /^(?:the\s+)?(?:(\d{1,2})(?:st|nd|rd|th)?|(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last))(?:\s+(?:task|one|item))?(?:\s+(?:from|in|on|of)\s+(?:the\s+)?(?:list|today|tomorrow|above|my\s+tasks|tasks|today'?s\s+tasks))?$/.exec(t) ??
+    /^(?:task|item|number|no\.?)\s*#?(\d{1,2})$/.exec(t);
+  if (!m) return null;
+  if (m[2] === "last") return -1;
+  const n = m[1] ? Number(m[1]) : ORDINAL_WORDS[m[2]];
+  return n >= 1 ? n - 1 : null;
+}
+
 const PRONOUN = /^(?:it|this|that|this one|that one|the task|the last one|last one|the previous one|same|the same)?$/i;
 
 export type Resolution = { task: Task | null; candidates: Task[]; viaFocus: boolean };
@@ -228,7 +244,7 @@ export async function resolveTaskRef(
   userId: string,
   ref: string,
   focus: string[],
-  opts: { includeCompleted?: boolean } = {},
+  opts: { includeCompleted?: boolean; listed?: string[] } = {},
 ): Promise<Resolution> {
   const statuses = opts.includeCompleted ? undefined : { in: ["PENDING", "IN_PROGRESS"] as Array<"PENDING" | "IN_PROGRESS"> };
   const tasks = await prisma.task.findMany({
@@ -237,6 +253,13 @@ export async function resolveTaskRef(
     take: 300,
   });
   const cleaned = ref.trim();
+  // "the 2nd task", "task 2", "the last one": a position in the last list shown.
+  const at = ordinalIndex(cleaned);
+  if (at !== null && opts.listed?.length) {
+    const id = at < 0 ? opts.listed[opts.listed.length - 1] : opts.listed[at];
+    const t = tasks.find((x) => x.id === id);
+    if (t) return { task: t, candidates: [], viaFocus: true };
+  }
   if (PRONOUN.test(cleaned) || !contentTokens(cleaned).length) {
     for (const id of focus) {
       const t = tasks.find((x) => x.id === id);

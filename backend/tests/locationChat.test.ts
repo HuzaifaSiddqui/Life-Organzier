@@ -214,3 +214,37 @@ test("an old 'which location?' question never swallows a new task that mentions 
     assert.match(pick.message.content, /Walton Road/);
   });
 });
+
+test("location by chat: not found → set-on-map card; 'its location' is the task just added; 'the 2nd task' is from the last list", { skip }, async () => {
+  await withUser("PRO", async (say, userId) => {
+    const gulberg = [{ name: "KFC", display_name: "KFC, Main Boulevard, Gulberg, Lahore, Pakistan", lat: "31.52", lon: "74.35" }];
+    await say("Add a task to call the bank today at 9 PM", true);
+    let r!: Awaited<ReturnType<typeof say>>;
+    await withNominatim([], async () => {
+      r = await say("I want to eat burger from KFC kalma chowk today", true);
+    });
+    const kfc = await prisma.task.findFirstOrThrow({ where: { userId, title: { contains: "burger" } } });
+    assert.match(r.message.content, /couldn't find 'KFC kalma chowk' on the map\. Set it below/);
+    assert.deepEqual(setupCard(r), { type: "location_setup", taskId: kfc.id, place: "KFC kalma chowk", saved: false, remindersOn: true });
+
+    await withNominatim(gulberg, async () => {
+      r = await say("change its location to KFC Gulberg", true);
+    });
+    assert.equal(r.message.intent, "location_changed", r.message.content);
+    assert.match(r.message.content, /Location set: KFC, Main Boulevard, Gulberg/);
+    assert.deepEqual(await linkedPlaces(userId), ["KFC Gulberg"]);
+
+    const list = await say("Show my tasks for today", true);
+    const shown = list.message.cards?.find((c) => c.type === "task_list");
+    const pos = shown?.type === "task_list" ? shown.tasks.findIndex((t) => t.id === kfc.id) : -1;
+    assert.ok(pos >= 0, "KFC task is in the list");
+    const nth = ["1st", "2nd", "3rd", "4th", "5th"][pos];
+    await withNominatim([{ name: "Kalma Chowk", display_name: "Kalma Chowk, Gulberg III, Lahore, Pakistan", lat: "31.50", lon: "74.33" }], async () => {
+      r = await say(`${nth} task from today, change its location to kalma chowk gulberg`, true);
+    });
+    assert.equal(r.message.intent, "location_changed", r.message.content);
+    assert.match(r.message.content, /Kalma Chowk, Gulberg III/);
+    const links = await prisma.taskLocation.findMany({ where: { taskId: kfc.id }, include: { savedLocation: true } });
+    assert.deepEqual(links.map((l) => l.savedLocation.name), ["Kalma chowk gulberg"]);
+  });
+});
