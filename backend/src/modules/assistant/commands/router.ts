@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { getAi, type ChatMessage } from "../../../ai/llm.js";
+import { normalizeSpelled } from "../../../lib/spelled.js";
 import { extractEntities, extractTargetDay, extractTimeRange, extractWeekdays } from "../entities.js";
+import { findDateRange } from "./find.js";
 import { COMMANDS, getCommand } from "./registry.js";
 import type { Command, CommandArgs, CommandCategory, ParseCtx } from "./types.js";
 
@@ -22,8 +24,8 @@ const CATEGORIES: Array<{ id: CommandCategory; label: string }> = [
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id) as [CommandCategory, ...CommandCategory[]];
 
 /** Argument words the model may fill. Everything time-like is the parser's job. */
-const WORD_ARGS = ["ref", "title", "note", "tag", "category", "mode", "language", "devices", "action", "priority", "range", "mood"] as const;
-const PARSER_ARGS = new Set(["time", "ymd", "fromYmd", "toYmd", "start", "end", "until", "minutes", "durationMinutes", "days"]);
+const WORD_ARGS = ["ref", "title", "note", "tag", "category", "mode", "language", "devices", "action", "priority", "range", "mood", "terms", "place", "status"] as const;
+const PARSER_ARGS = new Set(["time", "ymd", "fromYmd", "toYmd", "start", "end", "until", "minutes", "durationMinutes", "days", "dateRange"]);
 const INTERNAL_ARGS = new Set(["text", "taskId", "routineId", "occurrenceId", "subtaskId", "taskIds", "replace", "add", "remove", "titles", "index", "name"]);
 
 function schemaKeys(command: Command): string[] {
@@ -77,6 +79,7 @@ function parserArgs(text: string, ctx: ParseCtx): CommandArgs {
     minutes: e.durationMinutes ?? undefined,
     durationMinutes: e.durationMinutes ?? undefined,
     days: extractWeekdays(text) ?? undefined,
+    dateRange: findDateRange(text, ctx),
   };
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined && v !== null));
 }
@@ -95,6 +98,18 @@ function adapt(command: Command, words: Record<string, string>): CommandArgs {
       return w.title ? { ref: w.ref ?? "", name: w.title.toLowerCase() } : {};
     case "bulk_complete_tag":
       return w.tag ? { tag: w.tag.replace(/^#/, "").toLowerCase() } : {};
+    case "find_items": {
+      // The model names what to look for; the search and the reply come from the database.
+      const terms = String(w.terms ?? w.ref ?? "").split(/[,;]+/).map((x: string) => normalizeSpelled(x).trim().toLowerCase()).filter(Boolean);
+      const priority = (w.priority ?? "").toUpperCase();
+      return {
+        terms,
+        ...(w.place ? { place: w.place } : {}),
+        ...(w.tag ? { tag: w.tag.replace(/^#/, "").toLowerCase() } : {}),
+        ...(["active", "completed", "all"].includes(w.status ?? "") ? { status: w.status } : {}),
+        ...(["URGENT", "HIGH", "MEDIUM", "LOW"].includes(priority) ? { priority } : {}),
+      };
+    }
     default:
       return w;
   }
