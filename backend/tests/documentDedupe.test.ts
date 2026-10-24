@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { prisma } from "../src/config/db.js";
-import { documentHash, processDocument } from "../src/modules/documents/documentProcessing.js";
+import { documentHash, EXTRACTOR_VERSION, processDocument } from "../src/modules/documents/documentProcessing.js";
 import { dbAvailable } from "./fixtures.js";
 
 const skip = !dbAvailable && "no database";
@@ -96,13 +96,30 @@ test("reused result after deleting the auto-created task: not claimed as created
   });
 });
 
-test("an upload that found nothing is read again next time (a better reader may find something), not reused", { skip }, async () => {
+test("reuse follows EXTRACTOR_VERSION: same version reused (even when empty), an older one read again", { skip }, async () => {
   await withUser(async (user, settings) => {
     const nothing = "Welcome to the course. Please be on time and respect your classmates.";
     const first = await processDocument(user, settings, upload(nothing));
     assert.equal(first.extracted.deadlines.length + first.extracted.schedules.length, 0);
-    const again = await processDocument(user, settings, upload(nothing));
-    assert.notEqual(again.reused, true);
+    const same = await processDocument(user, settings, upload(nothing));
+    assert.equal(same.reused, true, "same version: reused, even though it found nothing");
+    assert.equal(await prisma.document.count({ where: { userId: user.id } }), 1);
+
+    // Saved by an older reader: read again → a second document.
+    const doc = await prisma.document.findFirstOrThrow({ where: { userId: user.id } });
+    await prisma.document.update({ where: { id: doc.id }, data: { extracted: { ...(doc.extracted as object), extractorVersion: EXTRACTOR_VERSION - 1 } } });
+    const reread = await processDocument(user, settings, upload(nothing));
+    assert.notEqual(reread.reused, true);
     assert.equal(await prisma.document.count({ where: { userId: user.id } }), 2);
+    assert.equal((reread.extracted as { extractorVersion?: number }).extractorVersion, EXTRACTOR_VERSION);
+
+    // Saved before versions existed (no field): also read again.
+    const legacy = "Assignment 3 due 30 November 2026 at 5 PM";
+    await processDocument(user, settings, upload(legacy));
+    const saved = await prisma.document.findFirstOrThrow({ where: { userId: user.id, text: { contains: "Assignment 3" } } });
+    const { extractorVersion: _drop, ...old } = saved.extracted as Record<string, unknown>;
+    await prisma.document.update({ where: { id: saved.id }, data: { extracted: old as object } });
+    assert.notEqual((await processDocument(user, settings, upload(legacy))).reused, true);
+    assert.equal(await prisma.task.count({ where: { userId: user.id, title: { contains: "Assignment 3" } } }), 1, "re-reading never duplicates the task");
   });
 });

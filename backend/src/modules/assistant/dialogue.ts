@@ -22,11 +22,12 @@ import {
   localYmd,
   parseClock,
   relativeDayLabel,
+  startOfLocalDay,
   zonedTimeToUtc,
 } from "../../lib/time.js";
 import { formatDuration, fuzzySimilarity, listJoin, plural, truncate } from "../../lib/text.js";
 import { addMessage, getOrCreateConversation, readState, recentChat, saveState } from "../conversations/conversationService.js";
-import { logEvent } from "../events/eventService.js";
+import { logEvent, logEventAwait } from "../events/eventService.js";
 import { buildAssistantContext } from "../memory/contextBuilder.js";
 import {
   extractAndStoreMemories,
@@ -778,7 +779,7 @@ export async function proceedWithDraft(
     lines[0] = lines[0].replace(task.title, shorter);
   }
   // Free users: the place stays in the task text; tell them what Pro would add (Pro is switched on in Settings).
-  const proNudge = Boolean(place && !isPro(turn.settings));
+  const proNudge = Boolean(place && !isPro(turn.settings)) && (await proNudgeDue(turn));
   if (proNudge) lines.push(locationText(turn).proNeeded(place!.charAt(0).toUpperCase() + place!.slice(1)));
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
@@ -796,6 +797,14 @@ export async function proceedWithDraft(
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
   return { content: lines.join("\n"), cards: [taskCard(shown, undefined, true), ...(setup?.card ? [setup.card] : [])], actions, intent: "task_created" };
+}
+
+/** The Free-user invitation to Pro shows at most once per (local) day per user, across conversations. */
+async function proNudgeDue(turn: Turn): Promise<boolean> {
+  const shown = await prisma.activityEvent.findFirst({ where: { userId: turn.user.id, type: "PRO_NUDGE_SHOWN", createdAt: { gte: startOfLocalDay(turn.todayYmd, turn.tz) } }, select: { id: true } });
+  if (shown) return false;
+  await logEventAwait(turn.user.id, "PRO_NUDGE_SHOWN", null, { feature: "location_reminders" });
+  return true;
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

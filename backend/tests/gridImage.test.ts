@@ -1,14 +1,40 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fillMissingSlots, findBlocks, gridSchedulesFromImage, IMAGE_GRID_MAX, looksLikeTimetable } from "../src/modules/documents/gridTimetable.js";
+import { analyzeDocument } from "../src/modules/documents/documentProcessing.js";
+import { fillMissingSlots, findBlocks, gridSchedulesFromImage, hasClockGrid, IMAGE_GRID_MAX, looksLikeTimetable, normalizeRoom, weekdayLabels } from "../src/modules/documents/gridTimetable.js";
 import { shutdownOcr } from "../src/modules/documents/textExtraction.js";
 
 test.after(() => shutdownOcr());
 
-test("timetable photos: worth the grid pass only with many clock times", () => {
-  assert.ok(looksLikeTimetable("08:30 09:00 09:30 10:00 10:30 11:00"));
-  assert.ok(!looksLikeTimetable("Assignment 1 due 12 Nov 2026 at 11:59 PM"));
+test("timetable gate: a bill, a mark sheet and a datesheet never start the grid pass; a timetable does", () => {
+  const bill = "Electricity Bill October 2026\nUnits consumed 345.00\nAmount Rs. 1200.00\nDue date 15.10.2026\nLate fee 15.00\nTotal Rs. 1215.00\nPay at any branch Monday to Friday";
+  const markSheet = "Result Card\nCalculus 78.50\nPhysics 66.00\nEnglish 81.25\nCGPA 3.50\nDeclared on Monday, collect on Tuesday or Wednesday";
+  const datesheet = [
+    "Final Examination Date Sheet",
+    "Date | Day | Paper | Time",
+    "02-11-2026 | Monday | Calculus | 9:00 AM - 12:00 PM",
+    "03-11-2026 | Tuesday | Physics | 2:00 PM - 5:00 PM",
+    "04-11-2026 | Wednesday | English | 9:00 AM - 12:00 PM",
+    "05-11-2026 | Thursday | Chemistry | 2:00 PM - 5:00 PM",
+    "06-11-2026 | Friday | Urdu | 9:00 AM - 12:00 PM",
+    "07-11-2026 | Saturday | Islamiat | 2:00 PM - 5:00 PM",
+  ].join("\n");
+  for (const [name, text] of [["bill", bill], ["mark sheet", markSheet], ["datesheet", datesheet]] as const) {
+    assert.equal(hasClockGrid(text), false, `${name}: grid pass not started`);
+    assert.equal(looksLikeTimetable(text), false, name);
+  }
+  const header = "Mo\nTu\nWe\n08:30 09:00 09:30 10:00 10:30 11:00 11:30";
+  assert.ok(hasClockGrid(header) && looksLikeTimetable(header));
+  assert.deepEqual([...weekdayLabels("Peer\nMangal\nبدھ")].sort(), [1, 2, 3]);
+  assert.equal(weekdayLabels("We will meet soon").size, 0, "'We' in a sentence is not Wednesday");
+});
+
+test("timetable image: an upload is read as a grid (method image-grid), classes to review", async () => {
+  const image = readFileSync(new URL("./eval/documents/images/timetable-grid.png", import.meta.url));
+  const a = await analyzeDocument({ buffer: image, fileName: "timetable.png", mimeType: "image/png", docType: "SCHEDULE", language: "eng", tz: "Asia/Karachi" });
+  assert.equal(a.method, "image-grid");
+  assert.equal(a.schedules.length, 7);
 });
 
 test("header columns: a slot whose times weren't read is put back", () => {
@@ -55,4 +81,12 @@ test("grid timetable image: each class with its day, start, length and room; rev
   assert.equal(byTitle("CSE499", 6)?.room, "FYP Lab");
   assert.equal(byTitle("MTH231", 3)?.instructor, "Dr Sana Ali");
   assert.ok(found.every((s) => s.confidence <= IMAGE_GRID_MAX));
+});
+
+test("rooms read from an image: hyphen restored for 'D118'; odd ones flagged for checking, never guessed", () => {
+  assert.deepEqual(normalizeRoom("D118"), { room: "D-118", check: false });
+  assert.deepEqual(normalizeRoom("D 8"), { room: "D-8", check: false });
+  for (const ok of ["D-8", "N-25-A", "C-5", "SE Lab-J (C-9)", "CS Lab-FYP (C-12)"]) assert.deepEqual(normalizeRoom(ok), { room: ok, check: false }, ok);
+  for (const odd of ["p17", "p-117", "0-3", "Nn-1158", "CS Lob-FYP FYP (C12)"]) assert.deepEqual(normalizeRoom(odd), { room: odd, check: true }, odd);
+  assert.deepEqual(normalizeRoom(null), { room: null, check: false });
 });

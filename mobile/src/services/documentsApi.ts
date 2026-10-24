@@ -35,6 +35,8 @@ export type ExtractedSchedule = {
   time: string | null;
   durationMinutes: number | null;
   room: string | null;
+  /** Read from an image and not shaped like a room code: the review row asks the user to check it. */
+  roomCheck?: boolean;
   instructor: string | null;
   confidence: number;
   source: string;
