@@ -695,7 +695,7 @@ export function parseLocationCommand(text: string): LocationCommand | null {
 }
 
 const FILLER_PREFIX =
-  /^(?:(?:hey|hi|ok|okay|so|um|uh|well|please|pls|plz|let'?s|i said|i told you)[,!\s]+)*(?:(?:can|could|would|will) you\s+|i\s+(?:need|have|want|got|must|should|gotta|wanna)\s+(?:to\s+)?|i'?ll\s+|i'?m\s+going\s+to\s+|i\s+am\s+going\s+to\s+|remind\s+me\s+(?:to\s+|about\s+)?|don'?t\s+(?:let\s+me\s+)?forget\s+(?:to\s+|about\s+)?|remember\s+to\s+|add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|reminder)\s*(?:to|for|about|:)?\s*|create\s+(?:a\s+)?(?:new\s+)?(?:task|todo|reminder)\s*(?:to|for|about|:)?\s*|set\s+(?:a\s+)?reminder\s*(?:to|for|about)?\s*|make\s+(?:a\s+)?(?:task|note)\s*(?:to|for|about)?\s*|schedule\s+|plan\s+(?:to\s+)?|task\s*:\s*|todo\s*:\s*)+/i;
+  /^(?:(?:hey|hi|ok|okay|so|um|uh|well|please|pls|plz|let'?s|i said|i told you)[,!\s]+)*(?:(?:can|could|would|will) you\s+|(?:i|we)\s+(?:need|have|want|got|must|should|gotta|wanna)\s+(?:to\s+)?|(?:i|we)'?ll\s+|(?:i|we)\s+will\s+|(?:i'?m|we'?re|we\s+are|i\s+am)\s+going\s+to\s+|let\s+us\s+|remind\s+(?:me|us)\s+(?:to\s+|about\s+)?|don'?t\s+(?:let\s+me\s+)?forget\s+(?:to\s+|about\s+)?|remember\s+to\s+|add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|reminder)\s*(?:to|for|about|:)?\s*|create\s+(?:a\s+)?(?:new\s+)?(?:task|todo|reminder)\s*(?:to|for|about|:)?\s*|set\s+(?:a\s+)?reminder\s*(?:to|for|about)?\s*|make\s+(?:a\s+)?(?:task|note)\s*(?:to|for|about)?\s*|schedule\s+|plan\s+(?:to\s+)?|task\s*:\s*|todo\s*:\s*)+/i;
 
 /** Turns the residual text into a short actionable title. */
 /**

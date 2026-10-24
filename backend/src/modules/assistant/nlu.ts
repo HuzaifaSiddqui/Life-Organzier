@@ -74,7 +74,7 @@ const SUPPORT =
 const PROVIDE_INFO =
   /\b(?:i (?:really )?(?:prefer|like|love|enjoy|hate|dislike|usually|always|normally|work best|study best|tend to)|my (?:goal|name|job|major|university|degree)|call me|helps me|calms me|i(?:'m| am) (?:a|an) (?:\w+ )?(?:student|teacher|developer|engineer|doctor|parent))\b/i;
 const CREATE_CUE =
-  /\b(?:remind me|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
+  /\b(?:remind (?:me|us)|let us|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
 const IMPERATIVE_START =
   /^(?:please\s+)?(?:do(?!\s+(?:i|you|we|they|he|she|it|my|your|our|their|u)\b)|call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
 const SMALLTALK =
@@ -156,7 +156,7 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (DELETE.test(t) && !e.frequency && !/\b(?:remind|add|create)\b/i.test(t)) return { intent: "delete_task", confidence: 0.85 };
   if (ASK_TO_UPDATE.test(t) && !addBeforeEdit(t) && (e.date || e.time || e.priority || e.durationMinutes || /\bto\b/i.test(t))) return { intent: "update_task", confidence: 0.9 };
   if (MAKE_IT.test(t) || (UPDATE_VERB.test(t) && (e.date || e.time || e.priority || e.durationMinutes || /\b(?:to|rename|title)\b/i.test(t)))) {
-    if (!/^(?:i\s+)?(?:need|have|want|must|remind)/i.test(t) && !addBeforeEdit(t)) return { intent: "update_task", confidence: 0.85 };
+    if (!/^(?:(?:i|we)\s+)?(?:need|have|want|must|remind)/i.test(t) && !addBeforeEdit(t)) return { intent: "update_task", confidence: 0.85 };
   }
   if (mood && !e.date && !e.time) return { intent: "log_mood", confidence: mood.confidence * 0.9 };
   if (e.frequency) return { intent: "create_routine", confidence: 0.85 };

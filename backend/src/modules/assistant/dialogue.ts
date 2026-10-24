@@ -322,7 +322,7 @@ const NO_ROUTE = new Set(["confirm", "deny", "greeting", "thanks", "support", "l
 const QUESTIONISH = /\?\s*$|^(?:what|when|where|why|how|who|which|can|could|should|would|is|are|do|does|did)\b/i;
 
 /** A full new request ("I need to finish my report by Friday"), not an answer to the open question. */
-const NEW_REQUEST = /^(?:(?:please|ok|okay|also|and|let'?s)\s+)*(?:i\s+(?:need|have|want|must|should|gotta)\s+to|i'?ll|i\s+will|remind me to|add|create|new task|set a reminder to|don'?t forget to)\b/i;
+const NEW_REQUEST = /^(?:(?:please|ok|okay|also|and|let'?s)\s+)*(?:(?:i|we)\s+(?:need|have|want|must|should|gotta)\s+to|(?:i|we)'?ll|(?:i|we)\s+will|let\s+us|remind (?:me|us) to|add|create|new task|set a reminder to|don'?t forget to)\b/i;
 
 function isTopicSwitch(u: Understanding, text: string): boolean {
   if (SWITCH_INTENTS.has(u.intent)) return true;
