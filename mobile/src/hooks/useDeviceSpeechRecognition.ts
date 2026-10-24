@@ -108,7 +108,8 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
     };
   }, []);
 
-  const start = useCallback(async (existingText: string, lang = "en-US") => {
+  /** `hints`: words from the user's data the recogniser should expect (task titles, places, course codes). */
+  const start = useCallback(async (existingText: string, lang = "en-US", hints: string[] = []) => {
     const mod = getNativeSpeechModule();
     if (!mod) {
       optsRef.current.onError?.(
@@ -135,6 +136,8 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
       interimResults: true,
       continuous: false,
       iosTaskHint: "dictation",
+      // Android 13+ (EXTRA_BIASING_STRINGS) and iOS (SFSpeechRecognitionRequest.contextualStrings); older Android ignores it.
+      ...(hints.length ? { contextualStrings: hints } : {}),
       androidIntentOptions: {
         // FR-VF-001: auto-stop after 2+ seconds of silence.
         EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 2000,
