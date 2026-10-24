@@ -7,7 +7,7 @@ import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
 import { aiDeadlines, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
-import { gridSchedulesFromPdf } from "./gridTimetable.js";
+import { gridSchedulesFromImage, gridSchedulesFromPdf, looksLikeTimetable } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
 export const DOC_TYPES = ["SYLLABUS", "SCHEDULE", "NOTES", "OTHER"] as const;
@@ -124,6 +124,16 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
       schedules = fromGrid;
       grid = true;
     }
+  } else if (input.docType !== "NOTES" && input.buffer && /^image\//i.test(input.mimeType) && looksLikeTimetable(raw.text)) {
+    // A photo or screenshot of a grid timetable: plain OCR text loses which class sits in which day and slot.
+    const fromGrid = await gridSchedulesFromImage(input.buffer, input.language, started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS)).catch((error) => {
+      console.warn("Grid timetable image parse failed", error instanceof Error ? error.message : error);
+      return [];
+    });
+    if (fromGrid.length >= 2) {
+      schedules = fromGrid;
+      grid = true;
+    }
   }
   // AI pass on every document when AI is on (masked text only), merged with the rules.
   let aiNote: string | null = null;
@@ -145,7 +155,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
       if (/^(?:lectures?|class(?:es)?|labs?|tutorials?|sessions?|sections?)$/i.test(s.title)) s.title = `${course.code} ${s.title}`;
     }
   }
-  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : aiNote), needsLanguage: raw.needsLanguage, method: grid ? "pdf-grid" : raw.method, grid };
+  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : aiNote), needsLanguage: raw.needsLanguage, method: grid ? (/pdf/i.test(input.mimeType) ? "pdf-grid" : "image-grid") : raw.method, grid };
 }
 
 type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean };

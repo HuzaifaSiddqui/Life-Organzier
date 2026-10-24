@@ -93,7 +93,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Table header rows** ("Date | Day | Paper | Time", English, Roman Urdu or Urdu column names) never become items.
   When OCR garbles one header cell ("Te" for "Date"), the date column is taken from the first row, but only if
   that row has the same number of cells; otherwise the rows are skipped rather than guessed.
-- Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
+- **Grid timetables** (days down the side, 30-minute slots across, classes as boxes) are read by position:
+  from the PDF text layer, or, for a photo/screenshot whose OCR text has 6+ clock times, from the image
+  (ruling lines removed for the day and time headers; class blocks found by their colour fill and read one
+  by one). Image classes are capped at 85 % so they go to review, never auto-created: a section's timetable
+  lists every group (G1, G2, G3) and the student ticks theirs. Blocks need a coloured fill on a white page;
+  plain-outline grids, handwritten or skewed photos fall back to the line-based rules. Small room labels can
+  be misread ("D-117" → "p-117"); days, times and course codes are the reliable part. About 4 s extra.
 
 ## Task classification
 

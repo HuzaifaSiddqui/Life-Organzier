@@ -99,6 +99,63 @@ function scannedPdf(jpeg: Buffer, width: number, height: number): Buffer {
 
 const SCANNED = ["table-pipe", "syllabus-full"];
 
+/**
+ * A synthetic grid timetable in the style universities export (days down the side, 30-minute slots across with
+ * start/end times in 12-hour clock without am/pm, classes as coloured blocks with a dark left bar). Expected
+ * classes: tests/gridImage.test.ts.
+ */
+export const GRID_CLASSES = [
+  { day: 0, from: 0, slots: 3, label: "PHY101 - G1", lines: ["A-12"], fill: "#e3e6ec" },
+  { day: 1, from: 6, slots: 3, label: "CSC201", lines: ["Lab-3"], fill: "#e3e6ec" },
+  { day: 1, from: 11, slots: 2, label: "ENG110 - G2", lines: ["B-4"], fill: "#e3e6ec" },
+  { day: 2, from: 3, slots: 3, label: "MTH231", lines: ["Dr Sana Ali", "C-7"], fill: "#d4f2f8" },
+  { day: 2, from: 6, slots: 2, label: "CSC201", lines: ["Lab-3"], fill: "#e3e6ec" },
+  { day: 3, from: 6, slots: 3, label: "CSC201", lines: ["Lab-3"], fill: "#e3e6ec" },
+  { day: 4, from: 0, slots: 3, label: "MTH231", lines: ["Dr Sana Ali", "C-7"], fill: "#d4f2f8" },
+  { day: 5, from: 3, slots: 6, label: "CSE499", lines: ["FYP Lab"], fill: "#fbe8d2" },
+];
+
+function gridTimetable(): Buffer {
+  const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const left = 70;
+  const colW = 58;
+  const top = 110;
+  const headH = 64;
+  const rowH = 96;
+  const slots = 22;
+  const width = left + slots * colW + 10;
+  const height = top + headH + days.length * rowH + 10;
+  const clock = (m: number) => `${String(((Math.floor(m / 60) + 11) % 12) + 1).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const parts: string[] = [`<rect width="100%" height="100%" fill="white"/>`, `<text x="${width / 2}" y="40" font-size="26" text-anchor="middle">Spring 2027 Timetable</text>`];
+  for (let c = 0; c <= slots; c += 1) parts.push(`<line x1="${left + c * colW}" y1="${top}" x2="${left + c * colW}" y2="${height - 10}" stroke="#555" stroke-width="1.5"/>`);
+  for (const y of [top, top + headH, ...days.map((_, r) => top + headH + (r + 1) * rowH)]) parts.push(`<line x1="10" y1="${y}" x2="${width - 10}" y2="${y}" stroke="#555" stroke-width="1.5"/>`);
+  for (let c = 0; c < slots; c += 1) {
+    const start = 8 * 60 + 30 + c * 30;
+    const cx = left + c * colW + colW / 2;
+    parts.push(`<text x="${cx}" y="${top + 18}" font-size="14" text-anchor="middle">${c + 1}</text>`);
+    parts.push(`<text x="${cx}" y="${top + 38}" font-size="14" text-anchor="middle">${clock(start)}</text>`);
+    parts.push(`<text x="${cx}" y="${top + 56}" font-size="14" text-anchor="middle">${clock(start + 30)}</text>`);
+  }
+  days.forEach((d, r) => parts.push(`<text x="40" y="${top + headH + r * rowH + rowH / 2 + 10}" font-size="26" font-weight="bold" text-anchor="middle">${d}</text>`));
+  for (const k of GRID_CLASSES) {
+    const x = left + k.from * colW + 1;
+    const y = top + headH + k.day * rowH + 4;
+    const w = k.slots * colW - 2;
+    const h = rowH - 8;
+    parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${k.fill}" stroke="#9aa0a6" stroke-width="1"/>`);
+    parts.push(`<rect x="${x}" y="${y}" width="6" height="${h}" fill="#2c3e50"/>`);
+    parts.push(`<text x="${x + 14}" y="${y + 22}" font-size="16" font-weight="bold">${esc(k.label)}</text>`);
+    k.lines.forEach((l, i) => parts.push(`<text x="${x + 14}" y="${y + 46 + i * 22}" font-size="14">${esc(l)}</text>`));
+  }
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><g font-family="DejaVu Sans, Arial, Helvetica, sans-serif" fill="#111">${parts.join("")}</g></svg>`);
+}
+
+if (process.argv.includes("--grid-only")) {
+  writeFileSync(join(dir, "images", "timetable-grid.png"), await sharp(gridTimetable()).flatten({ background: "#ffffff" }).png().toBuffer());
+  console.log("Wrote images/timetable-grid.png");
+  process.exit(0);
+}
+
 const manifestPath = join(dir, "manifest.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { documents: Array<Record<string, unknown>> };
 manifest.documents = manifest.documents.filter((d) => !d.from); // regenerate image rows
@@ -123,4 +180,5 @@ for (const name of SCANNED) {
   manifest.documents.push({ file, from: name, docType: source?.docType, categories: ["image", "scanned-pdf"] });
 }
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-console.log(`Wrote ${SOURCES.length * DAMAGES.length} images and ${SCANNED.length} scanned PDFs.`);
+writeFileSync(join(dir, "images", "timetable-grid.png"), await sharp(gridTimetable()).flatten({ background: "#ffffff" }).png().toBuffer());
+console.log(`Wrote ${SOURCES.length * DAMAGES.length} images, ${SCANNED.length} scanned PDFs and the grid timetable.`);
