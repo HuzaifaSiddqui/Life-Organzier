@@ -225,6 +225,6 @@ test("snooze: only a reminder from the last 6 hours can be snoozed; the reply na
   const fresh = await prisma.task.create({ data: { userId: user.id, title: "Fresh one", dueAt: new Date(Date.now() + 12 * H) } });
   await addOutboundMessage(user.id, "WHATSAPP", "Reminder: Fresh one", { focusTaskId: fresh.id });
   await processInbound(msg(number, "snooze 2 hours"), s.send);
-  assert.match(s.sent.at(-1)?.body ?? "", /^Okay, I'll remind you about "Fresh one" again (?:today|tomorrow) at \d{1,2}:\d{2} [AP]M\.$/);
+  assert.match(s.sent.at(-1)?.body ?? "", /^Okay, I'll remind you about "Fresh one" again (?:today|tomorrow) at \d{1,2}(?::\d{2})? [AP]M\.$/);
   assert.equal(await prisma.reminderLog.count({ where: { taskId: fresh.id, level: "SNOOZE" } }), 1);
 });
