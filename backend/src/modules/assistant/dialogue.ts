@@ -47,7 +47,7 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
-import { attachPlaceByName, savedPlaceInTitle } from "../locations/locationService.js";
+import { attachLocation, attachPlaceByName, findSavedPlace, isPersonalPlace, savedPlaceInTitle } from "../locations/locationService.js";
 import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
@@ -72,7 +72,7 @@ import {
   fillDraft,
   VERY_LOW_CLARITY,
 } from "./draft.js";
-import { extractEntities, isHabitLike, isVagueTitle, type ExtractOptions } from "./entities.js";
+import { extractEntities, isHabitLike, isVagueTitle, titleWithoutPlace, type ExtractOptions } from "./entities.js";
 import { understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
@@ -102,6 +102,8 @@ export type Turn = {
   memoriesUsed: number;
   /** Pro users' saved place names (location extraction accepts them after "at" / "se"). */
   placeNames?: string[];
+  /** The phone's Location reminders toggle + permission (app only; unknown on WhatsApp). */
+  locationReminders?: boolean;
 };
 
 export type Out = {
@@ -158,6 +160,8 @@ export async function handleAssistantMessage(input: {
   channel: Channel;
   /** Test hook: the turn's clock (expiry of confirmations, relative dates). */
   now?: Date;
+  /** Sent by the app: false when its Location reminders toggle is off or access is refused. */
+  locationReminders?: boolean;
 }): Promise<AssistantReply> {
   const now = input.now ?? new Date();
   const tz = input.settings.timezone;
@@ -177,6 +181,7 @@ export async function handleAssistantMessage(input: {
     learned: [],
     memoriesUsed: 0,
     placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
+    locationReminders: input.locationReminders,
   };
 
   const text = input.text?.trim() ?? "";
@@ -321,8 +326,12 @@ const SWITCH_INTENTS = new Set([...STRONG_SWITCH, "support", "thanks"]);
 const NO_ROUTE = new Set(["confirm", "deny", "greeting", "thanks", "support", "log_mood", "provide_info"]);
 const QUESTIONISH = /\?\s*$|^(?:what|when|where|why|how|who|which|can|could|should|would|is|are|do|does|did)\b/i;
 
+/** A full new request ("I need to finish my report by Friday"), not an answer to the open question. */
+const NEW_REQUEST = /^(?:(?:please|ok|okay|also|and|let'?s)\s+)*(?:(?:i|we)\s+(?:need|have|want|must|should|gotta)\s+to|(?:i|we)'?ll|(?:i|we)\s+will|let\s+us|remind (?:me|us) to|add|create|new task|set a reminder to|don'?t forget to)\b/i;
+
 function isTopicSwitch(u: Understanding, text: string): boolean {
   if (SWITCH_INTENTS.has(u.intent)) return true;
+  if ((u.intent === "create_task" || u.intent === "create_routine") && NEW_REQUEST.test(text.trim()) && u.title && !isVagueTitle(u.title) && u.title.split(/\s+/).length >= 2) return true;
   if (u.intent === "smalltalk" && u.confidence >= 0.85) return true;
   if (u.intent === "log_mood" && u.mood?.explicit) return true;
   const e = u.entities;
@@ -731,11 +740,23 @@ export async function proceedWithDraft(
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
   // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
   const place = draft.location ?? savedPlaceInTitle(task.title, turn.placeNames ?? []);
-  if (place && isPro(turn.settings)) lines.push(await placeLine(turn, task, place));
+  const setup = place && isPro(turn.settings) ? await proPlace(turn, task, place) : null;
+  if (setup) lines.push(setup.line);
+  // The place is now the task's location: the title needn't say it ("Eat burger from KFC Gulberg" → "Eat burger").
+  let shown = task;
+  const shorter = setup?.attached && place ? titleWithoutPlace(task.title, place) : task.title;
+  if (shorter !== task.title) {
+    shown = (await updateTask(turn.task, task.id, { title: shorter })) ?? task;
+    lines[0] = lines[0].replace(task.title, shorter);
+  }
+  // Free users: the place stays in the task text; tell them what Pro would add (Pro is switched on in Settings).
+  const proNudge = Boolean(place && !isPro(turn.settings));
+  if (proNudge) lines.push(locationText(turn).proNeeded(place!.charAt(0).toUpperCase() + place!.slice(1)));
   const actions: QuickAction[] = [
     { label: "Undo", payload: { type: "undo_task", taskId: task.id } },
     { label: "View task", payload: { type: "open_task", taskId: task.id } },
   ];
+  if (proNudge) actions.unshift({ label: locationText(turn).openSettings, payload: { type: "navigate", screen: "Settings" }, style: "primary" });
   if (draft.scheduledStart) actions.splice(1, 0, { label: "Change", payload: { type: "open_task", taskId: task.id } });
   if ((!draft.durationMinutes || noSlot) && task.taskType !== TaskType.FIXED) actions.push({ label: "Find time for it", payload: { type: "suggest_slot", taskId: task.id } });
 
@@ -746,7 +767,39 @@ export async function proceedWithDraft(
     actions.unshift({ label: "Break into chunks", payload: { type: "chunk_task", taskId: task.id }, style: "primary" });
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
-  return { content: lines.join("\n"), cards: [taskCard(task, undefined, true)], actions, intent: "task_created" };
+  return { content: lines.join("\n"), cards: [taskCard(shown, undefined, true), ...(setup?.card ? [setup.card] : [])], actions, intent: "task_created" };
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * A Pro user's task names a place. A saved place (or alias: "ghar" → Home) is attached. A personal place
+ * that isn't saved (home, uni, office, hostel) is never searched on the map: the card asks the user to set
+ * it. Other places are searched as before. With the phone's toggle off, the card offers to turn it on first.
+ */
+export async function proPlace(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; card: Card | null; attached: boolean }> {
+  const L = locationText(turn);
+  const remindersOff = turn.locationReminders === false;
+  const saved = await findSavedPlace(turn.user.id, place);
+  let needsPlace = !saved && isPersonalPlace(place);
+  const shown = saved?.name ?? capitalize(place);
+  let line: string;
+  let attached = Boolean(saved);
+  if (saved) {
+    await attachLocation(turn.user.id, task.id, saved.id);
+    line = remindersOff ? L.turnOn(shown) : L.set(saved.name, L.range[saved.preset] ?? L.range.NEARBY);
+  } else if (needsPlace) {
+    line = remindersOff ? L.turnOn(shown) : turn.channel === "WHATSAPP" ? L.whereIsApp(shown) : L.whereIs(shown);
+  } else {
+    const r = await placeLine(turn, task, place);
+    attached = r.attached;
+    // Not on the map ("KFC kalma chowk"): the picker searches near the user, or they drop the pin.
+    needsPlace = !r.found;
+    line = r.found ? r.line : turn.channel === "WHATSAPP" ? r.line : L.notFoundSet(shown);
+    if (remindersOff) line += `\n${L.turnOn(shown)}`;
+  }
+  const card: Card | null = turn.channel !== "WHATSAPP" && (remindersOff || needsPlace) ? { type: "location_setup", taskId: task.id, place: shown, saved: !needsPlace, remindersOn: !remindersOff } : null;
+  return { line, card, attached };
 }
 
 /** FR-LB-001 chat replies (English + Urdu). */
@@ -759,6 +812,12 @@ export const LOCATION_TEXT = {
     openToSearch: "Open task to search",
     openHint: (title: string) => `Open '${title}' and tap 'Add location' to search.`,
     none: "No location set. You can add one from the task details.",
+    proNeeded: (place: string) => `Want a reminder when you get to ${place}? Location reminders come with Pro: switch to Pro and turn on Location reminders in Settings.`,
+    turnOn: (place: string) => `Want a reminder about this task when you get to ${place}? Turn on Location reminders below.`,
+    notFoundSet: (place: string) => `I couldn't find '${place}' on the map. Set it below and I'll remind you when you get there.`,
+    whereIs: (place: string) => `Where is ${place}? Set it on the map below and I'll remind you when you get there.`,
+    whereIsApp: (place: string) => `Set ${place} in the app (Settings → Saved places) and I'll remind you when you get there.`,
+    openSettings: "Go to Settings",
     range: { PRECISE: "Precise", NEARBY: "Nearby", AREA: "Area" } as Record<string, string>,
   },
   ur: {
@@ -769,6 +828,12 @@ export const LOCATION_TEXT = {
     openToSearch: "تلاش کے لیے کام کھولیں",
     openHint: (title: string) => `'${title}' کھولیں اور تلاش کے لیے 'مقام شامل کریں' دبائیں۔`,
     none: "کوئی مقام طے نہیں ہوا۔ آپ کام کی تفصیل سے شامل کر سکتے ہیں۔",
+    notFoundSet: (place: string) => `'${place}' نقشے پر نہیں ملا۔ نیچے طے کریں، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
+    turnOn: (place: string) => `${place} پہنچنے پر اس کام کی یاددہانی چاہیے؟ نیچے مقام کی یاددہانیاں آن کریں۔`,
+    whereIs: (place: string) => `${place} کہاں ہے؟ نیچے نقشے پر طے کریں، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
+    whereIsApp: (place: string) => `ایپ میں ${place} طے کریں (ترتیبات ← محفوظ مقامات)، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
+    proNeeded: (place: string) => `${place} پہنچنے پر یاددہانی چاہیے؟ مقام کی یاددہانیاں Pro میں ہیں: ترتیبات میں Pro پر جائیں اور مقام کی یاددہانیاں آن کریں۔`,
+    openSettings: "ترتیبات کھولیں",
     range: { PRECISE: "قریب ترین", NEARBY: "قریب", AREA: "علاقہ" } as Record<string, string>,
   },
 };
@@ -789,22 +854,22 @@ export function locationChoiceList(turn: Turn, results: Array<{ displayName: str
  * Attaches the place named in chat and returns the reply line. Several geocoding matches → nothing is
  * attached yet; the numbered choices are asked and remembered in working memory (`location_choice`).
  */
-export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<string> {
+export async function placeLine(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; found: boolean; attached: boolean }> {
   const L = locationText(turn);
   try {
     const r = await attachPlaceByName(turn.user.id, task.id, place, turn.tz);
-    if (r.kind === "not_found") return L.notFound(place);
+    if (r.kind === "not_found") return { line: L.notFound(place), found: false, attached: false };
     if (r.kind === "choices") {
       const results = r.results.slice(0, 4);
       const more = r.results.length > 4;
       turn.state.pending = { kind: "location_choice", taskId: task.id, taskTitle: task.title, place, results, more };
-      return `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`;
+      return { line: `${L.choose(task.title, place)}\n${locationChoiceList(turn, results, more)}\n${L.chooseEnd}`, found: true, attached: false };
     }
     const shown = r.kind === "saved" ? r.place.name : truncate(r.result.displayName, 70);
-    return L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY);
+    return { line: L.set(shown, L.range[r.place.preset] ?? L.range.NEARBY), found: true, attached: true };
   } catch (error) {
     console.warn("Could not attach place from chat", error instanceof Error ? error.message : error);
-    return L.notFound(place);
+    return { line: L.notFound(place), found: false, attached: false };
   }
 }
 

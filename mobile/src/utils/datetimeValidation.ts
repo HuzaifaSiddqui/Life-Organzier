@@ -217,3 +217,12 @@ export function validateDueDateNotPast(dueDateIso: string | null, dueTime: strin
   }
   return null;
 }
+
+/**
+ * The planned start is half filled and would be saved: block the save. It is only shown and saved with a
+ * duration, so after the duration is cleared, leftover values are ignored (and kept if it is picked again).
+ */
+export function plannedStartIncomplete(v: { durationMinutes: number | null; plannedYmd: string; plannedTime: string }): boolean {
+  if (!v.durationMinutes || (!v.plannedYmd && !v.plannedTime.trim())) return false;
+  return !(v.plannedYmd && v.plannedTime.trim() && parseDueTimeToHoursMinutes(v.plannedTime));
+}

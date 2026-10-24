@@ -63,7 +63,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
-      - run: npx tsx --import ./tests/setup.ts --test tests/documentOcr.test.ts tests/dateRules.test.ts
+      - run: npx tsx --import ./tests/setup.ts --test tests/documentOcr.test.ts tests/dateRules.test.ts tests/gridImage.test.ts
 
   mobile:
     runs-on: ubuntu-latest

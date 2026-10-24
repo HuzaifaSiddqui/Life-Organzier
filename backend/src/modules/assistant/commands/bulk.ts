@@ -8,7 +8,7 @@ import { getTaskForUser, listActiveTasks, serializeTask, softDeleteTask, updateT
 import type { Turn } from "../dialogue.js";
 import { extractTargetDay } from "../entities.js";
 import { WHATSAPP_LIST_CAP } from "../queryAnswers.js";
-import { ALL, DO_IT, TASK_WORD, TODAY, has, norm } from "./lexicon.js";
+import { ALL, DO_IT, MOVE_WORDS, TASK_WORD, TODAY, addBeforeMove, has, norm } from "./lexicon.js";
 import { commandText, dayLabelFor } from "./copy.js";
 import { recordUndo, snapshots, undoAction } from "./runtime.js";
 import type { Command, CommandArgs, Prepared } from "./types.js";
@@ -74,7 +74,7 @@ const day = (turn: Turn, ymd: string) => dayLabelFor(turn.settings.language, rel
 
 /* ------------------------------------------------------------------ commands */
 
-const MOVE = `move|shift|push|postpone|reschedule|delay|daal do|dal do|${DO_IT}|منتقل|ڈال دو`;
+const MOVE = `${MOVE_WORDS}|daal do|dal do|${DO_IT}|منتقل|ڈال دو`;
 const TODAY_SOURCE = /\b(?:today'?s|todays|today|tonight|from today|aaj\s+(?:ke|ki|ka)|aaj)\b|آج\s+(?:کے|کی|کا)|آج/gi;
 
 const moveToday: Command = {
@@ -87,7 +87,7 @@ const moveToday: Command = {
   parse(text, ctx) {
     const t = norm(text);
     const clear = /^(?:please )?(?:clear|free up|empty|cancel) (?:my |the )?(?:day|today|whole day|schedule today|plans today)$/.test(t);
-    if (!clear && !(has(t, MOVE) && has(t, ALL) && has(t, TODAY) && has(t, `${TASK_WORD}|everything|sab|سب|سارے`))) return null;
+    if (!clear && (addBeforeMove(t) || !(has(t, MOVE) && has(t, ALL) && has(t, TODAY) && has(t, `${TASK_WORD}|everything|sab|سب|سارے`)))) return null;
     if (has(t, "non urgent|nonurgent|not urgent|less important|ghair zaroori|غیر ضروری")) return null;
     const target = extractTargetDay(text.replace(TODAY_SOURCE, " "), ctx.opts);
     const toYmd = target && target > ctx.todayYmd ? target : addDaysYmd(ctx.todayYmd, 1);
@@ -186,7 +186,7 @@ const postponeNonUrgent: Command = {
   undoable: true,
   parse(text) {
     const t = norm(text);
-    return has(t, `${MOVE}|aage kar|aage karo`) && has(t, "non urgent|nonurgent|not urgent|less important|unimportant|ghair zaroori|ghair zaruri|jo zaroori nahi|غیر ضروری") ? {} : null;
+    return !addBeforeMove(t) && has(t, `${MOVE}|aage kar|aage karo`) && has(t, "non urgent|nonurgent|not urgent|less important|unimportant|ghair zaroori|ghair zaruri|jo zaroori nahi|غیر ضروری") ? {} : null;
   },
   async prepare(turn) {
     const all = nonUrgentSoon(turn, await listActiveTasks(turn.user.id));

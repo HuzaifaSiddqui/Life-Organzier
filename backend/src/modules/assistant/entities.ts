@@ -595,6 +595,16 @@ export function extractLocation(text: string, places: string[] = []): string | n
   return null;
 }
 
+/**
+ * The title without "from/at/in/near <place>" once that place is the task's location: "Eat burger from KFC
+ * kalma chowk" → "Eat burger". Unchanged when the place isn't there or nothing would be left.
+ */
+export function titleWithoutPlace(title: string, place: string): string {
+  const escaped = place.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const out = title.replace(new RegExp(`\\s+(?:at|from|in|near)\\s+(?:the\\s+)?${escaped}(?=\\s|$|[,.!?])`, "i"), "").trim();
+  return out.length >= 2 ? out : title;
+}
+
 /* ---- chat command helpers: time ranges and weekday lists ------------------------------------------ */
 
 const UR_SCRIPT_PART: Record<string, "subah" | "dopahar" | "shaam" | "raat"> = { صبح: "subah", دوپہر: "dopahar", شام: "shaam", رات: "raat" };
@@ -681,8 +691,11 @@ export function extractTargetDay(text: string, opts: ExtractOptions): string | n
 export type LocationCommand = { kind: "remove"; taskRef: string } | { kind: "change"; taskRef: string; place: string | null };
 
 /** "remove the location (from X)", "X ki location hata do", "change the location (of X) to Y", "jagah badal do". */
+/** "Ok", "so", "also" … before a command: not part of it ("Ok change the location to KFC Gulberg"). */
+const COMMAND_LEAD_IN = /^(?:(?:ok(?:ay)?|k|so|also|and|then|now|yes|yeah|yep|alright|right|hey|hi|well|great|cool|fine|acha|achha|theek(?:\s+hai)?)[,!.\s]+)+/i;
+
 export function parseLocationCommand(text: string): LocationCommand | null {
-  const t = text.trim().replace(/[.!?]+$/, "");
+  const t = text.trim().replace(/[.!?]+$/, "").replace(COMMAND_LEAD_IN, "");
   let m = /^(?:please\s+)?(?:remove|delete|clear|drop)\s+(?:the\s+)?(?:location|place)(?:\s+(?:from|of|on)\s+(.+))?$/i.exec(t);
   if (m) return { kind: "remove", taskRef: (m[1] ?? "").trim() };
   m = /^(?:(.+?)\s+(?:ki|ka|ke|se)\s+)?(?:location|jagah)\s+(?:hata|hatao|hata\s*do|hata\s*dein|nikal\s*do)$/i.exec(t);
@@ -691,11 +704,31 @@ export function parseLocationCommand(text: string): LocationCommand | null {
   if (m) return { kind: "change", taskRef: (m[1] ?? "").trim(), place: m[2].trim() };
   m = /^(?:(.+?)\s+(?:ki|ka|ke)\s+)?(?:location|jagah)\s+(?:badal|badlo|change\s*kar)\s*(?:do|dein|den)?$/i.exec(t);
   if (m) return { kind: "change", taskRef: (m[1] ?? "").trim(), place: null };
+  const lead = "^(?:(?:please|pls|let'?s|can you|could you|i want to|i'?d like to)\\s+)*";
+  const loc = "(?:the\\s+|its\\s+|a\\s+|my\\s+|her\\s+|his\\s+)?(?:location|place)";
+  // "set the location of groceries to Model Town", "add location for KFC task as Gulberg"
+  m = new RegExp(`${lead}(?:change|set|update|put|add)\\s+${loc}\\s+(?:of|for|on)\\s+(.+?)\\s+(?:to|as|at)\\s+(.+)$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: m[1].trim(), place: m[2].trim() };
+  // "change its location to KFC Gulberg", "set location to Kalma Chowk"
+  m = new RegExp(`${lead}(?:change|set|update|put|move)\\s+${loc}\\s+(?:to|as|at)\\s+(.+)$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: "", place: m[1].trim() };
+  // "add location of Kalma Chowk Gulberg", "check for location of KFC Gulberg", "search location KFC Gulberg"
+  m = new RegExp(`${lead}(?:add|set|use|put|try|check(?:\\s+for)?|search(?:\\s+for)?|find|look\\s+for)\\s+${loc}\\s+(?:of|for|at|as|to|:)?\\s*(.+)$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: "", place: m[1].trim() };
+  // "use KFC Gulberg as the location"
+  m = new RegExp(`${lead}(?:add|set|use|make)\\s+(.+?)\\s+(?:as|the)\\s+${loc}$`, "i").exec(t);
+  if (m) return { kind: "change", taskRef: "", place: m[1].trim() };
+  // A task named up front: "2nd task from today, change its location to KFC Gulberg".
+  m = /^(.+?)\s*[,:;–-]\s+(.+)$/.exec(t);
+  if (m) {
+    const rest = parseLocationCommand(m[2]);
+    if (rest && !rest.taskRef) return { ...rest, taskRef: m[1].trim() };
+  }
   return null;
 }
 
 const FILLER_PREFIX =
-  /^(?:(?:hey|hi|ok|okay|so|um|uh|well|please|pls|plz)[,!\s]+)*(?:(?:can|could|would|will) you\s+|i\s+(?:need|have|want|got|must|should|gotta|wanna)\s+(?:to\s+)?|i'?ll\s+|i'?m\s+going\s+to\s+|i\s+am\s+going\s+to\s+|remind\s+me\s+(?:to\s+|about\s+)?|don'?t\s+(?:let\s+me\s+)?forget\s+(?:to\s+|about\s+)?|remember\s+to\s+|add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|reminder)\s*(?:to|for|about|:)?\s*|create\s+(?:a\s+)?(?:new\s+)?(?:task|todo|reminder)\s*(?:to|for|about|:)?\s*|set\s+(?:a\s+)?reminder\s*(?:to|for|about)?\s*|make\s+(?:a\s+)?(?:task|note)\s*(?:to|for|about)?\s*|schedule\s+|plan\s+(?:to\s+)?|task\s*:\s*|todo\s*:\s*)+/i;
+  /^(?:(?:hey|hi|ok|okay|so|um|uh|well|please|pls|plz|let'?s|i said|i told you)[,!\s]+)*(?:(?:can|could|would|will) you\s+|(?:i|we)\s+(?:need|have|want|got|must|should|gotta|wanna)\s+(?:to\s+)?|(?:i|we)'?ll\s+|(?:i|we)\s+will\s+|(?:i'?m|we'?re|we\s+are|i\s+am)\s+going\s+to\s+|let\s+us\s+|remind\s+(?:me|us)\s+(?:to\s+|about\s+)?|don'?t\s+(?:let\s+me\s+)?forget\s+(?:to\s+|about\s+)?|remember\s+to\s+|add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|reminder)\s*(?:to|for|about|:)?\s*|create\s+(?:a\s+)?(?:new\s+)?(?:task|todo|reminder)\s*(?:to|for|about|:)?\s*|set\s+(?:a\s+)?reminder\s*(?:to|for|about)?\s*|make\s+(?:a\s+)?(?:task|note)\s*(?:to|for|about)?\s*|schedule\s+|plan\s+(?:to\s+)?|task\s*:\s*|todo\s*:\s*)+/i;
 
 /** Turns the residual text into a short actionable title. */
 /**

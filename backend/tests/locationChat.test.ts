@@ -45,12 +45,12 @@ test("location commands: remove and change, English and Roman Urdu", () => {
   assert.equal(parseLocationCommand("buy medicine from Ali Medical Store"), null);
 });
 
-async function withUser(tier: "FREE" | "PRO", fn: (say: (text: string) => ReturnType<typeof handleAssistantMessage>, userId: string) => Promise<void>) {
+async function withUser(tier: "FREE" | "PRO", fn: (say: (text: string, locationReminders?: boolean) => ReturnType<typeof handleAssistantMessage>, userId: string) => Promise<void>) {
   setAi(new AiService([]));
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
   await prisma.userSettings.create({ data: { userId: user.id, tier, timezone: "Asia/Karachi" } });
   try {
-    const say = async (text: string) => handleAssistantMessage({ user, settings: (await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }))!, deviceId: null, text, channel: "APP" });
+    const say = async (text: string, locationReminders?: boolean) => handleAssistantMessage({ user, settings: (await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }))!, deviceId: null, text, channel: "APP", locationReminders });
     await fn(say, user.id);
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
@@ -80,11 +80,12 @@ test("chat: Pro user's saved place is attached; 'ghar' finds Home; remove and ch
   });
 });
 
-test("chat: free users get no geofence and no location wording", { skip }, async () => {
+test("chat: free users get no geofence, only the invitation to Pro + Location reminders", { skip }, async () => {
   await withUser("FREE", async (say, userId) => {
     await createOrFindLocation(userId, { name: "Ali Medical Store", latitude: 31.5, longitude: 74.3 });
     const r = await say("buy medicine from Ali Medical Store tomorrow");
-    assert.doesNotMatch(r.message.content, /Location|map/);
+    assert.doesNotMatch(r.message.content, /Location set|map/);
+    assert.match(r.message.content, /Location reminders come with Pro/);
     assert.deepEqual(await linkedPlaces(userId), []);
     const cmd = await say("remove the location");
     assert.match(cmd.message.content, /Pro/);
@@ -155,5 +156,124 @@ test("chat: 'none' skips the location and clears the question; 5 results offer '
       assert.match((await say("5")).message.content, /Open 'Buy bandages[^']*' and tap 'Add location'/);
       assert.deepEqual(await linkedPlaces(userId), []);
     });
+  });
+});
+
+const setupCard = (r: Awaited<ReturnType<typeof handleAssistantMessage>>) => r.message.cards?.find((c) => c.type === "location_setup");
+
+test("chat (Pro): toggle off → in-chat 'turn on' card; an unsaved home is never searched on the map, it's set by the user", { skip }, async () => {
+  await withUser("PRO", async (say, userId) => {
+    // No Home saved, toggle off: ask to turn on, then set Home (no map search for "home").
+    let r = await say("We have to do 5 push ups today at home", false);
+    assert.match(r.message.content, /reminder about this task when you get to Home\? Turn on Location reminders below/);
+    assert.doesNotMatch(r.message.content, /several locations|couldn't find/);
+    let task = await prisma.task.findFirstOrThrow({ where: { userId }, orderBy: { createdAt: "desc" } });
+    assert.deepEqual(setupCard(r), { type: "location_setup", taskId: task.id, place: "Home", saved: false, remindersOn: false });
+    assert.deepEqual(await linkedPlaces(userId), []);
+
+    // Toggle on, Home still not saved: "Where is Home?" + the card goes straight to the map step.
+    r = await say("Add a task to clean my room at ghar tomorrow at 5 PM", true);
+    assert.match(r.message.content, /Where is Ghar\? Set it on the map below/);
+    assert.equal(setupCard(r)?.type === "location_setup" && setupCard(r)?.remindersOn, true);
+
+    // Home saved, toggle off: attached now, card only offers the toggle.
+    await createOrFindLocation(userId, { name: "Home", latitude: 31.52, longitude: 74.35 });
+    r = await say("Add a task to water the plants at home tomorrow at 6 PM", false);
+    task = await prisma.task.findFirstOrThrow({ where: { userId }, orderBy: { createdAt: "desc" } });
+    assert.deepEqual(setupCard(r), { type: "location_setup", taskId: task.id, place: "Home", saved: true, remindersOn: false });
+    assert.ok((await linkedPlaces(userId)).includes("Home"));
+
+    // Home saved, toggle on (or unknown, e.g. WhatsApp): plain "Location set", no card.
+    r = await say("Add a task to fold laundry at home tomorrow at 7 PM", true);
+    assert.match(r.message.content, /Location set: Home/);
+    assert.equal(setupCard(r), undefined);
+  });
+});
+
+test("an old 'which location?' question never swallows a new task that mentions the place", { skip }, async () => {
+  await withUser("PRO", async (say, userId) => {
+    await say("hello");
+    const conversation = await prisma.conversation.findFirstOrThrow({ where: { userId } });
+    const old = await prisma.task.create({ data: { userId, title: "Go to wahsorm", priority: "MEDIUM", source: "CHAT" } });
+    const results = [
+      { name: "home", displayName: "home, Al-Hussain Road, Johar Town, Lahore", latitude: 31.46, longitude: 74.27 },
+      { name: "home", displayName: "home, Walton Road, Model Town, Lahore", latitude: 31.49, longitude: 74.33 },
+    ];
+    const plant = () => prisma.conversation.update({ where: { id: conversation.id }, data: { state: { pending: { kind: "location_choice", taskId: old.id, taskTitle: old.title, place: "home", results, more: false }, focus: [], prereqAsked: [], turn: 1 } } });
+
+    await plant();
+    const r = await say("Add a task to go to washroom at home today", true);
+    assert.equal(r.message.intent, "task_created", r.message.content);
+    assert.match(r.message.content, /Go to washroom/);
+    assert.doesNotMatch(r.message.content, /Al-Hussain/);
+    assert.deepEqual(await linkedPlaces(userId), [], "nothing pinned from the old list");
+
+    await plant();
+    const pick = await say("Walton Road", true);
+    assert.equal(pick.message.intent, "location_set");
+    assert.match(pick.message.content, /Walton Road/);
+  });
+});
+
+test("location by chat: not found → set-on-map card; 'its location' is the task just added; 'the 2nd task' is from the last list", { skip }, async () => {
+  await withUser("PRO", async (say, userId) => {
+    const gulberg = [{ name: "KFC", display_name: "KFC, Main Boulevard, Gulberg, Lahore, Pakistan", lat: "31.52", lon: "74.35" }];
+    await say("Add a task to call the bank today at 9 PM", true);
+    let r!: Awaited<ReturnType<typeof say>>;
+    await withNominatim([], async () => {
+      r = await say("I want to eat burger from KFC kalma chowk today", true);
+    });
+    const kfc = await prisma.task.findFirstOrThrow({ where: { userId, title: { contains: "burger" } } });
+    assert.match(r.message.content, /couldn't find 'KFC kalma chowk' on the map\. Set it below/);
+    assert.deepEqual(setupCard(r), { type: "location_setup", taskId: kfc.id, place: "KFC kalma chowk", saved: false, remindersOn: true });
+
+    await withNominatim(gulberg, async () => {
+      r = await say("change its location to KFC Gulberg", true);
+    });
+    assert.equal(r.message.intent, "location_changed", r.message.content);
+    assert.match(r.message.content, /Location set: KFC, Main Boulevard, Gulberg/);
+    assert.deepEqual(await linkedPlaces(userId), ["KFC Gulberg"]);
+
+    const list = await say("Show my tasks for today", true);
+    const shown = list.message.cards?.find((c) => c.type === "task_list");
+    const pos = shown?.type === "task_list" ? shown.tasks.findIndex((t) => t.id === kfc.id) : -1;
+    assert.ok(pos >= 0, "KFC task is in the list");
+    const nth = ["1st", "2nd", "3rd", "4th", "5th"][pos];
+    await withNominatim([{ name: "Kalma Chowk", display_name: "Kalma Chowk, Gulberg III, Lahore, Pakistan", lat: "31.50", lon: "74.33" }], async () => {
+      r = await say(`${nth} task from today, change its location to kalma chowk gulberg`, true);
+    });
+    assert.equal(r.message.intent, "location_changed", r.message.content);
+    assert.match(r.message.content, /Kalma Chowk, Gulberg III/);
+    const links = await prisma.taskLocation.findMany({ where: { taskId: kfc.id }, include: { savedLocation: true } });
+    assert.deepEqual(links.map((l) => l.savedLocation.name), ["Kalma chowk gulberg"]);
+  });
+});
+
+test("'Ok change the location to …' works; the title drops the place only once it is the task's location", { skip }, async () => {
+  const row = (name: string, area: string) => [{ name, display_name: `${name}, ${area}, Lahore, Pakistan`, lat: "31.51", lon: "74.34" }];
+  await withUser("PRO", async (say, userId) => {
+    let r!: Awaited<ReturnType<typeof say>>;
+    await withNominatim(row("KFC", "Kalma Chowk"), async () => {
+      r = await say("I want to eat burger from KFC kalma chowk today", true);
+    });
+    assert.match(r.message.content, /^Added: Eat burger due today/);
+    const task = await prisma.task.findFirstOrThrow({ where: { userId } });
+    assert.equal(task.title, "Eat burger");
+
+    await withNominatim(row("KFC", "Gulberg"), async () => {
+      r = await say("Ok change the location to KFC gulberg", true);
+    });
+    assert.equal(r.message.intent, "location_changed", r.message.content);
+    assert.match(r.message.content, /Location set: KFC, Gulberg/);
+
+    // Not found: the place stays in the title (it's the only record of it).
+    await withNominatim([], async () => {
+      r = await say("I want to eat pizza from Pizza Planet Johar today", true);
+    });
+    assert.ok(await prisma.task.findFirst({ where: { userId, title: "Eat pizza from Pizza Planet Johar" } }));
+  });
+  await withUser("FREE", async (say, userId) => {
+    await say("buy medicine from Ali Medical Store tomorrow");
+    assert.ok(await prisma.task.findFirst({ where: { userId, title: { contains: "Ali Medical Store" } } }), "Free: the place stays in the title");
   });
 });

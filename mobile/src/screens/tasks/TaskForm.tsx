@@ -17,6 +17,7 @@ import {
   dueDateTimeToDate,
   formatDueTime12h,
   parseDueTimeToHoursMinutes,
+  plannedStartIncomplete,
   validateDueDateNotPast,
   ymdFromLocalDate,
 } from "../../utils/datetimeValidation";
@@ -113,7 +114,7 @@ export function toPayload(v: TaskFormValues, opts: { allowPast?: boolean } = {})
   const planned = plannedStartFromValues(v);
   const error = !v.title.trim()
     ? "Title is required"
-    : (v.plannedYmd || v.plannedTime) && !planned
+    : plannedStartIncomplete(v)
       ? "Set both a date and a time for the planned start, or clear it."
     : dueTime && !dueDateIso
       ? "Couldn't read that time. Use the picker or a format like 3 PM."

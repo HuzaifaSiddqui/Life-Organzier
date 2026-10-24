@@ -208,7 +208,8 @@ export type AssistantCard =
   | { type: "breathing"; minutes: number }
   | { type: "insight"; text: string; confidence: number }
   | { type: "resources"; resources?: CrisisPayload["resources"] }
-  | { type: "progress"; task: Task };
+  | { type: "progress"; task: Task }
+  | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean };
 
 export type ChatMessage = {
   id: string;

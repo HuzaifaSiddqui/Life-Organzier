@@ -95,3 +95,14 @@ test("reused result after deleting the auto-created task: not claimed as created
     assert.equal(stored.deadlines[0].taskId, taskId);
   });
 });
+
+test("an upload that found nothing is read again next time (a better reader may find something), not reused", { skip }, async () => {
+  await withUser(async (user, settings) => {
+    const nothing = "Welcome to the course. Please be on time and respect your classmates.";
+    const first = await processDocument(user, settings, upload(nothing));
+    assert.equal(first.extracted.deadlines.length + first.extracted.schedules.length, 0);
+    const again = await processDocument(user, settings, upload(nothing));
+    assert.notEqual(again.reused, true);
+    assert.equal(await prisma.document.count({ where: { userId: user.id } }), 2);
+  });
+});

@@ -26,6 +26,35 @@ export function groupTasksByLocation(tasks: Task[]): GeofencePlace[] {
   return [...byPlace.values()];
 }
 
+/** Open tasks with an active place: the ones location reminders watch. */
+export function locatedTaskIds(tasks: Task[]): string[] {
+  return [...new Set(groupTasksByLocation(tasks).flatMap((p) => p.tasks.map((t) => t.taskId)))];
+}
+
+/**
+ * A place just added to a task while the user is already there: Android's "already inside" trigger can lag
+ * by minutes, so these places are announced at once. Only places holding a newly located task, within radius.
+ */
+export function placesToAnnounceNow(places: GeofencePlace[], newTaskIds: string[], here: { latitude: number; longitude: number } | null): string[] {
+  if (!here || !newTaskIds.length) return [];
+  const fresh = new Set(newTaskIds);
+  return places.filter((p) => p.tasks.some((t) => fresh.has(t.taskId)) && distanceM(here, p) <= p.radiusM).map((p) => p.id);
+}
+
+/** Chat and voice tasks get the in-chat Location card instead of the snackbar (one prompt per task). */
+export function promptedInChat(task: Pick<Task, "source">): boolean {
+  return task.source === "CHAT" || task.source === "VOICE";
+}
+
+/**
+ * Ask for location access when reminders can't fire (toggle off or permission denied) and a watched task is
+ * new since the last check, or this is the first check since the app started. Asking once per new task never nags.
+ */
+export function shouldAskForLocation(seen: ReadonlySet<string> | null, located: string[], ready: boolean): boolean {
+  if (ready || !located.length) return false;
+  return !seen || located.some((id) => !seen.has(id));
+}
+
 /** The most-used places first, at most `max`; reports how many were left out. */
 export function selectTopLocations(places: GeofencePlace[], max = MAX_REGIONS): { places: GeofencePlace[]; dropped: number } {
   const sorted = [...places].sort((a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name));

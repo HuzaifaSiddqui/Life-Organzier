@@ -77,7 +77,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **If the phone gives up waiting, the server still finishes and saves** (document and auto-created tasks). Sending
   the same file again within 24 hours returns that saved result instead of reading it again (the document is
   identified by a hash of its content, type and language); after 24 hours it is read again, and auto-created tasks
-  are still not duplicated (same title, date and time).
+  are still not duplicated (same title, date and time). A saved result that found nothing is never reused: the
+  file is read again, so a better reader (e.g. a new timetable format) gets its chance.
 - **One OCR job runs at a time per language, and at most 3 may wait.** A fourth upload at that moment gets "I'm
   reading other documents right now, try again in a minute" (also on WhatsApp) instead of queuing.
 - **The upload status after the file is sent is timed, not reported.** "Reading the document" then "Finding dates and
@@ -93,7 +94,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Table header rows** ("Date | Day | Paper | Time", English, Roman Urdu or Urdu column names) never become items.
   When OCR garbles one header cell ("Te" for "Date"), the date column is taken from the first row, but only if
   that row has the same number of cells; otherwise the rows are skipped rather than guessed.
-- Grid timetables are read from the PDF text layer; image timetables use the line-based extraction only.
+- **Grid timetables** (days down the side, 30-minute slots across, classes as boxes) are read by position:
+  from the PDF text layer, or, for a photo/screenshot whose OCR text has 6+ clock times, from the image
+  (ruling lines removed for the day and time headers; class blocks found by their colour fill and read one
+  by one). Image classes are capped at 85 % so they go to review, never auto-created: a section's timetable
+  lists every group (G1, G2, G3) and the student ticks theirs. Blocks need a coloured fill on a white page;
+  plain-outline grids, handwritten or skewed photos fall back to the line-based rules. Small room labels can
+  be misread ("D-117" → "p-117"); days, times and course codes are the reliable part. About 4 s extra.
 
 ## Task classification
 
@@ -161,6 +168,29 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **iOS 20-region limit.** If a user has more than 20 active location-linked tasks across
   different places, only the 20 most-used places are monitored. Tasks at other places are
   still shown in the app but won't trigger arrival notifications.
+- **The app never opens the location dialog by itself.** A Pro user's task that gets a place (chat, form,
+  WhatsApp) while location access or the Settings toggle is off shows a snackbar ("Grant" when access is
+  refused, "Turn on" when only the toggle is off), once after launch and once per new such task; nothing
+  fires until the user taps it. The toggle lives on the phone, so the chat reply itself can't say it is off.
+- **Personal places are never searched on the map.** Home, university, office and hostel (and their aliases:
+  ghar, house, uni, campus, daftar, work) come from the user's saved places; an unsaved one is set by the user
+  ("Set Home on the map" in chat, or Settings → Saved places on WhatsApp). Shops and other named places are
+  searched as before.
+- **"The 2nd task" means the last list the chat showed** (Show my tasks, most urgent, top 3), in that order.
+  Without a list in the conversation, an ordinal isn't understood and the chat asks which task.
+- **A place in a new task needs a place word or a saved name.** "from KFC kalma chowk" (chowk), "from Ali
+  Medical Store" (store) or a saved place are recognised; "from KFC Gulberg" alone is not (it could be a
+  person or a thing), so the task is added without a location; "change its location to KFC Gulberg" works.
+- **A place the map search can't find** (e.g. "KFC kalma chowk") gets a "Set it on the map" card; the
+  picker searches near the user, or the pin can be dropped by hand.
+- **The chat knows the toggle only from the app.** The app sends its Location reminders state with each
+  message; WhatsApp can't, so it never shows the in-chat toggle.
+- **Free users' places are text only.** Naming a place in chat adds the task without a geofence; the reply
+  invites them to switch to Pro and turn on Location reminders (Pro is a demo switch in Settings).
+- **Already there when the place is added.** Android's "already inside" geofence trigger can lag by minutes,
+  so when a task gets a place while the app is open, the app checks the current position and announces at
+  once if the user is within the radius (the once-per-visit mark stops a second notification). This check
+  doesn't run on every app open, only when a task newly gets a place.
 - **Background permission required.** On Android, geofence triggers only fire with "Allow all
   the time" location permission. With "While using the app", the app checks position once on
   each foreground entry — no exit detection, no background triggers.

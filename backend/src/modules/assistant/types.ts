@@ -84,6 +84,8 @@ export type DialogueState = {
   pending: Pending | null;
   /** Most recently discussed tasks first — resolves "it", "this", "that". */
   focus: string[];
+  /** The last task list shown, in display order: resolves "the 2nd task". */
+  listed?: string[];
   prereqAsked: string[];
   turn: number;
   undo?: UndoRecord | null;
@@ -137,7 +139,9 @@ export type Card =
   | { type: "breathing"; minutes: number }
   | { type: "insight"; text: string; confidence: number }
   | { type: "resources"; resources: CrisisPayload["resources"] }
-  | { type: "progress"; task: SerializedTask };
+  | { type: "progress"; task: SerializedTask }
+  /** In-chat Location reminders toggle, then "Set <place> on the map" when the place isn't saved yet. */
+  | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean };
 
 export type AssistantMessageMeta = {
   cards?: Card[];

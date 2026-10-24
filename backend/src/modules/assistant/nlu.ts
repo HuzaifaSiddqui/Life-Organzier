@@ -66,7 +66,7 @@ const COMPLETE =
   /\b(?:i\s+)?(?:just\s+|already\s+)?(?:completed|finished|did|submitted|have done|'ve done|ve done|got done|wrapped up)\b|\bmark(?:ed)?\b[^.]*\b(?:as\s+)?(?:done|complete|completed|finished)\b|\b(?:is|are)\s+(?:done|finished|complete|completed)\b|\bdone with\b|\b(?:tick|check) off\b/i;
 const DELETE = /\b(?:delete|remove|cancel|drop|get rid of|erase|discard|scrap)\b/i;
 const SPLIT = /\b(?:split|divide|break(?:\s+(?:up|down))?|chunk)\b/i;
-const UPDATE_VERB = /\b(?:move|reschedule|postpone|push(?:\s+back)?|shift|delay|change|rename|update|edit|bring forward|prepone)\b/i;
+const UPDATE_VERB = /\b(?:move|reschedule|postpone|push(?![\s-]*ups?\b)(?:\s+back)?|shift|delay|change|rename|update|edit|bring forward|prepone)\b/i;
 const MAKE_IT = /\b(?:make|set|mark)\s+(?:it|this|that|the\s+\w+(?:\s+\w+)?|\w+)\s+(?:as\s+)?(?:urgent|high|low|medium|important|a priority|priority|high priority|low priority|due|for|to|at|on)\b/i;
 const SWITCH_CONTEXT = /\b(?:i(?:'m| am)\s+(?:now\s+)?(?:at|in)|switch(?:ing)?\s+(?:context\s+)?to|change\s+context\s+to|i(?:'m| am)\s+(?:back\s+)?(?:home|traveling|travelling))\s+(?:the\s+)?([a-z][a-z ]{1,30})/i;
 const SUPPORT =
@@ -74,13 +74,20 @@ const SUPPORT =
 const PROVIDE_INFO =
   /\b(?:i (?:really )?(?:prefer|like|love|enjoy|hate|dislike|usually|always|normally|work best|study best|tend to)|my (?:goal|name|job|major|university|degree)|call me|helps me|calms me|i(?:'m| am) (?:a|an) (?:\w+ )?(?:student|teacher|developer|engineer|doctor|parent))\b/i;
 const CREATE_CUE =
-  /\b(?:remind me|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
+  /\b(?:remind (?:me|us)|let us|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
 const IMPERATIVE_START =
-  /^(?:please\s+)?(?:call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
+  /^(?:please\s+)?(?:do(?!\s+(?:i|you|we|they|he|she|it|my|your|our|their|u)\b)|call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
 const SMALLTALK =
   /^(?:(?:hi|hey|hello)[,!\s]+)?(?:how are you|how(?:'s| is) it going|how do you do|what'?s up|who are you|what are you|are you (?:there|real|a bot|human)|tell me (?:a joke|about yourself)|good (?:night|job)|nice|cool|lol|haha|ok cool)\b/i;
 const ASK_TO_UPDATE =
   /\b(?:(?:can|could|would) you|please)\s+(?:also\s+)?(?:move|reschedule|postpone|push|shift|change|delay)\b|\b(?:move|reschedule|postpone|push|shift|delay)\s+(?:it|this|that|them)\b/i;
+/** "Add a task to change the bedsheets": an explicit add before the edit verb means a new task, not an edit. */
+const ADD_FIRST = /\b(?:add|create|new task|remind me)\b/i;
+function addBeforeEdit(t: string): boolean {
+  const add = ADD_FIRST.exec(t);
+  const edit = UPDATE_VERB.exec(t);
+  return Boolean(add && (!edit || add.index < edit.index));
+}
 const QUESTION =/\?\s*$|^(?:what|when|where|why|how|who|which|can|could|should|would|is|are|do|does|did)\b/i;
 
 function splitParts(text: string): string[] {
@@ -147,9 +154,9 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (SUPPORT.test(t)) return { intent: "support", confidence: 0.85 };
   if (COMPLETE.test(t) && !e.date && !e.frequency && !/\b(?:by|due|before|until)\b/i.test(t)) return { intent: "complete_task", confidence: 0.85 };
   if (DELETE.test(t) && !e.frequency && !/\b(?:remind|add|create)\b/i.test(t)) return { intent: "delete_task", confidence: 0.85 };
-  if (ASK_TO_UPDATE.test(t) && (e.date || e.time || e.priority || e.durationMinutes || /\bto\b/i.test(t))) return { intent: "update_task", confidence: 0.9 };
+  if (ASK_TO_UPDATE.test(t) && !addBeforeEdit(t) && (e.date || e.time || e.priority || e.durationMinutes || /\bto\b/i.test(t))) return { intent: "update_task", confidence: 0.9 };
   if (MAKE_IT.test(t) || (UPDATE_VERB.test(t) && (e.date || e.time || e.priority || e.durationMinutes || /\b(?:to|rename|title)\b/i.test(t)))) {
-    if (!/^(?:i\s+)?(?:need|have|want|must|remind)/i.test(t)) return { intent: "update_task", confidence: 0.85 };
+    if (!/^(?:(?:i|we)\s+)?(?:need|have|want|must|remind)/i.test(t) && !addBeforeEdit(t)) return { intent: "update_task", confidence: 0.85 };
   }
   if (mood && !e.date && !e.time) return { intent: "log_mood", confidence: mood.confidence * 0.9 };
   if (e.frequency) return { intent: "create_routine", confidence: 0.85 };

@@ -1,7 +1,10 @@
 import { RoutineFrequency } from "@prisma/client";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import sharp from "sharp";
+import { PSM, type Worker } from "tesseract.js";
 import { formatClockFromMinutes } from "../../lib/time.js";
 import type { ExtractedSchedule } from "./extraction.js";
+import { ocrLanguages, withWorker } from "./textExtraction.js";
 
 /**
  * Grid timetables (days down the side, time slots across the top, classes drawn as boxes) lose
@@ -70,10 +73,33 @@ function columns(items: TextItem[], gridTop: number): Col[] | null {
     };
     return { cx: a.x + a.w / 2, start: fix(a), end: fix(b) };
   });
-  return raw.map((c, i) => {
-    const half = ((raw[i + 1]?.cx ?? c.cx + (c.cx - raw[i - 1].cx)) - c.cx) / 2;
+  const full = fillMissingSlots(raw);
+  return full.map((c, i) => {
+    const half = ((full[i + 1]?.cx ?? c.cx + (c.cx - full[i - 1].cx)) - c.cx) / 2;
     return { left: c.cx - half, right: c.cx + half, start: c.start, end: c.end };
   });
+}
+
+/**
+ * Header columns are evenly spaced, one slot each. A column whose times weren't read (a photo) leaves a gap
+ * worth several slots: it is put back, so classes after it don't land one column early.
+ */
+export function fillMissingSlots(cols: Array<{ cx: number; start: number; end: number }>): Array<{ cx: number; start: number; end: number }> {
+  if (cols.length < 2) return cols;
+  const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+  const slot = median(cols.map((c) => c.end - c.start));
+  if (!(slot > 0)) return cols;
+  const steps = cols.slice(1).map((c, i) => ({ dt: c.start - cols[i].start, dx: c.cx - cols[i].cx })).filter((s) => s.dt === slot);
+  if (!steps.length) return cols;
+  const dx = median(steps.map((s) => s.dx));
+  const out = [cols[0]];
+  for (const c of cols.slice(1)) {
+    const prev = out[out.length - 1];
+    const k = Math.round((c.start - prev.start) / slot);
+    for (let j = 1; j < k && Math.abs(c.cx - prev.cx - k * dx) < dx * 0.5; j += 1) out.push({ cx: prev.cx + j * dx, start: prev.start + j * slot, end: prev.end + j * slot });
+    out.push(c);
+  }
+  return out;
 }
 
 /** Page-space boxes from the PDF's drawing operators (paths carry a bounding box in user space). */
@@ -204,4 +230,297 @@ export async function gridSchedulesFromPdf(buffer: Buffer): Promise<ExtractedSch
   } finally {
     await doc.destroy();
   }
+}
+
+/* ------------------------------------------------------------------ images (photos, screenshots) */
+
+/** A photo of a timetable: worth the positional pass when its plain OCR text has this many clock times. */
+export function looksLikeTimetable(text: string): boolean {
+  return (text.match(/\b\d{1,2}[:.]\d{2}\b/g) ?? []).length >= 6;
+}
+
+/** Highest image grid confidence: classes read from a photo are reviewed, never created on their own. */
+export const IMAGE_GRID_MAX = 85;
+const GRID_WIDTH = 2400;
+/** PDF-like coordinates, so classesFromLayout's tolerances (in points) fit images too. */
+const PAGE_WIDTH = 842;
+
+export type OcrWord = { text: string; conf: number; x0: number; y0: number; x1: number; y1: number; line: number };
+
+/**
+ * Ruling lines (a pixel column or row dark over more than a third of the image) painted white, so the small
+ * header times and labels between them can be read. `g` is a grayscale image, changed in place.
+ */
+export function removeRulingLines(g: Uint8Array, width: number, height: number): void {
+  const dark = (v: number) => v < 170;
+  for (let x = 0; x < width; x += 1) {
+    let run = 0;
+    let best = 0;
+    for (let y = 0; y < height; y += 1) {
+      run = dark(g[y * width + x]) ? run + 1 : 0;
+      if (run > best) best = run;
+    }
+    if (best > height * 0.35) for (let y = 0; y < height; y += 1) g[y * width + x] = 255;
+  }
+  for (let y = 0; y < height; y += 1) {
+    let run = 0;
+    let best = 0;
+    for (let x = 0; x < width; x += 1) {
+      run = dark(g[y * width + x]) ? run + 1 : 0;
+      if (run > best) best = run;
+    }
+    if (best > width * 0.35) g.fill(255, y * width, (y + 1) * width);
+  }
+}
+
+/** Overlapping readings of the same spot (several passes): the most confident one stays. */
+export function dedupeWords(words: OcrWord[]): OcrWord[] {
+  const overlap = (a: OcrWord, b: OcrWord) => {
+    const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+    const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (w <= 0 || h <= 0) return 0;
+    return (w * h) / Math.min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0));
+  };
+  const out: OcrWord[] = [];
+  for (const w of [...words].sort((a, b) => b.conf - a.conf)) if (!out.some((o) => overlap(o, w) > 0.5)) out.push(w);
+  return out;
+}
+
+/** Leftover line fragments read as "|", quotes or "¥": dropped from words; words left empty are dropped. */
+export function cleanWords(words: OcrWord[]): OcrWord[] {
+  return words
+    .map((w) => ({ ...w, text: w.text.replace(/[|¦”“’‘"'`¥{}]/g, (c) => (c === "{" ? "(" : c === "}" ? ")" : "")).trim() }))
+    // A class block's dark left bar reads as "I", "[" or "l": not text.
+    .filter((w) => (/[\p{L}\p{N}]/u.test(w.text) || /^[-–]$/.test(w.text)) && !/^[\p{L}]$/u.test(w.text) && !/^[[\]Il1!]+$/.test(w.text));
+}
+
+/**
+ * Words on the same visual line and close together become one item: "CSC461", "-", "G1" → "CSC461 - G1".
+ * By position, not OCR line: the passes split a label across lines.
+ */
+export function phrases(words: OcrWord[]): OcrWord[] {
+  const sameLine = (a: OcrWord, b: OcrWord) => Math.abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) < Math.min(a.y1 - a.y0, b.y1 - b.y0) * 0.6;
+  const lines: OcrWord[][] = [];
+  for (const w of [...words].sort((a, b) => a.y0 - b.y0)) {
+    const line = lines.find((l) => sameLine(l[0], w));
+    if (line) line.push(w);
+    else lines.push([w]);
+  }
+  const out: OcrWord[] = [];
+  for (const line of lines) {
+    const first = out.length;
+    for (const w of line.sort((a, b) => a.x0 - b.x0)) {
+      const prev = out.length > first ? out[out.length - 1] : null;
+      if (prev && w.x0 - prev.x1 < (w.y1 - w.y0) * 1.2) out[out.length - 1] = { ...prev, text: `${prev.text} ${w.text}`, x1: w.x1, y0: Math.min(prev.y0, w.y0), y1: Math.max(prev.y1, w.y1), conf: Math.min(prev.conf, w.conf) };
+      else out.push({ ...w });
+    }
+  }
+  // Header times stay one item per cell ("08:30"), which columns() pairs up; "CSC461-" loses the dash.
+  return out.flatMap((p) => (/^\d{1,2}:\d{2}(\s+\d{1,2}:\d{2})+$/.test(p.text) ? splitTimes(p) : [{ ...p, text: p.text.replace(/^([A-Z]{2,5}\d{3}[A-Z]?)-(?=\s|$)/, "$1") }]));
+}
+
+function splitTimes(p: OcrWord): OcrWord[] {
+  const parts = p.text.split(/\s+/);
+  const step = (p.x1 - p.x0) / parts.length;
+  return parts.map((text, i) => ({ ...p, text, x0: p.x0 + i * step, x1: p.x0 + (i + 1) * step }));
+}
+
+/**
+ * Class blocks in a timetable image: solid light fills (grey, blue, orange…) that are at least `minRun` px
+ * thick both ways, so thin grid lines and hatching drop out; touching blocks are split by the next block's
+ * dark edge. Connected regions, as image-pixel rectangles. `rgb` is a 3-channel image.
+ */
+/** A class block; `inner` is where its text starts (past the dark left bar, if any). */
+export type Block = Rect & { inner: number };
+
+export function findBlocks(rgb: Uint8Array, width: number, height: number, minRun = 12): Block[] {
+  const fill = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i += 1) {
+    const r = rgb[i * 3];
+    const g = rgb[i * 3 + 1];
+    const b = rgb[i * 3 + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    fill[i] = lum >= 195 && Math.min(r, g, b) <= 246 ? 1 : 0; // light, but not the white page
+  }
+  // Keep only pixels inside long runs: horizontal first (removes vertical lines), then vertical.
+  const keepRuns = (mask: Uint8Array, horizontal: boolean) => {
+    const out = new Uint8Array(mask.length);
+    const [outer, inner] = horizontal ? [height, width] : [width, height];
+    for (let o = 0; o < outer; o += 1) {
+      let start = -1;
+      for (let k = 0; k <= inner; k += 1) {
+        const idx = horizontal ? o * width + k : k * width + o;
+        const on = k < inner && mask[idx] === 1;
+        if (on && start < 0) start = k;
+        if (!on && start >= 0) {
+          if (k - start >= minRun) for (let j = start; j < k; j += 1) out[horizontal ? o * width + j : j * width + o] = 1;
+          start = -1;
+        }
+      }
+    }
+    return out;
+  };
+  const solid = keepRuns(keepRuns(fill, true), false);
+  const seen = new Uint8Array(width * height);
+  const rects: Block[] = [];
+  const stack: number[] = [];
+  for (let i = 0; i < solid.length; i += 1) {
+    if (!solid[i] || seen[i]) continue;
+    let x1 = width;
+    let y1 = height;
+    let x2 = 0;
+    let y2 = 0;
+    let n = 0;
+    seen[i] = 1;
+    stack.push(i);
+    while (stack.length) {
+      const p = stack.pop() as number;
+      const x = p % width;
+      const y = (p - x) / width;
+      n += 1;
+      if (x < x1) x1 = x;
+      if (x > x2) x2 = x;
+      if (y < y1) y1 = y;
+      if (y > y2) y2 = y;
+      for (const q of [p - 1, p + 1, p - width, p + width]) {
+        if (q < 0 || q >= solid.length || seen[q] || !solid[q] || (Math.abs((q % width) - x) > 1)) continue;
+        seen[q] = 1;
+        stack.push(q);
+      }
+    }
+    // A block is mostly filled (text makes holes); big sparse regions are background tints, not blocks.
+    if (n >= minRun * minRun * 4 && n >= (x2 - x1 + 1) * (y2 - y1 + 1) * 0.35) {
+      const left = leftEdge(rgb, width, x1, y1 + 1);
+      rects.push({ x1: left, y1, x2, y2, inner: barEnd(rgb, width, left, y1 + 1) });
+    }
+  }
+  return rects;
+}
+
+/** First pixel right of a block's dark left bar (the block's own edge when it has none), plus a margin. */
+function barEnd(rgb: Uint8Array, width: number, x: number, y: number): number {
+  const dark = (cx: number) => {
+    const i = (y * width + cx) * 3;
+    return 0.299 * rgb[i] + 0.587 * rgb[i + 1] + 0.114 * rgb[i + 2] < 140;
+  };
+  let cx = x;
+  while (cx < width - 1 && dark(cx)) cx += 1;
+  return cx + 3;
+}
+
+/**
+ * The label's dark letters break the fill, so a block seems to start after its label. From the block's top
+ * row (above the text) go left to its dark left bar or the white page: that is where the block starts.
+ */
+function leftEdge(rgb: Uint8Array, width: number, x: number, y: number): number {
+  const lum = (cx: number) => {
+    const i = (y * width + cx) * 3;
+    return 0.299 * rgb[i] + 0.587 * rgb[i + 1] + 0.114 * rgb[i + 2];
+  };
+  let edge = x;
+  let whites = 0;
+  for (let cx = x - 1; cx >= 0; cx -= 1) {
+    const v = lum(cx);
+    if (v < 110) {
+      while (cx > 0 && lum(cx - 1) < 110) cx -= 1; // the block's own left bar: the block starts where it does
+      return cx;
+    }
+    if (v > 246) {
+      if ((whites += 1) >= 6) break;
+      continue;
+    }
+    whites = 0;
+    edge = cx;
+  }
+  return edge;
+}
+
+/**
+ * Text lines of one block, read on its own: cropped from the upright original (not the thresholded page),
+ * enlarged smoothly and contrast-normalised. Much cleaner than the whole page. `r` is in GRID_WIDTH pixels.
+ */
+async function blockLines(worker: Worker, upright: Buffer, scale: number, r: Block): Promise<string[]> {
+  const left = Math.max(0, Math.round(r.inner * scale)); // past the block's dark left bar
+  const top = Math.max(0, Math.round(r.y1 * scale));
+  const width = Math.max(8, Math.round((r.x2 - r.inner) * scale));
+  const height = Math.max(8, Math.round((r.y2 - r.y1) * scale));
+  const crop = await sharp(upright)
+    .extract({ left, top, width, height })
+    .resize({ width: Math.round((r.x2 - r.x1) * 1.35), kernel: "lanczos3" })
+    .grayscale()
+    .normalise()
+    .png()
+    .toBuffer();
+  const { data } = await worker.recognize(crop);
+  return data.text
+    .split(/\n+/)
+    .map((l) => l.replace(/[|¦”“’‘"`¥]/g, "").replace(/\s+/g, " ").trim())
+    .filter((l) => (l.match(/[\p{L}\p{N}]/gu) ?? []).length >= 2); // "D-8", "O-3" are rooms
+}
+
+/** Image coordinates (y down, pixels) → page points (y up), like a PDF text layer. */
+function toPage(s: number, height: number) {
+  return {
+    item: (w: OcrWord): TextItem => ({ str: w.text, x: w.x0 * s, y: (height - w.y1) * s, w: (w.x1 - w.x0) * s, h: (w.y1 - w.y0) * s }),
+    rect: (r: Rect): Rect => ({ x1: r.x1 * s, x2: r.x2 * s, y1: (height - r.y2) * s, y2: (height - r.y1) * s }),
+  };
+}
+
+/**
+ * Grid timetable in an image: class blocks found from their colour fill and read one by one; days and header
+ * times read from the page with ruling lines removed (two thresholds, sparse and page mode: each finds cells
+ * the others miss). Then the same layout rules as PDFs.
+ */
+export async function gridSchedulesFromImage(buffer: Buffer, language: string, deadline = Infinity): Promise<ExtractedSchedule[]> {
+  const upright = await sharp(buffer).rotate().toBuffer();
+  const originalWidth = (await sharp(upright).metadata()).width ?? GRID_WIDTH;
+  const base = sharp(upright).resize({ width: GRID_WIDTH });
+  const { data: gray, info } = await base.clone().grayscale().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const rgb = await base.clone().removeAlpha().toColourspace("srgb").raw().toBuffer();
+  const clean = new Uint8Array(gray);
+  removeRulingLines(clean, width, height);
+  const pages = await Promise.all(
+    [140, 185].map((t) => sharp(Buffer.from(clean.map((v) => (v < t ? 0 : 255))), { raw: { width, height, channels: 1 } }).png().toBuffer()),
+  );
+  const blocks = findBlocks(new Uint8Array(rgb), width, height);
+  const words: OcrWord[] = [];
+  const labelled: Array<{ rect: Block; lines: string[] }> = [];
+  await withWorker(ocrLanguages(language), async (worker) => {
+    let line = 0;
+    for (const page of pages) {
+      for (const psm of [PSM.SPARSE_TEXT, PSM.AUTO]) {
+        if (Date.now() > deadline) return;
+        await worker.setParameters({ tessedit_pageseg_mode: psm, user_defined_dpi: "300" });
+        const { data } = await worker.recognize(page, {}, { blocks: true });
+        for (const b of data.blocks ?? []) {
+          for (const p of b.paragraphs) {
+            for (const l of p.lines) {
+              line += 1;
+              for (const w of l.words) if (w.text.trim()) words.push({ text: w.text.trim(), conf: w.confidence, line, ...w.bbox });
+            }
+          }
+        }
+      }
+    }
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    for (const rect of blocks) {
+      if (Date.now() > deadline) break;
+      const lines = await blockLines(worker, upright, originalWidth / GRID_WIDTH, rect).catch(() => []);
+      if (lines.length && COURSE_RE.test(lines[0])) labelled.push({ rect, lines });
+    }
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
+  });
+  // Days and header times from the page; each block becomes its label plus the lines under it, inside its box.
+  const page = phrases(dedupeWords(cleanWords(words))).filter((w) => DAY_RE.test(w.text) || TIME_RE.test(w.text));
+  const lineH = 24;
+  const fromBlocks: OcrWord[] = labelled.flatMap(({ rect, lines }) =>
+    lines.map((text, i) => ({ text: i ? text : text.replace(/^([A-Z]{2,5}\d{3}[A-Z]?)\s*-?\s*(G\d+)?.*$/, (_m, c: string, g?: string) => (g ? `${c} - ${g}` : c)), conf: 90, line: -1, x0: rect.x1 + 8, x1: rect.x1 + 18, y0: rect.y1 + 4 + i * lineH, y1: rect.y1 + 4 + i * lineH + lineH - 4 })),
+  );
+  const scale = toPage(PAGE_WIDTH / width, height);
+  return classesFromLayout([...page, ...fromBlocks].map(scale.item), labelled.map((b) => scale.rect(b.rect))).map((c) => ({
+    ...c,
+    confidence: Math.min(c.confidence, IMAGE_GRID_MAX),
+    source: c.source.replace("grid", "grid photo"),
+  }));
 }

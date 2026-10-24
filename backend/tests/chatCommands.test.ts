@@ -481,3 +481,32 @@ test("Urdu users get Urdu replies from settings and bulk commands (confirm butto
     assert.equal((await tap({ type: "undo_command" })).message.content, "↩ آخری تبدیلی واپس کر دی گئی۔");
   });
 });
+
+test("open question: a full new task request is its own task, not the answer; a bare time still answers", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    const q = await say("Call mom");
+    assert.equal(q.message.intent, "clarify");
+    const r = await say("I need to finish my report by Friday");
+    assert.doesNotMatch(r.message.content, /Call mom/);
+    assert.match(r.message.content, /Finish my report/); // its own draft (asks for the time)
+    assert.equal(await prisma.task.count({ where: { userId: user.id, title: "Call mom" } }), 0, "Call mom not given Friday");
+
+    await say("Buy groceries");
+    const a = await say("tomorrow at 5 PM");
+    assert.match(a.message.content, /Buy groceries/);
+  });
+});
+
+test("free user names a place: the task is added and the reply invites them to Pro + Location reminders", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    const r = await say("Add a task to do 10 push ups at home today");
+    assert.equal(r.message.intent, "task_created");
+    assert.match(r.message.content, /reminder when you get to Home\? Location reminders come with Pro/);
+    assert.deepEqual(r.message.actions?.[0], { label: "Go to Settings", payload: { type: "navigate", screen: "Settings" }, style: "primary" });
+    const task = await prisma.task.findFirstOrThrow({ where: { userId: user.id }, include: { locations: true } });
+    assert.equal(task.locations.length, 0, "no place attached on Free");
+
+    const plain = await say("Add a task to buy milk tomorrow at 5 PM");
+    assert.doesNotMatch(plain.message.content, /Pro/, "no nudge without a place");
+  });
+});

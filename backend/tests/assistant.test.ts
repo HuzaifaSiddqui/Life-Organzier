@@ -373,3 +373,47 @@ test("documents: national ID and phone numbers are masked, dates and times are n
   assert.equal((out.match(/\[CNIC\]/g) ?? []).length, 2);
   assert.equal((out.match(/\[PHONE\]/g) ?? []).length, 2);
 });
+
+test("an explicit add with an edit word inside is a new task ('push ups', 'change the bedsheets')", async () => {
+  const intent = async (text: string) => (await understand(text, { ...opts, history: [], allowLlm: false })).intent;
+  for (const text of [
+    "Let's add a task to do 4 push ups at home today",
+    "I said Add a task to do 4 push ups at home today",
+    "20 push-ups tomorrow at 7 AM",
+    "Add a task to change the bedsheets tomorrow",
+    "Add task to update my CV by Friday",
+    "Remind me to shift my books to the new room on Sunday",
+    "Create a task to edit the video tomorrow at 5 PM",
+  ]) assert.equal(await intent(text), "create_task", text);
+  for (const text of ["Push the essay to Friday", "Move my assignment to tomorrow", "Can you push it to 6 PM", "Change the report deadline to Monday", "Postpone the quiz prep to next week"]) {
+    assert.equal(await intent(text), "update_task", text);
+  }
+  for (const text of ["Do 20 push-ups tomorrow at 7 AM", "Do laundry tomorrow"]) assert.equal(await intent(text), "create_task", text);
+  for (const text of ["Do you remember my exam?", "Do I have anything tomorrow?"]) assert.notEqual(await intent(text), "create_task", text);
+  for (const lead of ["Let's add a task to", "I said Add a task to", "Lets add a task to"]) assert.equal(cleanTitle(`${lead} do 4 push ups`), "Do 4 push ups", lead);
+});
+
+test("chat commands: 'push ups' and an add before the move word never move a routine or tasks", async () => {
+  const { matchCommand, parseCtx } = await import("../src/modules/assistant/commands/registry.js");
+  const ctx = parseCtx(opts as never);
+  for (const text of ["Let's add a task to do 4 push ups at home today", "Add 20 push-ups today to my list", "Add a task to move all my boxes today", "Remind me to push the car out of the garage today"]) {
+    assert.equal(matchCommand(text, ctx)?.command.name ?? null, null, text);
+  }
+  assert.equal(matchCommand("Move my gym routine to 7 PM just today", ctx)?.command.name, "routine_reschedule_once");
+  assert.equal(matchCommand("Push all of today's tasks to tomorrow", ctx)?.command.name, "bulk_move_today");
+});
+
+test("'we' talks like 'I': the task is the user's and the title drops the lead-in", async () => {
+  for (const [said, title] of [
+    ["We have to do 5 push ups", "Do 5 push ups"],
+    ["we need to do 5 push ups", "Do 5 push ups"],
+    ["We must submit the report", "Submit the report"],
+    ["We'll call the landlord", "Call the landlord"],
+    ["we are going to clean the room", "Clean the room"],
+    ["Let us revise chapter 4", "Revise chapter 4"],
+    ["Remind us to pay the rent", "Pay the rent"],
+  ]) assert.equal(cleanTitle(said), title, said);
+  for (const text of ["We have to do 5 push ups today at home", "we need to do 5 push ups today", "Remind us to pay the rent on Friday"]) {
+    assert.equal((await understand(text, { ...opts, history: [], allowLlm: false })).intent, "create_task", text);
+  }
+});
