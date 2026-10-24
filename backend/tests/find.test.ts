@@ -28,7 +28,7 @@ async function withChatUser(tier: "FREE" | "PRO", fn: (say: (text: string, chann
 const ctx = parseCtx(opts);
 const terms = (text: string) => parseFindQuery(text, ctx)?.terms ?? null;
 
-test("find questions: the term is read in English, Roman Urdu, Urdu and spelled-out voice forms", () => {
+test("find questions: the term is read in English, Roman Urdu and spelled-out voice forms", () => {
   for (const [text, want] of [
     ["is there any task related to KFC", ["kfc"]],
     ["Is there any task related to KFC?", ["kfc"]],
@@ -42,7 +42,6 @@ test("find questions: the term is read in English, Roman Urdu, Urdu and spelled-
     ["KFC wala kaam", ["kfc"]],
     ["KFC se related koi task hai?", ["kfc"]],
     ["KFC ke bare mein koi kaam", ["kfc"]],
-    ["KFC کے بارے میں کوئی کام", ["kfc"]],
   ] as Array<[string, string[]]>) assert.deepEqual(terms(text), want, text);
 });
 

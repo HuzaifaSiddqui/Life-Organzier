@@ -10,13 +10,14 @@ import type { Card } from "../types.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 
 /**
- * "Is there any task related to KFC", "anything with Kalma Chowk", "KFC wala kaam", "KFC کے بارے میں کوئی کام".
- * Only when the question names something to look for; a plain "what's due today" stays with the task list.
+ * "Is there any task related to KFC", "anything with Kalma Chowk", "KFC wala kaam". English and Roman Urdu only
+ * (Urdu-script questions are planned after the deadline). Only when the question names something to look for;
+ * a plain "what's due today" stays with the task list.
  */
 
 const NOUN = "(?:tasks?|things?|items?|reminders?|routines?|todos?|to-dos?|kaam|kam)";
 const LINK = "(?:related to|relating to|regarding|about|concerning|involving|mentioning|that mention|with|for|on|at|from)";
-const ASKING = /\?|^(?:is|are|do|does|did|have|has|what|which|show|list|find|search|look|any|anything|kya|koi)\b|\b(?:is there|are there|do i have|have i got|any|anything|kya|koi)\b|کیا|کوئی/i;
+const ASKING = /\?|^(?:is|are|do|does|did|have|has|what|which|show|list|find|search|look|any|anything|kya|koi)\b|\b(?:is there|are there|do i have|have i got|any|anything|kya|koi)\b/i;
 /** Doing something to a task is a command, not a search ("add a task for KFC tomorrow", "mark the KFC task done"). */
 const DOING = /^(?:please\s+)?(?:add|create|new|remind|set|make|schedule|mark|complete|finish|delete|remove|cancel|move|change|rename|update|edit|start|split|break|tag|untag|pause|resume|skip|put|push|postpone)\b/i;
 
@@ -25,7 +26,7 @@ const DOING = /^(?:please\s+)?(?:add|create|new|remind|set|make|schedule|mark|co
  * ("…kaam hai?", "…koi task batao"); "KFC wala kaam kal karna hai" is a new task.
  */
 type Pattern = { re: RegExp; place?: boolean; standalone?: boolean };
-const ASK_TAIL = /^(?:\s+(?:hai|hain|he|kya|koi|batao|btao|dikhao|bata\s*do|please|plz|ہے|ہیں|کیا|بتائیں|بتاؤ|دکھاؤ))*\s*$/i;
+const ASK_TAIL = /^(?:\s+(?:hai|hain|he|kya|koi|batao|btao|dikhao|bata\s*do|please|plz))*\s*$/i;
 const PATTERNS: Pattern[] = [
   // "tasks about Walmart", "reminders regarding the visa": a plural list noun + topic asks by itself.
   { re: /^(?:(?:any|all|my|the)\s+)?(?:tasks|things|items|reminders|routines|todos|to-dos)\s+(?:related to|relating to|regarding|about|concerning|involving|mentioning|that mention)\s+(.+)$/i, standalone: true },
@@ -39,8 +40,6 @@ const PATTERNS: Pattern[] = [
   { re: /^(.+?)\s+(?:se|say)\s+(?:related|mutaliq|mutalliq|mutalik)\s+(?:koi\s+)?(?:kaam|kam|task|tasks)\b/i, standalone: true },
   { re: /^(.+?)\s+ke\s+(?:bare|baare|barey)\s+(?:mein|main|me|mai)\s+(?:koi\s+)?(?:kaam|kam|task|tasks)\b/i, standalone: true },
   { re: /^(.+?)\s+ka\s+koi\s+(?:kaam|kam|task)\b/i, standalone: true },
-  // Urdu: "KFC کے بارے میں کوئی کام", "KFC سے متعلق کوئی کام", "KFC والا کام"
-  { re: /^(.+?)\s*(?:کے\s*بارے\s*میں|سے\s*متعلق|والا|والی|کا)\s*(?:کوئی\s*)?(?:کام|ٹاسک)/, standalone: true },
 ];
 
 /** Words that shape the question, not what it is about. */
@@ -48,8 +47,7 @@ const NOT_A_TERM = new Set(
   ("is there are any a an the my some all of to for with and or about related relating regarding task tasks thing things item items reminder reminders routine routines todo todos " +
     "anything something stuff do does i have has got please today tonight tomorrow this week overdue late missed done completed finished pending open urgent important high low priority " +
     "due deadline deadlines scheduled planned " +
-    "koi ka ki ke kaam kam hai hain kya mera meri mere wala wali wale aaj kal mein se " +
-    "کوئی کا کی کے کام ہے ہیں کیا میرا میری میرے آج کل میں سے").split(" "),
+    "koi ka ki ke kaam kam hai hain kya mera meri mere wala wali wale aaj kal mein se").split(" "),
 );
 
 /** "overdue", "this week", or the day entities.ts reads ("today", "kal") when it is today or tomorrow. */
@@ -167,7 +165,7 @@ export const findItemsCommand: Command = {
   name: "find_items",
   category: "tasks",
   summary: "Find tasks and routines about something (a name, place, course, word in the notes)",
-  examples: ["Is there any task related to KFC?", "Anything with Kalma Chowk?", "KFC wala kaam"],
+  examples: ["Is there any task related to KFC?", "Anything with Kalma Chowk?", "KFC wala kaam"], // English + Roman Urdu
   schema: findFilterSchema as unknown as Command["schema"],
   undoable: false,
   parse(text, ctx): CommandArgs | null {
