@@ -524,3 +524,14 @@ test("Free users see the Pro invitation at most once a day", { skip }, async () 
     assert.match((await say("Add a task to fold clothes at home tomorrow", "APP", tomorrow)).message.content, pro, "next day: shown again");
   });
 });
+
+test("open 'Call mom' question: 'I need to call mom's doctor tomorrow' is its own task, not Call mom's date", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    assert.equal((await say("Call mom")).message.intent, "clarify");
+    const r = await say("I need to call mom's doctor tomorrow");
+    assert.equal(r.message.answered, undefined, "not taken as the answer");
+    assert.match(r.message.content, /doctor/i);
+    assert.doesNotMatch(r.message.content, /"Call mom"/);
+    assert.equal(await prisma.task.count({ where: { userId: user.id, title: "Call mom" } }), 0, "Call mom got no date and wasn't created");
+  });
+});
