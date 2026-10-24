@@ -6,6 +6,7 @@ import { priorityColor } from "../../utils/priorityColors";
 import { ProgressBar } from "../ui";
 import { BreathingExercise } from "./BreathingExercise";
 import { CrisisCard } from "./CrisisCard";
+import { LocationSetupCard } from "./LocationSetupCard";
 
 /** Draft slot names → words users understand. */
 const MISSING_LABEL: Record<string, string> = { title: "what to do", date: "date", time: "time", duration: "duration" };
@@ -200,6 +201,8 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
           case "resources":
             // Older stored messages have no resources; the card then shows only the guidance text.
             return <CrisisCard key={i} resources={card.resources ?? []} />;
+          case "location_setup":
+            return <LocationSetupCard key={i} taskId={card.taskId} place={card.place} saved={card.saved} />;
           default:
             return null;
         }

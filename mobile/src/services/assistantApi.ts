@@ -3,6 +3,7 @@ import type { ActionPayload, AssistantReply, Briefing, ChatMessage } from "../ty
 import { apiGet, apiPost } from "./api";
 import { syncNow } from "./syncEngine";
 import { scheduleReminderSync } from "./reminders";
+import { locationRemindersReady } from "./locationReminders";
 
 const CONVERSATION_KEY = "life-organizer:conversation:v2";
 
@@ -77,6 +78,8 @@ export async function sendToAssistant(input: {
       label: input.label ?? null,
       conversationId: input.conversationId ?? null,
       channel: input.voice ? "VOICE" : "APP",
+      // The server can't see the phone's toggle: it decides whether a task with a place offers "Turn on".
+      locationReminders: await locationRemindersReady(),
     },
     { timeout: 120000 },
   );

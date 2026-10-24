@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task, TaskLocation } from "../../types/models";
-import { buildNotificationBody, DEDUP_MS, distanceM, groupTasksByLocation, isDedupActive, locatedTaskIds, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace, type GeofenceTask } from "../geofence";
+import { buildNotificationBody, DEDUP_MS, distanceM, groupTasksByLocation, isDedupActive, locatedTaskIds, promptedInChat, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace, type GeofenceTask } from "../geofence";
 
 const NOW = Date.parse("2026-10-13T10:00:00Z");
 
@@ -113,6 +113,12 @@ describe("asking for location access", () => {
     expect(shouldAskForLocation(new Set(["a"]), ["a", "b"], false)).toBe(true); // "add a task … at home"
     expect(shouldAskForLocation(null, ["a"], true)).toBe(false); // already allowed and on
     expect(shouldAskForLocation(null, [], false)).toBe(false); // no task uses a place
+  });
+
+  it("chat and voice tasks are prompted by the in-chat card, others by the snackbar", () => {
+    expect(promptedInChat(task("a", [], { source: "CHAT" }))).toBe(true);
+    expect(promptedInChat(task("b", [], { source: "VOICE" }))).toBe(true);
+    expect(promptedInChat(task("c", [], { source: "MANUAL" }))).toBe(false);
   });
 
   it("watched tasks: open, with an active place, each once", () => {

@@ -47,7 +47,7 @@ import {
   STRESS,
   type Mood,
 } from "../mood/moodService.js";
-import { attachPlaceByName, savedPlaceInTitle } from "../locations/locationService.js";
+import { attachLocation, attachPlaceByName, findSavedPlace, isPersonalPlace, savedPlaceInTitle } from "../locations/locationService.js";
 import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
 import { createRoutine, mandatoryConflicts, occurrencesForDay } from "../routines/routineService.js";
@@ -102,6 +102,8 @@ export type Turn = {
   memoriesUsed: number;
   /** Pro users' saved place names (location extraction accepts them after "at" / "se"). */
   placeNames?: string[];
+  /** The phone's Location reminders toggle + permission (app only; unknown on WhatsApp). */
+  locationReminders?: boolean;
 };
 
 export type Out = {
@@ -158,6 +160,8 @@ export async function handleAssistantMessage(input: {
   channel: Channel;
   /** Test hook: the turn's clock (expiry of confirmations, relative dates). */
   now?: Date;
+  /** Sent by the app: false when its Location reminders toggle is off or access is refused. */
+  locationReminders?: boolean;
 }): Promise<AssistantReply> {
   const now = input.now ?? new Date();
   const tz = input.settings.timezone;
@@ -177,6 +181,7 @@ export async function handleAssistantMessage(input: {
     learned: [],
     memoriesUsed: 0,
     placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
+    locationReminders: input.locationReminders,
   };
 
   const text = input.text?.trim() ?? "";
@@ -735,7 +740,8 @@ export async function proceedWithDraft(
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
   // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
   const place = draft.location ?? savedPlaceInTitle(task.title, turn.placeNames ?? []);
-  if (place && isPro(turn.settings)) lines.push(await placeLine(turn, task, place));
+  const setup = place && isPro(turn.settings) ? await proPlace(turn, task, place) : null;
+  if (setup) lines.push(setup.line);
   // Free users: the place stays in the task text; tell them what Pro would add (Pro is switched on in Settings).
   const proNudge = Boolean(place && !isPro(turn.settings));
   if (proNudge) lines.push(locationText(turn).proNeeded(place!.charAt(0).toUpperCase() + place!.slice(1)));
@@ -754,7 +760,34 @@ export async function proceedWithDraft(
     actions.unshift({ label: "Break into chunks", payload: { type: "chunk_task", taskId: task.id }, style: "primary" });
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
-  return { content: lines.join("\n"), cards: [taskCard(task, undefined, true)], actions, intent: "task_created" };
+  return { content: lines.join("\n"), cards: [taskCard(task, undefined, true), ...(setup?.card ? [setup.card] : [])], actions, intent: "task_created" };
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * A Pro user's task names a place. A saved place (or alias: "ghar" → Home) is attached. A personal place
+ * that isn't saved (home, uni, office, hostel) is never searched on the map: the card asks the user to set
+ * it. Other places are searched as before. With the phone's toggle off, the card offers to turn it on first.
+ */
+async function proPlace(turn: Turn, task: { id: string; title: string }, place: string): Promise<{ line: string; card: Card | null }> {
+  const L = locationText(turn);
+  const remindersOff = turn.locationReminders === false;
+  const saved = await findSavedPlace(turn.user.id, place);
+  const needsPlace = !saved && isPersonalPlace(place);
+  const shown = saved?.name ?? capitalize(place);
+  let line: string;
+  if (saved) {
+    await attachLocation(turn.user.id, task.id, saved.id);
+    line = remindersOff ? L.turnOn(shown) : L.set(saved.name, L.range[saved.preset] ?? L.range.NEARBY);
+  } else if (needsPlace) {
+    line = remindersOff ? L.turnOn(shown) : turn.channel === "WHATSAPP" ? L.whereIsApp(shown) : L.whereIs(shown);
+  } else {
+    line = await placeLine(turn, task, place);
+    if (remindersOff) line += `\n${L.turnOn(shown)}`;
+  }
+  const card: Card | null = turn.channel !== "WHATSAPP" && (remindersOff || needsPlace) ? { type: "location_setup", taskId: task.id, place: shown, saved: !needsPlace, remindersOn: !remindersOff } : null;
+  return { line, card };
 }
 
 /** FR-LB-001 chat replies (English + Urdu). */
@@ -768,6 +801,9 @@ export const LOCATION_TEXT = {
     openHint: (title: string) => `Open '${title}' and tap 'Add location' to search.`,
     none: "No location set. You can add one from the task details.",
     proNeeded: (place: string) => `Want a reminder when you get to ${place}? Location reminders come with Pro: switch to Pro and turn on Location reminders in Settings.`,
+    turnOn: (place: string) => `Want a reminder about this task when you get to ${place}? Turn on Location reminders below.`,
+    whereIs: (place: string) => `Where is ${place}? Set it on the map below and I'll remind you when you get there.`,
+    whereIsApp: (place: string) => `Set ${place} in the app (Settings → Saved places) and I'll remind you when you get there.`,
     openSettings: "Go to Settings",
     range: { PRECISE: "Precise", NEARBY: "Nearby", AREA: "Area" } as Record<string, string>,
   },
@@ -779,6 +815,9 @@ export const LOCATION_TEXT = {
     openToSearch: "تلاش کے لیے کام کھولیں",
     openHint: (title: string) => `'${title}' کھولیں اور تلاش کے لیے 'مقام شامل کریں' دبائیں۔`,
     none: "کوئی مقام طے نہیں ہوا۔ آپ کام کی تفصیل سے شامل کر سکتے ہیں۔",
+    turnOn: (place: string) => `${place} پہنچنے پر اس کام کی یاددہانی چاہیے؟ نیچے مقام کی یاددہانیاں آن کریں۔`,
+    whereIs: (place: string) => `${place} کہاں ہے؟ نیچے نقشے پر طے کریں، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
+    whereIsApp: (place: string) => `ایپ میں ${place} طے کریں (ترتیبات ← محفوظ مقامات)، وہاں پہنچنے پر میں یاد دلاؤں گا۔`,
     proNeeded: (place: string) => `${place} پہنچنے پر یاددہانی چاہیے؟ مقام کی یاددہانیاں Pro میں ہیں: ترتیبات میں Pro پر جائیں اور مقام کی یاددہانیاں آن کریں۔`,
     openSettings: "ترتیبات کھولیں",
     range: { PRECISE: "قریب ترین", NEARBY: "قریب", AREA: "علاقہ" } as Record<string, string>,

@@ -165,6 +165,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   WhatsApp) while location access or the Settings toggle is off shows a snackbar ("Grant" when access is
   refused, "Turn on" when only the toggle is off), once after launch and once per new such task; nothing
   fires until the user taps it. The toggle lives on the phone, so the chat reply itself can't say it is off.
+- **Personal places are never searched on the map.** Home, university, office and hostel (and their aliases:
+  ghar, house, uni, campus, daftar, work) come from the user's saved places; an unsaved one is set by the user
+  ("Set Home on the map" in chat, or Settings → Saved places on WhatsApp). Shops and other named places are
+  searched as before.
+- **The chat knows the toggle only from the app.** The app sends its Location reminders state with each
+  message; WhatsApp can't, so it never shows the in-chat toggle.
 - **Free users' places are text only.** Naming a place in chat adds the task without a geofence; the reply
   invites them to switch to Pro and turn on Location reminders (Pro is a demo switch in Settings).
 - **Background permission required.** On Android, geofence triggers only fire with "Allow all

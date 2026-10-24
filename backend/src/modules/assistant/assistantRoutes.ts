@@ -22,6 +22,8 @@ const messageSchema = z
     label: z.string().max(200).optional().nullable(),
     conversationId: z.string().uuid().optional().nullable(),
     channel: z.enum(["APP", "VOICE"]).optional(),
+    /** The phone's Location reminders toggle (and permission); the server can't see it otherwise. */
+    locationReminders: z.boolean().optional(),
   })
   .refine((v) => Boolean(v.text?.trim()) || Boolean(v.payload), "text or payload is required");
 
@@ -38,6 +40,7 @@ assistantRouter.post(
       label: body.label ?? null,
       conversationId: body.conversationId ?? null,
       channel: body.channel ?? "APP",
+      locationReminders: body.locationReminders,
     });
     sendSuccess(res, reply);
   }),

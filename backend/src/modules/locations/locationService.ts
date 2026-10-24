@@ -177,6 +177,19 @@ const ALIASES: Record<string, string[]> = {
   mosque: ["mosque", "masjid"],
 };
 
+/** Places only the user can point to (their home, uni, office, hostel): never searched on the map. */
+const PERSONAL = ["home", "university", "office", "hostel"];
+export function isPersonalPlace(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return PERSONAL.some((k) => ALIASES[k].includes(n));
+}
+
+/** The user's saved place for a name or its everyday alias ("ghar" → Home). */
+export async function findSavedPlace(userId: string, name: string): Promise<SavedLocation | null> {
+  const names = aliasesOf(name);
+  return (await listLocations(userId)).find((p) => names.includes(p.name.trim().toLowerCase())) ?? null;
+}
+
 function aliasesOf(name: string): string[] {
   const n = name.trim().toLowerCase();
   const group = Object.values(ALIASES).find((g) => g.includes(n));

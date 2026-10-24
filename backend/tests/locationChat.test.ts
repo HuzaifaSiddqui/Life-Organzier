@@ -45,12 +45,12 @@ test("location commands: remove and change, English and Roman Urdu", () => {
   assert.equal(parseLocationCommand("buy medicine from Ali Medical Store"), null);
 });
 
-async function withUser(tier: "FREE" | "PRO", fn: (say: (text: string) => ReturnType<typeof handleAssistantMessage>, userId: string) => Promise<void>) {
+async function withUser(tier: "FREE" | "PRO", fn: (say: (text: string, locationReminders?: boolean) => ReturnType<typeof handleAssistantMessage>, userId: string) => Promise<void>) {
   setAi(new AiService([]));
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
   await prisma.userSettings.create({ data: { userId: user.id, tier, timezone: "Asia/Karachi" } });
   try {
-    const say = async (text: string) => handleAssistantMessage({ user, settings: (await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }))!, deviceId: null, text, channel: "APP" });
+    const say = async (text: string, locationReminders?: boolean) => handleAssistantMessage({ user, settings: (await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }))!, deviceId: null, text, channel: "APP", locationReminders });
     await fn(say, user.id);
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
@@ -156,5 +156,36 @@ test("chat: 'none' skips the location and clears the question; 5 results offer '
       assert.match((await say("5")).message.content, /Open 'Buy bandages[^']*' and tap 'Add location'/);
       assert.deepEqual(await linkedPlaces(userId), []);
     });
+  });
+});
+
+const setupCard = (r: Awaited<ReturnType<typeof handleAssistantMessage>>) => r.message.cards?.find((c) => c.type === "location_setup");
+
+test("chat (Pro): toggle off → in-chat 'turn on' card; an unsaved home is never searched on the map, it's set by the user", { skip }, async () => {
+  await withUser("PRO", async (say, userId) => {
+    // No Home saved, toggle off: ask to turn on, then set Home (no map search for "home").
+    let r = await say("We have to do 5 push ups today at home", false);
+    assert.match(r.message.content, /reminder about this task when you get to Home\? Turn on Location reminders below/);
+    assert.doesNotMatch(r.message.content, /several locations|couldn't find/);
+    let task = await prisma.task.findFirstOrThrow({ where: { userId }, orderBy: { createdAt: "desc" } });
+    assert.deepEqual(setupCard(r), { type: "location_setup", taskId: task.id, place: "Home", saved: false, remindersOn: false });
+    assert.deepEqual(await linkedPlaces(userId), []);
+
+    // Toggle on, Home still not saved: "Where is Home?" + the card goes straight to the map step.
+    r = await say("Add a task to clean my room at ghar tomorrow at 5 PM", true);
+    assert.match(r.message.content, /Where is Ghar\? Set it on the map below/);
+    assert.equal(setupCard(r)?.type === "location_setup" && setupCard(r)?.remindersOn, true);
+
+    // Home saved, toggle off: attached now, card only offers the toggle.
+    await createOrFindLocation(userId, { name: "Home", latitude: 31.52, longitude: 74.35 });
+    r = await say("Add a task to water the plants at home tomorrow at 6 PM", false);
+    task = await prisma.task.findFirstOrThrow({ where: { userId }, orderBy: { createdAt: "desc" } });
+    assert.deepEqual(setupCard(r), { type: "location_setup", taskId: task.id, place: "Home", saved: true, remindersOn: false });
+    assert.ok((await linkedPlaces(userId)).includes("Home"));
+
+    // Home saved, toggle on (or unknown, e.g. WhatsApp): plain "Location set", no card.
+    r = await say("Add a task to fold laundry at home tomorrow at 7 PM", true);
+    assert.match(r.message.content, /Location set: Home/);
+    assert.equal(setupCard(r), undefined);
   });
 });

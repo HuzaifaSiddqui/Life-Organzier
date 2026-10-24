@@ -5,7 +5,7 @@ import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
 import { dictionaries, type Language, type StringKey } from "../i18n/strings";
 import type { Task } from "../types/models";
-import { buildNotificationBody, distanceM, groupTasksByLocation, locatedTaskIds, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace } from "../utils/geofence";
+import { buildNotificationBody, distanceM, groupTasksByLocation, locatedTaskIds, promptedInChat, selectTopLocations, shouldAskForLocation, tasksToAnnounce, type GeofencePlace } from "../utils/geofence";
 import { CATEGORY_LOCATION, DEFAULT_CHANNEL_ID, ensureNotificationCategories } from "./reminders";
 import { auth } from "../lib/firebase";
 import { readTasks, subscribeTasks } from "./syncEngine";
@@ -290,6 +290,11 @@ export async function isLocationRemindersEnabled(): Promise<boolean> {
   return (await getItem(enabledKey())) === "1";
 }
 
+/** Location reminders can fire: the toggle is on and location access is allowed. Never prompts. */
+export async function locationRemindersReady(): Promise<boolean> {
+  return (await isLocationRemindersEnabled()) && (await getLocationPermission()) !== "denied";
+}
+
 /**
  * The Settings toggle. On: asks for permission; refused → stays off (returns "denied"). Off: stops
  * monitoring. Only Pro users can turn it on (the Settings screen disables it otherwise).
@@ -321,9 +326,12 @@ export function startLocationReminders(opts: { isPro: boolean }): () => void {
   // A snackbar, not the system dialog, so the user chooses; the dialog opens from its button.
   const askIfNeeded = async () => {
     if (!opts.isPro) return;
-    const located = locatedTaskIds(await readTasks());
+    const tasks = await readTasks();
+    const located = locatedTaskIds(tasks);
     const denied = (await getLocationPermission()) === "denied";
-    const ask = shouldAskForLocation(seen, located, enabled && !denied);
+    // After the first check, a new chat task already showed the in-chat card: don't prompt twice.
+    const inChat = new Set(tasks.filter(promptedInChat).map((x) => x.id));
+    const ask = shouldAskForLocation(seen, seen ? located.filter((id) => !inChat.has(id)) : located, enabled && !denied);
     seen = new Set(located);
     if (!ask) return;
     // Access refused → "Grant"; access fine but the Settings toggle off → "Turn on". Both turn the toggle on.

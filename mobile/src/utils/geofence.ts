@@ -31,6 +31,11 @@ export function locatedTaskIds(tasks: Task[]): string[] {
   return [...new Set(groupTasksByLocation(tasks).flatMap((p) => p.tasks.map((t) => t.taskId)))];
 }
 
+/** Chat and voice tasks get the in-chat Location card instead of the snackbar (one prompt per task). */
+export function promptedInChat(task: Pick<Task, "source">): boolean {
+  return task.source === "CHAT" || task.source === "VOICE";
+}
+
 /**
  * Ask for location access when reminders can't fire (toggle off or permission denied) and a watched task is
  * new since the last check, or this is the first check since the app started. Asking once per new task never nags.
