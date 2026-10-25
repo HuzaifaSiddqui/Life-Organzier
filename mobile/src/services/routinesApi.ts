@@ -16,6 +16,8 @@ export type RoutineInput = {
   locationContext?: string | null;
   intervalDays?: number | null;
   anchorDate?: string | null;
+  /** The only way a routine has no reminder; otherwise a missing time gets the user's usual time on the server. */
+  noReminder?: boolean;
 };
 
 export async function getRoutines(all = false): Promise<{ routines: Routine[]; context: string | null }> {

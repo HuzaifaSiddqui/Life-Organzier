@@ -51,6 +51,7 @@ const EMPTY: FormState = {
   priority: "NORMAL",
   timeLocked: false,
   locationContext: null,
+  noReminder: false,
 };
 
 function freqLabel(r: Routine): string {
@@ -131,7 +132,9 @@ export function RoutineScreen({ navigation }: Props) {
       // Every N days: the server decides which days count (no day rule on the phone).
       intervalDays: form.intervalDays ?? null,
       anchorDate: form.intervalDays ? (form.anchorDate ?? ymdFromLocalDate(new Date())) : null,
-      dueTime: form.dueTime || null,
+      dueTime: form.noReminder ? null : form.dueTime || null,
+      // Reminder on with no time: the server sets the user's usual time (9 AM until it is learned).
+      noReminder: Boolean(form.noReminder),
       durationMinutes: form.durationMinutes,
       category: form.category,
       priority: form.priority,
@@ -202,7 +205,7 @@ export function RoutineScreen({ navigation }: Props) {
             return (
               <Pressable
                 key={r.id}
-                onPress={() => setForm({ ...EMPTY, ...r, id: r.id, daysOfWeek: r.daysOfWeek ?? [], dayOfMonth: r.dayOfMonth ?? 1 })}
+                onPress={() => setForm({ ...EMPTY, ...r, id: r.id, daysOfWeek: r.daysOfWeek ?? [], dayOfMonth: r.dayOfMonth ?? 1, noReminder: !r.dueTime })}
               >
                 <Card style={{ gap: 6, opacity: r.active ? 1 : 0.55 }}>
                   <View style={styles.rowBetween}>
@@ -213,7 +216,7 @@ export function RoutineScreen({ navigation }: Props) {
                     <Switch value={r.active} onValueChange={(active) => void updateRoutine(r.id, { active }).then(load)} />
                   </View>
                   <Text style={styles.meta}>
-                    {freqLabel(r)} · {r.dueTime ?? "flexible time"}
+                    {freqLabel(r)} · {r.dueTime ?? "no reminder"}
                     {r.durationMinutes ? ` · ${formatDuration(r.durationMinutes)}` : ""}
                     {r.locationContext ? ` · ${r.locationContext}` : ""}
                     {r.timeLocked ? " · Time-locked" : ""}
@@ -302,13 +305,22 @@ export function RoutineScreen({ navigation }: Props) {
                     />
                   </View>
                 ) : null}
-                <View>
-                  <Text style={ui.label}>Time (leave empty for flexible)</Text>
-                  <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                    <InlineTimePickerField value={form.dueTime ?? ""} onChange={(t) => setForm({ ...form, dueTime: t, timeLocked: form.timeLocked || true })} style={{ flex: 1 }} />
-                    {form.dueTime ? <Chip small label="Flexible" onPress={() => setForm({ ...form, dueTime: null, timeLocked: false })} /> : null}
+                <View style={styles.rowBetween}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={ui.body}>Reminder</Text>
+                    <Text style={styles.meta}>{form.noReminder ? "No reminder and no set time" : "Before it starts, at the time, and once more if not done"}</Text>
                   </View>
+                  <Switch
+                    value={!form.noReminder}
+                    onValueChange={(on) => setForm({ ...form, noReminder: !on, ...(on ? {} : { dueTime: null, timeLocked: false }) })}
+                  />
                 </View>
+                {!form.noReminder ? (
+                  <View>
+                    <Text style={ui.label}>Time (empty: your usual time, 9 AM until learned)</Text>
+                    <InlineTimePickerField value={form.dueTime ?? ""} onChange={(t) => setForm({ ...form, dueTime: t, timeLocked: form.timeLocked || true })} />
+                  </View>
+                ) : null}
                 {form.dueTime ? (
                   <View style={styles.rowBetween}>
                     <View style={{ flex: 1 }}>
