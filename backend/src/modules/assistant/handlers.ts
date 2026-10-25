@@ -2,7 +2,7 @@ import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prism
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
 import { addDaysYmd, dueDateFromYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, startOfLocalDay } from "../../lib/time.js";
-import { formatDuration, fuzzySimilarity, listJoin, plural, truncate } from "../../lib/text.js";
+import { contentTokens, formatDuration, fuzzySimilarity, listJoin, plural, truncate } from "../../lib/text.js";
 import { logEvent } from "../events/eventService.js";
 import { isMood, type Mood } from "../mood/moodService.js";
 import { acceptRecommendation, dismissRecommendation } from "../patterns/recommendationService.js";
@@ -39,9 +39,11 @@ import {
   taskById,
   todayRoutinesText,
   dueLabel,
+  extractOpts,
   type Out,
   type Turn,
 } from "./dialogue.js";
+import { findReply, parseFindQuery } from "./commands/find.js";
 import { resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
@@ -491,13 +493,18 @@ async function splitIntent(turn: Turn, u: Understanding): Promise<Out> {
 }
 
 async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<Out> {
+  // A question that names something to look for is a search, never today's list ("any task related to KFC").
+  const find = parseFindQuery(text, { opts: extractOpts(turn), todayYmd: turn.todayYmd });
+  if (find) return findReply(turn, find);
   // Deterministic parse (English, Urdu, Roman Urdu) decides what is asked; the regexes below cover older English phrasing.
   const q = parseQuery(text);
   if (q?.kind === "classes" || q?.kind === "next_class" || q?.kind === "where_class") return classQuery(turn, q);
   if (q?.kind === "urgent") return urgentQuery(turn);
 
   const ref = q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null;
-  if (ref && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(ref)) {
+  // "what's due today" leaves "s": not a task name. Only a real word or an explicit "it/this/that" looks one up.
+  const namesTask = Boolean(ref && (contentTokens(ref).length || /\b(?:it|this|that)\b/i.test(ref)));
+  if (ref && namesTask && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(ref)) {
     const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted: true, listed: turn.state.listed });
     if (r.task) {
       focusOn(turn, r.task.id);
@@ -525,7 +532,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   const range = q?.kind === "overdue" ? "overdue" : q?.kind === "due" ? q.range : null;
   let title = "Today";
   let list: Task[];
-  if (range === "overdue" || (!q && /\boverdue|late|missed\b/i.test(text))) {
+  if (range === "overdue" || (!q && /\b(?:overdue|late|missed)\b/i.test(text))) {
     title = "Overdue";
     list = visible.filter((t) => t.dueAt && t.dueAt < turn.now);
   } else if (range === "week" || (!q && /\b(?:this week|week)\b/i.test(text))) {

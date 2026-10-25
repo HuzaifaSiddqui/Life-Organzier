@@ -43,6 +43,8 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run typecheck
       - run: npm test
+      # Search eval on a seeded test user: fails if a negative returns anything or precision/recall < 90 %.
+      - run: npm run eval:queries
 
   # Document reading on Windows: sharp, @napi-rs/canvas (scanned-PDF rendering) and Tesseract are native or
   # WASM packages with per-platform binaries, so their tests also run here. No database: DB tests skip.

@@ -24,6 +24,9 @@ import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage, isNetworkError } from "../../services/api";
 import { loadCurrentConversation, sendToAssistant, startNewConversation } from "../../services/assistantApi";
 import { speak, stopSpeaking } from "../../services/speech";
+import { readTasks } from "../../services/syncEngine";
+import { normalizeSpelled } from "../../utils/spelled";
+import { speechHints } from "../../utils/speechHints";
 import type { ActionPayload, ChatMessage, QuickAction } from "../../types/models";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Assistant">;
@@ -159,7 +162,8 @@ export function AssistantScreen({ navigation, route }: Props) {
         return;
       }
       setDraft("");
-      void send({ text, voice: true });
+      // Spelled letters ("k f c", "kay ef see") as one word before the assistant reads it; the server does it again.
+      void send({ text: normalizeSpelled(text), voice: true });
     },
     onError: (m) => setNotice(m),
   });
@@ -168,7 +172,8 @@ export function AssistantScreen({ navigation, route }: Props) {
     stopSpeaking();
     setNotice(null);
     voiceTurnRef.current = true;
-    const ok = await start("", SPEECH_LANG[settings?.language ?? "en"] ?? "en-US");
+    const hints = speechHints(await readTasks().catch(() => []));
+    const ok = await start("", SPEECH_LANG[settings?.language ?? "en"] ?? "en-US", hints);
     if (!ok) voiceTurnRef.current = false;
   }, [settings?.language, start]);
 

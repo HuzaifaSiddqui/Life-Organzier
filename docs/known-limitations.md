@@ -312,3 +312,39 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Other phrasings are not guessed** ("thrice a week", "every alternate Monday").
 - **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
   Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).
+
+## Finding tasks by topic
+
+- **Typos are caught in tiers.** Exact word, then substring, then fuzzy (trigram similarity ≥ 0.75, which
+  catches light typos such as "asignment"), then same Soundex code (catches "kentuky", "phisics", "grocries",
+  "multaan"). Not caught: a dropped letter that changes the sound code ("libary" for library) and typos in
+  words of 3 letters or fewer ("gim" for gym), where sound matching would match too much. Eval: 49/51 exact,
+  precision 100 %, recall 94.9 %, negatives 10/10.
+- **Every word must match somewhere.** "tasks about physics lab" needs both words in the same task (in any
+  field). Question words ("due", "today", "koi", "kaam") are not search words.
+- **Questions in English and Roman Urdu only.** Urdu-script search questions are not understood yet (planned
+  after the deadline; see "Urdu coverage"). Replies follow the app language, so Urdu users get Urdu replies.
+- **"KFC wala kaam" is a search only when nothing but question words follow it**; "KFC wala kaam kal karna hai"
+  adds a task.
+- **Voice hints** (task titles, places, course codes, tags; at most 100) help only on Android 13+ and iOS;
+  older Android ignores them. Routine titles are not in the hints (routines aren't cached on the phone).
+## Urdu coverage
+
+Scope until the deadline (1 Nov 2026): no new Urdu-script work. Existing Urdu behaviour, tests and the chat eval's
+Urdu group (18/18) stay as they are.
+
+- **Works in Urdu today:** the app's UI strings (`mobile/src/i18n/strings.ts`, English and Urdu tables); Urdu-script
+  chat commands (routines, task fields, settings, insights, bulk; chat eval: ur 18/18) and deadline/class
+  questions (answered in English); Urdu replies
+  for settings and bulk commands, confirmations and re-asks (`commands/copy.ts`), location-reminder messages and
+  the in-chat location card, the Free-user Pro invitation, search replies; crisis detection phrases (to be
+  reviewed by a native speaker); Urdu month names and weekday words in documents and timetables; check-in
+  templates and the first-step keyword library.
+- **English (and Roman Urdu) only:** search questions (`find_items`: English and Roman Urdu patterns; Urdu-script
+  questions are not matched, and Urdu-script words don't match English titles); deadline and class answers;
+  routine, task-field, insight and help replies (see "Some command replies are still English" above); new
+  features from now on (interval routines: English and Roman Urdu, Urdu strings only where the existing locale
+  mechanism needs no new translation). Right-to-left layout is built but switched off (`RTL_READY`).
+- **Planned after the deadline:** Urdu-script patterns for search and the new features, Urdu replies for the
+  remaining English command replies, transliteration so Urdu-script words can match English titles, and a native
+  speaker's review of the Urdu strings and crisis phrases.
