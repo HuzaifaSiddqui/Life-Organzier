@@ -501,7 +501,8 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   if (q?.kind === "classes" || q?.kind === "next_class" || q?.kind === "where_class") return classQuery(turn, q);
   if (q?.kind === "urgent") return urgentQuery(turn);
 
-  const ref = q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null;
+  // "my physics task" names the physics task: the word "task" is dropped, not a reason to list today.
+  const ref = (q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null)?.replace(/\btasks?\b/gi, " ").replace(/\s+/g, " ").trim() || null;
   // "what's due today" leaves "s": not a task name. Only a real word or an explicit "it/this/that" looks one up.
   const namesTask = Boolean(ref && (contentTokens(ref).length || /\b(?:it|this|that)\b/i.test(ref)));
   if (ref && namesTask && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(ref)) {
