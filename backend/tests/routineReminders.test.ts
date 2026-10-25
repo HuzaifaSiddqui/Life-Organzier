@@ -5,7 +5,7 @@ import type { User, UserSettings } from "@prisma/client";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { prisma } from "../src/config/db.js";
 import { backgroundSettled } from "../src/lib/background.js";
-import { addDaysYmd, localYmd, zonedTimeToUtc } from "../src/lib/time.js";
+import { addDaysYmd, formatClock, localYmd, zonedTimeToUtc } from "../src/lib/time.js";
 // The registry first, as in the app: it loads every command module in order.
 import "../src/modules/assistant/commands/registry.js";
 import { handleAssistantMessage } from "../src/modules/assistant/dialogue.js";
@@ -189,5 +189,23 @@ test("WhatsApp: done or skipped there → nothing planned for it, and a sync pus
     ]);
     const list = await plan(user);
     assert.deepEqual([...forRoutine(list, "Reading"), ...forRoutine(list, "Walk")].filter((s) => s.startsWith(TODAY)), []);
+  });
+});
+
+test("many tasks and many routines: tasks keep their reminders (routines get 24 of 60, tasks the rest)", { skip }, async () => {
+  await withUser(async (_say, user) => {
+    // 40 tasks due over the next 5 days at 5 PM (each has several reminders) and 15 daily routines.
+    for (let i = 0; i < 40; i += 1) {
+      const ymd = addDaysYmd(TODAY, 1 + (i % 5));
+      await prisma.task.create({ data: { userId: user.id, title: `Task ${i}`, priority: "MEDIUM", source: "CHAT", dueTime: "5 PM", dueAt: at(ymd, 17), dueDate: at(ymd, 0) } });
+    }
+    for (let i = 0; i < 15; i += 1) await createRoutine(user.id, TZ, { title: `Routine ${i}`, frequency: "DAILY", dueTime: formatClock(8 + (i % 12), i % 2 ? 30 : 0) }, NOW);
+    const planned = await plan(user);
+    const tasks = planned.filter((r) => r.taskId).length;
+    const routines = planned.filter((r) => r.routineOccurrenceId).length;
+    assert.equal(planned.length, 60);
+    assert.equal(routines, ROUTINE_REMINDER_SHARE, "routines are held to their share");
+    assert.equal(tasks, 60 - ROUTINE_REMINDER_SHARE, "tasks keep the rest");
+    assert.ok(planned.some((r) => r.taskId && new Date(r.fireAt).getTime() - NOW.getTime() < 36 * 3600000), "the soonest task reminders are kept");
   });
 });

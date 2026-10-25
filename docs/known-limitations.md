@@ -316,9 +316,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   their patterns (9 AM until learned), moved to the end of quiet hours if it falls inside them. Chat says what was
   set and takes one answer (a time or "no reminder"); ignoring it keeps the default. Same for the routine form and
   routines made from documents.
-- **"No reminder" means no set time.** There is no separate reminder field (no migration), so a routine without a
-  reminder is a flexible-time routine; one can't have a fixed time and no reminder. Routines saved before this
-  change without a time keep no reminder until a time is set.
+- **A routine cannot have a fixed time and no reminder.** There is no separate reminder field (no migration):
+  "no reminder" saves the routine without a time (a flexible-time routine).
+- **Routines saved before this change without a time have no reminder** until a time is set (chat or the
+  Routines screen). Only new routines get the default time.
+- **Mandatory routine follow-ups skip quiet hours and Do Not Disturb by design** when "critical reminders override
+  DND" is on: "Still to do" at +20 and +60 minutes can arrive at night. Normal routines' follow-ups never do.
 - **What is planned** for a pending occurrence: a nudge 10 minutes before (not in quiet hours or Do Not Disturb), the
   alarm at the time (also in quiet hours; in Do Not Disturb only with "critical reminders override DND"), and a
   "Still to do" follow-up 20 minutes after; mandatory routines get a second one at +60 minutes. Follow-ups skip
