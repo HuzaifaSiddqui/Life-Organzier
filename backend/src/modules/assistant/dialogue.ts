@@ -285,6 +285,13 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     };
   }
 
+  // The last chat reply offered something ("Say: …"): "yes", "sure, for 6 pm" runs it; anything else moves on.
+  if (turn.state.pending?.kind === "offer") {
+    const accepted = acceptOffer(extractOpts(turn), turn.state.pending.text, text);
+    turn.state.pending = null;
+    if (accepted) return handleText(turn, accepted);
+  }
+
   // "every other day" / "every N days": a new interval routine. Changing an existing routine's interval is done
   // on the routine screen (the chat doesn't edit intervals).
   const interval = extractInterval(text);
@@ -1242,7 +1249,7 @@ export async function confirmMood(turn: Turn, mood: Mood, confidence: number, sc
       history: turn.history,
       userText: `I'm feeling ${mood}.`,
       language: turn.settings.language,
-      instruction: `The assistant will also show these suggestions: ${rec.primary?.label ?? ""}; ${rec.suggestions.map((s) => s.label).join("; ")}. Write a short caring reply that leads into them. Do not list them. Do not ask how they feel — they just told you.`,
+      instruction: `The assistant will also show these suggestions: ${rec.primary?.label ?? ""}; ${rec.suggestions.map((s) => s.label).join("; ")}. Write a short caring reply that leads into them. Do not list them. Do not ask how they feel — they just told you. Do not offer to set reminders or ask yes/no questions.`,
     });
     if (llm) content = llm;
   }
@@ -1281,7 +1288,12 @@ export async function conversationalReply(turn: Turn, text: string, mode: "chat"
   const llm = allowDeep
     ? await generateReply({ mode, contextBlock: context.block, history: turn.history, userText: text, language: turn.settings.language })
     : null;
-  if (llm) return { content: llm, intent: mode };
+  if (llm) {
+    const offer = OFFER.exec(llm)?.[1]?.trim();
+    if (!offer) return { content: llm, intent: mode };
+    turn.state.pending = { kind: "offer", text: offer };
+    return { content: llm, actions: [{ label: offer.charAt(0).toUpperCase() + offer.slice(1), text: offer, style: "primary" }], intent: mode };
+  }
   if (mode === "support") {
     const tasks = await listActiveTasks(turn.user.id);
     const rec = recommendForMood("stressed", tasks, context.copingMemories);
@@ -1297,6 +1309,30 @@ export async function conversationalReply(turn: Turn, text: string, mode: "chat"
   }
   // No language model for a chat answer: say what I can do instead of a generic reply.
   return { ...capabilityReply(turn, text, "I can't chat about that right now, but here's what I can do:"), intent: "chat_fallback" };
+}
+
+/** The responder's "Say: …" suggestion (responder.ts asks the model to phrase actions that way). */
+const OFFER = /\bSay:\s*["'“‘]?([^"”’\n]+?)["'”’]?\s*[.!]?\s*(?:$|\n)/i;
+const YES_LEAD = /^(?:yes|yeah|yep|yup|sure|ok|okay|alright|haan|han|haa|ji|jee|theek hai|thik hai|go ahead|do it)\b[\s,!.]*/i;
+/** Words around a yes that add nothing ("yes, scheduled for 6 pm", "sure do it then"). */
+const OFFER_FILLER = new Set("please it that this then for at on in by scheduled schedule set make do sounds good fine great perfect the a and".split(" "));
+const OFFER_TIME = /\s*\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi;
+
+/**
+ * "yes" → the offered text; "yes, for 6 pm" → the offer with that time; "yes, tomorrow" → with that day.
+ * Null when it isn't a yes, or the yes carries a new request ("ok remove all my tasks").
+ * ponytail: the time swap is a regex on "8 PM"-style times, which is what the responder writes.
+ */
+export function acceptOffer(opts: ExtractOptions, offer: string, text: string): string | null {
+  const lead = YES_LEAD.exec(text.trim());
+  if (!lead) return null;
+  const rest = text.trim().slice(lead[0].length).replace(/[.!]+$/, "").trim();
+  if (!rest) return offer;
+  const e = extractEntities(rest, opts);
+  const leftover = e.residual.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w && !OFFER_FILLER.has(w));
+  if (leftover.length > 1 || (!e.date && !e.timeExplicit)) return leftover.length ? null : offer;
+  if (e.date) return `${extractEntities(offer, opts).residual.replace(/\s+(?:for|at|on|by)\s*$/i, "")} ${rest.replace(/^(?:scheduled|schedule it|set it|make it)\s+/i, "")}`;
+  return `${offer.replace(OFFER_TIME, "").trim()} at ${e.time}`;
 }
 
 export async function storeInfo(turn: Turn, text: string): Promise<Out> {

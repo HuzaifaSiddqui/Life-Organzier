@@ -135,6 +135,7 @@ would give an honest accuracy number is still empty: it needs a teammate who has
 | Move all of today to another day | no | `bulk_move_today` |
 | Complete all tasks with a tag | no | `bulk_complete_tag` |
 | Delete all completed tasks | no | `bulk_delete_completed` |
+| Delete all open tasks ("remove all the pending tasks") | no | `bulk_delete_open` |
 | Postpone non-urgent tasks | partial (button after stress / crisis) | `bulk_postpone_nonurgent` |
 | Several requests in one message | no | multi-clause split (`commands/multi.ts`) |
 

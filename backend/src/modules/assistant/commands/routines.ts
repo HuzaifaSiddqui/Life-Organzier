@@ -51,14 +51,17 @@ async function resolveRoutine(turn: Turn, command: string, args: CommandArgs): P
     return { out: askChoice(turn, command, args, "routineId", routines.map((r) => ({ id: r.id, label: r.title })), "Which routine?") };
   }
   const scored = routines
-    .map((r) => ({ r, s: Math.max(fuzzySimilarity(ref, r.title), r.title.toLowerCase().includes(ref) ? 0.9 : 0) }))
+    .map((r) => ({ r, s: bare(r.title) === bare(ref) ? 1 : Math.max(fuzzySimilarity(ref, r.title), r.title.toLowerCase().includes(ref) ? 0.9 : 0) }))
     .filter((x) => x.s >= 0.34)
     .sort((a, b) => b.s - a.s);
   if (!scored.length) return { none: true, empty: false };
   const [first, second] = scored;
-  if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12)) return { routine: first.r };
+  if (first.s === 1 || (first.s >= 0.5 && (!second || first.s - second.s >= 0.12))) return { routine: first.r };
   return { out: askChoice(turn, command, args, "routineId", scored.map((x) => ({ id: x.r.id, label: x.r.title })), "Which routine do you mean?") };
 }
+
+/** "Go to gym" and the ref "go gym" are the same routine. */
+const bare = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w && !["to", "the", "a", "an", "my", "of", "for"].includes(w)).join(" ");
 
 function notFound(ref: string): Out {
   return { content: ref ? `I couldn't find a routine called "${ref}".` : "Which routine?", actions: [{ label: "Show my routines", text: "Show my routines" }], intent: "routine_not_found" };
@@ -137,7 +140,9 @@ const routineUpdate: Command = {
   undoable: true,
   parse(text, ctx: ParseCtx) {
     const t = norm(text);
-    if (!has(t, ROUTINE) || !has(t, UPDATE) || has(t, `${ONCE}|${PAUSE}|${RESUME}|${DELETE}|${SKIP}`)) return null;
+    // Only routines can be mandatory, so "Make Go to gym mandatory" (the button after a new routine) needs no "routine".
+    const makeMandatory = /^(?:please )?(?:make|set|mark) .+ (?:as )?(?:mandatory|compulsory)$/.test(t);
+    if ((!has(t, ROUTINE) && !makeMandatory) || !has(t, UPDATE) || has(t, `${ONCE}|${PAUSE}|${RESUME}|${DELETE}|${SKIP}`)) return null;
     const e = extractEntities(text, ctx.opts);
     const args: CommandArgs = {};
     if (e.time && e.timeExplicit) args.time = e.time;

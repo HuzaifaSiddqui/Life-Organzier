@@ -117,10 +117,16 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
   that question and never starts a command; if the question can't use it, it is asked again. Only a reply that is
   not an answer (e.g. "mark all done" to a time question) can replace the question. The reply's `answered` field
   says which question took it. Eval group: `pending` in `assistant-eval.json`.
+- **Offers in chat replies** (`dialogue.ts` `acceptOffer`): when a model chat reply suggests "Say: …", that text is
+  kept as the open question and shown as a button. "yes" / "sure" / "haan" runs it; "yes, for 6 pm" or "yes,
+  tomorrow" runs it with that time or day; anything else drops it. English and Roman Urdu yes words only.
+- **A time alone means today** (`draft.ts`): "call Mooz at 6 pm" is due today; if 6 PM has passed, the usual
+  "tomorrow, or a later time today?" question asks. A reply that opens with "yes", "I mean" or "actually" never
+  puts those words in the title, and the LLM (which sees the conversation) titles it ("Call Mooz").
 - **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
   deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
   command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.
-- **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, postpone
+- **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, delete all open tasks, postpone
   non-urgent. One preview with the titles (at most 25 tasks per confirmation; WhatsApp shows 8 and "…and N
   more"), one "yes", undone as one batch from per-task snapshots.
 - **Several requests in one message** (`multi.ts`): split only at clause boundaries (and / aur / then / also /
