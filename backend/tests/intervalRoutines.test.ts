@@ -4,7 +4,7 @@ import test from "node:test";
 import type { User } from "@prisma/client";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { prisma } from "../src/config/db.js";
-import { ASK_ROUTINE_TIME, handleAssistantMessage, USE_ROUTINE_SCREEN } from "../src/modules/assistant/dialogue.js";
+import { handleAssistantMessage, USE_ROUTINE_SCREEN } from "../src/modules/assistant/dialogue.js";
 import { planReminders } from "../src/modules/reminders/reminderService.js";
 import { extractInterval } from "../src/modules/assistant/entities.js";
 import { analyzeDocument, INTERVAL_WARNING } from "../src/modules/documents/documentProcessing.js";
@@ -175,41 +175,8 @@ test("chat: Roman Urdu and a time; English replies", { skip }, async () => {
   });
 });
 
-test("no time given: chat asks once ('Morning, afternoon, evening, or pick a time?') and the answer sets the reminder time", { skip }, async () => {
-  await withUser(async (say, user) => {
-    const created = await say(MEDICINE);
-    assert.match(created.message.content, new RegExp(ASK_ROUTINE_TIME.replace("?", "\\?")));
-    assert.deepEqual(created.message.actions?.map((a) => a.label), ["Morning", "Afternoon", "Evening"]);
-    const routine = await prisma.routine.findFirstOrThrow({ where: { userId: user.id } });
-    const settings = await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } });
-    assert.equal((await planReminders(user.id, settings)).filter((r) => r.title === routine.title).length, 0, "no time: no reminder");
-
-    const set = await say("evening");
-    assert.equal(set.message.intent, "routine_time_set");
-    assert.match(set.message.content, /^Okay: Take medicine at 6 PM, every other day/);
-    const today = localYmd(new Date(), TZ);
-    const rows = await prisma.routineOccurrence.findMany({ where: { routineId: routine.id }, orderBy: { occurrenceDate: "asc" } });
-    assert.deepEqual(rows.slice(0, 2).map((o) => [localYmd(o.occurrenceDate, TZ), o.status, o.dueTime]), [
-      [today, "COMPLETED", null], // today's done one is kept as it was
-      [addDaysYmd(today, 2), "PENDING", "6 PM"],
-    ]);
-    const plan = (await planReminders(user.id, settings)).filter((r) => r.title === routine.title);
-    assert.ok(plan.length >= 1, "now it has reminders");
-    assert.equal(localYmd(new Date(plan[0].fireAt), TZ), addDaysYmd(today, 2), "first reminder: the day after tomorrow (5 minutes before 6 PM)");
-  });
-});
-
-test("the time question is asked once: an unrelated reply drops it; an explicit time works too", { skip }, async () => {
-  await withUser(async (say, user) => {
-    await say("water the plants every 3 days");
-    await say("hey how are you");
-    await say("evening");
-    assert.equal((await prisma.routine.findFirstOrThrow({ where: { userId: user.id } })).dueTime, null, "question dropped after an unrelated reply");
-    await say("read a chapter every other day");
-    await say("9:30 pm");
-    assert.equal((await prisma.routine.findFirstOrThrow({ where: { userId: user.id, title: { contains: "chapter", mode: "insensitive" } } })).dueTime, "9:30 PM");
-  });
-});
+// The time question after a routine without a time (default 9 AM, ignored / answered / "no reminder"):
+// tests/routineReminders.test.ts.
 
 test("updates that don't change the schedule keep the interval: title only, time only, the same schedule resent, the form's full payload", { skip }, async () => {
   await withUser(async (_say, user) => {
