@@ -1,4 +1,5 @@
 import { Prisma, type RoutineFrequency, type RoutineOccurrenceStatus, type RoutinePriority } from "@prisma/client";
+import { answerAction, commandAction } from "../actions.js";
 import { prisma } from "../../../config/db.js";
 import { fuzzySimilarity, truncate } from "../../../lib/text.js";
 import { generateRoutineOccurrences, updateRoutine } from "../../routines/routineService.js";
@@ -38,6 +39,12 @@ export const CONFIRM_TTL_MS = 10 * 60000;
  * `text`: the user's words, kept with a confirmation so an expired one can be shown again.
  */
 export async function runCommand(turn: Turn, name: string, rawArgs: CommandArgs, opts: { text?: string } = {}): Promise<Out> {
+  const out = await runCommandInner(turn, name, rawArgs, opts);
+  // Which command handled the turn (a fallback inside it may have handed over to another one).
+  return { ...out, command: out.command ?? name };
+}
+
+async function runCommandInner(turn: Turn, name: string, rawArgs: CommandArgs, opts: { text?: string }): Promise<Out> {
   const c = commandText(turn.settings.language);
   const command = getCommand(name);
   if (!command) return { content: c.unknown, intent: "unknown_command" };
@@ -68,7 +75,7 @@ export async function runCommand(turn: Turn, name: string, rawArgs: CommandArgs,
 export function askChoice(turn: Turn, command: string, args: CommandArgs, field: string, candidates: Array<{ id: string; label: string }>, question: string): Out {
   const shown = candidates.slice(0, 5);
   turn.state.pending = { kind: "command_choice", command, args, field, candidates: shown };
-  return { content: question, actions: shown.map((c, i) => ({ label: truncate(c.label, 32), text: String(i + 1) })), intent: "command_choice" };
+  return { content: question, actions: shown.map((c, i) => answerAction(truncate(c.label, 32), "command_choice", String(i + 1))), intent: "command_choice" };
 }
 
 /** Answers to confirm_command / command_choice. Null = the user moved on (the question is dropped by the caller). */
@@ -110,7 +117,8 @@ export async function confirmPending(turn: Turn, p: Extract<Pending, { kind: "co
   turn.state.pending = null;
   const c = commandText(turn.settings.language);
   if (p.at && turn.now.getTime() - Date.parse(p.at) > CONFIRM_TTL_MS) {
-    return { content: c.expired, actions: p.text ? [{ label: c.showAgain, text: p.text, style: "primary" }] : [], intent: "confirm_expired" };
+    // Shows the preview again with the same command (it is re-made from the current tasks), never re-reads the text.
+    return { content: c.expired, actions: [commandAction(c.showAgain, p.command, p.args, { text: p.text, style: "primary" })], intent: "confirm_expired" };
   }
   const command = getCommand(p.command);
   return command ? command.execute(turn, p.args) : { content: c.unknown, intent: "noop" };

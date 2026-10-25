@@ -127,13 +127,22 @@ export type ActionPayload =
   | { type: "set_context"; context: string }
   | { type: "open_task"; taskId: string }
   | { type: "navigate"; screen: string }
-  | { type: "breathing"; minutes: number };
+  | { type: "breathing"; minutes: number }
+  /** Run this registry command (or wrapped intent) with these arguments; never re-parsed as a sentence. */
+  | { type: "command"; command: string; args?: Record<string, unknown> }
+  /** An answer to the open question of this kind; ignored (and said so) once that question has closed. */
+  | { type: "answer"; pending: Pending["kind"]; text: string }
+  /** "Talk about it": a supportive conversation about how the user feels. */
+  | { type: "talk" };
 
+/**
+ * A button, chip or suggestion. The contract: it always carries a structured payload (what runs when it is
+ * tapped). `text` is only what a WhatsApp user can type instead; the app never sends it back for a tap.
+ */
 export type QuickAction = {
   label: string;
-  /** Text sent as the user's message when tapped (keeps one conversation pipeline). */
   text?: string;
-  payload?: ActionPayload;
+  payload: ActionPayload;
   style?: "primary" | "default" | "danger";
 };
 

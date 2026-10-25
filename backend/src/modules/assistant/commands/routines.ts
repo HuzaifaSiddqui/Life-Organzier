@@ -1,4 +1,5 @@
 import { RoutineFrequency, RoutineOccurrenceStatus, RoutinePriority, type Routine } from "@prisma/client";
+import { sayAction } from "../actions.js";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
 import { HttpError } from "../../../lib/http.js";
@@ -64,7 +65,7 @@ async function resolveRoutine(turn: Turn, command: string, args: CommandArgs): P
 const bare = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w && !["to", "the", "a", "an", "my", "of", "for"].includes(w)).join(" ");
 
 function notFound(ref: string): Out {
-  return { content: ref ? `I couldn't find a routine called "${ref}".` : "Which routine?", actions: [{ label: "Show my routines", text: "Show my routines" }], intent: "routine_not_found" };
+  return { content: ref ? `I couldn't find a routine called "${ref}".` : "Which routine?", actions: [sayAction("Show my routines", "routine_list", "Show my routines")], intent: "routine_not_found" };
 }
 
 async function prepareRoutine(turn: Turn, command: string, args: CommandArgs, fallback?: string): Promise<Prepared> {

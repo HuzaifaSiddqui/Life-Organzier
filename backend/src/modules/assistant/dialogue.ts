@@ -1,3 +1,4 @@
+import { answerAction, commandAction, sayAction } from "./actions.js";
 import {
   ConversationRole,
   Prisma,
@@ -78,8 +79,11 @@ import { rulesUnderstand, understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
-import { routeWithLlm } from "./commands/router.js";
-import { capabilityReply } from "./commands/capabilities.js";
+import { capabilityReply, unknownReply } from "./commands/capabilities.js";
+import { meaningRoute } from "./commands/meaning.js";
+import { getAi } from "../../ai/llm.js";
+import { bankIndex } from "./commands/neighbours.js";
+import type { ParseCtx } from "./commands/types.js";
 import { resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
@@ -116,6 +120,8 @@ export type Out = {
   mood?: string | null;
   /** Set when the reply answered the open question (see commands/pendingAnswer.ts). */
   answered?: string;
+  /** The registry command that handled the turn, when one did (the action contract test reads it). */
+  command?: string;
 };
 
 export function isPro(settings: UserSettings): boolean {
@@ -216,6 +222,7 @@ export async function handleAssistantMessage(input: {
     memoriesUsed: turn.memoriesUsed,
     learned: turn.learned,
     ...(out.answered ? { answered: out.answered } : {}),
+    ...(out.command ? { command: out.command } : {}),
   };
   const assistantMessage = await addMessage({
     conversationId: conversation.id,
@@ -317,7 +324,8 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     const hit = matchCommand(text, ctx);
     if (hit) {
       turn.state.pending = null;
-      return runCommand(turn, hit.command.name, hit.args, { text });
+      // Sure rules; only a strong disagreement of the meaning-based router asks first (commands/meaning.ts).
+      return (await routeByMeaning(turn, text, ctx, { command: hit.command.name, confidence: 1 })) ?? runCommand(turn, hit.command.name, hit.args, { text });
     }
   }
 
@@ -334,17 +342,46 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     const resolved = await resolvePending(turn, text, u, Boolean(answering));
     if (resolved) return answering ? { ...resolved, answered: answering } : resolved;
   }
-  // Rules unsure and AI on: the two-stage router picks a registry command (validated, resolved by code).
-  if (u.ruleConfidence < 0.75 && !NO_ROUTE.has(u.intent)) {
-    const routed = await routeWithLlm(text, ctx);
-    if (routed) {
-      const command = getCommand(routed.command);
-      // A wrapped intent keeps this turn's understanding (LLM title etc.); new commands run through the registry.
-      if (command?.wrapped) return handleIntent(turn, { ...u, intent: routed.command as Understanding["intent"], targetRef: typeof routed.args.ref === "string" && routed.args.ref ? routed.args.ref.toLowerCase() : u.targetRef }, text);
-      return runCommand(turn, routed.command, routed.args);
-    }
+  // Rules unsure (AI on): the router, guided by the nearest bank examples, picks a command; sure rules may be
+  // asked about once. Greetings, answers, feelings and support are never routed.
+  if (!NO_ROUTE.has(u.intent)) {
+    const routed = await routeByMeaning(turn, text, ctx, { command: u.intent, confidence: u.ruleConfidence }, u);
+    if (routed) return routed;
   }
   return handleIntent(turn, u, text);
+}
+
+/**
+ * The meaning-based router's decision for this turn (commands/meaning.ts), run here; null keeps the rules' path.
+ * A route chosen by the neighbours alone that changes data is offered as a button, never run directly.
+ */
+async function routeByMeaning(turn: Turn, text: string, ctx: ParseCtx, rules: { command: string; confidence: number }, u?: Understanding): Promise<Out | null> {
+  try {
+    const ai = getAi();
+    const model = ai.enabled && ai.available;
+    const r = await meaningRoute(text, ctx, rules, { index: await bankIndex(model), model });
+    const d = r.decision;
+    if (d.kind === "rules") return null;
+    if (d.kind === "unknown") return unknownReply(turn, text, r.lang);
+    const summary = (name: string) => truncate(getCommand(name)?.summary ?? name, 40);
+    if (d.kind === "ask") {
+      return { content: "Just to be sure, did you mean:", actions: [...d.options.map((c, i) => sayAction(summary(c), c, text, i === 0 ? "primary" : undefined)), { label: "Neither", payload: { type: "cancel_pending" } }], intent: "meaning_ask" };
+    }
+    const command = getCommand(d.command);
+    if (!command) return null;
+    if (d.via === "neighbours" && (command.undoable || command.category === "bulk")) {
+      return { content: "Did you mean this?", actions: [sayAction(summary(d.command), d.command, text, "primary"), { label: "No", payload: { type: "cancel_pending" } }], intent: "meaning_ask" };
+    }
+    // A wrapped intent keeps this turn's understanding (LLM title etc.); new commands run through the registry.
+    if (command.wrapped) {
+      const base = u ?? rulesUnderstand(text, extractOpts(turn));
+      return handleIntent(turn, { ...base, intent: d.command as Understanding["intent"], targetRef: typeof d.args.ref === "string" && d.args.ref ? d.args.ref.toLowerCase() : base.targetRef }, text);
+    }
+    return runCommand(turn, d.command, d.args, { text });
+  } catch (error) {
+    console.warn("Meaning router skipped:", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 const SWITCH_INTENTS = new Set([...STRONG_SWITCH, "support", "thanks"]);
@@ -433,9 +470,9 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
           return {
             content: "I'm still not sure what you'd like to do. Do you want to:",
             actions: [
-              { label: "Create a task", text: "I want to create a task" },
-              { label: "Set a reminder", text: "Set a reminder" },
-              { label: "Add a routine", text: "Add a routine" },
+              answerAction("Create a task", "clarify_intent", "I want to create a task"),
+              answerAction("Set a reminder", "clarify_intent", "Set a reminder"),
+              answerAction("Add a routine", "clarify_intent", "Add a routine"),
               { label: "Never mind", payload: { type: "cancel_pending" } },
             ],
             intent: "clarify_intent",
@@ -552,9 +589,10 @@ export function moodChips(): QuickAction[] {
 }
 
 function slotChips(awaiting: string[]): QuickAction[] {
-  if (awaiting.includes("date")) return ["Today", "Tomorrow", "This Friday", "Next week", "No deadline"].map((l) => ({ label: l, text: l }));
-  if (awaiting.includes("time")) return ["9 AM", "12 PM", "3 PM", "6 PM", "9 PM", "End of day"].map((l) => ({ label: l, text: l }));
-  if (awaiting.includes("duration")) return ["30 min", "1 hour", "2 hours", "3 hours", "Not sure"].map((l) => ({ label: l, text: l }));
+  const chip = (l: string) => answerAction(l, "task_draft", l);
+  if (awaiting.includes("date")) return ["Today", "Tomorrow", "This Friday", "Next week", "No deadline"].map(chip);
+  if (awaiting.includes("time")) return ["9 AM", "12 PM", "3 PM", "6 PM", "9 PM", "End of day"].map(chip);
+  if (awaiting.includes("duration")) return ["30 min", "1 hour", "2 hours", "3 hours", "Not sure"].map(chip);
   return [];
 }
 
@@ -570,9 +608,9 @@ function pastDateCheck(turn: Turn, draft: TaskDraft, source: "CHAT" | "VOICE" | 
     return {
       content: `${relativeDayLabel(draft.dueYmd, turn.todayYmd) === "yesterday" ? "Yesterday" : `${draft.dueYmd}`} is in the past. Did you mean today or another date?`,
       actions: [
-        { label: "Today", text: "today" },
-        { label: "Tomorrow", text: "tomorrow" },
-        { label: "Another date", text: "another date" },
+        answerAction("Today", "past_date", "today"),
+        answerAction("Tomorrow", "past_date", "tomorrow"),
+        answerAction("Another date", "past_date", "another date"),
       ],
       intent: "past_date",
     };
@@ -584,7 +622,7 @@ function pastDateCheck(turn: Turn, draft: TaskDraft, source: "CHAT" | "VOICE" | 
       turn.state.pending = { kind: "past_date", draft, source };
       return {
         content: `${draft.dueTime} today has already passed. Do you mean tomorrow, or a later time today?`,
-        actions: [{ label: "Tomorrow", text: "tomorrow" }, { label: "Later today", text: "another time today" }],
+        actions: [answerAction("Tomorrow", "past_date", "tomorrow"), answerAction("Later today", "past_date", "another time today")],
         intent: "past_date",
       };
     }
@@ -621,9 +659,9 @@ export async function proceedWithDraft(
     return {
       content: "I'm not sure what you mean. Do you want to:",
       actions: [
-        { label: "Create a task", text: `Create a task: ${draft.title ?? ""}`.trim() },
-        { label: "Set a reminder", text: `Remind me: ${draft.title ?? ""}`.trim() },
-        { label: "Add a routine", text: `Add a daily routine: ${draft.title ?? ""}`.trim() },
+        answerAction("Create a task", "clarify_intent", `Create a task: ${draft.title ?? ""}`.trim()),
+        answerAction("Set a reminder", "clarify_intent", `Remind me: ${draft.title ?? ""}`.trim()),
+        answerAction("Add a routine", "clarify_intent", `Add a daily routine: ${draft.title ?? ""}`.trim()),
         { label: "Something else", payload: { type: "cancel_pending" } },
       ],
       cards: [await draftCard(turn, draft, clarity, missing)],
@@ -642,7 +680,7 @@ export async function proceedWithDraft(
       cards: [await draftCard(turn, draft, clarity, missing)],
       actions: [
         ...slotChips(missing),
-        ...(priorityHint ? (["Urgent", "High", "Low"] as const).map((p) => ({ label: p, text: `${p} priority` })) : []),
+        ...(priorityHint ? (["Urgent", "High", "Low"] as const).map((p) => answerAction(p, "task_draft", `${p} priority`)) : []),
         { label: "Cancel", payload: { type: "cancel_pending" } },
       ],
       intent: "clarify",
@@ -658,7 +696,7 @@ export async function proceedWithDraft(
         content: `Did you mean "${corrected}"?`,
         actions: [
           { label: `Yes, "${truncate(corrected, 30)}"`, payload: { type: "confirm_pending" }, style: "primary" },
-          { label: "No, keep it", text: "no" },
+          answerAction("No, keep it", "typo", "no"),
         ],
         intent: "typo",
       };
@@ -673,8 +711,8 @@ export async function proceedWithDraft(
       return {
         content: `I see you're studying ${prereq.course} topics. Have you completed ${prereq.prereq}?`,
         actions: [
-          { label: "Yes", text: "yes" },
-          { label: "No", text: "no" },
+          answerAction("Yes", "prereq", "yes"),
+          answerAction("No", "prereq", "no"),
         ],
         intent: "prereq",
       };
@@ -710,9 +748,9 @@ export async function proceedWithDraft(
         content: `${day.charAt(0).toUpperCase()}${day.slice(1)} is at capacity — ${formatDuration(load.minutes)} already planned of your ${formatDuration(load.capacity)}. ${movable.length ? `I could move ${listJoin(movable.map((t) => `"${t.title}"`))}. ` : ""}What would you like to do?`,
         cards: movable.length ? [{ type: "task_list", title: "Flexible tasks you could move", tasks: movable.map((t) => serializeTask(t)) }] : [],
         actions: [
-          { label: "Pick another day", text: "pick another day", style: "primary" },
-          ...(movable.length ? [{ label: "Move flexible tasks", text: "move flexible tasks" }] : []),
-          { label: "Add anyway", text: "add anyway" },
+          answerAction("Pick another day", "capacity", "pick another day", "primary"),
+          ...(movable.length ? [answerAction("Move flexible tasks", "capacity", "move flexible tasks")] : []),
+          answerAction("Add anyway", "capacity", "add anyway"),
         ],
         intent: "capacity",
       };
@@ -734,8 +772,8 @@ export async function proceedWithDraft(
           return {
             content: `Your mandatory routine "${r.title}" (${r.dueTime}) conflicts with "${draft.title}". Which should take priority?`,
             actions: [
-              { label: `Keep ${truncate(r.title, 18)}, move task`, text: "keep the routine", style: "primary" },
-              { label: "Do the task anyway", text: "do the task anyway" },
+              answerAction(`Keep ${truncate(r.title, 18)}, move task`, "conflict", "keep the routine", "primary"),
+              answerAction("Do the task anyway", "conflict", "do the task anyway"),
             ],
             intent: "conflict",
           };
@@ -988,7 +1026,7 @@ async function resolveChoicePending(turn: Turn, text: string, u: Understanding):
       const out = await proceedWithDraft(turn, draft, p.source, { clarified: true });
       if (out.intent === "task_created") {
         out.content += `\nSince ${p.prereq} is a prerequisite, want to add some ${p.prereq} review first?`;
-        out.actions = [{ label: `Add ${p.prereq} review`, text: `Add a task to review ${p.prereq} basics this week for 2 hours`, style: "primary" }, ...(out.actions ?? [])];
+        out.actions = [sayAction(`Add ${p.prereq} review`, "create_task", `Add a task to review ${p.prereq} basics this week for 2 hours`, "primary"), ...(out.actions ?? [])];
       }
       return out;
     }
@@ -1120,13 +1158,13 @@ function routineQuestion(turn: Turn, draft: RoutineDraft, awaiting: Array<"title
   if (awaiting.includes("frequency")) {
     return {
       content: `How often should "${draft.title}" happen?`,
-      actions: ["Daily", "Weekdays", "Weekly", "Monthly"].map((l) => ({ label: l, text: l })),
+      actions: ["Daily", "Weekdays", "Weekly", "Monthly"].map((l) => answerAction(l, "routine_draft", l)),
       intent: "clarify",
     };
   }
   return {
     content: `What time for "${draft.title}"? Or is it flexible?`,
-    actions: [...["6 AM", "7 AM", "9 AM", "6 PM", "9 PM"].map((l) => ({ label: l, text: l })), { label: "Flexible", text: "flexible" }],
+    actions: [...["6 AM", "7 AM", "9 AM", "6 PM", "9 PM"].map((l) => answerAction(l, "routine_draft", l)), answerAction("Flexible", "routine_draft", "flexible")],
     intent: "clarify",
   };
 }
@@ -1210,9 +1248,10 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
   if (draft.timeLocked) lines.push("It's time-locked: if missed, I won't move it — the next one will be ready.");
   if (learnedNote) lines.push(learnedNote);
   const actions: QuickAction[] = askTime
-    ? ["Morning", "Afternoon", "Evening"].map((label) => ({ label, text: label.toLowerCase() }))
+    ? ["Morning", "Afternoon", "Evening"].map((label) => answerAction(label, "routine_time", label.toLowerCase()))
     : [{ label: "View routines", payload: { type: "navigate", screen: "Routines" } }];
-  if (!askTime && draft.priority !== RoutinePriority.MANDATORY) actions.push({ label: "Make it mandatory", text: `Make ${draft.title} mandatory` });
+  // The routine's id, not its title: a button never depends on how its text would be read.
+  if (!askTime && draft.priority !== RoutinePriority.MANDATORY) actions.push(commandAction("Make it mandatory", "routine_update", { routineId: routine.id, priority: "MANDATORY" }, { text: `Make my ${draft.title} routine mandatory` }));
   return { content: lines.join("\n"), cards: [{ type: "routine", routine: routine as unknown as Record<string, unknown> }], actions, intent: "routine_created" };
 }
 
@@ -1229,7 +1268,7 @@ export function askMoodConfirm(turn: Turn, mood: Mood, confidence: number, text:
   const others = (["stressed", "tired", "anxious", "happy", "overwhelmed", "sad"] as Mood[]).filter((m) => m !== mood).slice(0, 3);
   return {
     content: question,
-    actions: [{ label: "Yes", text: "yes", style: "primary" }, ...others.map((m) => ({ label: `I'm ${m}`, payload: { type: "log_mood", mood: m } as ActionPayload }))],
+    actions: [answerAction("Yes", "mood_confirm", "yes", "primary"), ...others.map((m) => ({ label: `I'm ${m}`, payload: { type: "log_mood", mood: m } as ActionPayload }))],
     intent: "mood_confirm",
     mood,
   };
@@ -1255,7 +1294,7 @@ export async function confirmMood(turn: Turn, mood: Mood, confidence: number, sc
   }
   const actions: QuickAction[] = [];
   if (rec.primary) actions.push({ label: rec.primary.label, payload: suggestionPayload(rec.primary.action), style: "primary" });
-  if (STRESS.has(mood) || mood === "sad") actions.push({ label: "Talk about it", text: "Can we talk about it?" });
+  if (STRESS.has(mood) || mood === "sad") actions.push({ label: "Talk about it", text: "Can we talk about it?", payload: { type: "talk" } });
   if (mood === "overwhelmed" || (score !== undefined && score <= 2)) actions.push({ label: "Postpone non-urgent", payload: { type: "postpone_nonurgent" } });
   return { content, cards: [{ type: "mood_support", recommendation: rec }], actions, intent: "mood_logged", mood };
 }

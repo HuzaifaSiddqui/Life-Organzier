@@ -1,4 +1,12 @@
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { truncate } from "../../../lib/text.js";
+import { maskPersonalNumbers } from "../../documents/extraction.js";
+import { hashIndex, nearest, vote } from "./neighbours.js";
+
+const BACKEND = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
+import { sayAction } from "../actions.js";
 import type { Out, Turn } from "../dialogue.js";
 import type { QuickAction } from "../types.js";
 import { norm } from "./lexicon.js";
@@ -28,7 +36,7 @@ export function helpReply(turn: Turn): Out {
     `You can ask for two things at once ("add X tomorrow and move Y to Friday"), and say "undo" after any change.`,
   ].join("\n");
   const picks = ["create_task", "query_tasks", "plan_day", "routine_list", "insights_completed", "settings_dnd"].map(byName).filter((c): c is Command => Boolean(c));
-  return { content, actions: picks.slice(0, turn.channel === "WHATSAPP" ? 5 : 6).map((c) => ({ label: truncate(c.examples[0], 32), text: c.examples[0] })), intent: "help" };
+  return { content, actions: picks.slice(0, turn.channel === "WHATSAPP" ? 5 : 6).map((c) => sayAction(truncate(c.examples[0], 32), c.name, c.examples[0])), intent: "help" };
 }
 
 const DEFAULTS = ["create_task", "query_tasks", "plan_day", "routine_list", "insights_completed"];
@@ -56,11 +64,33 @@ export function capabilityReply(turn: Turn, text: string, lead = "I'm not sure w
   const names = [...new Set([...scored, ...DEFAULTS])];
   const actions: QuickAction[] = [];
   const short = text.trim().split(/\s+/).length <= 8 && !/[?؟]\s*$/.test(text);
-  if (short && text.trim()) actions.push({ label: truncate(`Add "${text.trim()}" as a task`, 40), text: `Add a task: ${truncate(text.trim(), 60)}` });
+  if (short && text.trim()) actions.push(sayAction(truncate(`Add "${text.trim()}" as a task`, 40), "create_task", `Add a task: ${truncate(text.trim(), 60)}`));
   for (const name of names) {
     if (actions.length >= 5) break;
     const c = byName(name);
-    if (c) actions.push({ label: truncate(c.summary, 40), text: c.examples[0] });
+    if (c) actions.push(sayAction(truncate(c.summary, 40), c.name, c.examples[0]));
   }
   return { content: lead, actions, intent: "unclear" };
+}
+
+/**
+ * No command fits: "I can't do that yet" and 3 things I can do. The message is logged for review
+ * (`npm run unknown:review`): text with personal numbers masked, its language and the time; never the user id.
+ */
+export async function unknownReply(turn: Turn, text: string, lang: string | null = null): Promise<Out> {
+  await logUnknown(text, lang, turn.now);
+  const r = capabilityReply(turn, text, "I can't do that yet. Here are some things I can do:");
+  return { ...r, actions: (r.actions ?? []).slice(0, 3), intent: "unknown" };
+}
+
+async function logUnknown(text: string, lang: string | null, at: Date): Promise<void> {
+  const path = process.env.UNKNOWN_LOG_PATH ?? join(BACKEND, "logs/unknown-utterances.jsonl");
+  if (path === "off" || !text.trim()) return;
+  try {
+    const guess = lang ?? (/[؀-ۿ]/.test(text) ? "ur" : vote(await nearest(text, hashIndex())).lang ?? "en");
+    mkdirSync(dirname(path), { recursive: true });
+    appendFileSync(path, `${JSON.stringify({ text: maskPersonalNumbers(text).slice(0, 500), lang: guess, at: at.toISOString() })}\n`);
+  } catch (error) {
+    console.warn("Could not log an unknown message:", error instanceof Error ? error.message : error);
+  }
 }
