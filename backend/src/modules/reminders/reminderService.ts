@@ -33,6 +33,13 @@ export type PlannedReminder = {
 export type Draft = { at: Date; level: ReminderLevel; body: string; onTime?: boolean };
 
 const MAX_REMINDERS = 60;
+/**
+ * Routine reminders may use at most this many of the 60 slots when tasks need the rest (and tasks at most the
+ * rest when routines need these): 3-4 reminders per occurrence would otherwise push task reminders out.
+ */
+export const ROUTINE_REMINDER_SHARE = 24;
+/** Follow-ups ("Still to do") only for occurrences this soon; later days keep the start nudge and the alarm. */
+const FOLLOW_UP_HORIZON_MS = 36 * 3600000;
 
 function quietMinutes(settings: UserSettings) {
   return {
@@ -204,6 +211,61 @@ export function stillAllowedAt(at: Date, level: ReminderLevel, onTime: boolean, 
   return placed?.getTime() === at.getTime();
 }
 
+export type RoutineReminderKind = "start" | "time" | "follow1" | "follow2";
+type RoutineSettings = Pick<UserSettings, "quietStart" | "quietEnd" | "criticalOverridesDnd" | "notificationFrequency">;
+
+/**
+ * One pending routine occurrence → its reminders (phase 1):
+ * - start: 10 minutes before; skipped in quiet hours and Do Not Disturb (mandatory + criticalOverridesDnd: DND only);
+ * - time: the "it's time" alarm at the set time; fires even in quiet hours, like a task's on-time alarm (DND: only
+ *   when criticalOverridesDnd);
+ * - follow1: 20 minutes after ("Still to do"), follow2: 60 minutes after (mandatory only); only for occurrences in
+ *   the next 36 hours; quiet hours and DND skip them, except mandatory routines when criticalOverridesDnd is on.
+ * Minimal reminders: a normal routine gets only the alarm. "Still pending" is kept by re-planning: a done or
+ * skipped occurrence is not planned, and the phone drops its scheduled ones.
+ */
+export function routineReminderTimes(
+  start: Date,
+  priority: RoutinePriority,
+  settings: RoutineSettings,
+  tz: string,
+  dndUntil: Date | null,
+  now: Date,
+): Array<{ kind: RoutineReminderKind; at: Date }> {
+  const q = quietMinutes(settings as UserSettings);
+  const quiet = (at: Date) => {
+    const p = localParts(at, tz);
+    return inWindow(p.h * 60 + p.mi, q.start, q.end);
+  };
+  const inDnd = (at: Date) => Boolean(dndUntil && at < dndUntil);
+  const mandatory = priority === RoutinePriority.MANDATORY;
+  const override = mandatory && settings.criticalOverridesDnd;
+  const minimal = settings.notificationFrequency === "MINIMAL" && priority === RoutinePriority.NORMAL;
+  const out: Array<{ kind: RoutineReminderKind; at: Date }> = [];
+  const add = (kind: RoutineReminderKind, at: Date) => {
+    if (at > now) out.push({ kind, at: new Date(Math.floor(at.getTime() / 60000) * 60000) });
+  };
+  const nudge = new Date(start.getTime() - 10 * 60000);
+  if (!minimal && !quiet(nudge) && (!inDnd(nudge) || override)) add("start", nudge);
+  if (!inDnd(start) || settings.criticalOverridesDnd) add("time", start);
+  if (minimal || start.getTime() - now.getTime() > FOLLOW_UP_HORIZON_MS) return out;
+  for (const [kind, minutes] of [["follow1", 20], ...(mandatory ? [["follow2", 60]] : [])] as Array<[RoutineReminderKind, number]>) {
+    const at = new Date(start.getTime() + minutes * 60000);
+    if (override || (!quiet(at) && !inDnd(at))) add(kind, at);
+  }
+  return out;
+}
+
+/** Soonest first; when both overflow, routines keep ROUTINE_REMINDER_SHARE slots and tasks the rest. */
+export function capReminders(tasks: PlannedReminder[], routines: PlannedReminder[], max = MAX_REMINDERS): PlannedReminder[] {
+  const byTime = (a: PlannedReminder, b: PlannedReminder) => a.fireAt.localeCompare(b.fireAt);
+  const r = [...routines].sort(byTime);
+  const t = [...tasks].sort(byTime);
+  const routineRoom = Math.max(ROUTINE_REMINDER_SHARE, max - t.length);
+  const keptRoutines = r.slice(0, routineRoom);
+  return [...t.slice(0, max - keptRoutines.length), ...keptRoutines].sort(byTime);
+}
+
 export async function planReminders(userId: string, settings: UserSettings, now = new Date(), horizonDays = 7): Promise<PlannedReminder[]> {
   const tz = settings.timezone;
   if (settings.notificationFrequency === "NONE") return [];
@@ -225,6 +287,7 @@ export async function planReminders(userId: string, settings: UserSettings, now 
   const peakStartHour = peak.windows[0]?.start ?? 9;
   const dndUntil = settings.dndUntil && settings.dndUntil > now ? settings.dndUntil : null;
   const out: PlannedReminder[] = [];
+  const routineOut: PlannedReminder[] = [];
 
   for (const task of tasks) {
     const adapt = adaptivity.get(task.category ?? "Uncategorized") ?? adaptivity.get("*");
@@ -249,31 +312,44 @@ export async function planReminders(userId: string, settings: UserSettings, now 
     }
   }
 
-  // Routine reminders: mandatory/important always, normal unless the user chose minimal reminders.
   for (const o of occurrences) {
     if (o.status !== "PENDING" || !parseClock(o.dueTime)) continue;
-    if (settings.notificationFrequency === "MINIMAL" && o.routine.priority === RoutinePriority.NORMAL) continue;
-    let at = new Date(occurrenceStart(o, tz).getTime() - 5 * 60000);
-    if (dndUntil && at < dndUntil && !(o.routine.priority === RoutinePriority.MANDATORY && settings.criticalOverridesDnd)) continue;
-    if (at <= now || at > horizon) continue;
-    at = new Date(Math.floor(at.getTime() / 60000) * 60000);
-    const p = localParts(occurrenceStart(o, tz), tz);
-    out.push({
-      id: `r:${o.id}`,
-      taskId: null,
-      routineOccurrenceId: o.id,
-      fireAt: at.toISOString(),
-      level: o.routine.priority === RoutinePriority.MANDATORY ? "critical" : "normal",
-      title: `${o.routine.priority === RoutinePriority.MANDATORY ? "" : ""}${o.routine.title}`,
-      body: `Routine at ${formatClock(p.h, p.mi)}${o.routine.durationMinutes ? ` · ${formatDuration(o.routine.durationMinutes)}` : ""}`,
-      prominent: o.routine.priority === RoutinePriority.MANDATORY,
-    });
+    const start = occurrenceStart(o, tz);
+    const p = localParts(start, tz);
+    const clock = formatClock(p.h, p.mi);
+    const mandatory = o.routine.priority === RoutinePriority.MANDATORY;
+    for (const { kind, at } of routineReminderTimes(start, o.routine.priority, settings, tz, dndUntil, now)) {
+      if (at > horizon) continue;
+      routineOut.push({
+        id: `r:${o.id}:${kind}`,
+        taskId: null,
+        routineOccurrenceId: o.id,
+        fireAt: at.toISOString(),
+        level: kind === "time" ? "critical" : kind === "start" ? "normal" : mandatory ? "critical" : "urgent",
+        title: kind === "follow1" || kind === "follow2" ? `Still to do: ${o.routine.title}` : o.routine.title,
+        body:
+          kind === "start"
+            ? `Starts in 10 minutes (${clock})${o.routine.durationMinutes ? ` · ${formatDuration(o.routine.durationMinutes)}` : ""}`
+            : kind === "time"
+              ? `It's time (${clock})`
+              : `Routine at ${clock}${mandatory ? " · mandatory" : ""}`,
+        prominent: kind === "time" || mandatory,
+      });
+    }
   }
 
-  out.sort((a, b) => a.fireAt.localeCompare(b.fireAt));
-  const planned = out.slice(0, MAX_REMINDERS);
+  const planned = capReminders(out, routineOut);
   await recordPlan(userId, planned, tasks, now);
   return planned;
+}
+
+/** Routine occurrences from yesterday to tomorrow that are still pending (for snoozes on the phone). */
+export async function pendingRoutineOccurrenceIds(userId: string, now: Date): Promise<string[]> {
+  const rows = await prisma.routineOccurrence.findMany({
+    where: { userId, status: "PENDING", occurrenceDate: { gte: new Date(now.getTime() - 2 * 86400000), lt: new Date(now.getTime() + 2 * 86400000) } },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
 }
 
 /** Persists the plan so ignored reminders can be detected and used for adaptation. */
