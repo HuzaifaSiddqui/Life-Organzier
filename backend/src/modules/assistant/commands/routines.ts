@@ -10,6 +10,7 @@ import type { Out, Turn } from "../dialogue.js";
 import { APP_LIST_CAP, WHATSAPP_LIST_CAP } from "../queryAnswers.js";
 import { ASK, DO_IT, MOVE_WORDS, TODAY, ROUTINE, addBeforeMove, capture, has, norm, refFrom } from "./lexicon.js";
 import { askChoice, recordUndo, runCommand, UNDO_ACTION } from "./runtime.js";
+import { notifyRoutineFromWhatsapp } from "../../push/pushService.js";
 import type { Command, CommandArgs, ParseCtx, Prepared } from "./types.js";
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -294,6 +295,7 @@ function todayStatus(name: "routine_skip_today" | "routine_complete_today", stat
       const o = await updateOccurrence(turn.user.id, occurrenceId, status, { confirmMandatory: true });
       if (!o) return { content: "That routine isn't scheduled any more.", intent: "not_found" };
       recordUndo(turn, { kind: "occurrence", occurrenceId, before: { status: before.status, occurrenceDate: before.occurrenceDate.toISOString(), dueTime: before.dueTime }, label: `${o.routine.title} ${skip ? "skipped" : "done"} today` });
+      if (turn.channel === "WHATSAPP") notifyRoutineFromWhatsapp(turn.user.id, o.routine.title, skip ? "skipped" : "done");
       return { content: skip ? `Skipped "${o.routine.title}" for today.` : `"${o.routine.title}" done for today. Keep the streak going!`, actions: [UNDO_ACTION], intent: skip ? "routine_skipped" : "routine_done" };
     },
   };

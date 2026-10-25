@@ -143,3 +143,11 @@ export function notifyAddedFromWhatsapp(userId: string, titles: string[]): void 
   const body = titles.length === 1 ? titles[0] : `${titles.length} items: ${titles.slice(0, 3).join(", ")}${titles.length > 3 ? "…" : ""}`;
   background(sendPushToUser(userId, { title: "Added from WhatsApp", body: body.slice(0, 180), data: { type: "sync" } }));
 }
+
+/**
+ * A routine marked done or skipped on WhatsApp: the same {type: "sync"} push, so the phone re-plans and drops that
+ * occurrence's remaining alarms (they are local notifications the server can't cancel). Fire-and-forget.
+ */
+export function notifyRoutineFromWhatsapp(userId: string, title: string, status: "done" | "skipped"): void {
+  background(sendPushToUser(userId, { title: "Updated from WhatsApp", body: `${title}: ${status} for today`.slice(0, 180), data: { type: "sync" } }));
+}
