@@ -7,7 +7,8 @@
 - `roman-urdu-holdout.json` — **held-out** Roman Urdu messages, currently empty (two `"example": true` rows show the schema and are not scored).
 
 - `utterance-bank.json` — the example bank for the meaning-based router (`npm run eval:router`): seeded from the rows above, `query-eval.json` and the failures in `docs/chat-failures.md`. Rows are added only by `npm run bank:approve` (approved review rows) or by hand for a new miss. Never from `chat-holdout.json`.
-- `review/paraphrases-review.json` — model paraphrases waiting for review (`npm run paraphrases`); none are in the bank until approved.
+- `review/paraphrases-review.json` — model paraphrases waiting for review (`npm run paraphrases`, English only); none are in the bank until approved.
+- `collect-sheet.md` — the sheet classmates fill (12 everyday situations + "anything else"). `npm run collect -- collect-AB.md` adds the labelled messages (S01–S12, labelled by their situation) to `chat-holdout.json` and the "anything else" ones to `review/collect-review.json` with no command; a person labels those and moves them to `chat-holdout.json` by hand. Nothing from either goes into the bank.
 
 ## Adding to the held-out set
 

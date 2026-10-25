@@ -21,7 +21,8 @@
     "eval:router": "tsx scripts/eval-router.ts",
     "unknown:review": "tsx scripts/unknown-review.ts",
     "bank:approve": "tsx scripts/bank-approve.ts",
-    "paraphrases": "tsx scripts/gen-paraphrases.ts"
+    "paraphrases": "tsx scripts/gen-paraphrases.ts",
+    "collect": "tsx scripts/collect-to-holdout.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

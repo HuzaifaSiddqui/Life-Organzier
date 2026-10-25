@@ -315,16 +315,19 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Chat routing
 
-- **Rules first.** The meaning-based router adds nothing measurable yet (see the gate in
-  `docs/AI_ASSISTANT_ARCHITECTURE.md`): with AI off the rules decide alone; with AI on, unsure messages go to the
-  model as before, now with bank examples. Its value grows only as the bank grows (`npm run bank:approve`).
+- **Rules first; the meaning-based router is off** (`MEANING_ROUTER=on` to try it). The gate in
+  `docs/AI_ASSISTANT_ARCHITECTURE.md` found no gain over the existing LLM router, so it stays off until the bank is
+  bigger and a filled held-out set shows a gain.
 - **No held-out number.** `tests/eval/chat-holdout.json` is still empty; every chat accuracy figure is on rows the
   rules were written against.
-- **Unknown messages are logged on the server** (`backend/logs/unknown-utterances.jsonl`, git-ignored): the text
-  with personal numbers masked, its language and time, no user id. Names or other details in the text stay. The file
-  is not rotated or cleaned up automatically.
-- **Paraphrases are not trusted.** `npm run paraphrases` writes model paraphrases to a review file only; many Roman
-  Urdu ones from qwen2.5:7b are not natural, so each row needs a person's approval before it enters the bank.
+- **Unknown messages are logged on the server** (`backend/logs/unknown-utterances.jsonl`, git-ignored;
+  `UNKNOWN_LOG=off` to stop): numbers, e-mails, links and likely names are masked, but names are guessed (a
+  lower-case name with no cue word stays) and other details in the text (a place, an illness) are kept. Capped at
+  512 KB with one rotated file.
+- **Paraphrases are not trusted.** `npm run paraphrases` writes model paraphrases to a review file only, English
+  only: qwen2.5:7b's Roman Urdu paraphrases were mostly unnatural and were removed unreviewed. Each row needs a
+  person's approval before it enters the bank.
+- **Held-out set:** to be filled by classmates with `backend/tests/eval/collect-sheet.md` (`npm run collect`).
 - **Freeze:** vocabulary misses are bank rows, not new regexes (`docs/chat-failures.md`). Misses that are still
   open: "change the essay" (a new task, not a change) and a messy routine sentence's title with AI off.
 
