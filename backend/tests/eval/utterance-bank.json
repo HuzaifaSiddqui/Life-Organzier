@@ -1,0 +1,2382 @@
+{
+ "about": "Example bank for the meaning-based router (src/modules/assistant/commands/neighbours.ts) and its gate (npm run eval:router). One row per message: text, language (en, ru = Roman Urdu, ur = Urdu script), the command a person means (a registry name or an nlu intent such as create_task, unclear, smalltalk) and key args (alsoOk: other commands that are also right). Seeded on 25 Oct 2026 from assistant-eval.json (intent and command rows; 'multi' rows left out: two requests in one message are the rules' job), query-eval.json (search questions) and the chat failures in docs/chat-failures.md (source 'failure'). The rules were written against the assistant-eval rows, so 'rules alone' scores high on them. NEVER add rows from chat-holdout.json. New misses are added here (freeze rule), and reviewed rows from logs/unknown-utterances.jsonl (npm run unknown:review) and paraphrase review files only when marked approved.",
+ "rows": [
+  {
+   "id": "m01",
+   "text": "Remind me to call Ali tomorrow at 5 PM",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m02",
+   "text": "buy groceries after uni",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m03",
+   "text": "kal subah 9 baje doctor ke paas jana hai",
+   "lang": "ru",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m04",
+   "text": "Submit DBMS assignment by Friday 11:59 PM",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m05",
+   "text": "OS quiz prep due Thursday",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m06",
+   "text": "assignment Friday tak submit karni hai",
+   "lang": "ru",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m07",
+   "text": "need to finish the lab report before Wednesday",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m08",
+   "text": "study for physics quiz for 2 hours tomorrow",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m09",
+   "text": "Write the history essay, it will take 3 hours",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m10",
+   "text": "kal 2 ghante coding practice karni hai",
+   "lang": "ru",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m11",
+   "text": "revise chapter 4 for 45 minutes tonight",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m12",
+   "text": "gym every day at 7 am",
+   "lang": "en",
+   "command": "create_routine",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m13",
+   "text": "har roz subah namaz parhni hai",
+   "lang": "ru",
+   "command": "create_routine",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m14",
+   "text": "morning walk daily",
+   "lang": "en",
+   "command": "create_routine",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m15",
+   "text": "lectures every Monday and Wednesday at 9",
+   "lang": "en",
+   "command": "create_routine",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m16",
+   "text": "move the physics assignment to Saturday",
+   "lang": "en",
+   "command": "update_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m17",
+   "text": "postpone my essay to next week",
+   "lang": "en",
+   "command": "update_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m18",
+   "text": "make the DBMS quiz high priority",
+   "lang": "en",
+   "command": "update_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m19",
+   "text": "essay ko kal pe shift kar do",
+   "lang": "ru",
+   "command": "update_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m20",
+   "text": "I finished the lab report",
+   "lang": "en",
+   "command": "complete_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m21",
+   "text": "done with the physics assignment",
+   "lang": "en",
+   "command": "complete_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m22",
+   "text": "assignment submit ho gayi",
+   "lang": "ru",
+   "command": "complete_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m23",
+   "text": "mark groceries as done",
+   "lang": "en",
+   "command": "complete_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m24",
+   "text": "delete the gym task",
+   "lang": "en",
+   "command": "delete_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m25",
+   "text": "cancel tomorrow's meeting with Sara",
+   "lang": "en",
+   "command": "delete_task",
+   "source": "assistant-eval",
+   "alsoOk": [
+    "update_task"
+   ]
+  },
+  {
+   "id": "m26",
+   "text": "what do I have today?",
+   "lang": "en",
+   "command": "query_tasks",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m27",
+   "text": "kal ka kya schedule hai?",
+   "lang": "ru",
+   "command": "query_tasks",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m28",
+   "text": "show my overdue tasks",
+   "lang": "en",
+   "command": "query_tasks",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m29",
+   "text": "what should I work on now?",
+   "lang": "en",
+   "command": "plan_day",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m30",
+   "text": "plan my day",
+   "lang": "en",
+   "command": "plan_day",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m31",
+   "text": "I'm so stressed about exams",
+   "lang": "en",
+   "command": "log_mood",
+   "source": "assistant-eval",
+   "alsoOk": [
+    "support"
+   ]
+  },
+  {
+   "id": "m32",
+   "text": "aaj bohat thaka hua hun",
+   "lang": "ru",
+   "command": "log_mood",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m33",
+   "text": "feeling really motivated today",
+   "lang": "en",
+   "command": "log_mood",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m34",
+   "text": "I can't handle all this anymore, I need to talk",
+   "lang": "en",
+   "command": "support",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m35",
+   "text": "be more serious with reminders",
+   "lang": "en",
+   "command": "set_checkin_style",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m36",
+   "text": "mazaq band karo",
+   "lang": "ru",
+   "command": "set_checkin_style",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m37",
+   "text": "can your check-ins be a bit gentler",
+   "lang": "en",
+   "command": "set_checkin_style",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m38",
+   "text": "I usually study best at night",
+   "lang": "en",
+   "command": "provide_info",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m39",
+   "text": "how are you?",
+   "lang": "en",
+   "command": "smalltalk",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "m40",
+   "text": "math",
+   "lang": "en",
+   "command": "unclear",
+   "source": "assistant-eval",
+   "alsoOk": [
+    "create_task"
+   ]
+  },
+  {
+   "id": "m41",
+   "text": "the thing for Friday",
+   "lang": "en",
+   "command": "unclear",
+   "source": "assistant-eval",
+   "alsoOk": [
+    "create_task"
+   ]
+  },
+  {
+   "id": "m42",
+   "text": "Ali ka birthday",
+   "lang": "ru",
+   "command": "create_task",
+   "source": "assistant-eval",
+   "alsoOk": [
+    "unclear",
+    "provide_info"
+   ]
+  },
+  {
+   "id": "r01",
+   "text": "show my routines",
+   "lang": "en",
+   "command": "routine_list",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "r02",
+   "text": "list all my routines",
+   "lang": "en",
+   "command": "routine_list",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "r03",
+   "text": "what routines do I have?",
+   "lang": "en",
+   "command": "routine_list",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "r04",
+   "text": "meri routines dikhao",
+   "lang": "ru",
+   "command": "routine_list",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "r05",
+   "text": "میری روٹینز دکھاؤ",
+   "lang": "ur",
+   "command": "routine_list",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "r06",
+   "text": "change my gym routine to 7 PM",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym",
+    "time": "7 PM"
+   }
+  },
+  {
+   "id": "r07",
+   "text": "move the reading routine to 9:30 PM",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading",
+    "time": "9:30 PM"
+   }
+  },
+  {
+   "id": "r08",
+   "text": "make my gym routine weekdays only",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym",
+    "days": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   }
+  },
+  {
+   "id": "r09",
+   "text": "set my yoga routine to Mon Wed Fri",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "yoga",
+    "days": [
+     1,
+     3,
+     5
+    ]
+   }
+  },
+  {
+   "id": "r10",
+   "text": "rename my reading routine to night reading",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading",
+    "title": "Night reading"
+   }
+  },
+  {
+   "id": "r11",
+   "text": "make the meditation routine mandatory",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "meditation",
+    "priority": "MANDATORY"
+   }
+  },
+  {
+   "id": "r12",
+   "text": "change my gym routine duration to 45 minutes",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym",
+    "durationMinutes": 45
+   }
+  },
+  {
+   "id": "r13",
+   "text": "gym routine ka time 7 baje kar do",
+   "lang": "ru",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym",
+    "time": "7 PM"
+   }
+  },
+  {
+   "id": "r14",
+   "text": "reading routine ko 45 minute ka kar do",
+   "lang": "ru",
+   "command": "routine_update",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading",
+    "durationMinutes": 45
+   }
+  },
+  {
+   "id": "r15",
+   "text": "pause my gym routine",
+   "lang": "en",
+   "command": "routine_pause",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r16",
+   "text": "stop the reading routine for now",
+   "lang": "en",
+   "command": "routine_pause",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading"
+   }
+  },
+  {
+   "id": "r17",
+   "text": "gym routine band kar do",
+   "lang": "ru",
+   "command": "routine_pause",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r18",
+   "text": "جم روٹین روک دو",
+   "lang": "ur",
+   "command": "routine_pause",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "جم"
+   }
+  },
+  {
+   "id": "r19",
+   "text": "resume my gym routine",
+   "lang": "en",
+   "command": "routine_resume",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r20",
+   "text": "unpause the yoga routine",
+   "lang": "en",
+   "command": "routine_resume",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "yoga"
+   }
+  },
+  {
+   "id": "r21",
+   "text": "gym routine dobara shuru karo",
+   "lang": "ru",
+   "command": "routine_resume",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r22",
+   "text": "delete my gym routine",
+   "lang": "en",
+   "command": "routine_delete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r23",
+   "text": "remove the reading routine",
+   "lang": "en",
+   "command": "routine_delete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading"
+   }
+  },
+  {
+   "id": "r24",
+   "text": "yoga routine delete kar do",
+   "lang": "ru",
+   "command": "routine_delete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "yoga"
+   }
+  },
+  {
+   "id": "r25",
+   "text": "جم روٹین ڈیلیٹ کر دو",
+   "lang": "ur",
+   "command": "routine_delete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "جم"
+   }
+  },
+  {
+   "id": "r26",
+   "text": "skip gym today",
+   "lang": "en",
+   "command": "routine_skip_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r27",
+   "text": "skip my reading routine today",
+   "lang": "en",
+   "command": "routine_skip_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading"
+   }
+  },
+  {
+   "id": "r28",
+   "text": "aaj gym skip kar do",
+   "lang": "ru",
+   "command": "routine_skip_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r29",
+   "text": "آج جم چھوڑ دو",
+   "lang": "ur",
+   "command": "routine_skip_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "جم"
+   }
+  },
+  {
+   "id": "r30",
+   "text": "I did my gym routine today",
+   "lang": "en",
+   "command": "routine_complete_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r31",
+   "text": "mark the reading routine done for today",
+   "lang": "en",
+   "command": "routine_complete_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading"
+   }
+  },
+  {
+   "id": "r32",
+   "text": "gym routine ho gayi",
+   "lang": "ru",
+   "command": "routine_complete_today",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym"
+   }
+  },
+  {
+   "id": "r33",
+   "text": "move today's gym to 8 PM",
+   "lang": "en",
+   "command": "routine_reschedule_once",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym",
+    "ymd": "2026-10-05",
+    "time": "8 PM"
+   }
+  },
+  {
+   "id": "r34",
+   "text": "move my reading routine to tomorrow just this once",
+   "lang": "en",
+   "command": "routine_reschedule_once",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "reading",
+    "ymd": "2026-10-06"
+   }
+  },
+  {
+   "id": "r35",
+   "text": "push today's yoga to 6 PM",
+   "lang": "en",
+   "command": "routine_reschedule_once",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "yoga",
+    "time": "6 PM"
+   }
+  },
+  {
+   "id": "r36",
+   "text": "aaj ki gym shaam 8 baje kar do",
+   "lang": "ru",
+   "command": "routine_reschedule_once",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym",
+    "time": "8 PM"
+   }
+  },
+  {
+   "id": "t01",
+   "text": "add a note to the essay: bring printouts",
+   "lang": "en",
+   "command": "task_notes",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "note": "bring printouts"
+   }
+  },
+  {
+   "id": "t02",
+   "text": "note for math assignment: chapter 4 only",
+   "lang": "en",
+   "command": "task_notes",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "math assignment",
+    "note": "chapter 4 only"
+   }
+  },
+  {
+   "id": "t03",
+   "text": "set the description of the lab report to use the new template",
+   "lang": "en",
+   "command": "task_notes",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "lab report",
+    "note": "use the new template"
+   }
+  },
+  {
+   "id": "t04",
+   "text": "essay mein note likho: printouts le jana",
+   "lang": "ru",
+   "command": "task_notes",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "note": "printouts le jana"
+   }
+  },
+  {
+   "id": "t05",
+   "text": "مضمون میں نوٹ لکھو: پرنٹ آؤٹ لے جانا",
+   "lang": "ur",
+   "command": "task_notes",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "مضمون",
+    "note": "پرنٹ آؤٹ لے جانا"
+   }
+  },
+  {
+   "id": "t06",
+   "text": "turn off reminders for the essay",
+   "lang": "en",
+   "command": "task_reminder_mode",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "mode": "NONE"
+   }
+  },
+  {
+   "id": "t07",
+   "text": "remind me about the lab report only once",
+   "lang": "en",
+   "command": "task_reminder_mode",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "lab report",
+    "mode": "SINGLE"
+   }
+  },
+  {
+   "id": "t08",
+   "text": "keep reminding me about the math assignment",
+   "lang": "en",
+   "command": "task_reminder_mode",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "math assignment",
+    "mode": "ESCALATING"
+   }
+  },
+  {
+   "id": "t09",
+   "text": "use multiple reminders for the project",
+   "lang": "en",
+   "command": "task_reminder_mode",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "project",
+    "mode": "MULTIPLE"
+   }
+  },
+  {
+   "id": "t10",
+   "text": "essay ke reminders band kar do",
+   "lang": "ru",
+   "command": "task_reminder_mode",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "mode": "NONE"
+   }
+  },
+  {
+   "id": "t11",
+   "text": "start the essay",
+   "lang": "en",
+   "command": "task_start",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay"
+   }
+  },
+  {
+   "id": "t12",
+   "text": "I'm starting the math assignment now",
+   "lang": "en",
+   "command": "task_start",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "math assignment"
+   }
+  },
+  {
+   "id": "t13",
+   "text": "begin working on the lab report",
+   "lang": "en",
+   "command": "task_start",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "lab report"
+   }
+  },
+  {
+   "id": "t14",
+   "text": "essay shuru kar raha hoon",
+   "lang": "ru",
+   "command": "task_start",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay"
+   }
+  },
+  {
+   "id": "t15",
+   "text": "مضمون شروع کر رہا ہوں",
+   "lang": "ur",
+   "command": "task_start",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "مضمون"
+   }
+  },
+  {
+   "id": "t16",
+   "text": "reopen the essay",
+   "lang": "en",
+   "command": "task_reopen",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay"
+   }
+  },
+  {
+   "id": "t17",
+   "text": "mark the lab report as not done",
+   "lang": "en",
+   "command": "task_reopen",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "lab report"
+   }
+  },
+  {
+   "id": "t18",
+   "text": "mark math assignment as incomplete",
+   "lang": "en",
+   "command": "task_reopen",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "math assignment"
+   }
+  },
+  {
+   "id": "t19",
+   "text": "essay dobara khol do",
+   "lang": "ru",
+   "command": "task_reopen",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay"
+   }
+  },
+  {
+   "id": "t20",
+   "text": "add tag uni to the essay",
+   "lang": "en",
+   "command": "task_tags",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "add": [
+     "uni"
+    ]
+   }
+  },
+  {
+   "id": "t21",
+   "text": "tag the lab report with #physics",
+   "lang": "en",
+   "command": "task_tags",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "lab report",
+    "add": [
+     "physics"
+    ]
+   }
+  },
+  {
+   "id": "t22",
+   "text": "remove the tag uni from the essay",
+   "lang": "en",
+   "command": "task_tags",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "remove": [
+     "uni"
+    ]
+   }
+  },
+  {
+   "id": "t23",
+   "text": "untag #urgent from the math assignment",
+   "lang": "en",
+   "command": "task_tags",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "math assignment",
+    "remove": [
+     "urgent"
+    ]
+   }
+  },
+  {
+   "id": "t24",
+   "text": "essay par uni ka tag laga do",
+   "lang": "ru",
+   "command": "task_tags",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "add": [
+     "uni"
+    ]
+   }
+  },
+  {
+   "id": "t25",
+   "text": "essay se uni ka tag hata do",
+   "lang": "ru",
+   "command": "task_tags",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "remove": [
+     "uni"
+    ]
+   }
+  },
+  {
+   "id": "t26",
+   "text": "put the essay in the Academic category",
+   "lang": "en",
+   "command": "task_category",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "category": "Academic"
+   }
+  },
+  {
+   "id": "t27",
+   "text": "change the category of gym bag to Health",
+   "lang": "en",
+   "command": "task_category",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "gym bag",
+    "category": "Health"
+   }
+  },
+  {
+   "id": "t28",
+   "text": "move the electricity bill to Finance category",
+   "lang": "en",
+   "command": "task_category",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "electricity bill",
+    "category": "Finance"
+   }
+  },
+  {
+   "id": "t29",
+   "text": "essay ki category Academic kar do",
+   "lang": "ru",
+   "command": "task_category",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "category": "Academic"
+   }
+  },
+  {
+   "id": "t30",
+   "text": "مضمون کی کیٹیگری Academic کر دو",
+   "lang": "ur",
+   "command": "task_category",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "مضمون",
+    "category": "Academic"
+   }
+  },
+  {
+   "id": "t31",
+   "text": "add a subtask to the essay: write outline",
+   "lang": "en",
+   "command": "subtask_add",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "titles": [
+     "Write outline"
+    ]
+   }
+  },
+  {
+   "id": "t32",
+   "text": "add subtasks to the project: research, draft and review",
+   "lang": "en",
+   "command": "subtask_add",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "project",
+    "titles": [
+     "Research",
+     "Draft",
+     "Review"
+    ]
+   }
+  },
+  {
+   "id": "t33",
+   "text": "add step 'collect data' to the lab report",
+   "lang": "en",
+   "command": "subtask_add",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "lab report",
+    "titles": [
+     "Collect data"
+    ]
+   }
+  },
+  {
+   "id": "t34",
+   "text": "essay mein subtask add karo: outline banana",
+   "lang": "ru",
+   "command": "subtask_add",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "titles": [
+     "Outline banana"
+    ]
+   }
+  },
+  {
+   "id": "t35",
+   "text": "show the subtasks of the essay",
+   "lang": "en",
+   "command": "subtask_list",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay"
+   }
+  },
+  {
+   "id": "t36",
+   "text": "what are the steps for the project?",
+   "lang": "en",
+   "command": "subtask_list",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "project"
+   }
+  },
+  {
+   "id": "t37",
+   "text": "essay ke subtasks dikhao",
+   "lang": "ru",
+   "command": "subtask_list",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay"
+   }
+  },
+  {
+   "id": "t38",
+   "text": "mark step 2 of the essay as done",
+   "lang": "en",
+   "command": "subtask_complete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "index": 2
+   }
+  },
+  {
+   "id": "t39",
+   "text": "complete the first subtask of the project",
+   "lang": "en",
+   "command": "subtask_complete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "project",
+    "index": 1
+   }
+  },
+  {
+   "id": "t40",
+   "text": "finish the outline subtask of the essay",
+   "lang": "en",
+   "command": "subtask_complete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "name": "outline"
+   }
+  },
+  {
+   "id": "t41",
+   "text": "essay ka step 1 ho gaya",
+   "lang": "ru",
+   "command": "subtask_complete",
+   "source": "assistant-eval",
+   "args": {
+    "ref": "essay",
+    "index": 1
+   }
+  },
+  {
+   "id": "s01",
+   "text": "set quiet hours from 11 PM to 7 AM",
+   "lang": "en",
+   "command": "settings_quiet_hours",
+   "source": "assistant-eval",
+   "args": {
+    "start": "11 PM",
+    "end": "7 AM"
+   }
+  },
+  {
+   "id": "s02",
+   "text": "quiet hours 10pm-6am",
+   "lang": "en",
+   "command": "settings_quiet_hours",
+   "source": "assistant-eval",
+   "args": {
+    "start": "10 PM",
+    "end": "6 AM"
+   }
+  },
+  {
+   "id": "s03",
+   "text": "what are my quiet hours?",
+   "lang": "en",
+   "command": "settings_quiet_hours",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "s04",
+   "text": "change my quiet hours to start at 11:30 PM",
+   "lang": "en",
+   "command": "settings_quiet_hours",
+   "source": "assistant-eval",
+   "args": {
+    "start": "11:30 PM"
+   }
+  },
+  {
+   "id": "s05",
+   "text": "quiet hours raat 11 se subah 7 tak kar do",
+   "lang": "ru",
+   "command": "settings_quiet_hours",
+   "source": "assistant-eval",
+   "args": {
+    "start": "11 PM",
+    "end": "7 AM"
+   }
+  },
+  {
+   "id": "s06",
+   "text": "خاموشی کے اوقات رات 11 سے صبح 7 تک کر دو",
+   "lang": "ur",
+   "command": "settings_quiet_hours",
+   "source": "assistant-eval",
+   "args": {
+    "start": "11 PM",
+    "end": "7 AM"
+   }
+  },
+  {
+   "id": "s07",
+   "text": "turn on do not disturb",
+   "lang": "en",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "on"
+   }
+  },
+  {
+   "id": "s08",
+   "text": "do not disturb for 2 hours",
+   "lang": "en",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "on",
+    "minutes": 120
+   }
+  },
+  {
+   "id": "s09",
+   "text": "DND until 5 PM",
+   "lang": "en",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "on",
+    "until": "5 PM"
+   }
+  },
+  {
+   "id": "s10",
+   "text": "turn off DND",
+   "lang": "en",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "off"
+   }
+  },
+  {
+   "id": "s11",
+   "text": "is do not disturb on?",
+   "lang": "en",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "status"
+   }
+  },
+  {
+   "id": "s12",
+   "text": "2 ghante tak disturb na karna",
+   "lang": "ru",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "on",
+    "minutes": 120
+   }
+  },
+  {
+   "id": "s13",
+   "text": "dnd band kar do",
+   "lang": "ru",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "off"
+   }
+  },
+  {
+   "id": "s14",
+   "text": "ڈو ناٹ ڈسٹرب آن کر دو",
+   "lang": "ur",
+   "command": "settings_dnd",
+   "source": "assistant-eval",
+   "args": {
+    "action": "on"
+   }
+  },
+  {
+   "id": "s15",
+   "text": "send my reminders to WhatsApp only",
+   "lang": "en",
+   "command": "settings_notify_devices",
+   "source": "assistant-eval",
+   "args": {
+    "devices": "WHATSAPP"
+   }
+  },
+  {
+   "id": "s16",
+   "text": "notifications on my phone only",
+   "lang": "en",
+   "command": "settings_notify_devices",
+   "source": "assistant-eval",
+   "args": {
+    "devices": "PHONE"
+   }
+  },
+  {
+   "id": "s17",
+   "text": "remind me on both phone and WhatsApp",
+   "lang": "en",
+   "command": "settings_notify_devices",
+   "source": "assistant-eval",
+   "args": {
+    "devices": "ALL"
+   }
+  },
+  {
+   "id": "s18",
+   "text": "where do my reminders go?",
+   "lang": "en",
+   "command": "settings_notify_devices",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "s19",
+   "text": "reminders whatsapp pe bhejo",
+   "lang": "ru",
+   "command": "settings_notify_devices",
+   "source": "assistant-eval",
+   "args": {
+    "devices": "WHATSAPP"
+   }
+  },
+  {
+   "id": "s20",
+   "text": "یاد دہانی دونوں جگہ بھیجو",
+   "lang": "ur",
+   "command": "settings_notify_devices",
+   "source": "assistant-eval",
+   "args": {
+    "devices": "ALL"
+   }
+  },
+  {
+   "id": "s21",
+   "text": "switch to Urdu",
+   "lang": "en",
+   "command": "settings_language",
+   "source": "assistant-eval",
+   "args": {
+    "language": "ur"
+   }
+  },
+  {
+   "id": "s22",
+   "text": "change the language to English",
+   "lang": "en",
+   "command": "settings_language",
+   "source": "assistant-eval",
+   "args": {
+    "language": "en"
+   }
+  },
+  {
+   "id": "s23",
+   "text": "please reply in urdu",
+   "lang": "en",
+   "command": "settings_language",
+   "source": "assistant-eval",
+   "args": {
+    "language": "ur"
+   }
+  },
+  {
+   "id": "s24",
+   "text": "urdu mein baat karo",
+   "lang": "ru",
+   "command": "settings_language",
+   "source": "assistant-eval",
+   "args": {
+    "language": "ur"
+   }
+  },
+  {
+   "id": "s25",
+   "text": "زبان انگریزی کر دو",
+   "lang": "ur",
+   "command": "settings_language",
+   "source": "assistant-eval",
+   "args": {
+    "language": "en"
+   }
+  },
+  {
+   "id": "s26",
+   "text": "turn check-ins back on",
+   "lang": "en",
+   "command": "set_checkin_style",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "s27",
+   "text": "check-ins band kar do",
+   "lang": "ru",
+   "command": "set_checkin_style",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "s28",
+   "text": "show my settings",
+   "lang": "en",
+   "command": "settings_show",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "s29",
+   "text": "what are my settings?",
+   "lang": "en",
+   "command": "settings_show",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "s30",
+   "text": "meri settings dikhao",
+   "lang": "ru",
+   "command": "settings_show",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i01",
+   "text": "how many tasks did I complete this week?",
+   "lang": "en",
+   "command": "insights_completed",
+   "source": "assistant-eval",
+   "args": {
+    "range": "week"
+   }
+  },
+  {
+   "id": "i02",
+   "text": "how many tasks did I finish this month",
+   "lang": "en",
+   "command": "insights_completed",
+   "source": "assistant-eval",
+   "args": {
+    "range": "month"
+   }
+  },
+  {
+   "id": "i03",
+   "text": "what did I get done this week?",
+   "lang": "en",
+   "command": "insights_completed",
+   "source": "assistant-eval",
+   "args": {
+    "range": "week"
+   }
+  },
+  {
+   "id": "i04",
+   "text": "is hafte maine kitne kaam kiye?",
+   "lang": "ru",
+   "command": "insights_completed",
+   "source": "assistant-eval",
+   "args": {
+    "range": "week"
+   }
+  },
+  {
+   "id": "i05",
+   "text": "اس ہفتے میں نے کتنے کام مکمل کیے؟",
+   "lang": "ur",
+   "command": "insights_completed",
+   "source": "assistant-eval",
+   "args": {
+    "range": "week"
+   }
+  },
+  {
+   "id": "i06",
+   "text": "what's my streak?",
+   "lang": "en",
+   "command": "insights_streak",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i07",
+   "text": "how many days in a row have I completed something?",
+   "lang": "en",
+   "command": "insights_streak",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i08",
+   "text": "meri streak kitni hai",
+   "lang": "ru",
+   "command": "insights_streak",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i09",
+   "text": "میں کتنے دن سے مسلسل کام کر رہا ہوں؟",
+   "lang": "ur",
+   "command": "insights_streak",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i10",
+   "text": "what's my busiest day?",
+   "lang": "en",
+   "command": "insights_busiest_day",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i11",
+   "text": "which day am I most productive?",
+   "lang": "en",
+   "command": "insights_busiest_day",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i12",
+   "text": "main kis din sab se zyada kaam karta hoon?",
+   "lang": "ru",
+   "command": "insights_busiest_day",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i13",
+   "text": "how much time did I spend on Academic this week?",
+   "lang": "en",
+   "command": "insights_category_time",
+   "source": "assistant-eval",
+   "args": {
+    "range": "week",
+    "category": "Academic"
+   }
+  },
+  {
+   "id": "i14",
+   "text": "time per category this month",
+   "lang": "en",
+   "command": "insights_category_time",
+   "source": "assistant-eval",
+   "args": {
+    "range": "month"
+   }
+  },
+  {
+   "id": "i15",
+   "text": "how much time did I spend on each category?",
+   "lang": "en",
+   "command": "insights_category_time",
+   "source": "assistant-eval",
+   "args": {
+    "range": "week"
+   }
+  },
+  {
+   "id": "i16",
+   "text": "is mahine kis category par kitna waqt laga?",
+   "lang": "ru",
+   "command": "insights_category_time",
+   "source": "assistant-eval",
+   "args": {
+    "range": "month"
+   }
+  },
+  {
+   "id": "i17",
+   "text": "how many tasks are overdue?",
+   "lang": "en",
+   "command": "insights_overdue",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i18",
+   "text": "overdue count",
+   "lang": "en",
+   "command": "insights_overdue",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i19",
+   "text": "kitne kaam overdue hain?",
+   "lang": "ru",
+   "command": "insights_overdue",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i20",
+   "text": "کتنے کام لیٹ ہیں؟",
+   "lang": "ur",
+   "command": "insights_overdue",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i21",
+   "text": "how did I do compared to last week?",
+   "lang": "en",
+   "command": "insights_compare_week",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i22",
+   "text": "this week vs last week",
+   "lang": "en",
+   "command": "insights_compare_week",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i23",
+   "text": "pichle hafte ke muqable mein kaisa raha?",
+   "lang": "ru",
+   "command": "insights_compare_week",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "i24",
+   "text": "پچھلے ہفتے کے مقابلے میں کیسا رہا؟",
+   "lang": "ur",
+   "command": "insights_compare_week",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b01",
+   "text": "move all of today's tasks to tomorrow",
+   "lang": "en",
+   "command": "bulk_move_today",
+   "source": "assistant-eval",
+   "args": {
+    "toYmd": "2026-10-06"
+   }
+  },
+  {
+   "id": "b02",
+   "text": "move everything from today to Friday",
+   "lang": "en",
+   "command": "bulk_move_today",
+   "source": "assistant-eval",
+   "args": {
+    "toYmd": "2026-10-09"
+   }
+  },
+  {
+   "id": "b03",
+   "text": "clear my day",
+   "lang": "en",
+   "command": "bulk_move_today",
+   "source": "assistant-eval",
+   "args": {
+    "toYmd": "2026-10-06"
+   }
+  },
+  {
+   "id": "b04",
+   "text": "aaj ke saare kaam kal kar do",
+   "lang": "ru",
+   "command": "bulk_move_today",
+   "source": "assistant-eval",
+   "args": {
+    "toYmd": "2026-10-06"
+   }
+  },
+  {
+   "id": "b05",
+   "text": "آج کے سارے کام کل کر دو",
+   "lang": "ur",
+   "command": "bulk_move_today",
+   "source": "assistant-eval",
+   "args": {
+    "toYmd": "2026-10-06"
+   }
+  },
+  {
+   "id": "b06",
+   "text": "complete all tasks tagged #uni",
+   "lang": "en",
+   "command": "bulk_complete_tag",
+   "source": "assistant-eval",
+   "args": {
+    "tag": "uni"
+   }
+  },
+  {
+   "id": "b07",
+   "text": "mark all #physics tasks as done",
+   "lang": "en",
+   "command": "bulk_complete_tag",
+   "source": "assistant-eval",
+   "args": {
+    "tag": "physics"
+   }
+  },
+  {
+   "id": "b08",
+   "text": "saare #uni wale kaam done kar do",
+   "lang": "ru",
+   "command": "bulk_complete_tag",
+   "source": "assistant-eval",
+   "args": {
+    "tag": "uni"
+   }
+  },
+  {
+   "id": "b09",
+   "text": "delete all completed tasks",
+   "lang": "en",
+   "command": "bulk_delete_completed",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b10",
+   "text": "clear my completed tasks",
+   "lang": "en",
+   "command": "bulk_delete_completed",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b11",
+   "text": "saare mukammal kaam delete kar do",
+   "lang": "ru",
+   "command": "bulk_delete_completed",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b12",
+   "text": "تمام مکمل کام ڈیلیٹ کر دو",
+   "lang": "ur",
+   "command": "bulk_delete_completed",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b13",
+   "text": "postpone all non-urgent tasks",
+   "lang": "en",
+   "command": "bulk_postpone_nonurgent",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b14",
+   "text": "push the non urgent stuff to tomorrow",
+   "lang": "en",
+   "command": "bulk_postpone_nonurgent",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b15",
+   "text": "ghair zaroori kaam kal pe daal do",
+   "lang": "ru",
+   "command": "bulk_postpone_nonurgent",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "b16",
+   "text": "غیر ضروری کام کل پر ڈال دو",
+   "lang": "ur",
+   "command": "bulk_postpone_nonurgent",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "x09",
+   "text": "buy bread and eggs tomorrow",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "x10",
+   "text": "add milk and eggs to my shopping list",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "x11",
+   "text": "Research and write the report by Friday",
+   "lang": "en",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "x12",
+   "text": "doodh aur anday kal lene hain",
+   "lang": "ru",
+   "command": "create_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w01",
+   "text": "what do I have today?",
+   "lang": "en",
+   "command": "query_tasks",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w02",
+   "text": "plan my day",
+   "lang": "en",
+   "command": "plan_day",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w03",
+   "text": "undo",
+   "lang": "en",
+   "command": "undo",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w04",
+   "text": "what can you do?",
+   "lang": "en",
+   "command": "help",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w05",
+   "text": "aaj kya kaam hai?",
+   "lang": "ru",
+   "command": "query_tasks",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w06",
+   "text": "snooze 30 minutes",
+   "lang": "en",
+   "command": "snooze_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w07",
+   "text": "remove the location from buy medicine",
+   "lang": "en",
+   "command": "manage_location",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w08",
+   "text": "split the project into 3 parts",
+   "lang": "en",
+   "command": "split_task",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w09",
+   "text": "how far am I with the essay?",
+   "lang": "en",
+   "command": "query_progress",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "w10",
+   "text": "I'm 50% done with the lab report",
+   "lang": "en",
+   "command": "set_progress",
+   "source": "assistant-eval"
+  },
+  {
+   "id": "q01",
+   "text": "is there any task related to KFC",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q02",
+   "text": "any task about kalma chowk",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q03",
+   "text": "tasks about physics",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q04",
+   "text": "anything with the bank",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q05",
+   "text": "do I have a task for the visa",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q06",
+   "text": "what do I have at the university",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q07",
+   "text": "any task about groceries",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q08",
+   "text": "is there anything about eggs",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q09",
+   "text": "tasks about Daraz",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q10",
+   "text": "any task related to Multan",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q11",
+   "text": "anything with Shapes Gym",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q12",
+   "text": "any task about the gym",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q13",
+   "text": "find csc461",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q14",
+   "text": "any task about the library",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q15",
+   "text": "anything at Imtiaz",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q16",
+   "text": "KFC wala kaam",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q17",
+   "text": "KFC se related koi task hai?",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q18",
+   "text": "physics ke bare mein koi kaam",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q19",
+   "text": "bank wala kaam",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q20",
+   "text": "visa ka koi kaam",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q21",
+   "text": "gym se related koi kaam",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q22",
+   "text": "groceries wala task",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q23",
+   "text": "library ke bare mein koi task",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q24",
+   "text": "Multan wala kaam hai?",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q25",
+   "text": "masjid wala kaam",
+   "lang": "ru",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q26",
+   "text": "any task about k f c",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q27",
+   "text": "tasks about kay ef see",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q28",
+   "text": "is there any task related to K.F.C",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q29",
+   "text": "K F C wala kaam",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q30",
+   "text": "anything about f y p",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q31",
+   "text": "any task about c s c 461",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q32",
+   "text": "any task about kentuky",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q33",
+   "text": "tasks about grocries",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q34",
+   "text": "any task about phisics",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q35",
+   "text": "anything about the libary",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q36",
+   "text": "any task about Multaan",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q37",
+   "text": "tasks about Kalma chok",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q38",
+   "text": "any task about vissa",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q39",
+   "text": "gim wala kaam",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q40",
+   "text": "tasks about Walmart",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q41",
+   "text": "any task related to McDonalds",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q42",
+   "text": "anything with Karachi",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q43",
+   "text": "is there any task about swimming",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q44",
+   "text": "Pizza Hut wala kaam",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q45",
+   "text": "any task about Tesla",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q46",
+   "text": "tasks about piano lessons",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q47",
+   "text": "any task related to Islamabad",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q48",
+   "text": "anything about the dentist",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q49",
+   "text": "football ke bare mein koi kaam",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q50",
+   "text": "any urgent task about the electricity bill",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q51",
+   "text": "any completed task about the invoice",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q52",
+   "text": "tasks about physics due tomorrow",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q53",
+   "text": "any overdue task about the car",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q54",
+   "text": "what do I have at home",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "q55",
+   "text": "any tasks with #bills",
+   "lang": "en",
+   "command": "find_items",
+   "source": "query-eval"
+  },
+  {
+   "id": "f01",
+   "text": "Make Go to gym mandatory",
+   "lang": "en",
+   "command": "routine_update",
+   "source": "failure",
+   "args": {
+    "priority": "MANDATORY"
+   }
+  },
+  {
+   "id": "f02",
+   "text": "Please remove all the pending tasks",
+   "lang": "en",
+   "command": "bulk_delete_open",
+   "source": "failure"
+  },
+  {
+   "id": "f03",
+   "text": "Please remove all existing tasks",
+   "lang": "en",
+   "command": "bulk_delete_open",
+   "source": "failure"
+  },
+  {
+   "id": "f04",
+   "text": "Get me a task related to KFc",
+   "lang": "en",
+   "command": "find_items",
+   "source": "failure"
+  },
+  {
+   "id": "f05",
+   "text": "I don't want to do any task, I just want sleep",
+   "lang": "en",
+   "command": "log_mood",
+   "source": "failure"
+  },
+  {
+   "id": "f07",
+   "text": "Yes schedule a call at 6 pm",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f08",
+   "text": "I mean schedule a call with mooz at 6 pm",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f09",
+   "text": "when is my physics task due?",
+   "lang": "en",
+   "command": "query_tasks",
+   "source": "failure"
+  },
+  {
+   "id": "f10",
+   "text": "Ok change the location to KFC gulberg",
+   "lang": "en",
+   "command": "manage_location",
+   "source": "failure"
+  },
+  {
+   "id": "f11",
+   "text": "change its location to Emporium mall",
+   "lang": "en",
+   "command": "manage_location",
+   "source": "failure"
+  },
+  {
+   "id": "f12",
+   "text": "add a task to do 4 push ups today",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f13",
+   "text": "we have to do 5 push ups",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f14",
+   "text": "Do 20 push-ups",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f15",
+   "text": "Buy medicine from Ali Medical Store tomorrow",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f16",
+   "text": "I need to call mom's doctor tomorrow",
+   "lang": "en",
+   "command": "create_task",
+   "source": "failure"
+  },
+  {
+   "id": "f17",
+   "text": "how much of the essay is done?",
+   "lang": "en",
+   "command": "query_progress",
+   "source": "failure"
+  },
+  {
+   "id": "f18",
+   "text": "I am on kind of routine to go to gym at every Tuesday and Friday In morning 9 AM",
+   "lang": "en",
+   "command": "create_routine",
+   "source": "failure"
+  },
+  {
+   "id": "f19",
+   "text": "change the essay",
+   "lang": "en",
+   "command": "update_task",
+   "source": "failure"
+  },
+  {
+   "id": "f20",
+   "text": "blorp zinga",
+   "lang": "en",
+   "command": "unclear",
+   "source": "failure"
+  }
+ ]
+}
