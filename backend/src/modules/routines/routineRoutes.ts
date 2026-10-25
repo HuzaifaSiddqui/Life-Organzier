@@ -34,6 +34,9 @@ const base = {
   locationContext: z.string().max(60).nullable().optional(),
   location: z.string().trim().max(60).nullable().optional(),
   wellnessType: z.string().max(40).nullable().optional(),
+  /** Every N days from anchorDate (local YYYY-MM-DD); the server decides which days count. */
+  intervalDays: z.number().int().min(2).max(30).nullable().optional(),
+  anchorDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 };
 
 routineRouter.get(

@@ -80,10 +80,11 @@ async function routineById(turn: Turn, args: CommandArgs): Promise<Routine | nul
   return prisma.routine.findFirst({ where: { id: String(args.routineId), userId: turn.user.id } });
 }
 
-export function scheduleLabel(r: Pick<Routine, "frequency" | "daysOfWeek" | "dayOfMonth" | "dueTime">): string {
+export function scheduleLabel(r: Pick<Routine, "frequency" | "daysOfWeek" | "dayOfMonth" | "dueTime"> & Partial<Pick<Routine, "intervalDays" | "anchorDate">>): string {
   const days = Array.isArray(r.daysOfWeek) ? (r.daysOfWeek as number[]) : [];
-  const when =
-    r.frequency === RoutineFrequency.DAILY || days.length === 7
+  const when = r.intervalDays
+    ? `${r.intervalDays === 2 ? "every other day" : `every ${r.intervalDays} days`}${r.anchorDate ? ` from ${r.anchorDate}` : ""}`
+    : r.frequency === RoutineFrequency.DAILY || days.length === 7
       ? "daily"
       : r.frequency === RoutineFrequency.MONTHLY
         ? `monthly on day ${r.dayOfMonth}`

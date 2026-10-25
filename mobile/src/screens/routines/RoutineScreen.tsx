@@ -2,7 +2,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
-import { InlineTimePickerField } from "../../components/DueDateTimePickers";
+import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
@@ -19,7 +19,9 @@ import {
   type RoutineInput,
 } from "../../services/routinesApi";
 import type { Routine, RoutineFrequency, RoutineOccurrence, RoutinePriority } from "../../types/models";
+import { ymdFromLocalDate } from "../../utils/datetimeValidation";
 import { formatDuration, WEEKDAYS_SHORT } from "../../utils/format";
+import { INTERVAL_CHOICES, intervalRepeatLabel } from "../../utils/routineRepeat";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Routines">;
 
@@ -52,6 +54,7 @@ const EMPTY: FormState = {
 };
 
 function freqLabel(r: Routine): string {
+  if (r.intervalDays && r.anchorDate) return intervalRepeatLabel(r.intervalDays, r.anchorDate);
   if (r.frequency === "DAILY") return "Every day";
   if (r.frequency === "MONTHLY") return `Monthly on day ${r.dayOfMonth}`;
   const days = (r.daysOfWeek ?? []).map((d) => WEEKDAYS_SHORT[d]).join(", ");
@@ -114,7 +117,7 @@ export function RoutineScreen({ navigation }: Props) {
       setFormError("Give the routine a name");
       return;
     }
-    if ((form.frequency === "WEEKLY" || form.frequency === "CUSTOM") && !form.daysOfWeek?.length) {
+    if (!form.intervalDays && (form.frequency === "WEEKLY" || form.frequency === "CUSTOM") && !form.daysOfWeek?.length) {
       setFormError("Pick at least one day");
       return;
     }
@@ -123,8 +126,11 @@ export function RoutineScreen({ navigation }: Props) {
     const payload: RoutineInput = {
       title: form.title.trim(),
       frequency: form.frequency,
-      daysOfWeek: form.frequency === "WEEKLY" || form.frequency === "CUSTOM" ? form.daysOfWeek : null,
-      dayOfMonth: form.frequency === "MONTHLY" ? form.dayOfMonth : null,
+      daysOfWeek: !form.intervalDays && (form.frequency === "WEEKLY" || form.frequency === "CUSTOM") ? form.daysOfWeek : null,
+      dayOfMonth: !form.intervalDays && form.frequency === "MONTHLY" ? form.dayOfMonth : null,
+      // Every N days: the server decides which days count (no day rule on the phone).
+      intervalDays: form.intervalDays ?? null,
+      anchorDate: form.intervalDays ? (form.anchorDate ?? ymdFromLocalDate(new Date())) : null,
       dueTime: form.dueTime || null,
       durationMinutes: form.durationMinutes,
       category: form.category,
@@ -242,11 +248,34 @@ export function RoutineScreen({ navigation }: Props) {
                   <Text style={ui.label}>How often?</Text>
                   <View style={ui.wrap}>
                     {FREQS.map((f) => (
-                      <Chip key={f.key} small label={f.label} selected={form.frequency === f.key} onPress={() => setForm({ ...form, frequency: f.key })} />
+                      <Chip key={f.key} small label={f.label} selected={!form.intervalDays && form.frequency === f.key} onPress={() => setForm({ ...form, frequency: f.key, intervalDays: null, anchorDate: null })} />
                     ))}
+                    <Chip
+                      small
+                      label="Every few days"
+                      selected={Boolean(form.intervalDays)}
+                      onPress={() => setForm({ ...form, frequency: "DAILY", intervalDays: form.intervalDays ?? 2, anchorDate: form.anchorDate ?? ymdFromLocalDate(new Date()) })}
+                    />
                   </View>
                 </View>
-                {form.frequency === "WEEKLY" || form.frequency === "CUSTOM" ? (
+                {form.intervalDays ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={ui.label}>Repeat every</Text>
+                    <View style={ui.wrap}>
+                      {INTERVAL_CHOICES.map((n) => (
+                        <Chip key={n} small label={`${n} days`} selected={form.intervalDays === n} onPress={() => setForm({ ...form, intervalDays: n })} />
+                      ))}
+                    </View>
+                    <TaskFormDueDateRow
+                      label="Starting"
+                      valueYmd={form.anchorDate ?? ymdFromLocalDate(new Date())}
+                      onChangeYmd={(anchorDate) => setForm({ ...form, anchorDate })}
+                      onClear={() => setForm({ ...form, anchorDate: ymdFromLocalDate(new Date()) })}
+                    />
+                    <Text style={ui.meta}>{intervalRepeatLabel(form.intervalDays, form.anchorDate ?? ymdFromLocalDate(new Date()))}</Text>
+                  </View>
+                ) : null}
+                {!form.intervalDays && (form.frequency === "WEEKLY" || form.frequency === "CUSTOM") ? (
                   <View style={ui.wrap}>
                     {WEEKDAYS_SHORT.map((d, i) => {
                       const sel = form.daysOfWeek?.includes(i) ?? false;
@@ -262,7 +291,7 @@ export function RoutineScreen({ navigation }: Props) {
                     })}
                   </View>
                 ) : null}
-                {form.frequency === "MONTHLY" ? (
+                {!form.intervalDays && form.frequency === "MONTHLY" ? (
                   <View>
                     <Text style={ui.label}>Day of month</Text>
                     <TextInput

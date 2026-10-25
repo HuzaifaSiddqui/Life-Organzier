@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
-import { addDaysYmd, localYmd, parseClock, startOfLocalDay, weekdayOfYmd, zonedTimeToUtc } from "../../lib/time.js";
+import { addDaysYmd, diffDaysYmd, localYmd, parseClock, startOfLocalDay, weekdayOfYmd, zonedTimeToUtc } from "../../lib/time.js";
 import { logEvent } from "../events/eventService.js";
 
 export type RoutineInput = {
@@ -27,13 +27,29 @@ export type RoutineInput = {
   location?: string | null;
   wellnessType?: string | null;
   active?: boolean;
+  /** Every N days (2..30) from anchorDate (local YYYY-MM-DD); null keeps frequency/days. */
+  intervalDays?: number | null;
+  anchorDate?: string | null;
 };
+
+export const MAX_INTERVAL_DAYS = 30;
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Every N days: a day counts when its distance in days from the anchor is a non-negative multiple of N.
+ * Calendar-day arithmetic on YYYY-MM-DD (the user's local dates), so month ends and DST don't shift it.
+ */
+export function intervalMatches(anchorYmd: string, intervalDays: number, ymd: string): boolean {
+  const d = diffDaysYmd(anchorYmd, ymd);
+  return d >= 0 && d % intervalDays === 0;
+}
 
 export type OccurrenceWithRoutine = RoutineOccurrence & { routine: Routine };
 
 const GENERATE_DAYS = 14;
 
-export function routineMatchesDay(routine: Pick<Routine, "frequency" | "daysOfWeek" | "dayOfMonth">, ymd: string): boolean {
+export function routineMatchesDay(routine: Pick<Routine, "frequency" | "daysOfWeek" | "dayOfMonth"> & Partial<Pick<Routine, "intervalDays" | "anchorDate">>, ymd: string): boolean {
+  if (routine.intervalDays && routine.anchorDate) return intervalMatches(routine.anchorDate, routine.intervalDays, ymd);
   const weekday = weekdayOfYmd(ymd);
   const days = Array.isArray(routine.daysOfWeek) ? (routine.daysOfWeek as unknown[]).map(Number) : [];
   switch (routine.frequency) {
@@ -82,12 +98,23 @@ export async function listRoutines(userId: string, tz: string, context?: string 
 }
 
 function validate(input: RoutineInput): void {
+  if (input.intervalDays != null) {
+    if (!Number.isInteger(input.intervalDays) || input.intervalDays < 2 || input.intervalDays > MAX_INTERVAL_DAYS) {
+      throw new HttpError(400, "VALIDATION_ERROR", `Repeat every 2 to ${MAX_INTERVAL_DAYS} days`);
+    }
+    if (!input.anchorDate || !YMD.test(input.anchorDate)) throw new HttpError(400, "VALIDATION_ERROR", "Pick a start date for a routine that repeats every few days");
+    return validateTime(input);
+  }
   if ((input.frequency === RoutineFrequency.WEEKLY || input.frequency === RoutineFrequency.CUSTOM) && !input.daysOfWeek?.length) {
     throw new HttpError(400, "VALIDATION_ERROR", "Pick at least one day for weekly routines");
   }
   if (input.frequency === RoutineFrequency.MONTHLY && !input.dayOfMonth) {
     throw new HttpError(400, "VALIDATION_ERROR", "Pick a day of the month for monthly routines");
   }
+  validateTime(input);
+}
+
+function validateTime(input: RoutineInput): void {
   if (input.dueTime && !parseClock(input.dueTime)) throw new HttpError(400, "VALIDATION_ERROR", "Invalid routine time");
 }
 
@@ -109,21 +136,51 @@ export async function createRoutine(userId: string, tz: string, input: RoutineIn
       locationContext: input.locationContext ?? null,
       location: input.location?.trim() || null,
       wellnessType: input.wellnessType ?? null,
+      intervalDays: input.intervalDays ?? null,
+      anchorDate: input.intervalDays ? (input.anchorDate ?? null) : null,
     },
   });
   await generateRoutineOccurrences(userId, tz);
   return routine;
 }
 
+/**
+ * "I already took it today": today's occurrence is marked done. It exists from generation (one row per routine
+ * and day, unique), so this updates that row, or creates it if today doesn't match the schedule; never a second one.
+ */
+export async function markTodayDone(userId: string, tz: string, routineId: string): Promise<RoutineOccurrence> {
+  const routine = await prisma.routine.findFirstOrThrow({ where: { id: routineId, userId } });
+  const occurrenceDate = startOfLocalDay(localYmd(new Date(), tz), tz);
+  const done = { status: RoutineOccurrenceStatus.COMPLETED, completedAt: new Date() };
+  const row = await prisma.routineOccurrence.upsert({
+    where: { routineId_occurrenceDate: { routineId, occurrenceDate } },
+    update: done,
+    create: { routineId, userId, occurrenceDate, dueTime: routine.dueTime, ...done },
+  });
+  logEvent(userId, "ROUTINE_COMPLETED", routineId, { title: routine.title, category: routine.category });
+  return row;
+}
+
 export async function updateRoutine(userId: string, tz: string, id: string, input: Partial<RoutineInput>): Promise<Routine | null> {
   const existing = await prisma.routine.findFirst({ where: { id, userId } });
   if (!existing) return null;
+  // New weekdays or frequency without an interval: the routine follows those (the interval is dropped). Compared
+  // with what is stored, not by presence: the routine form resends the whole schedule on every save.
+  const days = (d: unknown) => (Array.isArray(d) ? [...(d as number[])].sort().join(",") : "");
+  const scheduleChanged =
+    (input.frequency !== undefined && input.frequency !== existing.frequency) ||
+    (input.daysOfWeek !== undefined && days(input.daysOfWeek) !== days(existing.daysOfWeek)) ||
+    (input.dayOfMonth !== undefined && (input.dayOfMonth ?? null) !== existing.dayOfMonth);
+  const intervalDays = input.intervalDays !== undefined ? input.intervalDays : scheduleChanged ? null : existing.intervalDays;
+  const anchorDate = intervalDays ? (input.anchorDate !== undefined ? input.anchorDate : existing.anchorDate) : null;
   const merged: RoutineInput = {
     title: input.title ?? existing.title,
     frequency: input.frequency ?? existing.frequency,
     daysOfWeek: input.daysOfWeek !== undefined ? input.daysOfWeek : (existing.daysOfWeek as number[] | null),
     dayOfMonth: input.dayOfMonth !== undefined ? input.dayOfMonth : existing.dayOfMonth,
     dueTime: input.dueTime !== undefined ? input.dueTime : existing.dueTime,
+    intervalDays,
+    anchorDate,
   };
   validate(merged);
   const routine = await prisma.routine.update({
@@ -131,6 +188,8 @@ export async function updateRoutine(userId: string, tz: string, id: string, inpu
     data: {
       ...input,
       daysOfWeek: input.daysOfWeek === undefined ? undefined : input.daysOfWeek?.length ? input.daysOfWeek : Prisma.JsonNull,
+      intervalDays,
+      anchorDate,
     },
   });
   // Future pending occurrences follow the new schedule.

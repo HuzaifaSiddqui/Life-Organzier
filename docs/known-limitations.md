@@ -289,3 +289,26 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   Urdu script and Roman Urdu; Urdu-script clock times are only read inside ranges such as "رات 11 سے صبح 7 تک".
 - **The LLM router adds up to two model calls** when the rules are unsure (on top of the existing intent call), so
   those messages are slower with a local model. It never runs with AI off.
+
+## Repeating every N days
+
+- **Supported:** routines that repeat every N days (2..30) from a start date, created by chat ("every other day",
+  "alternate days", "alternative day", "every 2nd day", "every 3 days", Roman Urdu "har doosre din", "ek din
+  chhor kar", "har teesre din") or in the routine form ("Every few days", 2–7 offered there; the server accepts up
+  to 30). Which days count is decided on the server (calendar days from the start date, in the user's timezone).
+  "I already took it today" / "I have taken today's" marks today done, so the next one is in N days. With no time
+  given, the routine has a flexible time (no follow-up question).
+- **Not by chat:** changing how often an existing routine repeats ("change my gym routine to every other day")
+  gets "open it on the Routines screen"; the routine is not changed. Changing a routine's weekdays (chat or form)
+  drops its interval.
+- **No time, no reminder.** The reminder planner needs a time. When chat makes an every-N-days routine without
+  one, it asks once ("Morning, afternoon, evening, or pick a time?"; morning 9 AM, afternoon 3 PM, evening 6 PM,
+  night 9 PM, or an exact time); any other reply drops the question and the routine stays at a flexible time
+  with no reminder until a time is set (chat or Routines screen).
+- **Reminders are best-effort, not a medical device.** A reminder can be late or missing (phone off, battery
+  saving, notifications blocked, Do Not Disturb, the app not opened for days). Don't rely on Life Organizer alone
+  for medicine or anything safety-critical.
+- **Documents:** a document or pasted text with these phrases still makes no routine and says why.
+- **Other phrasings are not guessed** ("thrice a week", "every alternate Monday").
+- **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
+  Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).

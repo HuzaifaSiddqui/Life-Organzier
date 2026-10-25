@@ -87,6 +87,14 @@ cd backend && npm install && npx prisma migrate deploy && npx prisma generate
 cd ../mobile && npm install
 ```
 
+Changing the database schema (`npx prisma migrate dev`) needs a third, scratch database that Prisma wipes on
+every run: never the dev or the test database. Create it once and put its URL in `backend/.env` as
+`SHADOW_DATABASE_URL` (see `backend/.env.example`). `migrate deploy`, `generate` and the tests don't need it.
+
+```bash
+psql "$DATABASE_URL" -c "CREATE DATABASE life_organizer_shadow"
+```
+
 Every time:
 
 ```bash

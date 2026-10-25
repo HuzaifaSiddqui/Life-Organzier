@@ -20,7 +20,7 @@ const CONTROL = /^(?:done|ok done|that'?s it|that'?s all|skip|later|not now|bas|
 const NUMBER = /^\s*#?\d{1,2}\s*[.)]?\s*$/;
 
 const CONFIRM_KINDS = new Set<Pending["kind"]>(["confirm_command", "confirm_delete", "confirm_update", "mood_confirm", "typo", "prereq", "task_review", "clarify_intent"]);
-const SLOT_KINDS = new Set<Pending["kind"]>(["task_draft", "routine_draft", "past_date", "capacity", "conflict", "task_review"]);
+const SLOT_KINDS = new Set<Pending["kind"]>(["task_draft", "routine_draft", "past_date", "capacity", "conflict", "task_review", "routine_time"]);
 
 function optionLabels(p: Pending): string[] {
   if (p.kind === "command_choice") return p.candidates.map((c) => c.label);

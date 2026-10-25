@@ -4,8 +4,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  /// Scratch database for `prisma migrate dev` / `migrate diff`: its own database, never the dev or test one
+  /// (Prisma wipes it). Not needed by `migrate deploy` or `generate`.
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model User {
@@ -125,6 +128,10 @@ model Routine {
   frequency       RoutineFrequency
   daysOfWeek      Json?
   dayOfMonth      Int?
+  /// Repeats every N days (2..30) counted from anchorDate; null = frequency/daysOfWeek/dayOfMonth decide.
+  intervalDays    Int?
+  /// Local YYYY-MM-DD the interval counts from (a day counts when its distance from it is a multiple of intervalDays).
+  anchorDate      String?
   dueTime         String?
   durationMinutes Int?
   category        String?

@@ -792,3 +792,57 @@ export function isVagueTitle(title: string | null): boolean {
   ]);
   return words.every((w) => vague.has(w));
 }
+
+/* ---- repeating every N days ----------------------------------------------------------------------- */
+
+const ORDINAL_N: Record<string, number> = { second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7 };
+const WORD_N: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+
+/**
+ * "every other day", "alternate day(s)", "alternative day(s)", "every 2nd/second day", "every 3 days" and the Roman
+ * Urdu "har doosre din", "ek din chhor kar", "har teesre din": the number of days between repeats (2..30), or null.
+ * Only these phrasings; others are not guessed. Urdu script is planned after the deadline.
+ */
+export function extractInterval(text: string): number | null {
+  const t = text.toLowerCase();
+  if (/\bevery\s+other\s+day\b/.test(t) || /\b(?:alternate|alternative)\s+days?\b/.test(t)) return 2;
+  if (/\bhar\s+(?:doosre|dusre|doosray|dusray|dosre)\s+din\b/.test(t) || /\bek\s+din\s+(?:chhor|chor|chhod|chod)\s+(?:kar|ke)\b/.test(t)) return 2;
+  if (/\bhar\s+(?:teesre|tisre|teesray|tisray)\s+din\b/.test(t)) return 3;
+  let m = /\bevery\s+(\d{1,2})(?:st|nd|rd|th)\s+day\b/.exec(t) ?? /\bevery\s+(second|third|fourth|fifth|sixth|seventh)\s+day\b/.exec(t);
+  if (m) return clampInterval(Number(m[1]) || ORDINAL_N[m[1]]);
+  m = /\bevery\s+(\d{1,2}|two|three|four|five|six|seven)\s+days\b/.exec(t);
+  if (m) return clampInterval(Number(m[1]) || WORD_N[m[1]]);
+  return null;
+}
+
+function clampInterval(n: number): number | null {
+  return n >= 2 && n <= 30 ? n : null;
+}
+
+/** The interval phrase removed (for the title): "I take medicine on every alternative day" → "I take medicine on". */
+export function withoutInterval(text: string): string {
+  return text
+    .replace(/\bevery\s+other\s+day\b|\b(?:on\s+)?(?:every\s+)?(?:alternate|alternative)\s+days?\b/gi, " ")
+    .replace(/\bhar\s+(?:doosre|dusre|doosray|dusray|dosre|teesre|tisre|teesray|tisray)\s+din\b|\bek\s+din\s+(?:chhor|chor|chhod|chod)\s+(?:kar|ke)\b/gi, " ")
+    .replace(/\bevery\s+(?:\d{1,2}(?:st|nd|rd|th)?|second|third|fourth|fifth|sixth|seventh|two|three|four|five|six|seven)\s+days?\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * "I already took it today", "I have taken today's", "I have already taken medicine of today", Roman Urdu
+ * "aaj ki le li hai": today's dose is done. The clause is also dropped from the title.
+ */
+const DONE_TODAY = /\b(?:i\s+)?(?:have\s+|i'?ve\s+)?(?:already\s+)?(?:took|taken|had|done|did)\b[^.!?,]*\btoday'?s?\b|\baaj\s+(?:ki|ka|ke|wali|wala)?\s*(?:\w+\s+)?(?:le\s+li|kha\s+li|kar\s+li|ho\s+gay[ai])\b/i;
+export function saysDoneToday(text: string): boolean {
+  return DONE_TODAY.test(text);
+}
+export function withoutDoneToday(text: string): string {
+  return text
+    .split(/(?:[,.;!?]|\s+and\s+|\s+aur\s+)/i)
+    .filter((clause) => !DONE_TODAY.test(clause))
+    .join(", ")
+    .replace(/[,\s]+$/, "")
+    .trim();
+}
+

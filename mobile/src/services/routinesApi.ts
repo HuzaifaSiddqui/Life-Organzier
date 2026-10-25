@@ -14,6 +14,8 @@ export type RoutineInput = {
   priority: RoutinePriority;
   timeLocked: boolean;
   locationContext?: string | null;
+  intervalDays?: number | null;
+  anchorDate?: string | null;
 };
 
 export async function getRoutines(all = false): Promise<{ routines: Routine[]; context: string | null }> {

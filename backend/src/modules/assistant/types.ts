@@ -45,6 +45,11 @@ export type RoutineDraft = {
   category: string | null;
   timeLocked: boolean;
   context: string | null;
+  /** Every N days from anchorDate (local YYYY-MM-DD); absent for weekday/daily/monthly routines. */
+  intervalDays?: number | null;
+  anchorDate?: string | null;
+  /** "I already took it today": today's occurrence is marked done when the routine is created. */
+  doneToday?: boolean;
 };
 
 export type TaskSlot = "title" | "date" | "time" | "duration";
@@ -54,6 +59,8 @@ export type Pending =
   | { kind: "task_draft"; draft: TaskDraft; awaiting: TaskSlot[]; source: "CHAT" | "VOICE" | "WHATSAPP"; clarity: number; reasks?: number }
   | { kind: "task_review"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; clarity: number }
   | { kind: "routine_draft"; draft: RoutineDraft; awaiting: RoutineSlot[]; reasks?: number }
+  /** Asked once after an every-N-days routine was made without a time (no time = no reminder). */
+  | { kind: "routine_time"; routineId: string; title: string }
   | { kind: "mood_confirm"; mood: string; confidence: number; text: string }
   | { kind: "confirm_update"; taskId: string; changes: Record<string, unknown>; summary: string }
   | { kind: "confirm_delete"; taskId: string; title: string }
