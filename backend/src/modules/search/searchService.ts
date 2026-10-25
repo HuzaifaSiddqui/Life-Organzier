@@ -48,13 +48,20 @@ export function soundex(word: string): string | null {
   return (out + "000").slice(0, 4);
 }
 
-/** Best match of one term in one field: 4 exact word or phrase, 3 substring, 2 fuzzy word, 1 same sound, 0 none. */
+/**
+ * Best match of one term in one field: 4 exact word or phrase, 3 substring, 2 fuzzy word, 1 same sound, 0 none.
+ * A substring counts at a word start ("phys" → "physics"), and inside a word only for terms of 5+ letters
+ * ("burger" → "cheeseburger"), so "art" never matches "start" or "party". Digits after letters start a word
+ * ("461" → "CSC461").
+ */
 export function matchStrength(term: string, field: string): number {
   const t = searchText(term);
   const f = searchText(field);
   if (!t || !f) return 0;
   if (` ${f} `.includes(` ${t} `)) return MATCH.exact;
-  if (t.length >= 3 && f.includes(t)) return MATCH.substring;
+  // A switch between letters and digits is a word start too: "461" in "csc461".
+  const starts = ` ${f.replace(/(\p{L})(?=\p{N})|(\p{N})(?=\p{L})/gu, "$1$2 ")}`;
+  if (t.length >= 3 && (starts.includes(` ${t}`) || (t.length >= 5 && f.includes(t)))) return MATCH.substring;
   const words = f.split(" ");
   if (words.some((w) => w.length >= 3 && fuzzySimilarity(t, w) >= FUZZY_MIN)) return MATCH.fuzzy;
   const key = !t.includes(" ") ? soundex(t) : null;
