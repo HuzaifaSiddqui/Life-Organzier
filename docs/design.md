@@ -252,7 +252,7 @@ Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), 
 | Dashboard / Today | ⏳ |
 | Task list | ⏳ (legacy `Animated` + `PanResponder` swipe) |
 | Task detail / Add / Edit (TaskForm) | ⏳ |
-| Routines | ⏳ (legacy; the form's "How often?" adds an "Every few days" chip: "Repeat every 2–7 days" chips, a "Starting" date row (`TaskFormDueDateRow`) and a preview line; the list shows "Every other day, starting 25 Oct". English only, like the rest of this screen) |
+| Routines | ⏳ (legacy; the form's "How often?" adds an "Every few days" chip: "Repeat every 2–7 days" chips, a "Starting" date row (`TaskFormDueDateRow`) and a preview line; the list shows "Every other day, starting 25 Oct". The form has a "Reminder" switch (RN `Switch`, on by default; off = no reminder and no set time) above the time field, and the "Flexible" chip is gone; the list shows "no reminder" for routines without a time. English only, like the rest of this screen) |
 | Documents (upload & extraction review) | ⏳ (the deadline review row is migrated: `DeadlineReviewItem`, copy in `strings.ts` en + ur; the rest of the screen is legacy) |
 | Mood | ⏳ |
 | Insights / Memory (analytics) | ⏳ |
