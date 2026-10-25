@@ -45,6 +45,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Android shows at most 3 action buttons**; the completion check-in uses exactly 3 (Done / +30 min / Update…). The
   other options (partly done, +15 / +60, didn't get to it) are in the in-app sheet.
 - **Check-ins in quiet hours or Do Not Disturb are skipped, not moved** (FR-RN-004 §4).
+- **A task snooze is kept on that phone.** "Snooze 15 min" is saved on the phone and scheduled again by every
+  re-sync until it fires (before, a re-sync within the 15 minutes dropped it). It is dropped when the task is done
+  or deleted on the phone's task list; another phone doesn't know about it.
 
 ## Documents and OCR
 
