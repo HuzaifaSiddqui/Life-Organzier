@@ -313,6 +313,21 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
   Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).
 
+## Chat routing
+
+- **Rules first.** The meaning-based router adds nothing measurable yet (see the gate in
+  `docs/AI_ASSISTANT_ARCHITECTURE.md`): with AI off the rules decide alone; with AI on, unsure messages go to the
+  model as before, now with bank examples. Its value grows only as the bank grows (`npm run bank:approve`).
+- **No held-out number.** `tests/eval/chat-holdout.json` is still empty; every chat accuracy figure is on rows the
+  rules were written against.
+- **Unknown messages are logged on the server** (`backend/logs/unknown-utterances.jsonl`, git-ignored): the text
+  with personal numbers masked, its language and time, no user id. Names or other details in the text stay. The file
+  is not rotated or cleaned up automatically.
+- **Paraphrases are not trusted.** `npm run paraphrases` writes model paraphrases to a review file only; many Roman
+  Urdu ones from qwen2.5:7b are not natural, so each row needs a person's approval before it enters the bank.
+- **Freeze:** vocabulary misses are bank rows, not new regexes (`docs/chat-failures.md`). Misses that are still
+  open: "change the essay" (a new task, not a change) and a messy routine sentence's title with AI off.
+
 ## Finding tasks by topic
 
 - **Typos are caught in tiers.** Exact word, then substring, then fuzzy (trigram similarity ≥ 0.75, which
