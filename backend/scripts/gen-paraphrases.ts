@@ -1,6 +1,7 @@
 /**
- * `npm run paraphrases`: asks the local model (backend/.env) for 20 paraphrases per command, in English and in
- * Roman Urdu, for the 10 most-used commands, and writes them to tests/eval/review/paraphrases-review.json with
+ * `npm run paraphrases`: asks the local model (backend/.env) for 20 paraphrases per command, in English (Roman
+ * Urdu only with `-- --roman-urdu`), for the 10 most-used commands, and writes them to
+ * tests/eval/review/paraphrases-review.json with
  * `approved: false`. Nothing enters the bank until a person sets `approved: true` (and fixes `command` if needed)
  * and runs `npm run bank:approve`.
  *
@@ -44,10 +45,13 @@ async function mostUsed(): Promise<string[]> {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP).map(([c]) => c);
 }
 
-const LANGS = {
+const ALL_LANGS = {
   en: "English",
   ru: "Roman Urdu (Urdu written in English letters, the way students in Pakistan text, e.g. \"kal subah 9 baje gym jana hai\")",
 };
+// English only by default: qwen2.5:7b's Roman Urdu paraphrases were mostly unnatural (25 Oct 2026, removed
+// unreviewed). `-- --roman-urdu` adds them again, still for review only.
+const LANGS = process.argv.includes("--roman-urdu") ? ALL_LANGS : { en: ALL_LANGS.en };
 const schema = z.object({ paraphrases: z.array(z.string().min(2).max(160)).min(1).max(40) });
 
 const ai = getAi();
