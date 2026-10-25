@@ -80,10 +80,11 @@ import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
-import { meaningRoute } from "./commands/meaning.js";
+import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
+import { routeWithLlm } from "./commands/router.js";
 import { getAi } from "../../ai/llm.js";
 import { bankIndex } from "./commands/neighbours.js";
-import type { ParseCtx } from "./commands/types.js";
+import type { CommandArgs, ParseCtx } from "./commands/types.js";
 import { resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
@@ -359,6 +360,12 @@ async function routeByMeaning(turn: Turn, text: string, ctx: ParseCtx, rules: { 
   try {
     const ai = getAi();
     const model = ai.enabled && ai.available;
+    if (!meaningRouterOn()) {
+      // The flag is off (default): the LLM router as before, only when the rules are unsure; no bank, no arbitration.
+      if (!model || rules.confidence >= RULES_UNSURE) return null;
+      const routed = await routeWithLlm(text, ctx);
+      return routed ? runRouted(turn, text, routed.command, routed.args, u) : null;
+    }
     const r = await meaningRoute(text, ctx, rules, { index: await bankIndex(model), model });
     const d = r.decision;
     if (d.kind === "rules") return null;
@@ -372,16 +379,22 @@ async function routeByMeaning(turn: Turn, text: string, ctx: ParseCtx, rules: { 
     if (d.via === "neighbours" && (command.undoable || command.category === "bulk")) {
       return { content: "Did you mean this?", actions: [sayAction(summary(d.command), d.command, text, "primary"), { label: "No", payload: { type: "cancel_pending" } }], intent: "meaning_ask" };
     }
-    // A wrapped intent keeps this turn's understanding (LLM title etc.); new commands run through the registry.
-    if (command.wrapped) {
-      const base = u ?? rulesUnderstand(text, extractOpts(turn));
-      return handleIntent(turn, { ...base, intent: d.command as Understanding["intent"], targetRef: typeof d.args.ref === "string" && d.args.ref ? d.args.ref.toLowerCase() : base.targetRef }, text);
-    }
-    return runCommand(turn, d.command, d.args, { text });
+    return runRouted(turn, text, d.command, d.args, u);
   } catch (error) {
     console.warn("Meaning router skipped:", error instanceof Error ? error.message : error);
     return null;
   }
+}
+
+/** Runs a routed command. A wrapped intent keeps this turn's understanding (LLM title etc.); others use the registry. */
+async function runRouted(turn: Turn, text: string, name: string, args: CommandArgs, u?: Understanding): Promise<Out | null> {
+  const command = getCommand(name);
+  if (!command) return null;
+  if (command.wrapped) {
+    const base = u ?? rulesUnderstand(text, extractOpts(turn));
+    return handleIntent(turn, { ...base, intent: name as Understanding["intent"], targetRef: typeof args.ref === "string" && args.ref ? args.ref.toLowerCase() : base.targetRef }, text);
+  }
+  return runCommand(turn, name, args, { text });
 }
 
 const SWITCH_INTENTS = new Set([...STRONG_SWITCH, "support", "thanks"]);
