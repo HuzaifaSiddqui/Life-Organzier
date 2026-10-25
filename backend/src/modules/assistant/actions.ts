@@ -20,3 +20,7 @@ export function sayAction(label: string, command: string, text: string, style?: 
 export function answerAction(label: string, pending: Pending["kind"], text: string, style?: Style): QuickAction {
   return { label, text, payload: { type: "answer", pending, text }, ...(style ? { style } : {}) };
 }
+
+/** Contract guard: `npm run typecheck` fails here if QuickAction.payload ever becomes optional again. */
+type PayloadRequired = undefined extends QuickAction["payload"] ? never : true;
+export const ACTION_PAYLOAD_REQUIRED: PayloadRequired = true;

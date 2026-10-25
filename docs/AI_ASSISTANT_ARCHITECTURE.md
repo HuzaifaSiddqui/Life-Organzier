@@ -163,7 +163,9 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **Action contract**: every button, chip and suggestion carries a payload (`command` + args, or `answer` for one
   open question, or one of the older payloads), never a sentence for the engine to read again; `text` is what a
   WhatsApp user can type. A `command` payload with only a sentence is read by that command's own parser.
-  `tests/actionContract.test.ts` taps every button from 20 conversations. See `docs/chat-failures.md`.
+  `tests/actionContract.test.ts` taps every button from 20 conversations. Guards: `npm run typecheck` fails if
+  `QuickAction.payload` becomes optional (`ACTION_PAYLOAD_REQUIRED` in `actions.ts`), and `tests/actionLint.test.ts`
+  fails on any `{ label, text }` object in `backend/src` without a payload. See `docs/chat-failures.md`.
 - **WhatsApp**: command replies are plain text; options become a numbered list (`formatReply`), "1" answers them,
   app-only buttons (open a screen) are dropped (and the numbers count only the listed ones), lists cap at 8.
 - **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
