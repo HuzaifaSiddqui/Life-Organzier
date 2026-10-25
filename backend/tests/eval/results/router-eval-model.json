@@ -1,0 +1,49 @@
+{
+ "vectors": "nomic-embed-text",
+ "model": true,
+ "summary": {
+  "en": {
+   "n": 201,
+   "rules": 192,
+   "neighbours": 108,
+   "combined": 194,
+   "oldRouter": 194,
+   "asked": 0,
+   "askedOnRight": 0,
+   "rulesRight": 192,
+   "routed": 5,
+   "unknown": 0,
+   "rulesAcc": 0.9552238805970149,
+   "neighboursAcc": 0.5373134328358209,
+   "combinedAcc": 0.9651741293532339,
+   "verdict": "beats rules",
+   "oldRouterAcc": 0.9651741293532339
+  },
+  "ru": {
+   "n": 58,
+   "rules": 56,
+   "neighbours": 19,
+   "combined": 57,
+   "oldRouter": 57,
+   "asked": 0,
+   "askedOnRight": 0,
+   "rulesRight": 56,
+   "routed": 2,
+   "unknown": 0,
+   "rulesAcc": 0.9655172413793104,
+   "neighboursAcc": 0.3275862068965517,
+   "combinedAcc": 0.9827586206896551,
+   "verdict": "beats rules",
+   "oldRouterAcc": 0.9827586206896551
+  }
+ },
+ "addedMs": {
+  "median": 13.96258300000045,
+  "p95": 19.64179100000183
+ },
+ "addedModelMs": {
+  "median": 3879.0207500000106,
+  "p95": 4648.955458999999,
+  "n": 9
+ }
+}

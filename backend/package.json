@@ -17,7 +17,11 @@
     "smoke": "tsx scripts/http-smoke.ts",
     "eval:documents": "tsx scripts/eval-documents.ts",
     "eval:assistant": "tsx scripts/eval-assistant.ts",
-    "eval:queries": "tsx scripts/eval-queries.ts"
+    "eval:queries": "tsx scripts/eval-queries.ts",
+    "eval:router": "tsx scripts/eval-router.ts",
+    "unknown:review": "tsx scripts/unknown-review.ts",
+    "bank:approve": "tsx scripts/bank-approve.ts",
+    "paraphrases": "tsx scripts/gen-paraphrases.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

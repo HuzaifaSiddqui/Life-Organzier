@@ -1,0 +1,43 @@
+{
+ "vectors": "hash-bow-256",
+ "model": false,
+ "summary": {
+  "en": {
+   "n": 201,
+   "rules": 192,
+   "neighbours": 86,
+   "combined": 192,
+   "oldRouter": 0,
+   "asked": 0,
+   "askedOnRight": 0,
+   "rulesRight": 192,
+   "routed": 0,
+   "unknown": 0,
+   "rulesAcc": 0.9552238805970149,
+   "neighboursAcc": 0.42786069651741293,
+   "combinedAcc": 0.9552238805970149,
+   "verdict": "does not beat rules"
+  },
+  "ru": {
+   "n": 58,
+   "rules": 56,
+   "neighbours": 17,
+   "combined": 56,
+   "oldRouter": 0,
+   "asked": 0,
+   "askedOnRight": 0,
+   "rulesRight": 56,
+   "routed": 0,
+   "unknown": 0,
+   "rulesAcc": 0.9655172413793104,
+   "neighboursAcc": 0.29310344827586204,
+   "combinedAcc": 0.9655172413793104,
+   "verdict": "does not beat rules"
+  }
+ },
+ "addedMs": {
+  "median": 0.09683300000006057,
+  "p95": 0.11645799999996598
+ },
+ "addedModelMs": null
+}
