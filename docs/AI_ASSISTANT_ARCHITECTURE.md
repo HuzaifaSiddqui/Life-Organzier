@@ -117,6 +117,9 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
   that question and never starts a command; if the question can't use it, it is asked again. Only a reply that is
   not an answer (e.g. "mark all done" to a time question) can replace the question. The reply's `answered` field
   says which question took it. Eval group: `pending` in `assistant-eval.json`.
+- **Offers in chat replies** (`dialogue.ts` `acceptOffer`): when a model chat reply suggests "Say: …", that text is
+  kept as the open question and shown as a button. "yes" / "sure" / "haan" runs it; "yes, for 6 pm" or "yes,
+  tomorrow" runs it with that time or day; anything else drops it. English and Roman Urdu yes words only.
 - **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
   deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
   command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.
