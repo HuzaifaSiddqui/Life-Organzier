@@ -37,14 +37,16 @@ await prisma.userSettings.create({ data: { userId: user.id, tier: "PRO", timezon
 const out: string[] = [];
 let failed = false;
 try {
+  // Pinned clock: noon on the run's date, for the seeds and for every question (a run can't straddle midnight).
   const today = localYmd(new Date(), TZ);
+  const now = zonedTimeToUtc(today, 12, 0, TZ);
   const places = new Map<string, string>();
   for (const p of data.seed.places) places.set(p.key, (await prisma.savedLocation.create({ data: { userId: user.id, name: p.name, displayAddress: p.address, latitude: 31.5, longitude: 74.3 } })).id);
   const seeded = new Set<string>();
   for (const t of data.seed.tasks) {
     const dueAt = t.dueInDays === undefined ? null : zonedTimeToUtc(addDaysYmd(today, t.dueInDays), 23, 59, TZ);
     const task = await prisma.task.create({
-      data: { userId: user.id, title: t.title, description: t.notes ?? null, tags: t.tags ?? undefined, category: t.category ?? null, priority: t.priority ?? "MEDIUM", status: t.status ?? "PENDING", source: "CHAT", dueAt, ...(t.status === "COMPLETED" ? { completedAt: new Date() } : {}) },
+      data: { userId: user.id, title: t.title, description: t.notes ?? null, tags: t.tags ?? undefined, category: t.category ?? null, priority: t.priority ?? "MEDIUM", status: t.status ?? "PENDING", source: "CHAT", dueAt, ...(t.status === "COMPLETED" ? { completedAt: now } : {}) },
     });
     seeded.add(task.id);
     for (const s of t.subtasks ?? []) seeded.add((await prisma.task.create({ data: { userId: user.id, title: s, parentTaskId: task.id, priority: "LOW", source: "CHAT" } })).id);
@@ -59,7 +61,7 @@ try {
     // Each question on its own: no open question or focus carried over; anything a misread created is removed.
     await prisma.conversation.updateMany({ where: { userId: user.id }, data: { state: {} } });
     const settings = await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } });
-    const r = await handleAssistantMessage({ user, settings, deviceId: null, text: question.q, channel: "APP" });
+    const r = await handleAssistantMessage({ user, settings, deviceId: null, text: question.q, channel: "APP", now });
     await prisma.task.deleteMany({ where: { userId: user.id, id: { notIn: [...seeded] } } });
     const cards = r.message.cards ?? [];
     const titles = [

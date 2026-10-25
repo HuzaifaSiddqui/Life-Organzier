@@ -100,3 +100,23 @@ test("Urdu users get the reply in Urdu", { skip }, async () => {
     assert.match((await say("tasks about Walmart")).message.content, /کوئی کام یا روٹین نہیں ملی/);
   });
 });
+
+test("each result says where it matched: notes, title, a misspelling, spelled-out letters, a routine", { skip }, async () => {
+  await withChatUser("PRO", async (say, _tap, user) => {
+    await prisma.task.create({ data: { userId: user.id, title: "Pick up coupons", description: "the kfc deal ends Friday", priority: "LOW", source: "CHAT" } });
+    await prisma.task.create({ data: { userId: user.id, title: "Read about Kentucky history", priority: "LOW", source: "CHAT" } });
+    await prisma.routine.create({ data: { userId: user.id, title: "Gym workout", location: "Shapes Gym", frequency: "DAILY", dueTime: "7 PM" } });
+
+    const notes = await say("is there any task related to KFC");
+    assert.match(notes.message.content, /Pick up coupons .*matched in: notes/);
+    assert.doesNotMatch(notes.message.content, /Kentucky/, "KFC is not Kentucky");
+    for (const spelled of ["any task about k f c", "tasks about kay ef see"]) assert.match((await say(spelled)).message.content, /Pick up coupons .*matched in: notes/, spelled);
+
+    assert.match((await say("any task about Kentucky")).message.content, /Read about Kentucky history .*matched in: title/);
+    assert.match((await say("any task about kentuky")).message.content, /Read about Kentucky history .*matched in: title/, "misspelling (same sound)");
+
+    const gym = await say("anything with Shapes Gym");
+    assert.ok(gym.message.content.includes("• Gym workout (routine, daily at 7 PM) · matched in: title / location"), gym.message.content);
+    assert.ok(gym.message.cards?.some((c) => c.type === "routine"), "routine card");
+  });
+});

@@ -160,6 +160,7 @@ export async function processInbound(msg: InboundMessage, send: Sender = sendWha
       payload: (picked?.payload as ActionPayload | undefined) ?? null,
       label: picked?.label ?? null,
       channel: "WHATSAPP",
+      now, // the same clock as the rest of this message (tests pin it; in production it is the current time)
     });
     await reply(formatReply(answer.message.content, answer.message.actions ?? []));
   } catch (error) {
