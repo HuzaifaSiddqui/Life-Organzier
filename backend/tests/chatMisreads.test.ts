@@ -95,3 +95,22 @@ test("a reply's yes / I mean / actually is not part of the title, and a time alo
   const noTime = rulesUnderstand("call mooz", at);
   assert.equal(draftFromEntities("call mooz", noTime.title, noTime.entities, "2026-10-25").dueYmd, null);
 });
+
+test("the offer's button is a structured yes: tapping it creates the offered task", { skip }, async () => {
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, tier: "PRO", timezone: "Asia/Karachi" } });
+  const send = async (input: { text?: string; payload?: Record<string, unknown> }) =>
+    (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: offerOpts.now, text: input.text ?? null, payload: (input.payload ?? null) as never, label: input.payload ? "Schedule a call with Mooz…" : null })).message;
+  try {
+    await send({ text: "hi" });
+    const convo = await prisma.conversation.findFirstOrThrow({ where: { userId: user.id } });
+    await prisma.conversation.update({ where: { id: convo.id }, data: { state: { ...(convo.state as object), pending: { kind: "offer", text: OFFER_TEXT } } } });
+    const done = await send({ payload: { type: "answer", pending: "offer", text: "yes" } });
+    assert.equal(done.intent, "task_created", done.content);
+    assert.equal(done.answered, "offer");
+    assert.match((await prisma.task.findFirstOrThrow({ where: { userId: user.id } })).title, /call with mooz/i);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});

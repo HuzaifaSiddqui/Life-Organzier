@@ -4,20 +4,20 @@
  "summary": {
   "en": {
    "n": 201,
-   "rules": 192,
+   "rules": 197,
    "neighbours": 108,
-   "combined": 194,
-   "oldRouter": 194,
+   "combined": 198,
+   "oldRouter": 198,
    "asked": 0,
    "askedOnRight": 0,
-   "rulesRight": 192,
-   "routed": 5,
+   "rulesRight": 197,
+   "routed": 4,
    "unknown": 0,
-   "rulesAcc": 0.9552238805970149,
+   "rulesAcc": 0.9800995024875622,
    "neighboursAcc": 0.5373134328358209,
-   "combinedAcc": 0.9651741293532339,
+   "combinedAcc": 0.9850746268656716,
    "verdict": "beats rules",
-   "oldRouterAcc": 0.9651741293532339
+   "oldRouterAcc": 0.9850746268656716
   },
   "ru": {
    "n": 58,
@@ -38,12 +38,12 @@
   }
  },
  "addedMs": {
-  "median": 13.96258300000045,
-  "p95": 19.64179100000183
+  "median": 14.601791999997658,
+  "p95": 23.154124999997293
  },
  "addedModelMs": {
-  "median": 3879.0207500000106,
-  "p95": 4648.955458999999,
-  "n": 9
+  "median": 4184.405542,
+  "p95": 14741.199,
+  "n": 7
  }
 }

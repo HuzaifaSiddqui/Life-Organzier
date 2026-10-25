@@ -33,7 +33,7 @@ const LEVELS = {
 
 /**
  * The neighbour / arbitration path is off unless MEANING_ROUTER=on. The gate (25 Oct 2026) found no gain over the
- * LLM router without examples (English 96.5% = 96.5%, Roman Urdu 98.3% = 98.3%) and none over the rules with AI
+ * LLM router without examples (English 98.5% = 98.5%, Roman Urdu 98.3% = 98.3%; rerun after #18 and #22) and none over the rules with AI
  * off, so it costs an embedding per message for nothing yet. Off: rules, and the plain LLM router when unsure.
  */
 export function meaningRouterOn(): boolean {

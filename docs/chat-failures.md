@@ -1,7 +1,7 @@
 # Chat failures (11–25 Oct 2026) and how chat changes from now on
 
 Every chat misread fixed in the last two weeks, from device testing and phone tests, including the three
-commits on `fix/chat-misreads` (not on `main` yet). Each one is now a row in `backend/tests/eval/utterance-bank.json`
+commits from `fix/chat-misreads` (merged in #22). Each one is now a row in `backend/tests/eval/utterance-bank.json`
 (id in the last column), so a regression shows up in the bank, not on the phone.
 
 ## Classes
@@ -20,7 +20,7 @@ commits on `fix/chat-misreads` (not on `main` yet). Each one is now a row in `ba
 | 2 | 25 Oct | "Please remove all the pending tasks" / "…all existing tasks" | "couldn't find a task matching 'all pending tasks'" | Capability | add0c59: `bulk_delete_open` | f02, f03 |
 | 3 | 25 Oct | "Get me a task related to KFc" | "Overdue: 1 task": "get me" wasn't a question | Vocabulary | add0c59 | f04 |
 | 4 | 25 Oct | "I don't want to do any task, I just want sleep" | a task titled with the whole sentence | Vocabulary | add0c59 (tired words) | f05 |
-| 5 | 25 Oct | "Yes scheduled for 6 pm" after the reply "Say: schedule a call with Mooz…" | task "Yes scheduled" | Contract | d5d787b (offer kept as the open question; fix/chat-misreads) | (depends on the reply before it: not a bank row) |
+| 5 | 25 Oct | "Yes scheduled for 6 pm" after the reply "Say: schedule a call with Mooz…" | task "Yes scheduled" | Contract | d5d787b (offer kept as the open question, #22; its button is now an `answer` payload) | (depends on the reply before it: not a bank row) |
 | 6 | 25 Oct | "Yes schedule a call at 6 pm" / "I mean schedule a call with mooz at 6 pm" | drafts "Yes schedule a call", "Mean schedule…", then "which day?" | Vocabulary | e108928 | f07, f08 |
 | 7 | 25 Oct | "when is my physics task due?" | today's list: the word "task" made the lookup give up | Vocabulary | 7cdfbb9 (#18) | f09 |
 | 8 | 24 Oct | "Ok change the location to KFC gulberg" | not understood ("Ok" prefix) | Vocabulary | 3be8a6f | f10 |

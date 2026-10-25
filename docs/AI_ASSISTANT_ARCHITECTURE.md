@@ -140,7 +140,7 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
   all, they win. Help is built from the registry.
 - **Meaning-based router** (`meaning.ts`, `neighbours.ts`), **off by default** (`MEANING_ROUTER=on` turns it on). The
   gate below found no gain: with AI on it scores exactly what the LLM router without examples scores (English
-  96.5% = 96.5%, Roman Urdu 98.3% = 98.3%), and with AI off it never beats the rules (95.5% / 96.6%), while it adds
+  98.5% = 98.5%, Roman Urdu 98.3% = 98.3%), and with AI off it never beats the rules (98.0% / 96.6%), while it adds
   an embedding call per message (median 14 ms). Off, the chat routes as before: the rules, and the plain LLM
   router when the rules are unsure (below 0.75); no bank, no arbitration. When on: the 5 nearest rows of `tests/eval/utterance-bank.json`
   (embedded once per embedding model, cached in `backend/.cache`; hashed vectors with AI off) are given to the
@@ -171,20 +171,20 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
   `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
 - **Router gate** (`npm run eval:router`, `-- --model` with the models from `.env`): leave-one-out over the 259
-  English and Roman Urdu bank rows, command accuracy. 25 Oct 2026:
+  English and Roman Urdu bank rows, command accuracy. 25 Oct 2026, after #18 and #22 were merged:
 
   | | n | rules alone | neighbours alone | rules + model (before) | rules + neighbours + model |
   |---|---|---|---|---|---|
-  | English, AI off (hashed vectors) | 201 | 95.5% | 42.8% | – | 95.5% |
+  | English, AI off (hashed vectors) | 201 | 98.0% | 42.8% | – | 98.0% |
   | Roman Urdu, AI off | 58 | 96.6% | 29.3% | – | 96.6% |
-  | English, AI on (nomic-embed-text, qwen2.5:7b) | 201 | 95.5% | 53.7% | 96.5% | 96.5% |
+  | English, AI on (nomic-embed-text, qwen2.5:7b) | 201 | 98.0% | 53.7% | 98.5% | 98.5% |
   | Roman Urdu, AI on | 58 | 96.6% | 32.8% | 98.3% | 98.3% |
 
   The rules were written against most of these rows, so "rules alone" is optimistic. The combined path beats
   rules alone only with the model on, and only as much as the model router did before: the bank examples and the
-  neighbour vote changed no answer on this bank (3–5 rows per command). Arbitration asked on 0 of the 248 rows the
+  neighbour vote changed no answer on this bank (3–5 rows per command). Arbitration asked on 0 of the 253 rows the
   rules get right. Neighbours alone are off. Added time per message: median 14 ms, p95 20–29 ms with the embedding
-  model (0.1 ms hashed); messages that call the model (9 of 259): median 3.9 s, as before. Held-out:
+  model (0.1 ms hashed); messages that call the model (7 of 259): median 4.2 s, as before. Held-out:
   `chat-holdout.json` has no scored rows yet, so there is no unbiased number.
 
 ## FR coverage

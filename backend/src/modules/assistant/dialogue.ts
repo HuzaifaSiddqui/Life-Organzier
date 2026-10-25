@@ -1344,7 +1344,8 @@ export async function conversationalReply(turn: Turn, text: string, mode: "chat"
     const offer = OFFER.exec(llm)?.[1]?.trim();
     if (!offer) return { content: llm, intent: mode };
     turn.state.pending = { kind: "offer", text: offer };
-    return { content: llm, actions: [{ label: offer.charAt(0).toUpperCase() + offer.slice(1), text: offer, style: "primary" }], intent: mode };
+    // The button is a "yes" to this offer (handlePayload runs it like a typed yes); WhatsApp users type the text.
+    return { content: llm, actions: [{ ...answerAction(offer.charAt(0).toUpperCase() + offer.slice(1), "offer", "yes", "primary"), text: offer }], intent: mode };
   }
   if (mode === "support") {
     const tasks = await listActiveTasks(turn.user.id);

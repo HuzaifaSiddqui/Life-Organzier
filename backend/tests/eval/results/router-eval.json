@@ -4,18 +4,18 @@
  "summary": {
   "en": {
    "n": 201,
-   "rules": 192,
+   "rules": 197,
    "neighbours": 86,
-   "combined": 192,
+   "combined": 197,
    "oldRouter": 0,
    "asked": 0,
    "askedOnRight": 0,
-   "rulesRight": 192,
+   "rulesRight": 197,
    "routed": 0,
    "unknown": 0,
-   "rulesAcc": 0.9552238805970149,
+   "rulesAcc": 0.9800995024875622,
    "neighboursAcc": 0.42786069651741293,
-   "combinedAcc": 0.9552238805970149,
+   "combinedAcc": 0.9800995024875622,
    "verdict": "does not beat rules"
   },
   "ru": {
@@ -36,8 +36,8 @@
   }
  },
  "addedMs": {
-  "median": 0.09683300000006057,
-  "p95": 0.11645799999996598
+  "median": 0.09691699999996217,
+  "p95": 0.11391700000001492
  },
  "addedModelMs": null
 }

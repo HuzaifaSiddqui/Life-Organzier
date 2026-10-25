@@ -43,6 +43,8 @@ import {
   extractOpts,
   type Out,
   type Turn,
+  acceptOffer,
+  handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery } from "./commands/find.js";
 import { resolveTaskRef } from "./draft.js";
@@ -912,6 +914,12 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       // Only for the question it was shown with; that question may have been answered or replaced since.
       const p = turn.state.pending;
       if (!p || p.kind !== payload.pending) return { content: "That question is already closed. What would you like to do?", intent: "answer_closed" };
+      if (p.kind === "offer") {
+        // The offer runs as its own text, the same as a typed "yes" (acceptOffer in dialogue.ts).
+        turn.state.pending = null;
+        const r = await handleText(turn, acceptOffer(extractOpts(turn), p.text, payload.text) ?? p.text);
+        return { ...r, answered: "offer" };
+      }
       const u = await understand(payload.text, { ...extractOpts(turn), history: [], allowLlm: false });
       const r = await resolvePending(turn, payload.text, u, true);
       return r ? { ...r, answered: p.kind } : { content: "Okay.", intent: "noop" };
