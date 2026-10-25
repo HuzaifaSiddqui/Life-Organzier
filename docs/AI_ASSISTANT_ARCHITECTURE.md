@@ -120,6 +120,9 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **Offers in chat replies** (`dialogue.ts` `acceptOffer`): when a model chat reply suggests "Say: …", that text is
   kept as the open question and shown as a button. "yes" / "sure" / "haan" runs it; "yes, for 6 pm" or "yes,
   tomorrow" runs it with that time or day; anything else drops it. English and Roman Urdu yes words only.
+- **A time alone means today** (`draft.ts`): "call Mooz at 6 pm" is due today; if 6 PM has passed, the usual
+  "tomorrow, or a later time today?" question asks. A reply that opens with "yes", "I mean" or "actually" never
+  puts those words in the title, and the LLM (which sees the conversation) titles it ("Call Mooz").
 - **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
   deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
   command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.

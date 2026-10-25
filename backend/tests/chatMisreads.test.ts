@@ -7,6 +7,8 @@ import "../src/modules/assistant/commands/registry.js";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { acceptOffer, handleAssistantMessage } from "../src/modules/assistant/dialogue.js";
 import { detectMood } from "../src/modules/mood/moodService.js";
+import { rulesUnderstand } from "../src/modules/assistant/nlu.js";
+import { draftFromEntities } from "../src/modules/assistant/draft.js";
 import { dbAvailable } from "./fixtures.js";
 
 const skip = !dbAvailable && "no database";
@@ -80,4 +82,16 @@ test("yes to a chat reply's offer creates the offered task at the time the user 
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
   }
+});
+
+// Phone test 2026-10-25: "Yes schedule a call at 6 pm" → draft "Yes schedule a call", asked which day.
+test("a reply's yes / I mean / actually is not part of the title, and a time alone means today", () => {
+  const at = { now: new Date("2026-10-25T11:25:00Z"), tz: "Asia/Karachi" };
+  assert.equal(rulesUnderstand("I mean schedule a call with mooz at 6 pm", at).title, "Call with mooz");
+  assert.equal(rulesUnderstand("no, actually call mooz at 7", at).title, "Call mooz");
+  assert.equal(rulesUnderstand("Nooria birthday gift tomorrow", at).title, "Nooria birthday gift");
+  const u = rulesUnderstand("call mooz at 6 pm", at);
+  assert.equal(draftFromEntities("call mooz at 6 pm", u.title, u.entities, "2026-10-25").dueYmd, "2026-10-25");
+  const noTime = rulesUnderstand("call mooz", at);
+  assert.equal(draftFromEntities("call mooz", noTime.title, noTime.entities, "2026-10-25").dueYmd, null);
 });

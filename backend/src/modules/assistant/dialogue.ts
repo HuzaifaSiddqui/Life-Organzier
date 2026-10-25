@@ -1249,7 +1249,7 @@ export async function confirmMood(turn: Turn, mood: Mood, confidence: number, sc
       history: turn.history,
       userText: `I'm feeling ${mood}.`,
       language: turn.settings.language,
-      instruction: `The assistant will also show these suggestions: ${rec.primary?.label ?? ""}; ${rec.suggestions.map((s) => s.label).join("; ")}. Write a short caring reply that leads into them. Do not list them. Do not ask how they feel — they just told you.`,
+      instruction: `The assistant will also show these suggestions: ${rec.primary?.label ?? ""}; ${rec.suggestions.map((s) => s.label).join("; ")}. Write a short caring reply that leads into them. Do not list them. Do not ask how they feel — they just told you. Do not offer to set reminders or ask yes/no questions.`,
     });
     if (llm) content = llm;
   }
