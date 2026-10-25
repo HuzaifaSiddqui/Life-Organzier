@@ -120,7 +120,7 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
 - **Undo**: each change stores one undo step in the conversation state (`UndoRecord`: settings, routine,
   deleted routine, routine occurrence, task batch). "Undo" or the Undo button reverts the newest change, a
   command's or a task edit's, whichever came last. Window: 15 minutes, deletes 24 hours.
-- **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, postpone
+- **Bulk** (`bulk.ts`): move all of today to another day, complete all with a tag, delete all completed, delete all open tasks, postpone
   non-urgent. One preview with the titles (at most 25 tasks per confirmation; WhatsApp shows 8 and "…and N
   more"), one "yes", undone as one batch from per-task snapshots.
 - **Several requests in one message** (`multi.ts`): split only at clause boundaries (and / aur / then / also /

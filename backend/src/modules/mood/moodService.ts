@@ -38,7 +38,7 @@ const LEXICON: Array<{ mood: Mood; re: RegExp }> = [
   { mood: "overwhelmed", re: /\b(overwhelm(?:ed|ing)?|too much (?:to do|work|on my plate)|swamped|drowning|can'?t keep up|buried in)\b/i },
   { mood: "anxious", re: /\b(anxious|anxiety|nervous|worried|worrying|panic(?:king)?|uneasy|scared)\b/i },
   { mood: "stressed", re: /\b(stress(?:ed|ful)?|under pressure|tense|freaking out|burn(?:ed|t)? out)\b/i },
-  { mood: "tired", re: /\b(tired|exhausted|sleepy|drained|fatigued|worn out|no energy)\b/i },
+  { mood: "tired", re: /\b(tired|exhausted|sleepy|drained|fatigued|worn out|no energy|(?:just|only) want (?:to )?sleep|don'?t (?:want|feel like) (?:to )?do(?:ing)? (?:any|anything))\b/i },
   { mood: "sad", re: /\b(sad|down|depressed|unhappy|lonely|low|heartbroken|miserable|upset)\b/i },
   { mood: "motivated", re: /\b(motivated|productive|energetic|pumped|determined|inspired|ready to go)\b/i },
   { mood: "focused", re: /\b(focused|in the zone|concentrated|locked in)\b/i },
@@ -63,7 +63,7 @@ export function detectMood(text: string): MoodDetection | null {
     }
     if (mood === "sad" && m[0] === "low" && !/\b(feel|feeling|i(?:'m| am))\b/.test(t)) continue;
     if (mood === "sad" && m[0] === "down" && !/\b(feel|feeling|i(?:'m| am))\s+(?:\w+\s+)?down\b/.test(t)) continue;
-    const explicit = /\b(i(?:'m| am| feel| was)|feeling|making me|feel so|feel really|so)\b/.test(t);
+    const explicit = /\b(i(?:'m| am| feel| was)|feeling|making me|feel so|feel really|so|i (?:just |only )?(?:want|don'?t want|don'?t feel))\b/.test(t);
     const intensifier = /\b(really|so|very|extremely|super|too)\b/.test(t);
     const confidence = Math.min(0.95, (explicit ? 0.85 : 0.65) + (intensifier ? 0.05 : 0));
     return { mood, confidence, explicit };
