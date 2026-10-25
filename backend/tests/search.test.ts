@@ -14,6 +14,13 @@ test("match strength: exact word > substring > fuzzy > same sound > none", () =>
   assert.equal(matchStrength("k f c", "KFC Gulberg"), MATCH.exact, "spelled letters");
   assert.equal(matchStrength("کے ایف سی", "کے ایف سی جانا"), MATCH.exact, "Urdu script");
   assert.equal(soundex("Kentucky"), soundex("Kentuky"));
+  // Substrings: at a word start, or inside a word for 5+ letters only.
+  assert.equal(matchStrength("art", "Start the essay"), 0, "'art' is not inside 'start'");
+  assert.equal(matchStrength("art", "Birthday party"), 0, "'art' is not inside 'party'");
+  assert.equal(matchStrength("art", "Art history notes"), MATCH.exact);
+  assert.equal(matchStrength("phys", "Physics lab"), MATCH.substring, "word start");
+  assert.equal(matchStrength("burger", "Grab a cheeseburger"), MATCH.substring, "5+ letters inside a word");
+  assert.equal(matchStrength("461", "CSC461 assignment 3"), MATCH.substring, "a course number starts where the letters end");
 });
 
 test("every term must match; matchedIn lists where", () => {
