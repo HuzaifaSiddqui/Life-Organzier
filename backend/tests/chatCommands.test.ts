@@ -284,15 +284,17 @@ test("insights commands: completed, overdue, time per category, streak, compare,
 
 test("bulk: move all of today previews titles, one yes moves them, undo moves them back", { skip }, async () => {
   await withChatUser("FREE", async (say, tap, user) => {
-    const today = localYmd(new Date(), TZ);
-    const mkToday = (title: string) => prisma.task.create({ data: { userId: user.id, title, priority: "MEDIUM", source: "CHAT", dueDate: new Date(`${today}T00:00:00Z`), dueTime: "11:59 PM", dueAt: new Date(Date.now() + 3600000) } });
+    // Pinned clock: 10 AM in Karachi (with the real clock, after 11 PM "in an hour" is already tomorrow).
+    const now = new Date("2026-10-05T05:00:00Z");
+    const today = localYmd(now, TZ);
+    const mkToday = (title: string) => prisma.task.create({ data: { userId: user.id, title, priority: "MEDIUM", source: "CHAT", dueDate: new Date(`${today}T00:00:00Z`), dueTime: "11:59 PM", dueAt: new Date(now.getTime() + 3600000) } });
     await mkToday("Read chapter 3");
     await mkToday("Email the TA");
-    const ask = await say("move all of today's tasks to tomorrow");
+    const ask = await say("move all of today's tasks to tomorrow", "APP", now);
     assert.equal(ask.message.intent, "bulk_move_today_confirm");
     assert.match(ask.message.content, /^Move 2 tasks from today to tomorrow\?\n• /);
     assert.match(ask.message.content, /Read chapter 3/);
-    assert.equal((await say("yes")).message.intent, "bulk_moved");
+    assert.equal((await say("yes", "APP", now)).message.intent, "bulk_moved");
     const moved = await prisma.task.findMany({ where: { userId: user.id } });
     assert.ok(moved.every((t) => localYmd(t.dueDate as Date, "UTC") === addDaysYmd(today, 1)));
     assert.equal((await tap({ type: "undo_command" })).message.intent, "undone");

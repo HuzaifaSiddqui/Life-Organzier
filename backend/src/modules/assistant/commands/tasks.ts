@@ -7,7 +7,7 @@ import { PREDEFINED_CATEGORIES } from "../../settings/settingsRoutes.js";
 import { createTask, getTaskForUser, listSubtasks, updateTask } from "../../tasks/taskService.js";
 import { focusOn, taskCard, type Out, type Turn } from "../dialogue.js";
 import { resolveTaskRef } from "../draft.js";
-import { extractEntities } from "../entities.js";
+import { extractEntities, extractInterval } from "../entities.js";
 import { handlePayload } from "../handlers.js";
 import { ASK, DO_IT, ROUTINE, TASK_WORD, capture, has, norm, refFrom, splitList } from "./lexicon.js";
 import { askChoice, recordUndo, runCommand, snapshots, UNDO_ACTION } from "./runtime.js";
@@ -116,6 +116,7 @@ const taskReminderMode: Command = {
     if (!has(t, REMIND) || has(t, "whatsapp|whats app|phone|mobile|app|both|dono|واٹس ایپ|فون|دونوں")) return null;
     const e = extractEntities(text, ctx.opts);
     if (e.date || e.timeExplicit) return null; // a new reminder with a date/time is a new task
+    if (e.frequency || extractInterval(text)) return null; // "meditate every day, no reminder" is a new routine
     const hit = MODES.find((m) => has(t, m.words));
     if (!hit) return null;
     const ref = refFrom(text, `${REMIND}|${MODES.map((m) => m.words).join("|")}|use|turn|set|give|send|keep|about|for|on|of|${DO_IT}`);

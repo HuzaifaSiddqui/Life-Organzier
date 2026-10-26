@@ -8,8 +8,9 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
-import { addDaysYmd, diffDaysYmd, localYmd, parseClock, startOfLocalDay, weekdayOfYmd, zonedTimeToUtc } from "../../lib/time.js";
+import { addDaysYmd, diffDaysYmd, formatClock, inWindow, localYmd, minutesOfDay, parseClock, startOfLocalDay, weekdayOfYmd, zonedTimeToUtc } from "../../lib/time.js";
 import { logEvent } from "../events/eventService.js";
+import { getPatterns, peakWindowsFrom } from "../patterns/patternService.js";
 
 export type RoutineInput = {
   title: string;
@@ -30,7 +31,27 @@ export type RoutineInput = {
   /** Every N days (2..30) from anchorDate (local YYYY-MM-DD); null keeps frequency/days. */
   intervalDays?: number | null;
   anchorDate?: string | null;
+  /** The user chose "no reminder": the routine keeps no time (flexible). Otherwise a missing time gets the default. */
+  noReminder?: boolean;
 };
+
+/** With no learned peak hours, a routine's default reminder is at 9 AM. */
+export const DEFAULT_ROUTINE_HOUR = 9;
+
+/** The default hour, moved to the end of quiet hours when it falls inside them (22:00–08:00 → 8 AM). */
+export function defaultRoutineHour(peakStartHour: number | null | undefined, quietStart: string | null, quietEnd: string | null): number {
+  const hour = peakStartHour ?? DEFAULT_ROUTINE_HOUR;
+  const start = minutesOfDay(parseClock(quietStart) ?? { h: 22, m: 0 });
+  const end = minutesOfDay(parseClock(quietEnd) ?? { h: 8, m: 0 });
+  return inWindow(hour * 60, start, end) ? Math.ceil(end / 60) % 24 : hour;
+}
+
+/** A routine made without a time gets one: the user's peak start hour (9 if unknown), never inside quiet hours. */
+export async function defaultRoutineTime(userId: string, tz: string): Promise<string> {
+  const [settings, patterns] = await Promise.all([prisma.userSettings.findUnique({ where: { userId } }), getPatterns(userId, tz)]);
+  const peak = peakWindowsFrom(patterns).windows[0]?.start;
+  return formatClock(defaultRoutineHour(peak, settings?.quietStart ?? null, settings?.quietEnd ?? null), 0);
+}
 
 export const MAX_INTERVAL_DAYS = 30;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -118,8 +139,10 @@ function validateTime(input: RoutineInput): void {
   if (input.dueTime && !parseClock(input.dueTime)) throw new HttpError(400, "VALIDATION_ERROR", "Invalid routine time");
 }
 
-export async function createRoutine(userId: string, tz: string, input: RoutineInput): Promise<Routine> {
+export async function createRoutine(userId: string, tz: string, input: RoutineInput, now = new Date()): Promise<Routine> {
   validate(input);
+  // Every routine gets a reminder time unless the user said "no reminder" (chat, form, documents alike).
+  const dueTime = input.dueTime ?? (input.noReminder ? null : await defaultRoutineTime(userId, tz));
   const routine = await prisma.routine.create({
     data: {
       userId,
@@ -128,7 +151,7 @@ export async function createRoutine(userId: string, tz: string, input: RoutineIn
       frequency: input.frequency,
       daysOfWeek: input.daysOfWeek?.length ? input.daysOfWeek : Prisma.JsonNull,
       dayOfMonth: input.dayOfMonth ?? null,
-      dueTime: input.dueTime ?? null,
+      dueTime,
       durationMinutes: input.durationMinutes ?? null,
       category: input.category ?? null,
       priority: input.priority ?? RoutinePriority.NORMAL,
@@ -140,7 +163,7 @@ export async function createRoutine(userId: string, tz: string, input: RoutineIn
       anchorDate: input.intervalDays ? (input.anchorDate ?? null) : null,
     },
   });
-  await generateRoutineOccurrences(userId, tz);
+  await generateRoutineOccurrences(userId, tz, GENERATE_DAYS, now);
   return routine;
 }
 
@@ -148,10 +171,10 @@ export async function createRoutine(userId: string, tz: string, input: RoutineIn
  * "I already took it today": today's occurrence is marked done. It exists from generation (one row per routine
  * and day, unique), so this updates that row, or creates it if today doesn't match the schedule; never a second one.
  */
-export async function markTodayDone(userId: string, tz: string, routineId: string): Promise<RoutineOccurrence> {
+export async function markTodayDone(userId: string, tz: string, routineId: string, now = new Date()): Promise<RoutineOccurrence> {
   const routine = await prisma.routine.findFirstOrThrow({ where: { id: routineId, userId } });
-  const occurrenceDate = startOfLocalDay(localYmd(new Date(), tz), tz);
-  const done = { status: RoutineOccurrenceStatus.COMPLETED, completedAt: new Date() };
+  const occurrenceDate = startOfLocalDay(localYmd(now, tz), tz);
+  const done = { status: RoutineOccurrenceStatus.COMPLETED, completedAt: now };
   const row = await prisma.routineOccurrence.upsert({
     where: { routineId_occurrenceDate: { routineId, occurrenceDate } },
     update: done,
@@ -161,9 +184,14 @@ export async function markTodayDone(userId: string, tz: string, routineId: strin
   return row;
 }
 
-export async function updateRoutine(userId: string, tz: string, id: string, input: Partial<RoutineInput>): Promise<Routine | null> {
+export async function updateRoutine(userId: string, tz: string, id: string, changes: Partial<RoutineInput>, now = new Date()): Promise<Routine | null> {
+  // "No reminder" on an existing routine clears its time.
+  const { noReminder, ...rest } = changes;
+  const input: Partial<RoutineInput> = noReminder ? { ...rest, dueTime: null } : rest;
   const existing = await prisma.routine.findFirst({ where: { id, userId } });
   if (!existing) return null;
+  // The form's reminder switch turned back on without a time: the default time, as for a new routine.
+  if (noReminder === false && !(input.dueTime !== undefined ? input.dueTime : existing.dueTime)) input.dueTime = await defaultRoutineTime(userId, tz);
   // New weekdays or frequency without an interval: the routine follows those (the interval is dropped). Compared
   // with what is stored, not by presence: the routine form resends the whole schedule on every save.
   const days = (d: unknown) => (Array.isArray(d) ? [...(d as number[])].sort().join(",") : "");
@@ -193,11 +221,11 @@ export async function updateRoutine(userId: string, tz: string, id: string, inpu
     },
   });
   // Future pending occurrences follow the new schedule.
-  const todayStart = startOfLocalDay(localYmd(new Date(), tz), tz);
+  const todayStart = startOfLocalDay(localYmd(now, tz), tz);
   await prisma.routineOccurrence.deleteMany({
     where: { routineId: id, status: RoutineOccurrenceStatus.PENDING, occurrenceDate: { gte: todayStart } },
   });
-  await generateRoutineOccurrences(userId, tz);
+  await generateRoutineOccurrences(userId, tz, GENERATE_DAYS, now);
   return routine;
 }
 
@@ -207,10 +235,10 @@ export async function deleteRoutine(userId: string, id: string): Promise<boolean
 }
 
 /** Ensures occurrences exist for the next 14 local days — one batched insert. */
-export async function generateRoutineOccurrences(userId: string, tz: string, days = GENERATE_DAYS): Promise<number> {
+export async function generateRoutineOccurrences(userId: string, tz: string, days = GENERATE_DAYS, now = new Date()): Promise<number> {
   const routines = await prisma.routine.findMany({ where: { userId, active: true } });
   if (!routines.length) return 0;
-  const today = localYmd(new Date(), tz);
+  const today = localYmd(now, tz);
   const rows: Prisma.RoutineOccurrenceCreateManyInput[] = [];
   for (const routine of routines) {
     const createdYmd = localYmd(routine.createdAt, tz);

@@ -50,6 +50,8 @@ export type RoutineDraft = {
   anchorDate?: string | null;
   /** "I already took it today": today's occurrence is marked done when the routine is created. */
   doneToday?: boolean;
+  /** "…, no reminder": created without a time (the only way a routine has no reminder). */
+  noReminder?: boolean;
 };
 
 export type TaskSlot = "title" | "date" | "time" | "duration";

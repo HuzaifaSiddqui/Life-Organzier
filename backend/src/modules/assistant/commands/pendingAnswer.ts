@@ -61,7 +61,7 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
     // A title or a free answer ("pick another day", "add anyway"), unless it is a specific new command.
     if (p.kind === "task_draft" && p.awaiting.includes("title")) return words <= 8 && !matchCommand(t, ctx);
     if (p.kind === "routine_draft" && p.awaiting.includes("title")) return words <= 6 && !matchCommand(t, ctx);
-    return /^(?:pick another day|another (?:day|date|time)|different day|add anyway|anyway|move (?:flexible )?tasks|keep the routine|do the task anyway|later today|end of day|no deadline|not sure|flexible)\b/i.test(t);
+    return /^(?:pick another day|another (?:day|date|time)|different day|add anyway|anyway|move (?:flexible )?tasks|keep the routine|do the task anyway|later today|end of day|no deadline|not sure|flexible|no reminders?|without (?:a )?reminder|don'?t remind me|bina reminder|reminder (?:nahi|nahin|mat))\b/i.test(t);
   }
   return CONFIRM_KINDS.has(p.kind) && words <= 2 && !matchCommand(t, ctx);
 }

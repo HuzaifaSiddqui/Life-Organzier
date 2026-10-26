@@ -34,7 +34,7 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 ## Notification actions
 
 - **Every notification button opens the app.** There is no background task handler (`expo-task-manager` isn't
-  installed), so action buttons — reminder Done / Snooze and check-in Started / Not today / Done / +30 min / Update…
+  installed), so action buttons — reminder Done / Snooze, routine Done / Snooze / Skip today, and check-in Started / Not today / Done / +30 min / Update…
   — briefly open the app and apply the answer there. A tap that launches the app from a cold start is picked up
   with `getLastNotificationResponseAsync` and handled once (the OS reports the same tap again on later starts, so the
   handled response is remembered).
@@ -300,21 +300,48 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   chhor kar", "har teesre din") or in the routine form ("Every few days", 2–7 offered there; the server accepts up
   to 30). Which days count is decided on the server (calendar days from the start date, in the user's timezone).
   "I already took it today" / "I have taken today's" marks today done, so the next one is in N days. With no time
-  given, the routine has a flexible time (no follow-up question).
+  given, the routine gets the default reminder time (see "Routine reminders").
 - **Not by chat:** changing how often an existing routine repeats ("change my gym routine to every other day")
   gets "open it on the Routines screen"; the routine is not changed. Changing a routine's weekdays (chat or form)
   drops its interval.
-- **No time, no reminder.** The reminder planner needs a time. When chat makes an every-N-days routine without
-  one, it asks once ("Morning, afternoon, evening, or pick a time?"; morning 9 AM, afternoon 3 PM, evening 6 PM,
-  night 9 PM, or an exact time); any other reply drops the question and the routine stays at a flexible time
-  with no reminder until a time is set (chat or Routines screen).
-- **Reminders are best-effort, not a medical device.** A reminder can be late or missing (phone off, battery
-  saving, notifications blocked, Do Not Disturb, the app not opened for days). Don't rely on Life Organizer alone
-  for medicine or anything safety-critical.
 - **Documents:** a document or pasted text with these phrases still makes no routine and says why.
 - **Other phrasings are not guessed** ("thrice a week", "every alternate Monday").
 - **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
   Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).
+
+## Routine reminders
+
+- **Reminders are best-effort, not a medical device.** A reminder can be late or missing (phone off, battery
+  saving, notifications blocked, Do Not Disturb, the app not opened for days, the phone's notification cap). Don't
+  rely on Life Organizer alone for medicine or anything safety-critical.
+- **Every routine gets a time.** In order: the time the user gave; a part of the day (morning 9 AM, afternoon
+  3 PM, evening 6 PM, night 9 PM; Roman Urdu subah, dopahar, shaam, raat); otherwise the user's peak start hour from
+  their patterns (9 AM until learned), moved to the end of quiet hours if it falls inside them. Chat says what was
+  set and takes one answer (a time or "no reminder"); ignoring it keeps the default. Same for the routine form and
+  routines made from documents.
+- **A routine cannot have a fixed time and no reminder.** There is no separate reminder field (no migration):
+  "no reminder" saves the routine without a time (a flexible-time routine).
+- **Routines saved before this change without a time have no reminder** until a time is set (chat or the
+  Routines screen). Only new routines get the default time.
+- **Mandatory routine follow-ups skip quiet hours and Do Not Disturb by design** when "critical reminders override
+  DND" is on: "Still to do" at +20 and +60 minutes can arrive at night. Normal routines' follow-ups never do.
+- **What is planned** for a pending occurrence: a nudge 10 minutes before (not in quiet hours or Do Not Disturb), the
+  alarm at the time (also in quiet hours; in Do Not Disturb only with "critical reminders override DND"), and a
+  "Still to do" follow-up 20 minutes after; mandatory routines get a second one at +60 minutes. Follow-ups skip
+  quiet hours and Do Not Disturb unless the routine is mandatory and "critical reminders override DND" is on, and
+  are planned only for the next 36 hours (later days get the nudge and the alarm; the plan is re-made on every
+  sync). With "minimal" reminders a normal routine gets only the alarm.
+- **Shared cap:** the phone schedules at most 60. When tasks and routines both need more, routines keep 24 and
+  tasks get the rest (unused room goes to the other side).
+- **"Still to do" is not checked at fire time.** Local notifications can't ask the server; a done or skipped
+  occurrence's notifications are removed on the phone: at once from a notification button, after the re-plan for
+  chat and the Routines screen, and after the "Updated from WhatsApp" push for WhatsApp (needs push set up, see
+  `docs/push-setup.md`; without it, on the next app open).
+- **Snooze (15 min) lives on the phone.** It moves that occurrence's remaining reminders and repeats the alarm in
+  15 minutes, on that phone only. Offline, the alarm repeats but the follow-ups move at the next sync.
+- **Not in phase 1:** routine reminders in the reminder log (adaptive learning is task-only), WhatsApp routine
+  reminders, and a per-routine reminder mode. English and Roman Urdu only; the new chat and notification text has
+  no Urdu.
 
 ## Chat routing
 

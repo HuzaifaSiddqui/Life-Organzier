@@ -212,6 +212,15 @@ Saved places are reusable; tasks link to them. The phone monitors geofences; the
 
 - **`POST /api/push/register`** (auth) `{ token, platform: "android"|"ios", deviceId? }` saves the device's Expo push token (a token used by another account on the same phone moves to this one). **`DELETE /api/push/register`** `{ token }` removes it (only the owner's). **`POST /api/push/unregister-device`** `{ token, deviceId }` (no login) is used by the phone's sign-out retry queue: it deletes the token only when the device id matches the one it was registered with. Tokens are never logged.
 
+### Routine reminders (phase 1)
+
+- **`POST /api/routines`** and **`PUT /api/routines/:id`** accept `noReminder?: boolean`. Create: without `dueTime`
+  the routine gets the default time (peak start hour, 9 AM until learned, out of quiet hours) unless
+  `noReminder: true`. Update: `noReminder: true` clears the time; `noReminder: false` with no time sets the default.
+- **`GET /api/reminders/plan`**: routine reminders have ids `r:<occurrenceId>:start|time|follow1|follow2` and
+  `taskId: null`; the response also has `pendingOccurrences: string[]` (routine occurrences from 2 days back to
+  2 days ahead still pending), which the phone uses for snoozed alarms.
+
 ### Check-ins (FR-RN-004)
 
 **`GET /api/reminders/plan?days=7`** now also returns `checkins: PlannedCheckin[]` (separate from `reminders`):

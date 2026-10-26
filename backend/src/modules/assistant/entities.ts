@@ -837,6 +837,16 @@ export function withoutInterval(text: string): string {
  * "aaj ki le li hai": today's dose is done. The clause is also dropped from the title.
  */
 const DONE_TODAY = /\b(?:i\s+)?(?:have\s+|i'?ve\s+)?(?:already\s+)?(?:took|taken|had|done|did)\b[^.!?,]*\btoday'?s?\b|\baaj\s+(?:ki|ka|ke|wali|wala)?\s*(?:\w+\s+)?(?:le\s+li|kha\s+li|kar\s+li|ho\s+gay[ai])\b/i;
+/** "no reminder", "without a reminder", "don't remind me", "bina reminder", "reminder nahi chahiye". */
+const NO_REMINDER = /\b(?:no|without(?: a| any)?|skip the|don'?t (?:need|want)(?: a| any)?)\s+reminders?\b|\bdon'?t remind me\b|\bbina reminder\b|\breminder\s+(?:nahi|nahin|mat|na)\b/i;
+export function saysNoReminder(text: string): boolean {
+  return NO_REMINDER.test(text);
+}
+/** The title without its "no reminder" clause ("Meditate, no reminder" → "Meditate"). */
+export function withoutNoReminder(title: string): string {
+  return title.replace(new RegExp(`[\\s,;.-]*(?:${NO_REMINDER.source})(?:\\s+chahiye)?[\\s,;.!-]*`, "gi"), " ").replace(/\s+([,.])/g, "$1").replace(/[\s,;.-]+$/, "").trim();
+}
+
 export function saysDoneToday(text: string): boolean {
   return DONE_TODAY.test(text);
 }

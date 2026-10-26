@@ -74,7 +74,7 @@ import {
   fillDraft,
   VERY_LOW_CLARITY,
 } from "./draft.js";
-import { extractEntities, extractInterval, isHabitLike, isVagueTitle, saysDoneToday, titleWithoutPlace, withoutDoneToday, withoutInterval, type ExtractOptions } from "./entities.js";
+import { extractEntities, extractInterval, isHabitLike, isVagueTitle, saysDoneToday, saysNoReminder, withoutNoReminder, titleWithoutPlace, withoutDoneToday, withoutInterval, type ExtractOptions } from "./entities.js";
 import { rulesUnderstand, understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
@@ -270,7 +270,9 @@ async function learnInBackground(turn: Turn, messageId: string | null, text: str
 /* ======================================================================== text turns */
 
 /** After an every-N-days routine without a time (English only, see "Urdu coverage"). */
-export const ASK_ROUTINE_TIME = "Morning, afternoon, evening, or pick a time?";
+/** After a routine made without a time: it got the default; the user may answer with a time or "no reminder". */
+export const ASK_ROUTINE_TIME = 'Reply with another time (morning, evening, 7:30 PM) or "no reminder".';
+export const routineDefaultLine = (time: string) => `No time given, so I'll remind you at ${time}.`;
 /** Changing how often an existing routine repeats is a routine-screen job. English only (see "Urdu coverage"). */
 export const USE_ROUTINE_SCREEN = "To change how often a routine repeats, open it on the Routines screen and set \"Repeat every N days\".";
 /** "Change / switch / update my … routine to every other day", "make it every 3 days": an existing routine. */
@@ -525,11 +527,17 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
       break;
     }
     case "routine_time": {
-      // Asked once: a time or part of day ("evening", "shaam", "9:30 pm") sets it; anything else drops the question.
+      // Asked once: a time or part of day ("evening", "shaam", "9:30 pm") sets it, "no reminder" clears it;
+      // anything else drops the question and the default time stays.
       turn.state.pending = null;
+      if (saysNoReminder(text)) {
+        const cleared = await updateRoutine(turn.user.id, turn.tz, p.routineId, { noReminder: true }, turn.now);
+        if (!cleared) return { content: "That routine no longer exists.", intent: "not_found" };
+        return { content: `Okay: no reminder for ${cleared.title}.`, cards: [{ type: "routine", routine: cleared as unknown as Record<string, unknown> }], intent: "routine_time_set" };
+      }
       const time = extractEntities(text, extractOpts(turn)).time;
       if (!time) return null;
-      const updated = await updateRoutine(turn.user.id, turn.tz, p.routineId, { dueTime: time });
+      const updated = await updateRoutine(turn.user.id, turn.tz, p.routineId, { dueTime: time }, turn.now);
       if (!updated) return { content: "That routine no longer exists.", intent: "not_found" };
       const every = updated.intervalDays ? intervalLabel(updated.intervalDays).toLowerCase() : "";
       return { content: `Okay: ${updated.title} at ${time}${every ? `, ${every}` : ""}. I'll remind you then.`, cards: [{ type: "routine", routine: updated as unknown as Record<string, unknown> }], intent: "routine_time_set" };
@@ -1104,7 +1112,7 @@ const FLEXIBLE_RE = /\b(checkup|check-up|bill|payment|dentist|doctor|appointment
 export function routineDraftFrom(turn: Turn, u: Understanding, text: string): RoutineDraft {
   const e = u.entities;
   const partOfDay = !e.timeExplicit ? text.match(/\b(morning|afternoon|evening|night)\b/i)?.[1] : undefined;
-  let title = u.title || null;
+  let title = (u.title && withoutNoReminder(u.title)) || null;
   if (title && partOfDay && !new RegExp(partOfDay, "i").test(title)) title = `${partOfDay.charAt(0).toUpperCase()}${partOfDay.slice(1).toLowerCase()} ${title.toLowerCase()}`;
   // Habits without an explicit frequency ("Morning workout") default to daily; vague times are asked.
   const frequency = e.frequency ?? (isHabitLike(text) ? RoutineFrequency.DAILY : null);
@@ -1113,8 +1121,10 @@ export function routineDraftFrom(turn: Turn, u: Understanding, text: string): Ro
     frequency,
     daysOfWeek: e.daysOfWeek,
     dayOfMonth: e.dayOfMonth,
-    dueTime: e.timeExplicit ? e.time : null,
+    // A clock time, or a part of the day mapped in entities.ts (morning 9, afternoon 3 PM, evening 6 PM, night 9 PM).
+    dueTime: e.time,
     flexibleTime: e.flexibleTime,
+    noReminder: saysNoReminder(text),
     durationMinutes: e.durationMinutes,
     priority: e.routinePriority ?? RoutinePriority.NORMAL,
     category: e.category,
@@ -1211,7 +1221,7 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
   const awaiting: Array<"title" | "frequency" | "time"> = [];
   if (!draft.title) awaiting.push("title");
   if (!draft.frequency) awaiting.push("frequency");
-  if (!draft.dueTime && !draft.flexibleTime) awaiting.push("time");
+  // No time question first: a routine without one gets the default reminder time (said in the reply).
   if (awaiting.length) return routineQuestion(turn, draft, awaiting);
 
   let learnedNote = "";
@@ -1234,8 +1244,9 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
     locationContext: draft.context,
     intervalDays: draft.intervalDays ?? null,
     anchorDate: draft.intervalDays ? (draft.anchorDate ?? turn.todayYmd) : null,
-  });
-  if (draft.intervalDays && draft.doneToday) await markTodayDone(turn.user.id, turn.tz, routine.id);
+    noReminder: draft.noReminder,
+  }, turn.now);
+  if (draft.intervalDays && draft.doneToday) await markTodayDone(turn.user.id, turn.tz, routine.id, turn.now);
   if (turn.channel === "WHATSAPP") notifyAddedFromWhatsapp(turn.user.id, [routine.title]);
   turn.state.pending = null;
   const freq = draft.intervalDays
@@ -1245,23 +1256,23 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
       : draft.frequency === RoutineFrequency.MONTHLY
         ? `Monthly (day ${draft.dayOfMonth})`
         : `Every ${listJoin((draft.daysOfWeek ?? []).map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]))}`;
-  const details = [draft.dueTime ?? "flexible time", draft.durationMinutes ? formatDuration(draft.durationMinutes) : null].filter(Boolean).join(", ");
+  const details = [routine.dueTime ?? "no reminder", draft.durationMinutes ? formatDuration(draft.durationMinutes) : null].filter(Boolean).join(", ");
   const lines = [`Created: ${freq} ${draft.title} (${details})`];
-  const askTime = Boolean(draft.intervalDays && !draft.dueTime);
+  // The default time was used: say so, and take one answer (a time, or "no reminder"); ignoring it keeps the default.
+  const askTime = Boolean(!draft.dueTime && routine.dueTime);
   if (draft.intervalDays) {
     const next = addDaysYmd(turn.todayYmd, draft.doneToday ? draft.intervalDays : 0);
     lines.push(draft.doneToday ? `Today's is marked done; the next one is ${relativeDayLabel(next, turn.todayYmd)} (${next}).` : `Starting today (${turn.todayYmd}).`);
-    // No time means no reminder (the planner needs one): ask once.
-    if (askTime) {
-      lines.push(ASK_ROUTINE_TIME);
-      turn.state.pending = { kind: "routine_time", routineId: routine.id, title: routine.title };
-    }
+  }
+  if (askTime) {
+    lines.push(`${routineDefaultLine(routine.dueTime as string)} ${ASK_ROUTINE_TIME}`);
+    turn.state.pending = { kind: "routine_time", routineId: routine.id, title: routine.title };
   }
   if (draft.priority === RoutinePriority.MANDATORY) lines.push("Mandatory routine — I'll schedule around it and ask before skipping.");
   if (draft.timeLocked) lines.push("It's time-locked: if missed, I won't move it — the next one will be ready.");
   if (learnedNote) lines.push(learnedNote);
   const actions: QuickAction[] = askTime
-    ? ["Morning", "Afternoon", "Evening"].map((label) => answerAction(label, "routine_time", label.toLowerCase()))
+    ? [...["Morning", "Evening"].map((label) => answerAction(label, "routine_time", label.toLowerCase())), answerAction("No reminder", "routine_time", "no reminder")]
     : [{ label: "View routines", payload: { type: "navigate", screen: "Routines" } }];
   // The routine's id, not its title: a button never depends on how its text would be read.
   if (!askTime && draft.priority !== RoutinePriority.MANDATORY) actions.push(commandAction("Make it mandatory", "routine_update", { routineId: routine.id, priority: "MANDATORY" }, { text: `Make my ${draft.title} routine mandatory` }));

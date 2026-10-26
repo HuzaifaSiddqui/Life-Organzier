@@ -5,7 +5,7 @@ import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { logEvent } from "../events/eventService.js";
 import { planCheckins } from "../checkins/checkinService.js";
-import { planReminders, recordReminderAction } from "./reminderService.js";
+import { pendingRoutineOccurrenceIds, planReminders, recordReminderAction } from "./reminderService.js";
 
 export const reminderRouter = Router();
 reminderRouter.use(requireFirebaseUser, requireUser);
@@ -21,6 +21,8 @@ reminderRouter.get(
     sendSuccess(res, {
       reminders,
       checkins,
+      // A snoozed routine alarm comes back on the phone only while its occurrence is still pending.
+      pendingOccurrences: await pendingRoutineOccurrenceIds(req.user.id, new Date()),
       settings: {
         method: req.settings.notificationMethod,
         devices: req.settings.notificationDevices,
