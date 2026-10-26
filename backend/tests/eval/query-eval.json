@@ -177,6 +177,14 @@
     },
     {
       "type": "english",
+      "q": "Get me a task related to KFc",
+      "expect": [
+        "Eat burger",
+        "Pick up coupons"
+      ]
+    },
+    {
+      "type": "english",
       "q": "any task about kalma chowk",
       "expect": [
         "Eat burger"

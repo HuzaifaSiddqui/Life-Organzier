@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sayAction } from "../actions.js";
 import { dayName, formatClock } from "../../../lib/time.js";
 import { formatDuration, plural } from "../../../lib/text.js";
 import { completionStreak, getAnalytics, timeByCategory } from "../../analytics/analyticsService.js";
@@ -74,7 +75,7 @@ const overdue: Command = {
     const n = a.totals.overdue;
     return {
       content: n ? `${plural(n, "task")} ${n === 1 ? "is" : "are"} overdue.` : "Nothing is overdue. Well done!",
-      actions: n ? [{ label: "Show them", text: "What's overdue?" }, { label: "Plan my day", payload: { type: "plan_day" } }] : [],
+      actions: n ? [sayAction("Show them", "query_tasks", "What's overdue?"), { label: "Plan my day", payload: { type: "plan_day" } }] : [],
       intent: "insights_overdue",
     };
   },

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { sayAction } from "../actions.js";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
 import { addDaysYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, zonedTimeToUtc } from "../../../lib/time.js";
@@ -71,7 +72,7 @@ const quietHours: Command = {
     const start = typeof args.start === "string" ? hhmm(args.start) : null;
     const end = typeof args.end === "string" ? hhmm(args.end) : null;
     if (!start && !end) {
-      return { content: c.quietRead(clock(s.quietStart), clock(s.quietEnd), !s.criticalOverridesDnd), actions: [{ label: c.quietChange, text: "Set quiet hours from 11 PM to 7 AM" }], intent: "settings_quiet_hours" };
+      return { content: c.quietRead(clock(s.quietStart), clock(s.quietEnd), !s.criticalOverridesDnd), actions: [sayAction(c.quietChange, "settings_quiet_hours", "Set quiet hours from 11 PM to 7 AM")], intent: "settings_quiet_hours" };
     }
     const data = { quietStart: start ?? s.quietStart, quietEnd: end ?? s.quietEnd };
     if (data.quietStart === data.quietEnd) return { content: c.quietSame, intent: "settings_invalid" };
@@ -125,7 +126,7 @@ const dnd: Command = {
     await save(turn, { dndUntil: until }, before, "Do Not Disturb");
     return {
       content: tx.dndOn(whenLabel(turn, until), formatDuration(Math.min(minutes, MAX_DND_MINUTES)), !(args.minutes || args.until), turn.settings.criticalOverridesDnd),
-      actions: [undoAction(turn.settings.language), { label: tx.turnOff, text: "Turn off DND" }],
+      actions: [undoAction(turn.settings.language), sayAction(tx.turnOff, "settings_dnd", "Turn off DND")],
       intent: "settings_dnd_on",
     };
   },

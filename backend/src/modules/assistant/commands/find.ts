@@ -17,7 +17,7 @@ import type { Command, CommandArgs, ParseCtx } from "./types.js";
 
 const NOUN = "(?:tasks?|things?|items?|reminders?|routines?|todos?|to-dos?|kaam|kam)";
 const LINK = "(?:related to|relating to|regarding|about|concerning|involving|mentioning|that mention|with|for|on|at|from)";
-const ASKING = /\?|^(?:is|are|do|does|did|have|has|what|which|show|list|find|search|look|any|anything|kya|koi)\b|\b(?:is there|are there|do i have|have i got|any|anything|kya|koi)\b/i;
+const ASKING = /\?|^(?:is|are|do|does|did|have|has|what|which|show|list|find|search|look|any|anything|kya|koi)\b|\b(?:is there|are there|do i have|have i got|any|anything|kya|koi)\b|^(?:please\s+)?(?:get|give|tell|show|bring|pull up)\s+me\b/i;
 /** Doing something to a task is a command, not a search ("add a task for KFC tomorrow", "mark the KFC task done"). */
 const DOING = /^(?:please\s+)?(?:add|create|new|remind|set|make|schedule|mark|complete|finish|delete|remove|cancel|move|change|rename|update|edit|start|split|break|tag|untag|pause|resume|skip|put|push|postpone)\b/i;
 

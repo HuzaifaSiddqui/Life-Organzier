@@ -16,9 +16,10 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
   return {
     title: title || null,
     description: null,
-    dueYmd: e.date?.ymd ?? null,
+    // "Call Mooz at 6 pm" means today (a time already past asks "tomorrow, or a later time today?").
+    dueYmd: e.date?.ymd ?? (e.time && e.timeExplicit ? todayYmd : null),
     dueTime: e.time,
-    dateText: e.date?.text ?? null,
+    dateText: e.date?.text ?? (e.time && e.timeExplicit ? "today" : null),
     dateFuzzy: e.date?.fuzzy ?? false,
     durationMinutes: e.durationMinutes,
     priority,

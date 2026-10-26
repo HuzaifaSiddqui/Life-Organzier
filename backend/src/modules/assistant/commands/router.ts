@@ -44,19 +44,35 @@ function argHint(command: Command): string {
 const stage1Schema = z.object({ category: z.enum([...CATEGORY_IDS, "none"]) });
 const stage2Schema = (names: [string, ...string[]]) => z.object({ command: z.enum(names), args: z.record(z.string()).default({}) });
 
-export function routerMessages(text: string, stage: 1 | 2, category?: CommandCategory): ChatMessage[] {
+/** A labelled message from the example bank (the nearest ones to the user's message). */
+export type RouteExample = { text: string; command: string };
+
+/** The area a command id belongs to; nlu-only labels (unclear, smalltalk, …) have none. */
+function areaOf(command: string): CommandCategory | "none" {
+  return getCommand(command)?.category ?? "none";
+}
+
+export function routerMessages(text: string, stage: 1 | 2, category?: CommandCategory, examples: RouteExample[] = []): ChatMessage[] {
   if (stage === 1) {
+    const shown = examples.map((e) => `"${e.text}" → ${areaOf(e.command)}`);
     return [
-      { role: "system", content: `You route a message sent to a student planner app to one area. Areas:\n${CATEGORIES.map((c) => `- ${c.id}: ${c.label}`).join("\n")}\n- none: chit-chat, a question about something else, or not a request to the app.\nReply as JSON {"category": "..."}.` },
+      {
+        role: "system",
+        content:
+          `You route a message sent to a student planner app to one area. Areas:\n${CATEGORIES.map((c) => `- ${c.id}: ${c.label}`).join("\n")}\n- none: chit-chat, a question about something else, or not a request to the app.\n` +
+          `${shown.length ? `Similar messages and their areas (a guide, not the answer):\n${shown.join("\n")}\n` : ""}Reply as JSON {"category": "..."}.`,
+      },
       { role: "user", content: text },
     ];
   }
   const list = COMMANDS.filter((c) => c.category === category);
+  const shown = examples.filter((e) => areaOf(e.command) === category).map((e) => `"${e.text}" → ${e.command}`);
   return [
     {
       role: "system",
       content:
         `Pick the one command that does what the user asks, or "none".\n${list.map((c) => `- ${c.name}: ${c.summary} (args: ${argHint(c)})`).join("\n")}\n` +
+        `${shown.length ? `Similar messages and their commands (a guide, not the answer):\n${shown.join("\n")}\n` : ""}` +
         `Fill args with the user's own words: ref = the task or routine they name. Never put dates, times, days or durations in args. ` +
         `Reply as JSON {"command": "...", "args": {...}}.`,
     },
@@ -116,16 +132,16 @@ function adapt(command: Command, words: Record<string, string>): CommandArgs {
 }
 
 /** Command + validated arguments, or null (no command fits, AI off/unavailable, or the output didn't validate). */
-export async function routeWithLlm(text: string, ctx: ParseCtx): Promise<{ command: string; args: CommandArgs } | null> {
+export async function routeWithLlm(text: string, ctx: ParseCtx, examples: RouteExample[] = []): Promise<{ command: string; args: CommandArgs } | null> {
   const ai = getAi();
   if (!ai.enabled || !ai.available) return null;
   const options = { maxTokens: 60, timeoutMs: 15000 };
-  const first = await ai.json(routerMessages(text, 1), stage1Schema, { ...options, json: { type: "object", properties: { category: { type: "string", enum: [...CATEGORY_IDS, "none"] } }, required: ["category"] } });
+  const first = await ai.json(routerMessages(text, 1, undefined, examples), stage1Schema, { ...options, json: { type: "object", properties: { category: { type: "string", enum: [...CATEGORY_IDS, "none"] } }, required: ["category"] } });
   if (!first || first.category === "none") return null;
   const names = COMMANDS.filter((c) => c.category === first.category).map((c) => c.name);
   if (!names.length) return null;
   const all: [string, ...string[]] = ["none", ...names];
-  const second = await ai.json(routerMessages(text, 2, first.category), stage2Schema(all), {
+  const second = await ai.json(routerMessages(text, 2, first.category, examples), stage2Schema(all), {
     ...options,
     maxTokens: 120,
     json: { type: "object", properties: { command: { type: "string", enum: all }, args: { type: "object", additionalProperties: { type: "string" } } }, required: ["command"] },

@@ -34,6 +34,8 @@ for (const key of new Set([...Object.keys(process.env), ...Object.keys(fromFile)
   if (/^(?:TWILIO_|EXPO_)/.test(key)) process.env[key] = "";
 }
 process.env.AI_ENABLED = "false";
+// Unknown messages are not logged to backend/logs from tests (a test that checks the log sets its own path).
+process.env.UNKNOWN_LOG_PATH = "off";
 process.env.GEMINI_API_KEY = "";
 
 /** Where Ollama would be reached (same default as ai/llm.ts). */

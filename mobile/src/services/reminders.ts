@@ -6,6 +6,7 @@ import { auth } from "../lib/firebase";
 import { apiGet, apiPost } from "./api";
 import { answerCheckin, showCheckinSheet, type CheckinResponse, type PlannedCheckin } from "./checkins";
 import { addSnooze, applySnoozes, pruneSnoozes, SNOOZE_MINUTES, snoozeRepeats, type Snoozes } from "../utils/routineSnooze";
+import { addTaskSnooze, liveTaskSnoozes, TASK_SNOOZE_MINUTES, withoutTask, type TaskSnooze } from "../utils/taskSnooze";
 
 /**
  * Offline-first reminders (FR-RN-001/002): the server computes an escalating, quiet-hours-aware
@@ -45,6 +46,7 @@ export const CATEGORY_LOCATION = "lo-location";
 export const DEFAULT_CHANNEL_ID = "lo-sound-vibrate";
 const HANDLED_KEY = "life-organizer:handled-notification-response";
 const SNOOZES_KEY = "life-organizer:routine-snoozes";
+const TASK_SNOOZES_KEY = "life-organizer:task-snoozes";
 let configured = false;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -225,6 +227,52 @@ async function scheduleRepeat(r: { occurrenceId: string; fireAt: string; title: 
   }
 }
 
+async function readTaskSnoozes(): Promise<TaskSnooze[]> {
+  try {
+    const list = JSON.parse((await AsyncStorage.getItem(TASK_SNOOZES_KEY)) ?? "[]") as TaskSnooze[];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeTaskSnoozes(list: TaskSnooze[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(TASK_SNOOZES_KEY, JSON.stringify(list));
+  } catch {
+    // storage unavailable: the snoozed copy still fires unless a re-sync comes first
+  }
+}
+
+/** Open task ids from the phone's task list (null when it can't be read). */
+async function openTaskIds(): Promise<Set<string> | null> {
+  try {
+    const { readTasks } = await import("./syncEngine");
+    return new Set((await readTasks()).filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS").map((t) => t.id));
+  } catch {
+    return null;
+  }
+}
+
+async function scheduleTaskSnooze(s: TaskSnooze, channel: Channel = lastChannel): Promise<boolean> {
+  const date = new Date(s.fireAt);
+  if (date.getTime() <= Date.now() + 1000) return false;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${PREFIX}${s.identifier}`,
+      content: { title: s.title, body: s.body, sound: channel.sound, data: s.data, categoryIdentifier: s.categoryIdentifier ?? CATEGORY_TASK },
+      trigger:
+        Platform.OS === "android"
+          ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: channel.id }
+          : { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+    });
+    return true;
+  } catch (error) {
+    console.warn("Could not schedule snoozed reminder", error);
+    return false;
+  }
+}
+
 async function cancelOurs(): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
@@ -259,6 +307,10 @@ export async function syncReminders(): Promise<number | null> {
     .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime());
   let count = 0;
   for (const r of repeats) if (await scheduleRepeat(r, channel)) count += 1;
+  // Task snoozes made on this phone: the cancel above dropped them, so they are scheduled again (utils/taskSnooze.ts).
+  const taskSnoozes = liveTaskSnoozes(await readTaskSnoozes(), await openTaskIds(), Date.now());
+  await writeTaskSnoozes(taskSnoozes);
+  for (const s of taskSnoozes) if (await scheduleTaskSnooze(s, channel)) count += 1;
   const batch = upcoming.slice(0, MAX_LOCAL_REMINDERS - count);
   if (upcoming.length > batch.length) {
     console.info(`Reminders: scheduled ${batch.length}, skipped ${upcoming.length - batch.length} later ones (local notification limit)`);
@@ -383,6 +435,7 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   if (action === "DONE") {
     try {
       if (target.taskId) {
+        await writeTaskSnoozes(withoutTask(await readTaskSnoozes(), target.taskId));
         const { updateTask } = await import("./tasksApi");
         await updateTask(target.taskId, { status: "COMPLETED" });
       }
@@ -390,11 +443,19 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
       console.warn("Could not complete from notification", error);
     }
   } else if (action === "SNOOZE") {
-    await Notifications.scheduleNotificationAsync({
-      identifier: `${PREFIX}snooze:${Date.now()}`,
-      content: { title: content.title ?? "Reminder", body: content.body ?? "", data: content.data, categoryIdentifier: content.categoryIdentifier ?? CATEGORY_TASK },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 15 * 60 },
-    });
+    if (target.taskId) {
+      // Kept on the phone, so a re-sync before it fires schedules it again instead of losing it.
+      const list = addTaskSnooze(await readTaskSnoozes(), { taskId: target.taskId, title: content.title ?? "Reminder", body: content.body ?? "", data: (content.data ?? {}) as Record<string, unknown>, categoryIdentifier: content.categoryIdentifier ?? CATEGORY_TASK }, Date.now());
+      await writeTaskSnoozes(list);
+      const s = list.find((x) => x.taskId === target.taskId);
+      if (s) await scheduleTaskSnooze(s);
+    } else {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${PREFIX}snooze:${Date.now()}`,
+        content: { title: content.title ?? "Reminder", body: content.body ?? "", data: content.data, categoryIdentifier: content.categoryIdentifier ?? CATEGORY_TASK },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: TASK_SNOOZE_MINUTES * 60 },
+      });
+    }
   } else {
     onOpen(target);
   }
@@ -466,4 +527,6 @@ export function startReminderResponses(onOpen: (target: ReminderOpenTarget) => v
 /** Clears every scheduled reminder (sign out). */
 export async function clearAllReminders(): Promise<void> {
   await cancelOurs();
+  await writeTaskSnoozes([]);
+  await writeSnoozes({});
 }

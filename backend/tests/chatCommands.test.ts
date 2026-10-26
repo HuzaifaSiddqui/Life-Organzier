@@ -412,7 +412,7 @@ test("router: model picks area then command; its times are ignored, the parser's
   assert.equal(await routeWithLlm("make the workout one happen at 7 pm", ctx), null);
 });
 
-test("router in the pipeline: unsure rules → routed command; nothing matches → 4–5 things I can do; help lists them", { skip }, async () => {
+test("router in the pipeline: unsure rules → routed command; nothing matches → \"I can't do that yet\" + 3 things I can do; help lists them", { skip }, async () => {
   await withChatUser("FREE", async (say, _tap, user) => {
     await prisma.task.create({ data: { userId: user.id, title: "Essay", priority: "MEDIUM", source: "CHAT", status: "COMPLETED", completedAt: new Date() } });
     const m = scriptedModel("insights", { command: "insights_completed", args: { range: "week" } });
@@ -423,8 +423,9 @@ test("router in the pipeline: unsure rules → routed command; nothing matches �
 
     setAi(new AiService([]));
     const lost = await say("blorp the flux capacitor");
-    assert.equal(lost.message.intent, "unclear");
-    assert.equal(lost.message.actions?.length, 5);
+    assert.equal(lost.message.intent, "unknown");
+    assert.match(lost.message.content, /^I can't do that yet/);
+    assert.equal(lost.message.actions?.length, 3);
     assert.match(lost.message.actions?.[0].label ?? "", /^Add "blorp the flux capacitor" as a task/);
 
     const help = await say("what can you do?");

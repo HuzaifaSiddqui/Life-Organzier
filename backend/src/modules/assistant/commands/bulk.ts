@@ -177,6 +177,38 @@ const deleteCompleted: Command = {
   },
 };
 
+/** "Remove all the pending tasks", "delete all my tasks", "saare kaam delete kar do". Never completed ones, a day or a tag. */
+const DELETE_ALL_OPEN = [
+  /^(?:please )?(?:delete|remove|clear|erase|get rid of|cancel) (?:all|every|everything)(?: of)?(?: the| my)?(?: (?:pending|existing|open|remaining|current|active|incomplete|undone|unfinished))?(?: (?:tasks?|todos?|to dos?))?(?: please)?$/,
+  /^(?:please )?(?:mere )?(?:saare|sare|saari|sari|sab|tamam|tamaam)(?: ke sab)?(?: pending)? (?:kaam|kam|tasks?) (?:delete|hata|khatam|remove) (?:kar )?(?:do|dein|den)?$/,
+];
+
+const deleteOpen: Command = {
+  name: "bulk_delete_open",
+  category: "bulk",
+  summary: "Delete all open tasks (preview, one confirmation, undo 24 hours)",
+  examples: ["Remove all the pending tasks", "Delete all my tasks", "saare kaam delete kar do"],
+  schema: z.object({ taskIds: z.array(z.string()).optional() }).passthrough(),
+  undoable: true,
+  parse(text) {
+    const t = norm(text);
+    return DELETE_ALL_OPEN.some((re) => re.test(t)) ? {} : null;
+  },
+  async prepare(turn) {
+    const open = await listActiveTasks(turn.user.id);
+    if (!open.length) return nothing(tx(turn).bulkNoOpen, "bulk_nothing");
+    const list = open.slice(0, BULK_CAP);
+    return preview(turn, tx(turn).bulkDeletePreview(list.length, true), list, open.length);
+  },
+  async execute(turn, args) {
+    const tasks = await tasksByIds(turn, args);
+    const deleted: string[] = [];
+    for (const t of tasks) if (await softDeleteTask(turn.task, t.id)) deleted.push(t.id);
+    recordUndo(turn, { kind: "tasks", op: "delete", taskIds: deleted, label: `${plural(deleted.length, "task")} deleted` });
+    return { content: tx(turn).bulkDeleted(deleted.length, true), actions: [undoAction(turn.settings.language)], intent: "bulk_deleted" };
+  },
+};
+
 const postponeNonUrgent: Command = {
   name: "bulk_postpone_nonurgent",
   category: "bulk",
@@ -202,5 +234,5 @@ const postponeNonUrgent: Command = {
   },
 };
 
-export const bulkCommands: Command[] = [postponeNonUrgent, moveToday, completeTag, deleteCompleted];
+export const bulkCommands: Command[] = [postponeNonUrgent, moveToday, completeTag, deleteCompleted, deleteOpen];
 

@@ -120,3 +120,17 @@ test("each result says where it matched: notes, title, a misspelling, spelled-ou
     assert.ok(gym.message.cards?.some((c) => c.type === "routine"), "routine card");
   });
 });
+
+test("'when is my physics task due?' is the single-task due answer, not a search list", { skip }, async () => {
+  await withChatUser("PRO", async (say, _tap, user) => {
+    await prisma.task.create({ data: { userId: user.id, title: "Physics assignment", priority: "MEDIUM", source: "CHAT", dueAt: new Date(Date.now() + 26 * 3600000) } });
+    await prisma.task.create({ data: { userId: user.id, title: "Buy groceries", priority: "LOW", source: "CHAT", dueAt: new Date(Date.now() + 5 * 3600000) } });
+    for (const text of ["when is my physics task due?", "when is the physics assignment due"]) {
+      assert.equal(parseFindQuery(text, ctx), null, `${text}: not a find question`);
+      const r = await say(text);
+      assert.notEqual(r.message.intent, "find_items", text);
+      assert.match(r.message.content, /Physics assignment/, text);
+      assert.doesNotMatch(r.message.content, /groceries|Found \d/i, `${text}: one task, no list`);
+    }
+  });
+});

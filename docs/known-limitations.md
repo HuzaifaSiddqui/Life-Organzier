@@ -45,6 +45,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Android shows at most 3 action buttons**; the completion check-in uses exactly 3 (Done / +30 min / Update…). The
   other options (partly done, +15 / +60, didn't get to it) are in the in-app sheet.
 - **Check-ins in quiet hours or Do Not Disturb are skipped, not moved** (FR-RN-004 §4).
+- **A task snooze is kept on that phone.** "Snooze 15 min" is saved on the phone and scheduled again by every
+  re-sync until it fires (before, a re-sync within the 15 minutes dropped it). It is dropped when the task is done
+  or deleted on the phone's task list; another phone doesn't know about it.
 
 ## Documents and OCR
 
@@ -340,6 +343,24 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   reminders, and a per-routine reminder mode. English and Roman Urdu only; the new chat and notification text has
   no Urdu.
 
+## Chat routing
+
+- **Rules first; the meaning-based router is off** (`MEANING_ROUTER=on` to try it). The gate in
+  `docs/AI_ASSISTANT_ARCHITECTURE.md` found no gain over the existing LLM router, so it stays off until the bank is
+  bigger and a filled held-out set shows a gain.
+- **No held-out number.** `tests/eval/chat-holdout.json` is still empty; every chat accuracy figure is on rows the
+  rules were written against.
+- **Unknown messages are logged on the server** (`backend/logs/unknown-utterances.jsonl`, git-ignored;
+  `UNKNOWN_LOG=off` to stop): numbers, e-mails, links and likely names are masked, but names are guessed (a
+  lower-case name with no cue word stays) and other details in the text (a place, an illness) are kept. Capped at
+  512 KB with one rotated file.
+- **Paraphrases are not trusted.** `npm run paraphrases` writes model paraphrases to a review file only, English
+  only: qwen2.5:7b's Roman Urdu paraphrases were mostly unnatural and were removed unreviewed. Each row needs a
+  person's approval before it enters the bank.
+- **Held-out set:** to be filled by classmates with `backend/tests/eval/collect-sheet.md` (`npm run collect`).
+- **Freeze:** vocabulary misses are bank rows, not new regexes (`docs/chat-failures.md`). Misses that are still
+  open: "change the essay" (a new task, not a change) and a messy routine sentence's title with AI off.
+
 ## Finding tasks by topic
 
 - **Typos are caught in tiers.** Exact word, then substring, then fuzzy (trigram similarity ≥ 0.75, which
@@ -353,8 +374,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   after the deadline; see "Urdu coverage"). Replies follow the app language, so Urdu users get Urdu replies.
 - **"KFC wala kaam" is a search only when nothing but question words follow it**; "KFC wala kaam kal karna hai"
   adds a task.
-- **Voice hints** (task titles, places, course codes, tags; at most 100) help only on Android 13+ and iOS;
-  older Android ignores them. Routine titles are not in the hints (routines aren't cached on the phone).
+- **Voice hints** (places, course codes and tags of open tasks; at most 100) help only on Android 13+ and iOS;
+  older Android ignores them. Task and routine titles are never sent: the hints go to the OS speech service, and
+  a title can hold personal or health details, so a misheard word that appears only in a title isn't helped.
+- **Spelled letters in voice**: the app joins only runs of 3+ single letters ("k f c" → "kfc"), because it
+  changes every voice message and "section A B" must stay. Two-letter runs ("C S") are joined by the server only
+  inside search questions.
+- **A search term matches inside a word only at 5+ letters** ("burger" finds "cheeseburger"); shorter terms
+  match at a word start ("phys" → "physics"), so "art" doesn't find "start" or "party".
 ## Urdu coverage
 
 Scope until the deadline (1 Nov 2026): no new Urdu-script work. Existing Urdu behaviour, tests and the chat eval's
@@ -375,3 +402,8 @@ Urdu group (18/18) stay as they are.
 - **Planned after the deadline:** Urdu-script patterns for search and the new features, Urdu replies for the
   remaining English command replies, transliteration so Urdu-script words can match English titles, and a native
   speaker's review of the Urdu strings and crisis phrases.
+- **Urdu strings to review after the deadline** (written without a native speaker's check):
+  - search replies in `backend/src/modules/assistant/commands/find.ts`: `TEXT.ur` (found, none, closest,
+    "matched in", routine, no due date) and the `FIELD_LABEL` Urdu names (title, location, notes, subtask, tags,
+    category);
+  - the crisis detection phrases (`backend/src/modules/mood/crisis.ts`).

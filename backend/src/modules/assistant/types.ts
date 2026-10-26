@@ -64,6 +64,8 @@ export type Pending =
   /** Asked once after an every-N-days routine was made without a time (no time = no reminder). */
   | { kind: "routine_time"; routineId: string; title: string }
   | { kind: "mood_confirm"; mood: string; confidence: number; text: string }
+  /** A chat reply suggested something to say ("Say: schedule a call with Mooz tonight at 8 PM"); "yes" (+ a new time) runs it. */
+  | { kind: "offer"; text: string }
   | { kind: "confirm_update"; taskId: string; changes: Record<string, unknown>; summary: string }
   | { kind: "confirm_delete"; taskId: string; title: string }
   | { kind: "location_choice"; taskId: string; taskTitle: string; place: string; results: Array<{ name: string; displayName: string; latitude: number; longitude: number }>; more: boolean }
@@ -127,13 +129,22 @@ export type ActionPayload =
   | { type: "set_context"; context: string }
   | { type: "open_task"; taskId: string }
   | { type: "navigate"; screen: string }
-  | { type: "breathing"; minutes: number };
+  | { type: "breathing"; minutes: number }
+  /** Run this registry command (or wrapped intent) with these arguments; never re-parsed as a sentence. */
+  | { type: "command"; command: string; args?: Record<string, unknown> }
+  /** An answer to the open question of this kind; ignored (and said so) once that question has closed. */
+  | { type: "answer"; pending: Pending["kind"]; text: string }
+  /** "Talk about it": a supportive conversation about how the user feels. */
+  | { type: "talk" };
 
+/**
+ * A button, chip or suggestion. The contract: it always carries a structured payload (what runs when it is
+ * tapped). `text` is only what a WhatsApp user can type instead; the app never sends it back for a tap.
+ */
 export type QuickAction = {
   label: string;
-  /** Text sent as the user's message when tapped (keeps one conversation pipeline). */
   text?: string;
-  payload?: ActionPayload;
+  payload: ActionPayload;
   style?: "primary" | "default" | "danger";
 };
 

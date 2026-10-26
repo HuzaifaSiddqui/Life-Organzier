@@ -239,6 +239,9 @@ const FEW_SHOT: ChatMessage[] = [
 ];
 
 /** Exact messages the LLM intent step sends (also used by scripts/model-benchmark.ts). */
+/** A message that answers or corrects the assistant's last reply ("yes …", "I mean …", "no, actually …"). */
+const REPLY_LEAD = /^(?:yes|yeah|yep|sure|ok|okay|haan|no|nope|actually|i mean|i meant)\b[\s,!.]+\S/i;
+
 export function nluMessages(text: string, opts: { history: ChatMessage[]; pendingHint?: string | null; memoryHint?: string | null }): ChatMessage[] {
   const history = opts.history.slice(-4).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 160)}`).join("\n");
   return [
@@ -289,7 +292,9 @@ export async function understand(
   let targetRef = targetFromText(entities.residual, intent);
   let moodOut = mood;
 
-  const needsLlm = rule.confidence < 0.75 || ((intent === "create_task" || intent === "create_routine") && title.split(/\s+/).length > 7);
+  // "Yes schedule a call at 6 pm" after a chat reply: the title is in the conversation, which the LLM sees.
+  const replyLead = REPLY_LEAD.test(text.trim()) && opts.history.length > 0;
+  const needsLlm = rule.confidence < 0.75 || replyLead || ((intent === "create_task" || intent === "create_routine") && title.split(/\s+/).length > 7);
   const ai = getAi();
   if (needsLlm && opts.allowLlm && ai.enabled && ai.available) {
     const result = await ai.json(nluMessages(text, opts), llmSchema, NLU_LLM_OPTIONS);
@@ -303,7 +308,7 @@ export async function understand(
       }
       const llmTitle = cleanTitle(result.task_title ?? "");
       if ((intent === "create_task" || intent === "create_routine") && llmTitle && llmTitle.length >= 2 && llmTitle.length <= 80) {
-        if (!title || title.split(/\s+/).length > 6 || /^(?:i|it|this|that|to)\b/i.test(title)) title = llmTitle;
+        if (!title || replyLead || title.split(/\s+/).length > 6 || /^(?:i|it|this|that|to)\b/i.test(title)) title = llmTitle;
       }
       if (result.target_task && !targetRef) targetRef = result.target_task.toLowerCase();
       if (!moodOut && result.mood && result.mood !== "none" && isMood(result.mood)) {

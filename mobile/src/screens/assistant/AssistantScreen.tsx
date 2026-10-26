@@ -25,7 +25,7 @@ import { getApiErrorMessage, isNetworkError } from "../../services/api";
 import { loadCurrentConversation, sendToAssistant, startNewConversation } from "../../services/assistantApi";
 import { speak, stopSpeaking } from "../../services/speech";
 import { readTasks } from "../../services/syncEngine";
-import { normalizeSpelled } from "../../utils/spelled";
+import { normalizeSpelled, VOICE_MIN_RUN } from "../../utils/spelled";
 import { speechHints } from "../../utils/speechHints";
 import type { ActionPayload, ChatMessage, QuickAction } from "../../types/models";
 
@@ -162,8 +162,9 @@ export function AssistantScreen({ navigation, route }: Props) {
         return;
       }
       setDraft("");
-      // Spelled letters ("k f c", "kay ef see") as one word before the assistant reads it; the server does it again.
-      void send({ text: normalizeSpelled(text), voice: true });
+      // Spelled letters ("k f c", "kay ef see") as one word before the assistant reads it. Runs of 3+ only: this
+      // changes every voice message ("section A B" stays); the server joins 2-letter runs in search questions.
+      void send({ text: normalizeSpelled(text, VOICE_MIN_RUN), voice: true });
     },
     onError: (m) => setNotice(m),
   });
