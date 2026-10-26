@@ -1,0 +1,1610 @@
+[
+ {
+  "text": "Hey can you add a reminder for me to submit my project by 3 PM on Wednesday?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a reminder for me to hit the gym at 6 PM on Tuesday, please!",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you add a reminder for a meeting with Prof. Johnson at 11 AM on Monday?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Remind me to buy groceries this evening, please",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a reminder for me to read the chapter on evolution by 9 PM tonight",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, add a task to clean my apartment for me on Saturday at 10 AM",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you set a reminder for me to attend the finance seminar at 3 PM on Friday?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a task for me to call my mom this evening at 7 PM, please",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you remind me to send an email to Dr. Smith about the research paper tomorrow at 4 PM?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a reminder for me to do laundry this evening after dinner",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, add a task for me to prepare for the presentation next Monday by 2 PM",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you add a reminder for a friend's birthday party on Sunday at 7 PM?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a task for me to submit my assignment by 5 PM on Thursday",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you remind me to buy stamps from the post office on Wednesday at 4 PM?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a reminder for me to have a lunch meeting with Dr. Lee at 1 PM on Tuesday",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a reminder for me to go to the bank on Monday at 2 PM?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a task for me to prepare a presentation for next Monday by 10 AM",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you remind me to water the plants this evening at 6 PM?",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Add a reminder for me to return the book to the library on Friday at 2 PM",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a task for me to buy some books on Saturday at 11 AM",
+  "lang": "en",
+  "command": "create_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you remind me to check in on my mood today?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, I need to add a mood check-in for later today, can you help?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey there! Could you set a reminder for 7 PM to tell me how I’m feeling?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can I add a 'Feel Good Check-In' reminder for 8 PM tonight?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, I want to set a reminder for 6 PM to log my mood for the day",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you please add a reminder for 3 PM to tell me how I’m doing?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you put a reminder for 4 PM to check my mood?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you set a reminder for 2 PM to tell me how I’m feeling?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, I need a reminder for 5 PM to check my mood. Can you do that?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can I add a 'Mood Meter' reminder for 7 PM?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, could you set a 'Mood Check-In' reminder for 6 PM for me?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a 'Feel Good' reminder for 4 PM to check my mood?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you please remind me to check in on my mood at 8 PM tonight?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a 'Mood Check-In' reminder for 9 PM for me?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, could you set a reminder for 3 PM to check my mood and how I’m feeling?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a 'Mood Tracker' reminder for 7 PM for me?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, could you set a reminder for 6 PM to tell me how I’m doing today?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a 'Feel Good' reminder for 5 PM to check my mood?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, could you set a reminder for 8 PM to check my mood?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a 'Mood Check-In' reminder for 2 PM for me?",
+  "lang": "en",
+  "command": "log_mood",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you tell me what's due today?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "What tasks are scheduled for today?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Remind me of today's deadlines, please.",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's to-do list, if you please.",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "What classes do I have today?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "When are my classes today?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's schedule, quick please!",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Show me what's due today, won't you?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "What tasks are today's assignments?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's schedule and deadlines?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "What tasks are due today, again?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's classes and deadlines, quickly!",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "What are today's classes and tasks?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's schedule and due dates, fast!",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's classes and to-do list, please.",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Quick, what's due today?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's classes and to-dos, now please!",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's deadlines and classes, quick!",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "What classes and tasks are due today?",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's schedule and assignments, hurry!",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Today's classes and deadlines, please.",
+  "lang": "en",
+  "command": "query_tasks",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you find any task related to the course 'Data Structures'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, do you have anything on the planner for 'Algebra'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Do you have any tasks for 'Operating Systems'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Check if there's anything related to the word 'Python' in my notes?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Is there any task associated with the notes from yesterday?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, are there any tasks involving 'Probability'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Is there a task about 'Graph Theory'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Did I add anything related to 'C++' in the planner?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you find a task about 'Linear Algebra'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Is there anything with 'Python' in my schedule?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Any tasks related to 'Calculus'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Check if there's a task for 'Discrete Math'",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Do I have anything planned for 'Biology'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Are there any tasks with 'Java'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Is there anything with 'English Literature'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Did I add 'Organic Chemistry' to my planner?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Is there a task related to 'French'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you find a task about 'Statistics'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Do I have anything planned for 'Physics'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Are there any tasks with 'Spanish'?",
+  "lang": "en",
+  "command": "find_items",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you remove the location for my 'Submit Thesis Draft' task?",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, could you take the location out of the 'Study Group Meeting' task?",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Please remove the venue from 'Library Research'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you take the place off 'Team Lunch Meeting'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, remove the location from 'Workshop Registration'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you remove the location from 'Final Exam Review'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, take the venue out of 'Project Meeting'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you remove the place from 'Office Visit'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, could you remove the location from 'Seminar'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Please take the location out of 'Community Service'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, remove the location from 'Lab Session'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you take the venue out of 'Client Meeting'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, remove the location from 'Seminar on Sustainability'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you remove the place from 'Study Session'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, take the location out of 'Seminar on AI'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you remove the venue from 'Teaching Assistant Duties'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, remove the location from 'Group Project'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you take the place out of 'Field Trip'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, could you remove the location from 'Class'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Please take the location out of 'Book Club'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, remove the venue from 'Research Presentation'",
+  "lang": "en",
+  "command": "manage_location",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you remind me how to plan my schedule with the app?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "I need to know how to use the planner to schedule tasks.",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you show me how to find free time in the app?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How do I input tasks in the planner app?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Is there a way to organize my tasks in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you teach me how to use the planner to schedule my day?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How can I make use of the planner to find free time?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you help me set up my schedule using the planner app?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How do I schedule my tasks in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you guide me on how to use the planner to organize my tasks?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How do I use the planner to manage my schedule?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you demonstrate how to schedule tasks in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "I need help finding free time in the planner, can you show me?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you walk me through setting up tasks in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How do I use the planner to block out time for tasks?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you explain how to schedule tasks in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How do I schedule my tasks to find free time in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you teach me how to organize my schedule in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "How do I use the planner to schedule my day and find free time?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you show me how to input tasks in the planner?",
+  "lang": "en",
+  "command": "plan_day",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you delete the old draft?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you trash the old draft for me?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you remove the old draft task?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the outdated project plan, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, delete the obsolete homework task.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you take out the old draft task, please?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you remove the old project plan?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the outdated homework plan, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the old project plan, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, remove the old homework task.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you get rid of the old draft task?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the old lecture notes task, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the old assignment task for me, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you delete the old assignment task?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the old presentation task, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you delete the old lecture notes task?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you delete the old exam prep task?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Delete the old reading task for me, please.",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you delete the old reading assignment?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you delete the old reading task, please?",
+  "lang": "en",
+  "command": "delete_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you add a reminder for my daily 30-minute workout at 7 AM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you set a daily task for reading for 1 hour at 9 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Sure, could you add a daily reminder to clean my room by 5 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a daily task for doing laundry by 7 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you remind me daily to jog for 20 minutes at 6 AM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you add a daily task of writing in my journal for 15 minutes at 8 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you set a reminder daily for a 15-minute walk at 4 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a daily task of preparing my lunch for 10 minutes at 1 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you remind me to take a 10-minute break for stretching at 3 PM daily?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you add a daily task for daily reading for 30 minutes at 7 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a daily task of daily yoga for 20 minutes at 7 AM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you set a daily reminder for taking a 15-minute nap at 2 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a daily task for daily journaling for 15 minutes at 8 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you remind me to walk for 10 minutes at 4 PM daily?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you add a daily task for taking a 10-minute break for a walk at 3 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a daily task for daily reading for 15 minutes at 7 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you set a reminder daily for taking a 5-minute break for meditation at 9 AM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you add a daily task for daily journaling for 20 minutes at 9 PM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you add a daily task of doing 30-minute cardio at 6 AM?",
+  "lang": "en",
+  "command": "create_routine",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you switch my project deadline to next Tuesday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, could you change the midterm to this Friday instead?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, can you bump up the quiz to tomorrow?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you shift the group meeting to 3 PM on Wednesday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Move the presentation to Thursday, please.",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Sure, can you make the assignment due on Monday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, can you update the workshop to 10 AM on Thursday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Change the coding challenge to Monday 9 AM.",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you change the reading assignment to Tuesday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Sure, could you make the exam on Saturday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you change the presentation date to Monday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey, can you change the quiz to 2 PM on Friday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you change the lab on Thursday to 2 PM?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you make the event on Tuesday at 3 PM?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Change the seminar to 10 AM on Wednesday.",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Sure, can you make the assignment due on Monday instead?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Could you move the lecture to 10 AM on Thursday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hi, can you change the workshop to 2 PM on Friday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you change the meeting to 3 PM on Wednesday?",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Change the exam to Tuesday 2 PM.",
+  "lang": "en",
+  "command": "update_task",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey can you read out my tasks for today?",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Please read my schedule for tomorrow out loud",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you read my tasks from 9 AM tomorrow?",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read out my tasks for 2 PM",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks for tonight",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Hey read my tasks from 3 PM",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks for this afternoon",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you read my tasks from 10 AM tomorrow?",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks from 4 PM out loud",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Please read out my tasks for the evening",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you read my tasks for 1 PM out loud?",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks from 6 PM",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks from 5 PM out loud",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks from 11 AM tomorrow out loud",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks for tomorrow",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you read my tasks for 7 PM?",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks from 2 PM out loud",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Please read out my tasks for 10 AM",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Read my tasks for this morning",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ },
+ {
+  "text": "Can you read my tasks from 12 PM?",
+  "lang": "en",
+  "command": "read_back",
+  "source": "paraphrase",
+  "model": "qwen2.5:7b",
+  "approved": false
+ }
+]

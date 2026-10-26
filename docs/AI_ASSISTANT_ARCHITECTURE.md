@@ -137,12 +137,55 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
   schema-constrained calls, area then command, over the registry. The model returns a command name and argument
   words only; dates, times, durations and weekdays are re-extracted by `entities.ts`, the arguments are
   validated with the command's zod schema, and references resolve in code. If the rules accept the text after
-  all, they win. No match → `capabilities.ts` replies with 4–5 things I can do closest to the message (never a
-  generic chat answer); the same happens for chit-chat when no model is available. Help is built from the registry.
+  all, they win. Help is built from the registry.
+- **Meaning-based router** (`meaning.ts`, `neighbours.ts`), **off by default** (`MEANING_ROUTER=on` turns it on). The
+  gate below found no gain: with AI on it scores exactly what the LLM router without examples scores (English
+  98.5% = 98.5%, Roman Urdu 98.3% = 98.3%), and with AI off it never beats the rules (98.0% / 96.6%), while it adds
+  an embedding call per message (median 14 ms). Off, the chat routes as before: the rules, and the plain LLM
+  router when the rules are unsure (below 0.75); no bank, no arbitration. When on: the 5 nearest rows of `tests/eval/utterance-bank.json`
+  (embedded once per embedding model, cached in `backend/.cache`; hashed vectors with AI off) are given to the
+  fallback router as examples and are a second opinion. Rules confidence below 0.75 (unchanged): the model picks,
+  guided by the examples; if it disagrees with both the rules and a strong neighbour vote, the neighbours win.
+  0.75–0.85: the rules. 0.85 and up (or a registry match): the rules, unless the neighbours strongly disagree and
+  the model agrees with them; then one question with two buttons (arbitration). A command chosen by the neighbours
+  alone that changes data is only offered as a button. Crisis detection runs first and is never routed. Neighbours
+  never decide alone (AI off): see the gate below.
+- **Unknown messages** (always on): no command fits → "I can't do that yet" and 3 things I can do (`unknownReply`);
+  the message is appended to `backend/logs/unknown-utterances.jsonl` (masked text, language, time; no user id). `npm run unknown:review` makes review rows (in `backend/logs`, git-ignored), `npm run bank:approve`
+  adds approved ones to the bank.
+  **Privacy (unknown-message log):** `UNKNOWN_LOG=off` turns it off. Before writing, `maskForLog` replaces CNIC
+  and phone numbers, any other run of 5+ digits, e-mails and links, and likely names: a capitalised word that is not
+  the first one (short acronyms such as KFC are kept), a word after a cue ("call", "meet", "with", "sir", "Dr"),
+  and a word before an Urdu honorific ("bhai", "baji", "sahab"). Names are guessed: a lower-case name with no cue
+  ("mooz is my friend") stays. No user id, conversation id or device is written. The file is capped
+  (`UNKNOWN_LOG_MAX_KB`, default 512 KB) and rotated once to `.1`, so at most about 1 MB is kept; it never leaves
+  the server and is git-ignored. Review rows (`npm run unknown:review`) stay in `backend/logs` too.
+- **Action contract**: every button, chip and suggestion carries a payload (`command` + args, or `answer` for one
+  open question, or one of the older payloads), never a sentence for the engine to read again; `text` is what a
+  WhatsApp user can type. A `command` payload with only a sentence is read by that command's own parser.
+  `tests/actionContract.test.ts` taps every button from 20 conversations. Guards: `npm run typecheck` fails if
+  `QuickAction.payload` becomes optional (`ACTION_PAYLOAD_REQUIRED` in `actions.ts`), and `tests/actionLint.test.ts`
+  fails on any `{ label, text }` object in `backend/src` without a payload. See `docs/chat-failures.md`.
 - **WhatsApp**: command replies are plain text; options become a numbered list (`formatReply`), "1" answers them,
-  app-only buttons (open a screen) are dropped, lists cap at 8.
+  app-only buttons (open a screen) are dropped (and the numbers count only the listed ones), lists cap at 8.
 - **Eval**: `npm run eval:assistant` (rules only, AI off) scores `tests/eval/assistant-eval.json` per command;
   `tests/eval/chat-holdout.json` is for a teammate and never tuned on.
+- **Router gate** (`npm run eval:router`, `-- --model` with the models from `.env`): leave-one-out over the 259
+  English and Roman Urdu bank rows, command accuracy. 25 Oct 2026, after #18 and #22 were merged:
+
+  | | n | rules alone | neighbours alone | rules + model (before) | rules + neighbours + model |
+  |---|---|---|---|---|---|
+  | English, AI off (hashed vectors) | 201 | 98.0% | 42.8% | – | 98.0% |
+  | Roman Urdu, AI off | 58 | 96.6% | 29.3% | – | 96.6% |
+  | English, AI on (nomic-embed-text, qwen2.5:7b) | 201 | 98.0% | 53.7% | 98.5% | 98.5% |
+  | Roman Urdu, AI on | 58 | 96.6% | 32.8% | 98.3% | 98.3% |
+
+  The rules were written against most of these rows, so "rules alone" is optimistic. The combined path beats
+  rules alone only with the model on, and only as much as the model router did before: the bank examples and the
+  neighbour vote changed no answer on this bank (3–5 rows per command). Arbitration asked on 0 of the 253 rows the
+  rules get right. Neighbours alone are off. Added time per message: median 14 ms, p95 20–29 ms with the embedding
+  model (0.1 ms hashed); messages that call the model (7 of 259): median 4.2 s, as before. Held-out:
+  `chat-holdout.json` has no scored rows yet, so there is no unbiased number.
 
 ## FR coverage
 

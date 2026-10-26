@@ -1,4 +1,5 @@
 import { ReminderMode, TaskSource, TaskStatus, TaskType, type Task } from "@prisma/client";
+import { commandAction, sayAction } from "../actions.js";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
 import { fuzzySimilarity, listJoin, truncate } from "../../../lib/text.js";
@@ -29,7 +30,7 @@ async function prepareTask(turn: Turn, command: string, args: CommandArgs, opts:
   if (r.task) return { args: { ...args, taskId: r.task.id } };
   if (r.candidates.length && ref) return { out: askChoice(turn, command, args, "taskId", r.candidates.map((t) => ({ id: t.id, label: t.title })), "Which task do you mean?") };
   if (opts.fallback && args.text) return { out: await runCommand(turn, opts.fallback, { text: args.text }) };
-  return { out: { content: ref ? `I couldn't find a task matching "${ref}".` : "Which task do you mean?", actions: [{ label: "Show my tasks", text: "Show my tasks" }], intent: "not_found" } };
+  return { out: { content: ref ? `I couldn't find a task matching "${ref}".` : "Which task do you mean?", actions: [sayAction("Show my tasks", "query_tasks", "Show my tasks")], intent: "not_found" } };
 }
 
 async function taskOf(turn: Turn, args: CommandArgs): Promise<Task | null> {
@@ -291,7 +292,7 @@ const taskCategory: Command = {
     const wanted = String(args.category);
     const match = names.find((n) => n.toLowerCase() === wanted.toLowerCase()) ?? names.map((n) => ({ n, s: fuzzySimilarity(wanted, n) })).sort((a, b) => b.s - a.s).find((x) => x.s >= 0.75)?.n;
     if (!match) {
-      return { out: { content: `You don't have a category called "${wanted}". Your categories: ${listJoin(names)}. You can add one in Settings.`, actions: names.slice(0, 5).map((n) => ({ label: n, text: `put ${args.ref || "it"} in the ${n} category` })), intent: "category_unknown" } };
+      return { out: { content: `You don't have a category called "${wanted}". Your categories: ${listJoin(names)}. You can add one in Settings.`, actions: names.slice(0, 5).map((n) => commandAction(n, "task_category", { ...args, category: n }, { text: `put ${args.ref || "it"} in the ${n} category` })), intent: "category_unknown" } };
     }
     return prepareTask(turn, "task_category", { ...args, category: match }, { includeCompleted: true });
   },

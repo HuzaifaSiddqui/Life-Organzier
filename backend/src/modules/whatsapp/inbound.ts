@@ -92,9 +92,14 @@ async function lastActions(userId: string): Promise<QuickAction[]> {
   return Array.isArray(meta?.actions) ? meta.actions : [];
 }
 
+/** The actions WhatsApp can offer (no app screens), in the order they are numbered. */
+export function whatsappActions(actions: QuickAction[]): QuickAction[] {
+  return actions.filter((a) => !(a.payload && ["open_task", "navigate", "breathing"].includes(a.payload.type))).slice(0, 5);
+}
+
 /** WhatsApp has no buttons: quick actions become a numbered list the user can answer with "1", "2", … */
 export function formatReply(content: string, actions: QuickAction[]): string {
-  const usable = actions.filter((a) => !(a.payload && ["open_task", "navigate", "breathing"].includes(a.payload.type))).slice(0, 5);
+  const usable = whatsappActions(actions);
   if (!usable.length) return content;
   return `${content}\n\n${usable.map((a, i) => `${i + 1}. ${a.label}`).join("\n")}`;
 }
@@ -149,7 +154,8 @@ export async function processInbound(msg: InboundMessage, send: Sender = sendWha
     if (!body) return void (await reply('Send me a message like "Add assignment due Friday 3 PM" or "What\'s due today?"'));
 
     // A number or an exact label answers the previous message's options.
-    const actions = await lastActions(user.id);
+    // Numbered exactly as formatReply listed them (app-only actions were left out of the list).
+    const actions = whatsappActions(await lastActions(user.id));
     const n = /^\d$/.test(body) ? Number(body) : NaN;
     const picked = Number.isInteger(n) && n >= 1 && n <= actions.length ? actions[n - 1] : actions.find((a) => a.label.toLowerCase() === body.toLowerCase());
     const answer = await handleAssistantMessage({

@@ -1,4 +1,5 @@
 import { fuzzySimilarity } from "../../../lib/text.js";
+import { answerAction } from "../actions.js";
 import { cleanTitle, extractEntities } from "../entities.js";
 import type { Pending, QuickAction } from "../types.js";
 import { commandText } from "./copy.js";
@@ -71,9 +72,9 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
  */
 export function answerPrompt(p: Pending, language: string): { content: string; actions: QuickAction[] } {
   const c = commandText(language);
-  if (p.kind === "command_choice") return { content: c.pickNumber, actions: p.candidates.map((x, i) => ({ label: x.label, text: String(i + 1) })) };
-  if (p.kind === "location_choice") return { content: c.pickNumber, actions: p.results.map((r, i) => ({ label: r.name, text: String(i + 1) })) };
-  if (p.kind === "choose_task") return { content: c.pickNumber, actions: p.candidates.map((_, i) => ({ label: String(i + 1), text: String(i + 1) })) };
+  if (p.kind === "command_choice") return { content: c.pickNumber, actions: p.candidates.map((x, i) => answerAction(x.label, "command_choice", String(i + 1))) };
+  if (p.kind === "location_choice") return { content: c.pickNumber, actions: p.results.map((r, i) => answerAction(r.name, "location_choice", String(i + 1))) };
+  if (p.kind === "choose_task") return { content: c.pickNumber, actions: p.candidates.map((_, i) => answerAction(String(i + 1), "choose_task", String(i + 1))) };
   if (CONFIRM_KINDS.has(p.kind)) {
     return { content: c.yesOrNo, actions: [{ label: c.yes, payload: { type: "confirm_pending" }, style: "primary" }, { label: c.no, payload: { type: "cancel_pending" } }] };
   }

@@ -313,6 +313,24 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **English only:** the chat replies, the document note and the form's new option have no Urdu text, and
   Urdu-script phrasings ("ہر دوسرے دن", "ایک دن چھوڑ کر") are not recognised (planned after the deadline).
 
+## Chat routing
+
+- **Rules first; the meaning-based router is off** (`MEANING_ROUTER=on` to try it). The gate in
+  `docs/AI_ASSISTANT_ARCHITECTURE.md` found no gain over the existing LLM router, so it stays off until the bank is
+  bigger and a filled held-out set shows a gain.
+- **No held-out number.** `tests/eval/chat-holdout.json` is still empty; every chat accuracy figure is on rows the
+  rules were written against.
+- **Unknown messages are logged on the server** (`backend/logs/unknown-utterances.jsonl`, git-ignored;
+  `UNKNOWN_LOG=off` to stop): numbers, e-mails, links and likely names are masked, but names are guessed (a
+  lower-case name with no cue word stays) and other details in the text (a place, an illness) are kept. Capped at
+  512 KB with one rotated file.
+- **Paraphrases are not trusted.** `npm run paraphrases` writes model paraphrases to a review file only, English
+  only: qwen2.5:7b's Roman Urdu paraphrases were mostly unnatural and were removed unreviewed. Each row needs a
+  person's approval before it enters the bank.
+- **Held-out set:** to be filled by classmates with `backend/tests/eval/collect-sheet.md` (`npm run collect`).
+- **Freeze:** vocabulary misses are bank rows, not new regexes (`docs/chat-failures.md`). Misses that are still
+  open: "change the essay" (a new task, not a change) and a messy routine sentence's title with AI off.
+
 ## Finding tasks by topic
 
 - **Typos are caught in tiers.** Exact word, then substring, then fuzzy (trigram similarity ≥ 0.75, which

@@ -1,4 +1,5 @@
 import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
+import { answerAction, commandAction, sayAction } from "./actions.js";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
 import { addDaysYmd, dueDateFromYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, startOfLocalDay } from "../../lib/time.js";
@@ -42,6 +43,8 @@ import {
   extractOpts,
   type Out,
   type Turn,
+  acceptOffer,
+  handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery } from "./commands/find.js";
 import { resolveTaskRef } from "./draft.js";
@@ -55,9 +58,11 @@ import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction } from "./types.js";
-import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, snapshots, UNDO_ACTION } from "./commands/runtime.js";
+import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, runCommand, snapshots, UNDO_ACTION } from "./commands/runtime.js";
 import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
-import { capabilityReply, helpReply } from "./commands/capabilities.js";
+import { capabilityReply, helpReply, unknownReply } from "./commands/capabilities.js";
+import { getCommand, parseCtx } from "./commands/registry.js";
+import type { CommandArgs } from "./commands/types.js";
 
 /* ======================================================================== intents */
 
@@ -123,8 +128,8 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
       return conversationalReply(turn, text, "chat");
     case "unclear":
     default:
-      // Nothing matched (rules, and the LLM router when AI is on): what I can do that is closest to the words.
-      return capabilityReply(turn, text);
+      // Nothing matched (rules, and the router when AI is on): "I can't do that yet" + what I can do (logged for review).
+      return unknownReply(turn, text);
   }
 }
 
@@ -167,7 +172,8 @@ async function manageLocation(turn: Turn, text: string): Promise<Out> {
   if (!r.task) {
     return {
       content: "Which task do you mean? Try \"remove location from <task name>\".",
-      actions: r.candidates.slice(0, 3).map((t) => ({ label: truncate(t.title, 32), text: cmd.kind === "remove" ? `remove location from ${t.title}` : `change the location of ${t.title} to ` })),
+      // The place the user named stays in the sentence ("change the location of X to KFC Gulberg").
+      actions: r.candidates.slice(0, 3).map((t) => sayAction(truncate(t.title, 32), "manage_location", cmd.kind === "remove" ? `remove location from ${t.title}` : `change the location of ${t.title} to ${"place" in cmd ? cmd.place : ""}`.trim())),
       intent: "choose_task",
     };
   }
@@ -234,9 +240,9 @@ export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
   const t = RESPONSE_TEXT[lang];
   const req = parseCheckinStyle(text) ?? { kind: "ask" as const };
   const others = (current: string) =>
-    (["FUNNY", "SERIOUS", "GENTLE"] as const).filter((s) => s !== current).map((s) => ({ label: STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), text: STYLE_CHIP_TEXT[s] }));
+    (["FUNNY", "SERIOUS", "GENTLE"] as const).filter((s) => s !== current).map((s) => sayAction(STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), "set_checkin_style", STYLE_CHIP_TEXT[s]));
   if (req.kind === "ask") {
-    return { content: t.STYLE_ASK, actions: (["FUNNY", "SERIOUS", "GENTLE"] as const).map((s) => ({ label: STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), text: STYLE_CHIP_TEXT[s] })), intent: "checkin_style_ask" };
+    return { content: t.STYLE_ASK, actions: (["FUNNY", "SERIOUS", "GENTLE"] as const).map((s) => sayAction(STYLE_NAMES[lang][s].replace(/^./, (c) => c.toUpperCase()), "set_checkin_style", STYLE_CHIP_TEXT[s])), intent: "checkin_style_ask" };
   }
   const before = { checkinsEnabled: turn.settings.checkinsEnabled, checkinTone: turn.settings.checkinTone };
   if (req.kind === "off" || req.kind === "on") {
@@ -246,7 +252,7 @@ export async function setCheckinStyle(turn: Turn, text: string): Promise<Out> {
     logEvent(turn.user.id, "CHECKIN_STYLE_CHANGED", null, { checkinsEnabled });
     return {
       content: checkinsEnabled ? t.CHECKINS_ON : t.CHECKINS_OFF,
-      actions: checkinsEnabled ? [...others(turn.settings.checkinTone), UNDO_ACTION] : [{ label: lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", text: "Turn check-ins back on" }],
+      actions: checkinsEnabled ? [...others(turn.settings.checkinTone), UNDO_ACTION] : [sayAction(lang === "ur" ? "دوبارہ آن کریں" : "Turn back on", "set_checkin_style", "Turn check-ins back on")],
       intent: checkinsEnabled ? "checkins_on" : "checkins_off",
     };
   }
@@ -283,7 +289,7 @@ async function chooseOrResolve(
     return {
       out: {
         content: "Which task do you mean?",
-        actions: r.candidates.map((t, i) => ({ label: truncate(t.title, 32), text: `${i + 1}` })),
+        actions: r.candidates.map((t, i) => answerAction(truncate(t.title, 32), "choose_task", `${i + 1}`)),
         cards: [{ type: "task_list", title: "Did you mean", tasks: r.candidates.map((t) => serializeTask(t)) }],
         intent: "choose_task",
       },
@@ -292,7 +298,7 @@ async function chooseOrResolve(
   return {
     out: {
       content: u.targetRef ? `I couldn't find a task matching "${u.targetRef}". Which one do you mean?` : "Which task do you mean?",
-      actions: [{ label: "Show my tasks", text: "Show my tasks" }],
+      actions: [sayAction("Show my tasks", "query_tasks", "Show my tasks")],
       intent: "not_found",
     },
   };
@@ -367,9 +373,9 @@ async function updateIntent(turn: Turn, u: Understanding, text: string): Promise
     return {
       content: `What should I change about "${found.task.title}"?`,
       actions: [
-        { label: "Move to tomorrow", text: "move it to tomorrow" },
-        { label: "Make it urgent", text: "make it urgent" },
-        { label: "Change time", text: "change it to 5 PM" },
+        commandAction("Move to tomorrow", "update_task", { text: "move it to tomorrow", ref: found.task.title }, { text: "move it to tomorrow" }),
+        commandAction("Make it urgent", "update_task", { text: "make it urgent", ref: found.task.title }, { text: "make it urgent" }),
+        commandAction("Change time", "update_task", { text: "change it to 5 PM", ref: found.task.title }, { text: "change it to 5 PM" }),
       ],
       intent: "update_ask",
     };
@@ -575,7 +581,7 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
   return {
     content,
     cards: [{ type: "task_list", title: label, tasks: shown.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }],
-    actions: [{ label: "Plan my day", payload: { type: "plan_day" } }, { label: "Read them to me", text: "Read back my tasks" }],
+    actions: [{ label: "Plan my day", payload: { type: "plan_day" } }, sayAction("Read them to me", "read_back", "Read back my tasks")],
     intent: "query_tasks",
   };
 }
@@ -892,6 +898,34 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     case "open_task":
     case "navigate":
       return { content: "Opening…", intent: "navigate" };
+    case "command": {
+      // A button names its command: it runs that command, whatever its text would have matched. A new request
+      // replaces the open question, as a typed command does.
+      const command = getCommand(payload.command);
+      if (!command) return { content: "That option isn't available any more.", intent: "unknown_command" };
+      let args: CommandArgs = payload.args ?? {};
+      const text = typeof args.text === "string" ? args.text : undefined;
+      // Only a sentence given: this command's own parser reads its arguments (never another command's).
+      if (!command.wrapped && text && Object.keys(args).length === 1) args = command.parse(text, parseCtx(extractOpts(turn))) ?? args;
+      turn.state.pending = null;
+      return runCommand(turn, command.name, args, { text });
+    }
+    case "answer": {
+      // Only for the question it was shown with; that question may have been answered or replaced since.
+      const p = turn.state.pending;
+      if (!p || p.kind !== payload.pending) return { content: "That question is already closed. What would you like to do?", intent: "answer_closed" };
+      if (p.kind === "offer") {
+        // The offer runs as its own text, the same as a typed "yes" (acceptOffer in dialogue.ts).
+        turn.state.pending = null;
+        const r = await handleText(turn, acceptOffer(extractOpts(turn), p.text, payload.text) ?? p.text);
+        return { ...r, answered: "offer" };
+      }
+      const u = await understand(payload.text, { ...extractOpts(turn), history: [], allowLlm: false });
+      const r = await resolvePending(turn, payload.text, u, true);
+      return r ? { ...r, answered: p.kind } : { content: "Okay.", intent: "noop" };
+    }
+    case "talk":
+      return conversationalReply(turn, "Can we talk about it?", "support");
     default:
       return { content: "Okay.", intent: "noop" };
   }
@@ -950,7 +984,7 @@ async function overdueAction(turn: Turn, taskId: string, choice: "complete_now" 
   if (choice === "extension") {
     return {
       content: `Asking for an extension is up to you — a short, honest message usually works. Want a reminder to send it?`,
-      actions: [{ label: "Remind me today 5 PM", text: `Remind me to ask for an extension on ${task.title} today at 5 PM`, style: "primary" }],
+      actions: [sayAction("Remind me today 5 PM", "create_task", `Remind me to ask for an extension on ${task.title} today at 5 PM`, "primary")],
       intent: "overdue_extension",
     };
   }
