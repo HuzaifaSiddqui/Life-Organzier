@@ -1,0 +1,210 @@
+{
+ "name": "ollama-v1",
+ "date": "2026-10-28",
+ "tag": "baseline-ollama-v1",
+ "commit": "2988159c379479be1f69594939f30267641a638d",
+ "machine": {
+  "cpu": "Apple M1",
+  "ramGB": 16,
+  "os": "macOS 26.5.2",
+  "node": "v24.21.0",
+  "postgres": "16.13",
+  "ollama": "0.34.3"
+ },
+ "models": {
+  "chat": "qwen2.5:7b (845dbda0ea48)",
+  "embeddings": "nomic-embed-text (0a109f422b47)",
+  "checkinCopy": "gemini-3.8-flash first, then Ollama, then the built-in library"
+ },
+ "env": {
+  "AI_PROVIDER": "ollama",
+  "OLLAMA_MODEL": "qwen2.5:7b",
+  "GEMINI_MODEL": "gemini-3.8-flash",
+  "GEMINI_API_KEY": "set (value not recorded)",
+  "GEMINI_FALLBACK": "unset",
+  "MEANING_ROUTER": "off (unset)",
+  "UNKNOWN_LOG": "on (unset)"
+ },
+ "versions": {
+  "@prisma/client": "6.19.3",
+  "express": "4.22.1",
+  "tesseract.js": "7.0.0",
+  "sharp": "0.34.4",
+  "pdfjs-dist": "5.4.296",
+  "typescript": "5.9.3",
+  "tsx": "4.21.0"
+ },
+ "tests": {
+  "backendTypecheckErrors": 0,
+  "backend": {
+   "tests": 358,
+   "pass": 358,
+   "fail": 0,
+   "skipped": 0
+  },
+  "mobile": {
+   "typecheck": "clean",
+   "tests": 41,
+   "pass": 41
+  }
+ },
+ "chatEval": {
+  "aiOff": true,
+  "assistantEval": {
+   "correct": 211,
+   "total": 215
+  },
+  "byLanguage": {
+   "en": [
+    145,
+    147
+   ],
+   "ru": [
+    48,
+    50
+   ],
+   "ur": [
+    18,
+    18
+   ]
+  },
+  "knownMisses": [
+   "m22",
+   "m32",
+   "m33",
+   "w09"
+  ],
+  "heldOut": "chat-holdout.json has no scored rows"
+ },
+ "pendingMatrix": {
+  "correct": 230,
+  "total": 230
+ },
+ "queryEval": {
+  "precision": 1.0,
+  "recall": 0.943,
+  "exact": [
+   44,
+   46
+  ],
+  "negativesEmpty": [
+   10,
+   10
+  ]
+ },
+ "routerGate": {
+  "bankRows": 259,
+  "aiOff": {
+   "en": {
+    "n": 201,
+    "rules": 0.98,
+    "neighbours": 0.428,
+    "combined": 0.98
+   },
+   "ru": {
+    "n": 58,
+    "rules": 0.966,
+    "neighbours": 0.293,
+    "combined": 0.966
+   }
+  },
+  "aiOn": {
+   "en": {
+    "n": 201,
+    "rules": 0.98,
+    "neighbours": 0.537,
+    "llmRouterNoExamples": 0.985,
+    "combined": 0.985
+   },
+   "ru": {
+    "n": 58,
+    "rules": 0.966,
+    "neighbours": 0.328,
+    "llmRouterNoExamples": 0.983,
+    "combined": 0.983
+   },
+   "askedOnRulesRight": "0/253",
+   "modelCalls": 7,
+   "modelCallMs": {
+    "median": 6132,
+    "p95": 13351
+   }
+  },
+  "meaningRouterFlag": "off"
+ },
+ "documentEval": {
+  "documents": 69,
+  "aiOff": {
+   "recall": [
+    153,
+    154
+   ],
+   "precision": [
+    153,
+    153
+   ],
+   "textRecall": 1.0,
+   "imageRecall": 0.986
+  },
+  "aiOn": {
+   "recall": [
+    153,
+    154
+   ],
+   "precision": [
+    153,
+    154
+   ],
+   "note": "one extra item \"Midter Ex\" on the noisy multiline-exam image"
+  },
+  "missOnBoth": "images/multiline-exam.noise.jpg: Midterm 2026-11-15 10 AM"
+ },
+ "privateDocuments": "tests/eval/documents/private has 1 image (timetable-real.jpg) and no manifest: not scored",
+ "latency": {
+  "evenSample40": {
+   "aiOff": {
+    "ai": false,
+    "unsure": false,
+    "messages": 40,
+    "failed": 0,
+    "over1s": 0,
+    "medianMs": 8,
+    "p95Ms": 29,
+    "maxMs": 131
+   },
+   "aiOn": {
+    "ai": true,
+    "unsure": false,
+    "messages": 40,
+    "failed": 0,
+    "over1s": 0,
+    "medianMs": 10,
+    "p95Ms": 42,
+    "maxMs": 142
+   }
+  },
+  "rulesUnsure": {
+   "aiOff": {
+    "ai": false,
+    "unsure": true,
+    "messages": 7,
+    "failed": 0,
+    "over1s": 0,
+    "medianMs": 10,
+    "p95Ms": 38,
+    "maxMs": 38
+   },
+   "aiOn": {
+    "ai": true,
+    "unsure": true,
+    "messages": 7,
+    "failed": 0,
+    "over1s": 7,
+    "medianMs": 5959,
+    "p95Ms": 8573,
+    "maxMs": 8573
+   }
+  }
+ },
+ "gateLatencyRule": "p95 per message may not be worse than this baseline by more than 2 s (rulesUnsure.aiOn.p95Ms is the AI path)"
+}
