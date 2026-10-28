@@ -7,7 +7,7 @@ import { sendError, sendSuccess } from "../../utils/apiResponse.js";
 import { agentStatus, connectAgent, disconnectAgent, requireAgentFeature, sendTestMessage, updateAgentSettings } from "./service.js";
 
 /**
- * /api/whatsapp-agent (WHATSAPP_AGENT=on). Every route needs a signed-in user and acts only on that user's own
+ * /api/whatsapp-agent (Pro; on unless WHATSAPP_AGENT=off). Every route needs a signed-in user and acts only on that user's own
  * connection. Connect and test messages are rate-limited per user. The API key is accepted once and never
  * returned: responses show only its last 4 characters.
  */

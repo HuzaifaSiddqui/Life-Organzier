@@ -16,7 +16,10 @@ import { PgAdvisoryLock } from "../src/modules/whatsappAgent/lock.js";
 import { Outbox, PRIORITY } from "../src/modules/whatsappAgent/outbox.js";
 import { ConnectionLimiter, TokenBucket, type Clock } from "../src/modules/whatsappAgent/rateLimiter.js";
 import { composeReminder, resetAgentReminderState, sendDueAgentReminders } from "../src/modules/whatsappAgent/reminders.js";
-import { decryptSecret, encryptSecret, last4 } from "../src/modules/whatsappAgent/secrets.js";
+import { decryptSecret, encryptSecret, last4, resetGeneratedSecret } from "../src/modules/whatsappAgent/secrets.js";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { agentStatus, connectAgent, disconnectAgent, remindersViaAgent, updateAgentSettings } from "../src/modules/whatsappAgent/service.js";
 import { nextOffset, normalizeUpdate, type AgentUpdate } from "../src/modules/whatsappAgent/shapes.js";
 import { FakeAgentServer, textPdf } from "./fakes/fakeAgentServer.js";
@@ -39,7 +42,6 @@ for (const level of ["log", "info", "warn", "error", "debug"] as const) {
 const responses: string[] = [];
 
 process.env.WHATSAPP_KEY_SECRET = "a".repeat(64);
-process.env.WHATSAPP_AGENT = "on";
 
 const fake = await new FakeAgentServer().start();
 process.env.WHATSAPP_AGENT_BASE_URL = fake.base;
@@ -85,7 +87,7 @@ function fakeClock(start = 0): Clock & { t: number; slept: number[] } {
 
 async function makeUser(over: Partial<UserSettings> = {}): Promise<{ user: User; settings: UserSettings }> {
   const user = await prisma.user.create({
-    data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test`, settings: { create: { timezone: "Asia/Karachi", ...over } } },
+    data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test`, settings: { create: { timezone: "Asia/Karachi", tier: "PRO", ...over } } },
     include: { settings: true },
   });
   created.push(user.id);
@@ -125,6 +127,26 @@ test("secrets: AES-256-GCM round trip; bound to the owner; tampering fails; the 
   process.env.WHATSAPP_KEY_SECRET = "short";
   assert.throws(() => encryptSecret(KEY, "user-a"), /32 bytes/);
   process.env.WHATSAPP_KEY_SECRET = saved;
+});
+
+test("secrets: without WHATSAPP_KEY_SECRET the server makes one, keeps it in a file and reuses it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "wa-secret-"));
+  const saved = process.env.WHATSAPP_KEY_SECRET;
+  try {
+    delete process.env.WHATSAPP_KEY_SECRET;
+    process.env.WHATSAPP_KEY_SECRET_FILE = join(dir, "nested", "whatsapp-key-secret");
+    resetGeneratedSecret();
+    const blob = encryptSecret(KEY, "user-a");
+    assert.ok(existsSync(process.env.WHATSAPP_KEY_SECRET_FILE));
+    assert.match(readFileSync(process.env.WHATSAPP_KEY_SECRET_FILE, "utf8"), /^[0-9a-f]{64}$/);
+    resetGeneratedSecret(); // a restart: the same secret is read back, so stored keys still decrypt
+    assert.equal(decryptSecret(blob, "user-a"), KEY);
+  } finally {
+    process.env.WHATSAPP_KEY_SECRET = saved;
+    delete process.env.WHATSAPP_KEY_SECRET_FILE;
+    resetGeneratedSecret();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("shapes: text, voice, photo and PDF updates in the assumed and alternative layouts", () => {
@@ -299,6 +321,32 @@ test("connect: a wrong key is refused without echoing it; a good key is stored e
   assert.ok(!row.encryptedKey.includes(KEY));
   assert.equal(decryptSecret(row.encryptedKey, user.id), KEY);
   assert.equal(row.lastOffset, String(old[1] + 1), "starts after the newest update: nothing old is replayed");
+  await disconnectAgent(user.id);
+});
+
+test("Pro only: Free users can't connect; a user back on Free stops being polled and gets a Pro notice", { skip }, async () => {
+  const free = await makeUser({ tier: "FREE" });
+  await assert.rejects(connectAgent(free.user.id, KEY), (e: Error & { code?: string }) => e.code === "PRO_REQUIRED");
+  const freeStatus = await agentStatus(free.user.id);
+  responses.push(JSON.stringify(freeStatus));
+  assert.equal(freeStatus.pro, false);
+
+  await drain(KEY);
+  const { user, row } = await connected();
+  const m = manager(async () => undefined);
+  assert.equal(await m.add(row.id), true);
+  await prisma.userSettings.update({ where: { userId: user.id }, data: { tier: "FREE" } });
+  await m.rescan();
+  assert.equal(m.isPolling(row.id), false);
+  assert.equal(await m.add(row.id), false);
+  const io = collectingIO();
+  await handleAgentUpdate(row, update({ text: "what's due today" }), io);
+  assert.equal(io.replies.at(-1), agentCopy("en").proOnly);
+  assert.equal(await prisma.conversationMessage.count({ where: { userId: user.id } }), 0);
+  await prisma.userSettings.update({ where: { userId: user.id }, data: { tier: "PRO" } });
+  await m.rescan();
+  assert.equal(m.isPolling(row.id), true, "polling resumes after upgrading");
+  await m.stop();
   await disconnectAgent(user.id);
 });
 
@@ -483,15 +531,18 @@ test("documents: the real pipeline reads a PDF, nothing is created until '1'; nu
   await disconnectAgent(user.id);
 });
 
-test("voice notes: off by default; with a fake STT the reply starts with what was heard; low confidence asks to type; crisis in a transcript", { skip }, async () => {
+test("voice notes: on by default; no transcriber → please type; the user's switch; with a fake STT the reply starts with what was heard; low confidence asks to type; crisis in a transcript", { skip }, async () => {
   const { user, row } = await connected();
   const io = collectingIO();
   fake.media.set("voice-1", { bytes: Buffer.from("OggS fake audio"), type: "audio/ogg" });
   const voice = () => update({ kind: "voice", media: { id: "voice-1", mimeType: "audio/ogg", size: 15, duration: 3, fileName: null } });
+  assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).waAgentVoice, true, "on by default");
+  setStt(null);
+  await handleAgentUpdate(row, voice(), io);
+  assert.equal(io.replies.at(-1), agentCopy("en").voiceUnavailable, "no transcriber running: please type");
+  await prisma.userSettings.update({ where: { userId: user.id }, data: { waAgentVoice: false } });
   await handleAgentUpdate(row, voice(), io);
   assert.equal(io.replies.at(-1), agentCopy("en").voiceOff);
-
-  process.env.WHATSAPP_VOICE = "on";
   await prisma.userSettings.update({ where: { userId: user.id }, data: { waAgentVoice: true } });
   let next = { text: "Complete math assignment by Friday 3 PM", confidence: 0.9 as number | null };
   const stt: SttProvider = { name: "fake", dataLocation: "test", transcribe: async () => ({ ...next, language: "en", ms: 5 }) };
@@ -510,12 +561,11 @@ test("voice notes: off by default; with a fake STT the reply starts with what wa
     assert.equal(io.replies.at(-1), agentCopy("en").voiceTooLong);
   } finally {
     setStt(undefined);
-    delete process.env.WHATSAPP_VOICE;
   }
   await disconnectAgent(user.id);
 });
 
-test("reminders: off unless enabled; sent on WhatsApp with numbered actions that reuse the push handlers; a failed send falls back to push", { skip }, async () => {
+test("reminders: on by default (WhatsApp + phone), a server kill switch; sent on WhatsApp with numbered actions that reuse the push handlers; a failed send falls back to push", { skip }, async () => {
   await drain(KEY);
   const { user, row } = await connected(KEY, { quietStart: "00:00", quietEnd: "00:00" });
   const m = manager();
@@ -524,11 +574,12 @@ test("reminders: off unless enabled; sent on WhatsApp with numbered actions that
   const taskRow = await prisma.task.create({ data: { userId: user.id, title: "Submit essay", dueAt: new Date(now.getTime() + 2 * 3600000), dueDate: new Date(now.getTime() + 2 * 3600000), dueTime: "11:59 PM" } });
   const log = await prisma.reminderLog.create({ data: { userId: user.id, taskId: taskRow.id, fireAt: new Date(now.getTime() - 60000), level: "normal", status: "SCHEDULED" } });
 
-  assert.equal(await sendDueAgentReminders(m, now), 0, "WHATSAPP_AGENT_REMINDERS is off");
+  assert.equal((await agentStatus(user.id)).reminders.setting, "BOTH", "on by default, phone notifications too");
+  assert.equal(await remindersViaAgent(user.id), false, "in BOTH the phone keeps its own notifications");
+  process.env.WHATSAPP_AGENT_REMINDERS = "off";
+  assert.equal(await sendDueAgentReminders(m, now), 0, "kill switch");
   await assert.rejects(updateAgentSettings(user.id, { reminders: "WHATSAPP" }), (e: Error & { code?: string }) => e.code === "REMINDERS_UNAVAILABLE");
-  assert.equal(await remindersViaAgent(user.id), false);
-
-  process.env.WHATSAPP_AGENT_REMINDERS = "on";
+  delete process.env.WHATSAPP_AGENT_REMINDERS;
   resetAgentReminderState();
   try {
     await updateAgentSettings(user.id, { reminders: "WHATSAPP" });
@@ -558,7 +609,6 @@ test("reminders: off unless enabled; sent on WhatsApp with numbered actions that
     assert.ok(pushes.slice(pushesBefore).some((p) => p.title === "Submit essay"));
     assert.match((await agentStatus(user.id)).lastError ?? "", /phone notification/);
   } finally {
-    delete process.env.WHATSAPP_AGENT_REMINDERS;
     await m.stop();
   }
   await disconnectAgent(user.id);
@@ -570,11 +620,12 @@ test("disconnect: the poller stops, the key is deleted, reminders go back to the
   const m = manager();
   setAgentManager(m);
   await m.add(row.id);
-  await prisma.userSettings.update({ where: { userId: user.id }, data: { waAgentReminders: "BOTH" } });
+  await prisma.userSettings.update({ where: { userId: user.id }, data: { waAgentReminders: "WHATSAPP" } });
+  assert.equal(await remindersViaAgent(user.id), true);
   await disconnectAgent(user.id);
   assert.equal(m.isPolling(row.id), false);
   assert.equal(await prisma.whatsAppAgentConnection.count({ where: { userId: user.id } }), 0);
-  assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).waAgentReminders, "OFF");
+  assert.equal(await remindersViaAgent(user.id), false, "the phone schedules its reminders again");
   const status = await agentStatus(user.id);
   responses.push(JSON.stringify(status));
   assert.equal(status.status, null);

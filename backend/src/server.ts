@@ -14,7 +14,7 @@ const server = app.listen(port, "0.0.0.0", () => {
   console.log(`API listening on http://localhost:${port}`);
   if (process.env.DISABLE_JOBS !== "true") startJobs();
   void checkAndWarmModels();
-  // Off unless WHATSAPP_AGENT=on (docs/whatsapp-agent.md). Outbound polling only: no tunnel needed.
+  // On unless WHATSAPP_AGENT=off (docs/whatsapp-agent.md). Outbound polling only: no tunnel needed.
   startWhatsappAgent().catch((error) => console.warn("WhatsApp Agent could not start:", error instanceof Error ? error.message : error));
 });
 // Graceful shutdown: stop the WhatsApp Agent pollers (releases their locks) before exiting.

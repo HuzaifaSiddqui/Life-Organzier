@@ -6,11 +6,11 @@ import { PgAdvisoryLock } from "./lock.js";
 import { sendDueAgentReminders } from "./reminders.js";
 import { secretConfigured } from "./secrets.js";
 
-/** Starts the WhatsApp Agent pollers when WHATSAPP_AGENT=on (and the key secret is set). Null when off. */
+/** Starts the WhatsApp Agent pollers (on unless WHATSAPP_AGENT=off). The key secret is created if missing. Null when off. */
 export async function startWhatsappAgent(): Promise<AgentConnectionManager | null> {
   if (!agentEnabled()) return null;
   if (!secretConfigured()) {
-    console.warn("WhatsApp Agent is on but WHATSAPP_KEY_SECRET is missing or not 32 bytes; not starting.");
+    console.warn("WhatsApp Agent: WHATSAPP_KEY_SECRET is not 32 bytes (64 hex characters or base64), or the generated secret file can't be written; not starting.");
     return null;
   }
   const manager = new AgentConnectionManager({ lock: new PgAdvisoryLock(), handler: (connection, update, io) => handleAgentUpdate(connection, update, io) });

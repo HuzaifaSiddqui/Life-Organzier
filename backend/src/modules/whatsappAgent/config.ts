@@ -1,13 +1,14 @@
 /**
- * WhatsApp Agent flags and limits (docs/whatsapp-agent.md). Everything is off unless WHATSAPP_AGENT=on.
+ * WhatsApp Agent flags and limits (docs/whatsapp-agent.md). Everything is on by default: a Pro user pastes their
+ * agent's key in the app and the server does the rest. The variables are kill switches ("off").
  * The limits come from a community implementation, not Meta's documentation (see docs/whatsapp-agent-findings.md).
  */
 
-export const agentEnabled = (): boolean => process.env.WHATSAPP_AGENT === "on";
-/** Voice notes: off until a speech-to-text provider is approved (STT_PROVIDER). */
-export const agentVoiceEnabled = (): boolean => agentEnabled() && process.env.WHATSAPP_VOICE === "on";
-/** Reminders on WhatsApp: off until the probe confirms the agent may message first. */
-export const agentRemindersEnabled = (): boolean => agentEnabled() && process.env.WHATSAPP_AGENT_REMINDERS === "on";
+export const agentEnabled = (): boolean => process.env.WHATSAPP_AGENT !== "off";
+/** Voice notes (transcribed by STT_PROVIDER, local whisper.cpp by default). */
+export const agentVoiceEnabled = (): boolean => agentEnabled() && process.env.WHATSAPP_VOICE !== "off";
+/** Reminders on WhatsApp. */
+export const agentRemindersEnabled = (): boolean => agentEnabled() && process.env.WHATSAPP_AGENT_REMINDERS !== "off";
 
 export const agentBaseUrl = (): string => (process.env.WHATSAPP_AGENT_BASE_URL || "https://api.whatsapp.com/agent/v1").replace(/\/$/, "");
 

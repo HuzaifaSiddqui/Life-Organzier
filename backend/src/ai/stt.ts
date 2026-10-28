@@ -1,8 +1,8 @@
 /**
- * Speech-to-text behind a provider interface, like the LLM chain in llm.ts. Audio can't be masked before it
- * leaves the server, so only providers the project owner approved may be configured (STT_PROVIDER); the default
- * is none, and WhatsApp voice notes then get "please type it". Candidates and their data terms are listed in
- * docs/whatsapp-agent.md ("Voice notes"). Nothing here adds an npm dependency.
+ * Speech-to-text behind a provider interface, like the LLM chain in llm.ts. Audio can't be masked, so it is
+ * transcribed locally: the default provider is a whisper.cpp server on this machine (STT_PROVIDER=whisper-local),
+ * audio never leaves it. STT_PROVIDER=none turns transcription off. When the local server isn't running, WhatsApp
+ * voice notes get "please type it". Other candidates are listed in docs/whatsapp-agent.md. No npm dependency.
  */
 
 export type Transcript = {
@@ -18,6 +18,21 @@ export interface SttProvider {
   /** Where the audio goes, for the docs and the status endpoint ("this server", "OpenAI", …). */
   readonly dataLocation: string;
   transcribe(audio: Buffer, mimeType: string, opts: { languages: string[]; timeoutMs: number }): Promise<Transcript>;
+  /** Whether it can take audio right now (e.g. the local server is running). Absent = always. */
+  ready?(): Promise<boolean>;
+}
+
+const readyCache = new Map<string, { at: number; ok: boolean }>();
+
+/** `provider.ready()`, remembered for a minute so a burst of voice notes doesn't re-check each time. */
+export async function sttReady(provider: SttProvider | null): Promise<boolean> {
+  if (!provider) return false;
+  if (!provider.ready) return true;
+  const hit = readyCache.get(provider.name);
+  if (hit && Date.now() - hit.at < 60000) return hit.ok;
+  const ok = await provider.ready().catch(() => false);
+  readyCache.set(provider.name, { at: Date.now(), ok });
+  return ok;
 }
 
 /** Below this the user is asked to type it instead. Providers without a confidence are judged on the text alone. */
@@ -45,6 +60,12 @@ export class WhisperCppProvider implements SttProvider {
 
   constructor(private readonly baseUrl = (process.env.WHISPER_URL || "http://127.0.0.1:8178").replace(/\/$/, "")) {}
 
+  /** Any answer from the server counts: whisper-server serves a page at "/". */
+  async ready(): Promise<boolean> {
+    const res = await fetch(`${this.baseUrl}/`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
+    return Boolean(res);
+  }
+
   async transcribe(audio: Buffer, mimeType: string, opts: { languages: string[]; timeoutMs: number }): Promise<Transcript> {
     const started = Date.now();
     const form = new FormData();
@@ -67,10 +88,10 @@ export class WhisperCppProvider implements SttProvider {
 
 let provider: SttProvider | null | undefined;
 
-/** The configured provider, or null (STT_PROVIDER unset or "none"). */
+/** The configured provider (local whisper.cpp unless STT_PROVIDER=none), or null. */
 export function getStt(): SttProvider | null {
   if (provider !== undefined) return provider;
-  provider = process.env.STT_PROVIDER === "whisper-local" ? new WhisperCppProvider() : null;
+  provider = process.env.STT_PROVIDER === "none" ? null : new WhisperCppProvider();
   return provider;
 }
 

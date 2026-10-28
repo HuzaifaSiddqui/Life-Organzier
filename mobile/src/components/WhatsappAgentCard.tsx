@@ -12,8 +12,9 @@ import { Button, Card, Chip, Skeleton, Text } from "./ui";
 /**
  * Settings → WhatsApp Agent (docs/whatsapp-agent.md). The user creates an agent in WhatsApp, copies its API key and
  * pastes it here. The key is sent once and never shown again (only ••••last4). Explicit consent to the privacy
- * notice (not end-to-end encrypted, Meta handles the messages, availability depends on Meta). Hidden when the
- * server has the feature off. English + Roman Urdu.
+ * notice (not end-to-end encrypted, Meta handles the messages, availability depends on Meta). Pro only (Free users
+ * see a locked card). The server does the rest: connection, polling, documents, voice notes and reminders are on by
+ * default. Hidden when the server has the feature switched off. English + Roman Urdu.
  */
 export function WhatsappAgentCard() {
   const { t } = useLocale();
@@ -106,6 +107,22 @@ export function WhatsappAgentCard() {
     </Text>
   ) : null;
 
+  if (!status.pro) {
+    return (
+      <Card style={{ gap: spacing.sm }}>
+        <View style={styles.row}>
+          <Icon name="lock" color={colors.textSecondary} />
+          <Text variant="bodyStrong" style={styles.flex}>
+            {t("waAgent.proLocked")}
+          </Text>
+        </View>
+        <Text variant="caption" color="secondary">
+          {t("waAgent.body")}
+        </Text>
+      </Card>
+    );
+  }
+
   if (status.connected) {
     const mode = status.reminders.setting;
     return (
@@ -148,7 +165,7 @@ export function WhatsappAgentCard() {
           <View style={[styles.flex, { gap: spacing.xs }]}>
             <Text variant="callout">{t("waAgent.voice")}</Text>
             <Text variant="caption" color="secondary">
-              {status.voice.available ? t("waAgent.voiceHint") : t("waAgent.voiceUnavailable")}
+              {!status.voice.available ? t("waAgent.voiceUnavailable") : status.voice.ready ? t("waAgent.voiceHint") : t("waAgent.voiceNotReady")}
             </Text>
           </View>
           <Switch

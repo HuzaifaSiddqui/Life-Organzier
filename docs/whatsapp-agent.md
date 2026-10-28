@@ -1,11 +1,14 @@
 # WhatsApp Agent
 
-Users connect **their own WhatsApp Agent** to Life Organizer: in WhatsApp they open Settings → Agents, create an
-agent, open it → Chat info → API key, and paste the key into the app (Settings → WhatsApp → WhatsApp Agent). The
-server then reads that agent's chat over the Agent API and answers through the same assistant engine as the app.
+**Pro** users connect **their own WhatsApp Agent** to Life Organizer: in WhatsApp they open Settings → Agents,
+create an agent, open it → Chat info → API key, and paste the key into the app (Settings → WhatsApp → WhatsApp
+Agent). That is the only step. The server does everything else by itself: it checks the key, creates the
+connection, starts polling, answers text, voice notes, photos, PDFs and Word files through the same assistant
+engine as the app, and sends reminders. Nothing has to be configured on the server: the feature, voice notes and
+reminders are **on by default**, and the key-encryption secret is generated on first start.
 
-This is a **beta path behind a flag** (`WHATSAPP_AGENT=on`, default off). The existing Twilio WhatsApp number
-(FR-WA-001/002, `modules/whatsapp/`) is untouched and keeps working; both can run at the same time.
+The existing Twilio WhatsApp number (FR-WA-001/002, `modules/whatsapp/`) is untouched and keeps working; both can
+run at the same time.
 
 > **Status of the API facts.** Everything we know about the Agent API comes from a community implementation, not
 > from Meta's documentation. The probe (`npm run wa:probe`) checks it on a real phone; results go in
@@ -22,23 +25,29 @@ This is a **beta path behind a flag** (`WHATSAPP_AGENT=on`, default off). The ex
 | Chats with an agent are **not end-to-end encrypted** | Community implementation (and shown to users as such) |
 | Offset / acknowledgement semantics (Telegram-style `offset = last id + 1`) | **Unconfirmed** — assumed by the code (`shapes.ts nextOffset`); probe step 1 checks it |
 | Exact JSON payloads (update envelope, message fields, send body, media answer) | **Unconfirmed** — the parser is tolerant (`shapes.ts`); probe records redacted shapes |
-| The agent may message first (reminders with no recent message from the user) | **Unconfirmed** — probe step 4. Reminders stay off (`WHATSAPP_AGENT_REMINDERS`) until confirmed |
+| The agent may message first (reminders with no recent message from the user) | **Unconfirmed** — probe step 4. Reminders are on by default in **Both** mode, so the phone's own notification still arrives if WhatsApp doesn't deliver |
 | Media size and format limits, voice note format, retention, availability in Pakistan | **Unconfirmed** |
 
-## Flags and configuration (`backend/.env`)
+## Configuration (`backend/.env`): nothing required
+
+Everything is on by default; the variables only switch things off or move them.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `WHATSAPP_AGENT` | off | `on` starts the pollers, enables `/api/whatsapp-agent` and shows the card in the app. Off: the routes answer 404 `FEATURE_OFF`, no poller runs, the card is hidden |
-| `WHATSAPP_KEY_SECRET` | — | Required with the flag: 32 bytes as 64 hex characters or base64 (`openssl rand -hex 32`). Encrypts API keys at rest. Losing it means every user must reconnect |
+| `WHATSAPP_AGENT` | on | `off` is the kill switch: no poller runs, the routes answer 404 `FEATURE_OFF`, the card is hidden |
+| `WHATSAPP_KEY_SECRET` | generated | Encrypts API keys at rest (32 bytes, 64 hex characters or base64). If unset, the server creates one on first start in `backend/.secrets/whatsapp-key-secret` (git-ignored; `WHATSAPP_KEY_SECRET_FILE` moves it) and logs where. **Back it up**: losing it means every user must paste their key again. An invalid value is an error, never silently replaced |
+| `WHATSAPP_AGENT_REMINDERS` | on | `off` stops reminders on WhatsApp for everyone (phones keep their notifications) |
+| `WHATSAPP_VOICE` | on | `off` stops transcribing voice notes (users are asked to type) |
+| `STT_PROVIDER` | `whisper-local` | `none` turns transcription off |
+| `WHISPER_URL` | `http://127.0.0.1:8178` | The local whisper.cpp server |
 | `WHATSAPP_AGENT_BASE_URL` | `https://api.whatsapp.com/agent/v1` | Only for tests / a different endpoint |
-| `WHATSAPP_AGENT_REMINDERS` | off | `on` lets users choose reminders on WhatsApp. Keep off until the probe confirms agent-first messages |
-| `WHATSAPP_VOICE` | off | `on` transcribes voice notes, if `STT_PROVIDER` is set and the user turned voice notes on |
-| `STT_PROVIDER` | none | `whisper-local` (see Voice notes). Only providers the project owner approved |
-| `WHISPER_URL` | `http://127.0.0.1:8178` | whisper.cpp server for `whisper-local` |
 
-**Revert:** set `WHATSAPP_AGENT=off` (or remove it) and restart. Pollers stop; stored connections stay (keys stay
-encrypted) and resume when the flag is turned on again. Phones get reminders as notifications again on their next
+**Pro only.** Connecting needs Pro (403 `PRO_REQUIRED`); Free users see a locked card. A user who goes back to Free
+stops being polled at the next minute's rescan (any message before that gets a Pro notice and is not processed);
+the connection is kept and polling resumes after upgrading. Reminders go only to Pro users.
+
+**Revert:** set `WHATSAPP_AGENT=off` and restart. Pollers stop; stored connections stay (keys stay
+encrypted) and resume when the switch is removed. Phones get reminders as notifications again on their next
 sync (the plan's `viaWhatsappAgent` is false when the flag is off). The migration is additive (two tables, two
 columns with defaults), so the code can be rolled back without a down-migration.
 
@@ -67,7 +76,7 @@ WhatsApp (user's agent) ⇄ Agent API ⇄ [long poll] connectionManager ─ Poll
 | `connectionManager.ts` | One poller per CONNECTED connection; start/add/remove/rescan/stop |
 | `rateLimiter.ts`, `outbox.ts` | Per-connection token buckets and the outbound queue |
 | `inbound.ts` | Text, voice and file handling (English + Roman Urdu replies) |
-| `reminders.ts` | Phase 3 delivery (off by default) |
+| `reminders.ts` | Reminder delivery (on by default, Both mode) |
 | `service.ts`, `routes.ts` | Connect / status / test / settings / disconnect |
 | `backend/src/modules/conversations/conversationContext.ts` | Context window (below) |
 | `backend/src/modules/assistant/commands/documents.ts` | Internal `document_add_items` / `document_review` commands |
@@ -136,14 +145,26 @@ reply lists the dated items (8 at most, "…and N more"), says how many need a d
 
 ### Voice notes
 
-Off by default (`WHATSAPP_VOICE` and the user's switch). At most 2 minutes / 5 MB. The note is downloaded,
-transcribed by the configured provider and handled as text; the reply starts with `I heard: "…"`. No provider, a
-failure, noise or low confidence → "Sorry, I couldn't make that out. Could you type it?". Audio can't be masked, so
-only an approved provider may be configured. Candidates (verify each one's current terms before approving):
+On by default (the user can turn it off in the card). At most 2 minutes / 5 MB. The note is downloaded,
+transcribed **locally** by whisper.cpp on the server (audio never leaves it; the app's own voice input uses the
+phone's speech recognizer, which can't read WhatsApp audio) and handled as text; the reply starts with
+`I heard: "…"`. If the whisper.cpp server isn't running (checked at most once a minute) the user gets "I can't
+listen to voice notes on this server yet. Please type your message."; a failure, noise or low confidence → "Sorry,
+I couldn't make that out. Could you type it?". The card shows "On, but the server can't transcribe right now"
+while the transcriber is down. Install on the server:
+
+1. Build whisper.cpp with its server (`cmake -B build && cmake --build build --config Release`; the binary is
+   `whisper-server`), or use a release build.
+2. Download a multilingual model: `ggml-small.bin` (≈ 0.5 GB) is a reasonable start; `ggml-medium.bin` is better for
+   Urdu but slower.
+3. Install ffmpeg (WhatsApp voice notes are Ogg/Opus).
+4. Run `whisper-server -m models/ggml-small.bin --convert --port 8178` next to the backend.
+
+Other candidates if local is too slow (not implemented; verify each one's terms before approving):
 
 | Candidate | Where the audio goes | Notes |
 |---|---|---|
-| **whisper.cpp, local** (`STT_PROVIDER=whisper-local`, implemented) | Stays on the server | Open source. Needs whisper.cpp built with `whisper-server`, a multilingual model (`ggml-small.bin` ≈ 0.5 GB, `medium` better for Urdu) and ffmpeg for WhatsApp's Ogg/Opus: `whisper-server -m models/ggml-small.bin --convert --port 8178`. No npm dependency. CPU latency depends on the machine |
+| **whisper.cpp, local** (default, implemented) | Stays on the server | Open source. Needs whisper.cpp built with `whisper-server`, a multilingual model (`ggml-small.bin` ≈ 0.5 GB, `medium` better for Urdu) and ffmpeg for WhatsApp's Ogg/Opus: `whisper-server -m models/ggml-small.bin --convert --port 8178`. No npm dependency. CPU latency depends on the machine |
 | OpenAI transcription API | OpenAI | Not implemented. Per OpenAI's API terms API data is not used for training by default and may be kept for a limited time for abuse monitoring; check the current policy |
 | Google Cloud Speech-to-Text (`ur-PK`, `en-PK`) | Google Cloud | Not implemented. Data logging is opt-in; check current terms |
 | Gemini (already an optional LLM provider) | Google | Not implemented. Free-tier terms differ from paid-tier terms on use of data; check before approving |
@@ -152,10 +173,11 @@ Roman Urdu: Whisper-family models write spoken Urdu in Urdu script unless steere
 instead of transliterate. The benchmark (`npm run stt:bench -- <folder>`, notes + `.txt` references, file names with
 `ru` count as Roman Urdu) reports word error rate and latency per language. **Not run yet: it needs your recordings.**
 
-### Reminders (Phase 3, off until the probe confirms agent-first messages)
+### Reminders (on by default)
 
-`UserSettings.waAgentReminders`: `OFF` (phone only, default), `WHATSAPP` (WhatsApp instead of phone notifications)
-or `BOTH`. The same planner as the phone (`planReminders`: quiet hours, DND, mandatory routines, the 60-slot cap)
+`UserSettings.waAgentReminders`: `BOTH` (WhatsApp and phone notifications, the default), `WHATSAPP` (WhatsApp
+instead of phone notifications) or `OFF` (phone only). Pro users with a connected agent only. Because the default is
+`BOTH`, a reminder WhatsApp doesn't deliver (agent-first sends are unconfirmed) still arrives as a notification. The same planner as the phone (`planReminders`: quiet hours, DND, mandatory routines, the 60-slot cap)
 decides what is due; the job runs every minute and serves only connections polled by that instance. Each reminder
 is claimed before sending (task rows SCHEDULED/SNOOZED → SENDING; routine reminders get a ReminderLog row), so
 overlapping runs never send twice. In `WHATSAPP` mode the reminder plan tells the phone (`settings.viaWhatsappAgent`)
@@ -169,11 +191,11 @@ that needs reconnecting turns `viaWhatsappAgent` off, and the reconnect push mak
 
 | Route | Body / answer |
 |---|---|
-| `GET /status` | `{ enabled, connected, status, keyLast4, polling, lastPollAt, rateLimitedUntil, lastError, consentAt, reminders: {setting, available}, voice: {setting, available} }`. Never the key |
-| `POST /connect` | `{ apiKey, consent: true }` → status. One validation poll. Errors: 400 `INVALID_KEY`, 403 `NOT_CREATOR`, 409 `KEY_IN_USE`, 429 `RATE_LIMITED`, 502 `NOT_AVAILABLE` / `UNREACHABLE`; 5 per 10 minutes per user |
+| `GET /status` | `{ enabled, pro, connected, status, keyLast4, polling, lastPollAt, rateLimitedUntil, lastError, consentAt, reminders: {setting, available}, voice: {setting, available, ready} }`. Never the key |
+| `POST /connect` | `{ apiKey, consent: true }` → status. Pro only (403 `PRO_REQUIRED`). One validation poll. Errors: 400 `INVALID_KEY`, 403 `NOT_CREATOR`, 409 `KEY_IN_USE`, 429 `RATE_LIMITED`, 502 `NOT_AVAILABLE` / `UNREACHABLE`; 5 per 10 minutes per user |
 | `POST /test` | Sends a short test message; 3 a minute |
-| `PATCH /settings` | `{ reminders?: "OFF" \| "WHATSAPP" \| "BOTH", voice?: boolean }`; 409 `REMINDERS_UNAVAILABLE` / `VOICE_UNAVAILABLE` when off on the server |
-| `DELETE /` | Stops the poller, deletes the connection and its key, reminders back to `OFF` |
+| `PATCH /settings` | `{ reminders?: "OFF" \| "WHATSAPP" \| "BOTH", voice?: boolean }`; 409 `REMINDERS_UNAVAILABLE` / `VOICE_UNAVAILABLE` when switched off on the server |
+| `DELETE /` | Stops the poller, deletes the connection and its key. Reminders go back to the phone at once (nothing is sent without a connection); the user's choice is kept for next time |
 
 ## Privacy position
 
@@ -219,11 +241,10 @@ server polls it with that user's key. What changes:
 
 - No business number, webhook or public URL; no per-message Business API cost. Availability depends on Meta's
   Agents rollout (beta) instead of a Twilio account.
-- The 24-hour window may not apply, but whether the agent may message first is unconfirmed, so reminders stay off
-  until the probe shows it (FR-WA-002's window rule is then replaced by the user's own opt-in).
+- The 24-hour window may not apply, but whether the agent may message first is unconfirmed, so reminders go to
+  WhatsApp **and** the phone by default (FR-WA-002's window rule is replaced by that double path).
 - Not end-to-end encrypted, unlike a normal WhatsApp chat (the Business API has the same property).
-- It is not Pro-gated: the user brings their own agent and it costs the project nothing per message. The Twilio
-  number stays Pro-only as the FRD says.
+- Pro only, like FR-WA's WhatsApp features.
 - Everything else in FR-WA-001 holds: text, voice (transcribed, when approved), images/PDFs, multi-turn context,
   the same commands, clarifying questions. The Twilio implementation stays in place, so the FRD path is still
   available; this path is an additional, flag-guarded channel.
@@ -238,11 +259,13 @@ See [known-limitations.md](known-limitations.md#whatsapp-agent).
    key shown as ••••last4.
 2. Send test message → it arrives in the agent's chat.
 3. Text "Add assignment due Friday 3 PM" → reply; the task is in the app.
-4. Voice note (with `WHATSAPP_VOICE=on`, a provider and the switch on) → reply starts "I heard: …".
+4. Voice note (whisper.cpp running on the server) → reply starts "I heard: …"; with it stopped → "please type".
 5. Photo of a timetable / deadline sheet → summary with 1 / 2 / 3; nothing created yet; "1" → added.
 6. PDF → same; a ZIP or a > 10 MB file → clear refusal.
 7. Numbered reply: "help" → "1" runs the first option.
-8. Reminder on WhatsApp (only with `WHATSAPP_AGENT_REMINDERS=on`): choose "WhatsApp", make a task due soon → the
-   reminder arrives on WhatsApp and not as a notification; "2" snoozes 15 min.
-9. Regenerate the key in WhatsApp → push "WhatsApp needs reconnecting", chip "Needs reconnect"; paste the new key.
-10. Disconnect → the poller stops; reminders come as notifications again.
+8. Reminders (default Both): make a task due soon → the reminder arrives on WhatsApp and as a notification; choose
+   "WhatsApp" in the card → only on WhatsApp; "2" snoozes 15 min.
+9. As a Free user: the card is locked; switch a connected user to Free → within a minute WhatsApp messages get the
+   Pro notice and are not processed.
+10. Regenerate the key in WhatsApp → push "WhatsApp needs reconnecting", chip "Needs reconnect"; paste the new key.
+11. Disconnect → the poller stops; reminders come as notifications again.

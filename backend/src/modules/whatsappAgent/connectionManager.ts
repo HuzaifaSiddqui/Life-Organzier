@@ -212,7 +212,8 @@ export class AgentConnectionManager {
   }
 
   async rescan(): Promise<void> {
-    const rows = await prisma.whatsAppAgentConnection.findMany({ where: { status: "CONNECTED" }, select: { id: true } });
+    // Pro only: a connection whose user went back to Free stops here (and starts again after upgrading).
+    const rows = await prisma.whatsAppAgentConnection.findMany({ where: { status: "CONNECTED", user: { settings: { tier: "PRO" } } }, select: { id: true } });
     const live = new Set(rows.map((r) => r.id));
     for (const id of [...this.pollers.keys()]) if (!live.has(id)) await this.remove(id);
     for (const r of rows) await this.add(r.id);
@@ -221,13 +222,14 @@ export class AgentConnectionManager {
   /** Starts polling this connection here, unless it already runs here or on another instance. */
   async add(connectionId: string): Promise<boolean> {
     if (this.pollers.has(connectionId)) return true;
-    const row = await prisma.whatsAppAgentConnection.findUnique({ where: { id: connectionId } });
-    if (!row || row.status !== "CONNECTED") return false;
+    const row = await prisma.whatsAppAgentConnection.findUnique({ where: { id: connectionId }, include: { user: { select: { settings: { select: { tier: true } } } } } });
+    if (!row || row.status !== "CONNECTED" || row.user.settings?.tier !== "PRO") return false;
     if (!(await this.lock.tryAcquire(connectionId))) return false;
     if (this.pollers.has(connectionId)) return true; // added meanwhile
     let poller: Poller;
     try {
-      poller = new Poller(row, this);
+      const { user: _user, ...connection } = row;
+      poller = new Poller(connection, this);
     } catch (error) {
       logSafe("could not start", error);
       await this.lock.release(connectionId).catch(() => undefined);

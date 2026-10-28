@@ -35,6 +35,8 @@ for (const key of new Set([...Object.keys(process.env), ...Object.keys(fromFile)
   if (/^(?:TWILIO_|EXPO_)/.test(key)) process.env[key] = "";
 }
 process.env.AI_ENABLED = "false";
+// No real speech-to-text (the default is a local whisper.cpp server); a voice test installs a fake with setStt().
+process.env.STT_PROVIDER = "none";
 // Unknown messages are not logged to backend/logs from tests (a test that checks the log sets its own path).
 process.env.UNKNOWN_LOG_PATH = "off";
 process.env.GEMINI_API_KEY = "";

@@ -4,6 +4,7 @@ import { scheduleReminderSync } from "./reminders";
 /** WhatsApp Agent connection (server: /api/whatsapp-agent). The API key is sent once and never comes back. */
 export type AgentStatus = {
   enabled: boolean;
+  pro: boolean;
   connected: boolean;
   status: "PENDING" | "CONNECTED" | "NEEDS_RECONNECT" | "ERROR" | "DISABLED" | null;
   keyLast4: string | null;
@@ -13,7 +14,8 @@ export type AgentStatus = {
   lastError: string | null;
   consentAt: string | null;
   reminders: { setting: "OFF" | "WHATSAPP" | "BOTH"; available: boolean };
-  voice: { setting: boolean; available: boolean };
+  /** available: on for this server; ready: the server can transcribe right now. */
+  voice: { setting: boolean; available: boolean; ready: boolean };
 };
 
 export function getAgentStatus(): Promise<AgentStatus> {

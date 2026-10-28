@@ -14,13 +14,13 @@ import { CHANNEL } from "./inbound.js";
 import { PRIORITY } from "./outbox.js";
 
 /**
- * Phase 3: reminders on the user's WhatsApp Agent (WHATSAPP_AGENT_REMINDERS=on, off until the probe confirms the
- * agent may message first). Same planner as the phone (planReminders: quiet hours, DND, mandatory routines, the
+ * Phase 3: reminders on the user's WhatsApp Agent (Pro; on by default in BOTH mode; WHATSAPP_AGENT_REMINDERS=off
+ * turns them off for the whole server). Same planner as the phone (planReminders: quiet hours, DND, mandatory routines, the
  * 60-slot cap), so WhatsApp gets exactly the reminders the phone would show.
  *
- * Modes (UserSettings.waAgentReminders): OFF = phone only (default); WHATSAPP = WhatsApp instead of phone
+ * Modes (UserSettings.waAgentReminders): BOTH = WhatsApp and the phone (default); OFF = phone only; WHATSAPP = WhatsApp instead of phone
  * notifications (the plan tells the phone not to schedule them, so nothing arrives twice), with a push if a send
- * fails; BOTH = WhatsApp and the phone. Only connections polled by this instance are served (their send budget
+ * fails. Only connections polled by this instance are served (their send budget
  * lives here), and each reminder is claimed before it is sent, so overlapping runs never send it twice.
  *
  * Numbered actions reuse the push buttons' handlers: tasks 1 Done (complete_task), 2 Snooze 15 min (snooze_task);
@@ -155,10 +155,10 @@ async function deliverFor(manager: AgentConnectionManager, conn: WhatsAppAgentCo
   return 0;
 }
 
-/** Every minute: due reminders for connected users who chose WhatsApp. 0 when the feature is off. */
+/** Every minute: due reminders for connected Pro users (BOTH or WHATSAPP). 0 when switched off. */
 export async function sendDueAgentReminders(manager: AgentConnectionManager | null, now = new Date()): Promise<number> {
   if (!agentRemindersEnabled() || !manager) return 0;
-  const conns = await prisma.whatsAppAgentConnection.findMany({ where: { status: "CONNECTED", user: { settings: { waAgentReminders: { in: ["WHATSAPP", "BOTH"] } } } }, include: { user: { include: { settings: true } } } });
+  const conns = await prisma.whatsAppAgentConnection.findMany({ where: { status: "CONNECTED", user: { settings: { tier: "PRO", waAgentReminders: { in: ["WHATSAPP", "BOTH"] } } } }, include: { user: { include: { settings: true } } } });
   let sent = 0;
   for (const c of conns) {
     if (!manager.isPolling(c.id) || !c.user.settings) continue;

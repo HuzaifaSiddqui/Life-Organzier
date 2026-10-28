@@ -1,9 +1,14 @@
 import crypto from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * WhatsApp Agent API keys (and chat references) at rest: AES-256-GCM with WHATSAPP_KEY_SECRET (32 bytes, as 64 hex
- * characters or base64). The owner's user id is the additional authenticated data, so a ciphertext copied to
- * another user's row does not decrypt. Format: v1:<iv>:<tag>:<ciphertext> (base64). Errors never include the value.
+ * characters or base64). Without it the server makes its own on first start and keeps it in
+ * backend/.secrets/whatsapp-key-secret (git-ignored, or WHATSAPP_KEY_SECRET_FILE): nothing to set up. Losing that file
+ * means every user pastes their key again, so back it up (or set WHATSAPP_KEY_SECRET) on a real server.
+ * The owner's user id is the additional authenticated data, so a ciphertext copied to another user's row does not decrypt. Format: v1:<iv>:<tag>:<ciphertext> (base64). Errors never include the value.
  */
 
 export class SecretConfigError extends Error {
@@ -12,11 +17,50 @@ export class SecretConfigError extends Error {
   }
 }
 
-function secretKey(): Buffer {
-  const raw = (process.env.WHATSAPP_KEY_SECRET ?? "").trim();
+function decode(raw: string): Buffer {
   const key = /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
   if (key.length !== 32) throw new SecretConfigError();
   return key;
+}
+
+export function secretFile(): string {
+  return process.env.WHATSAPP_KEY_SECRET_FILE || fileURLToPath(new URL("../../../.secrets/whatsapp-key-secret", import.meta.url));
+}
+
+let generated: Buffer | null = null;
+
+/** WHATSAPP_KEY_SECRET if set (an invalid one is an error, never silently replaced); else the saved or a new one. */
+function secretKey(): Buffer {
+  const raw = (process.env.WHATSAPP_KEY_SECRET ?? "").trim();
+  if (raw) return decode(raw);
+  if (generated) return generated;
+  const file = secretFile();
+  if (existsSync(file)) {
+    generated = decode(readFileSync(file, "utf8").trim());
+    return generated;
+  }
+  const fresh = crypto.randomBytes(32);
+  mkdirSync(dirname(file), { recursive: true });
+  try {
+    writeFileSync(file, fresh.toString("hex"), { flag: "wx" }); // never overwrites a secret another process just wrote
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    generated = decode(readFileSync(file, "utf8").trim());
+    return generated;
+  }
+  try {
+    chmodSync(file, 0o600);
+  } catch {
+    // Windows: permissions come from the folder
+  }
+  console.info(`WhatsApp Agent: created a key-encryption secret in ${file}. Back it up; without it users must reconnect.`);
+  generated = fresh;
+  return generated;
+}
+
+/** Test hook: forget the cached generated secret. */
+export function resetGeneratedSecret(): void {
+  generated = null;
 }
 
 export function secretConfigured(): boolean {

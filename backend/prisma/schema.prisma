@@ -208,10 +208,10 @@ model UserSettings {
   checkinTone           String    @default("FUNNY")
   /// Research mode: randomly include/omit the first step (50/50)
   checkinResearchMode   Boolean   @default(false)
-  /// WhatsApp Agent reminders: OFF (push only, default) | WHATSAPP (instead of phone notifications; push if a send fails) | BOTH
-  waAgentReminders      String    @default("OFF")
-  /// WhatsApp Agent voice notes are transcribed (needs WHATSAPP_VOICE=on and an approved speech-to-text provider)
-  waAgentVoice          Boolean   @default(false)
+  /// WhatsApp Agent reminders: BOTH (WhatsApp and phone, default) | WHATSAPP (instead of phone notifications; push if a send fails) | OFF (phone only)
+  waAgentReminders      String    @default("BOTH")
+  /// WhatsApp Agent voice notes are transcribed (local whisper.cpp; on by default)
+  waAgentVoice          Boolean   @default(true)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

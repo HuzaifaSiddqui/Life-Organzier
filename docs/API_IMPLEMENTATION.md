@@ -208,14 +208,14 @@ Saved places are reusable; tasks link to them. The phone monitors geofences; the
   on every save) keeps it. An interval change replaces future pending occurrences; completed ones stay.
 - **Routines** accept and return `location` (room/venue, max 60). `POST /api/documents/:id/confirm` schedules accept `location`.
 
-### WhatsApp Agent (beta, `WHATSAPP_AGENT=on`)
+### WhatsApp Agent (Pro, on by default)
 
 Full reference in `docs/whatsapp-agent.md` (API section). All signed in, own connection only; 404 `FEATURE_OFF` when
-the flag is off.
+switched off with `WHATSAPP_AGENT=off`; connect and test need Pro (403 `PRO_REQUIRED`).
 
-- **`GET /api/whatsapp-agent/status`** → `{ enabled, connected, status, keyLast4, polling, lastPollAt, rateLimitedUntil, lastError, consentAt, reminders: { setting, available }, voice: { setting, available } }`. Never the key.
+- **`GET /api/whatsapp-agent/status`** → `{ enabled, pro, connected, status, keyLast4, polling, lastPollAt, rateLimitedUntil, lastError, consentAt, reminders: { setting, available }, voice: { setting, available, ready } }`. Never the key.
 - **`POST /api/whatsapp-agent/connect`** `{ apiKey, consent: true }` → status (one validation poll; history skipped). 400 `INVALID_KEY`, 403 `NOT_CREATOR`, 409 `KEY_IN_USE`, 429 `RATE_LIMITED`, 502 `NOT_AVAILABLE` / `UNREACHABLE`. 5 per 10 min per user.
-- **`POST /api/whatsapp-agent/test`** sends a short message (3 a minute). **`PATCH /api/whatsapp-agent/settings`** `{ reminders?: "OFF"|"WHATSAPP"|"BOTH", voice?: boolean }` (409 when unavailable on the server). **`DELETE /api/whatsapp-agent`** stops polling and deletes the key.
+- **`POST /api/whatsapp-agent/test`** sends a short message (3 a minute). **`PATCH /api/whatsapp-agent/settings`** `{ reminders?: "OFF"|"WHATSAPP"|"BOTH", voice?: boolean }` (409 when switched off on the server). **`DELETE /api/whatsapp-agent`** stops polling and deletes the key.
 - `GET /api/reminders/plan` → `settings.viaWhatsappAgent`: true when the phone should leave task and routine reminders to WhatsApp.
 - `POST /api/documents/:id/apply` now calls `documents/applyItems.ts` (same behaviour); the WhatsApp Agent's "Add all" uses it too.
 
@@ -327,7 +327,7 @@ These **use** the APIs above but add client-only behavior:
 | `PORT` | Backend | Listen port (default `5000` in code) |
 | Firebase admin keys / project | Backend `config/firebase.ts` | Verify ID tokens |
 | `EXPO_PUBLIC_API_BASE_URL` | Mobile | API base ending with `/api` |
-| `WHATSAPP_AGENT`, `WHATSAPP_KEY_SECRET`, `WHATSAPP_AGENT_REMINDERS`, `WHATSAPP_VOICE`, `STT_PROVIDER`, `WHISPER_URL`, `WHATSAPP_AGENT_BASE_URL` | Backend | WhatsApp Agent, all off by default (`docs/whatsapp-agent.md`) |
+| `WHATSAPP_AGENT`, `WHATSAPP_KEY_SECRET`, `WHATSAPP_AGENT_REMINDERS`, `WHATSAPP_VOICE`, `STT_PROVIDER`, `WHISPER_URL`, `WHATSAPP_AGENT_BASE_URL` | Backend | WhatsApp Agent: all on by default, `off` switches; the secret is generated if unset (`docs/whatsapp-agent.md`) |
 
 ### Local AI environment variables
 

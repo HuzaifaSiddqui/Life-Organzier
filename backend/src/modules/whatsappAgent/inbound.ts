@@ -1,7 +1,7 @@
 import type { WhatsAppAgentConnection } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { ensureSettings } from "../../lib/http.js";
-import { getStt, usableTranscript, type Transcript } from "../../ai/stt.js";
+import { getStt, sttReady, usableTranscript, type Transcript } from "../../ai/stt.js";
 import { handleAssistantMessage } from "../assistant/dialogue.js";
 import type { ActionPayload } from "../assistant/types.js";
 import { dropStaleQuestion, loadContext } from "../conversations/conversationContext.js";
@@ -28,6 +28,7 @@ const DEVICE = "whatsapp-agent";
 const COPY = {
   en: {
     empty: 'Send me a message like "Add assignment due Friday 3 PM" or "What\'s due today?"',
+    proOnly: "WhatsApp is part of Life Organizer Pro. Upgrade in the app (Settings) to keep chatting here.",
     voiceOff: "Voice notes are off. Please type your message, or turn on voice notes in the app (Settings → WhatsApp).",
     voiceUnavailable: "I can't listen to voice notes on this server yet. Please type your message.",
     voiceTooLong: `That voice note is too long for me (over ${VOICE_MAX_SECONDS / 60} minutes). Please type it or send a shorter one.`,
@@ -41,6 +42,7 @@ const COPY = {
   },
   // Roman Urdu: the agent replies in English or Roman Urdu only.
   ur: {
+    proOnly: "WhatsApp Life Organizer Pro ka hissa hai. Yahan baat jaari rakhne ke liye app (Settings) mein Pro lein.",
     empty: 'Mujhe aisa message bhejein: "Friday 3 baje assignment" ya "Aaj kya due hai?"',
     voiceOff: "Voice notes band hain. Message type kar dein, ya app mein (Settings → WhatsApp) voice notes on kar lein.",
     voiceUnavailable: "Abhi main voice notes nahin sun sakta. Meherbani karke type kar dein.",
@@ -102,6 +104,8 @@ export async function handleAgentUpdate(connection: WhatsAppAgentConnection, upd
     await io.reply(crisisResponse(settings.language));
     return;
   }
+  // Pro only. A user who went back to Free gets this until the poller stops at the next rescan (within a minute).
+  if (settings.tier !== "PRO") return void (await io.reply(c.proOnly));
   logEvent(user.id, "WHATSAPP_AGENT_RECEIVED", null, { kind: update.kind });
 
   if (update.kind === "voice") return handleVoice(user, settings, update, io, now);
@@ -127,7 +131,7 @@ async function handleVoice(user: Awaited<ReturnType<typeof loadUser>>["user"], s
   const c = agentCopy(settings.language);
   if (!agentVoiceEnabled() || !settings.waAgentVoice) return void (await io.reply(c.voiceOff));
   const stt = getStt();
-  if (!stt) return void (await io.reply(c.voiceUnavailable));
+  if (!(await sttReady(stt)) || !stt) return void (await io.reply(c.voiceUnavailable));
   if (update.media?.duration && update.media.duration > VOICE_MAX_SECONDS) return void (await io.reply(c.voiceTooLong));
   const file = await download(update, io, VOICE_MAX_BYTES);
   if (file === "too_big") return void (await io.reply(c.voiceTooLong));

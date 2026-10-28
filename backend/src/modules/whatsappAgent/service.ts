@@ -1,7 +1,8 @@
 import type { WhatsAppAgentConnection } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
-import { getStt } from "../../ai/stt.js";
+import { getStt, sttReady } from "../../ai/stt.js";
+import { ensureSettings } from "../../lib/http.js";
 import { AgentError, ConflictError, createAgentClient, ForbiddenError, InvalidKeyError, NetworkError, RateLimitedError } from "./client.js";
 import { agentEnabled, agentRemindersEnabled, agentVoiceEnabled, POLL_LIMIT } from "./config.js";
 import { getAgentManager } from "./connectionManager.js";
@@ -14,6 +15,10 @@ import { nextOffset } from "./shapes.js";
 export function requireAgentFeature(): void {
   if (!agentEnabled()) throw new HttpError(404, "FEATURE_OFF", "WhatsApp Agent isn't turned on for this server");
   if (!secretConfigured()) throw new HttpError(503, "NOT_CONFIGURED", "WhatsApp Agent isn't set up on this server yet");
+}
+
+async function requirePro(userId: string): Promise<void> {
+  if ((await ensureSettings(userId)).tier !== "PRO") throw new HttpError(403, "PRO_REQUIRED", "WhatsApp is part of Pro");
 }
 
 /** API errors as replies the app can show. Nothing technical; never the key. */
@@ -29,6 +34,7 @@ function asHttp(error: unknown): HttpError {
 
 export type AgentStatus = {
   enabled: boolean;
+  pro: boolean;
   connected: boolean;
   status: string | null;
   keyLast4: string | null;
@@ -38,17 +44,19 @@ export type AgentStatus = {
   lastError: string | null;
   consentAt: string | null;
   reminders: { setting: string; available: boolean };
-  voice: { setting: boolean; available: boolean };
+  /** available: voice notes are on for this server; ready: the transcriber is reachable right now. */
+  voice: { setting: boolean; available: boolean; ready: boolean };
 };
 
 export async function agentStatus(userId: string): Promise<AgentStatus> {
   const [row, settings] = await Promise.all([
     prisma.whatsAppAgentConnection.findUnique({ where: { userId } }),
-    prisma.userSettings.findUnique({ where: { userId }, select: { waAgentReminders: true, waAgentVoice: true } }),
+    prisma.userSettings.findUnique({ where: { userId }, select: { waAgentReminders: true, waAgentVoice: true, tier: true } }),
   ]);
   const limited = row?.rateLimitedUntil && row.rateLimitedUntil > new Date() ? row.rateLimitedUntil.toISOString() : null;
   return {
     enabled: agentEnabled(),
+    pro: settings?.tier === "PRO",
     connected: row?.status === "CONNECTED",
     status: row?.status ?? null,
     keyLast4: row?.keyLast4 ?? null,
@@ -57,8 +65,8 @@ export async function agentStatus(userId: string): Promise<AgentStatus> {
     rateLimitedUntil: limited,
     lastError: row?.lastError ?? null,
     consentAt: row?.consentAt.toISOString() ?? null,
-    reminders: { setting: settings?.waAgentReminders ?? "OFF", available: agentRemindersEnabled() },
-    voice: { setting: settings?.waAgentVoice ?? false, available: agentVoiceEnabled() && getStt() !== null },
+    reminders: { setting: settings?.waAgentReminders ?? "BOTH", available: agentRemindersEnabled() },
+    voice: { setting: settings?.waAgentVoice ?? true, available: agentVoiceEnabled() && getStt() !== null, ready: agentVoiceEnabled() && (await sttReady(getStt())) },
   };
 }
 
@@ -80,6 +88,7 @@ async function latestOffset(apiKey: string): Promise<string | null> {
 
 export async function connectAgent(userId: string, apiKey: string): Promise<AgentStatus> {
   requireAgentFeature();
+  await requirePro(userId);
   const key = apiKey.trim();
   const existing = await prisma.whatsAppAgentConnection.findUnique({ where: { userId } });
   // Our own poller would make the check poll a 409: stop it while the new key is checked.
@@ -105,8 +114,8 @@ export async function disconnectAgent(userId: string): Promise<void> {
     await getAgentManager()?.remove(row.id);
     await prisma.whatsAppAgentConnection.delete({ where: { id: row.id } }); // the key goes with it
   }
-  // Reminders go back to phone notifications only.
-  await prisma.userSettings.updateMany({ where: { userId }, data: { waAgentReminders: "OFF" } });
+  // Reminders go back to the phone by themselves: without a connection nothing is sent on WhatsApp and the plan's
+  // viaWhatsappAgent is false. The user's reminder choice is kept for the next connection.
 }
 
 export async function connectedRow(userId: string): Promise<WhatsAppAgentConnection> {
@@ -119,6 +128,7 @@ export const TEST_MESSAGE = { en: "Life Organizer is connected. Send me a task, 
 
 export async function sendTestMessage(userId: string, language: string): Promise<void> {
   requireAgentFeature();
+  await requirePro(userId);
   const row = await connectedRow(userId);
   const text = language === "ur" ? TEST_MESSAGE.ur : TEST_MESSAGE.en;
   const queued = getAgentManager()?.send(row.id, text, PRIORITY.reply);
@@ -130,10 +140,10 @@ export async function sendTestMessage(userId: string, language: string): Promise
 export async function updateAgentSettings(userId: string, input: { reminders?: "OFF" | "WHATSAPP" | "BOTH"; voice?: boolean }): Promise<AgentStatus> {
   requireAgentFeature();
   if (input.reminders && input.reminders !== "OFF") {
-    if (!agentRemindersEnabled()) throw new HttpError(409, "REMINDERS_UNAVAILABLE", "Reminders on WhatsApp aren't available yet; you'll keep getting them as notifications.");
+    if (!agentRemindersEnabled()) throw new HttpError(409, "REMINDERS_UNAVAILABLE", "Reminders on WhatsApp are turned off on this server; you'll keep getting them as notifications.");
     await connectedRow(userId);
   }
-  if (input.voice && !(agentVoiceEnabled() && getStt())) throw new HttpError(409, "VOICE_UNAVAILABLE", "Voice notes aren't available on this server yet.");
+  if (input.voice && !agentVoiceEnabled()) throw new HttpError(409, "VOICE_UNAVAILABLE", "Voice notes are turned off on this server.");
   await prisma.userSettings.update({ where: { userId }, data: { ...(input.reminders ? { waAgentReminders: input.reminders } : {}), ...(input.voice !== undefined ? { waAgentVoice: input.voice } : {}) } });
   return agentStatus(userId);
 }
@@ -143,7 +153,7 @@ export async function remindersViaAgent(userId: string): Promise<boolean> {
   if (!agentRemindersEnabled()) return false;
   const [row, settings] = await Promise.all([
     prisma.whatsAppAgentConnection.findUnique({ where: { userId }, select: { status: true } }),
-    prisma.userSettings.findUnique({ where: { userId }, select: { waAgentReminders: true } }),
+    prisma.userSettings.findUnique({ where: { userId }, select: { waAgentReminders: true, tier: true } }),
   ]);
-  return row?.status === "CONNECTED" && settings?.waAgentReminders === "WHATSAPP";
+  return row?.status === "CONNECTED" && settings?.tier === "PRO" && settings.waAgentReminders === "WHATSAPP";
 }
