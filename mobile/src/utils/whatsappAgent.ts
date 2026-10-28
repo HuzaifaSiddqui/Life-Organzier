@@ -21,7 +21,7 @@ export const CHIP_ICON: Record<AgentChip, "check" | "info" | "clock" | "lock"> =
 /** Server error codes → copy keys (never the server's text). Unknown → generic. */
 export function agentErrorKey(code: string | null, offline: boolean): string {
   if (offline) return "waAgent.err.offline";
-  const known = ["INVALID_KEY", "NOT_CREATOR", "KEY_IN_USE", "RATE_LIMITED", "NOT_AVAILABLE", "UNREACHABLE", "REMINDERS_UNAVAILABLE", "VOICE_UNAVAILABLE", "NOT_CONNECTED"];
+  const known = ["INVALID_KEY", "NOT_CREATOR", "KEY_IN_USE", "RATE_LIMITED", "NOT_AVAILABLE", "UNREACHABLE", "REMINDERS_UNAVAILABLE", "VOICE_UNAVAILABLE", "NOT_CONNECTED", "NO_CHAT_YET", "PRO_REQUIRED"];
   return code && known.includes(code) ? `waAgent.err.${code}` : "waAgent.err.generic";
 }
 

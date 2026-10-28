@@ -7,7 +7,7 @@ import type { AgentLock } from "./lock.js";
 import { Outbox, PRIORITY, type Priority, type SendOutcome } from "./outbox.js";
 import { ConnectionLimiter, realClock, type Clock } from "./rateLimiter.js";
 import { decryptSecret, encryptSecret } from "./secrets.js";
-import { nextOffset, type AgentUpdate } from "./shapes.js";
+import type { AgentUpdate, UpdateBatch } from "./shapes.js";
 
 /**
  * Keeps one long-poll loop per CONNECTED WhatsApp Agent connection (docs/whatsapp-agent.md):
@@ -15,8 +15,8 @@ import { nextOffset, type AgentUpdate } from "./shapes.js";
  * - long poll (25 s) with exponential backoff and full jitter on network errors;
  * - 401 / 400 code 100 → NEEDS_RECONNECT, polling stops, the user gets a push; 409 → wait, re-check the lock;
  *   429 → the poll bucket is blocked until the API's budget is back;
- * - each update is claimed in WhatsAppProcessedUpdate before it is handled (a retry or restart never acts
- *   twice), and the offset is saved only after it was handled. An update claimed but never finished (crash)
+ * - each message is claimed in WhatsAppProcessedUpdate (by message id) before it is handled, so a retry or restart
+ *   never acts twice; the API's next_offset is saved only after the whole batch was handled. An update claimed but never finished (crash)
  *   gets one "please resend" when the poller starts again.
  */
 
@@ -130,9 +130,9 @@ class Poller {
         break;
       }
       if (!(await this.limiter.acquire("polls", signal))) break;
-      let updates: AgentUpdate[];
+      let batch: UpdateBatch;
       try {
-        updates = await this.client.getUpdates({ offset: this.offset, limit: POLL_LIMIT, timeoutS: this.manager.pollTimeoutS, signal });
+        batch = await this.client.getUpdates({ offset: this.offset, limit: POLL_LIMIT, timeoutS: this.manager.pollTimeoutS, signal });
         failures = 0;
       } catch (error) {
         if (signal.aborted) break;
@@ -156,9 +156,18 @@ class Poller {
         continue;
       }
       await prisma.whatsAppAgentConnection.update({ where: { id: this.id }, data: { lastPollAt: new Date(clock.now()), rateLimitedUntil: null } }).catch(() => undefined);
-      for (const update of updates) {
-        if (signal.aborted) break;
+      let complete = true;
+      for (const update of batch.updates) {
+        if (signal.aborted) {
+          complete = false;
+          break;
+        }
         await this.process(update);
+      }
+      // Only after the batch: a crash before this re-delivers it, and the claims skip what was already done.
+      if (complete && batch.nextOffset && batch.nextOffset !== this.offset) {
+        this.offset = batch.nextOffset;
+        await prisma.whatsAppAgentConnection.update({ where: { id: this.id }, data: { lastOffset: this.offset } });
       }
     }
     await lock.release(this.id).catch(() => undefined);
@@ -178,10 +187,8 @@ class Poller {
       }
       await prisma.whatsAppProcessedUpdate.updateMany({ where: { connectionId: this.id, updateId: update.id }, data: { processedAt: new Date(this.manager.clock.now()) } });
       // Read receipt: best effort, only if the status budget has room right now.
-      if (update.messageId && this.limiter.tryAcquire("statuses")) await this.client.markRead(update.messageId, this.chatRef).catch(() => undefined);
+      if (update.messageId && this.limiter.tryAcquire("statuses")) await this.client.markRead(update.messageId).catch(() => undefined);
     }
-    this.offset = nextOffset(update.id);
-    await prisma.whatsAppAgentConnection.update({ where: { id: this.id }, data: { lastOffset: this.offset } });
   }
 }
 

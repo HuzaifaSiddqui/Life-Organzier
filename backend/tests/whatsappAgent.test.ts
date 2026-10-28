@@ -9,7 +9,7 @@ import { capTurns, dropStaleQuestion, loadContext } from "../src/modules/convers
 import { crisisResponse } from "../src/modules/mood/crisis.js";
 import { shutdownOcr } from "../src/modules/documents/textExtraction.js";
 import { setPushProvider, type PushMessage } from "../src/modules/push/pushService.js";
-import { AgentError, errorFor, ForbiddenError, HttpAgentClient, InvalidKeyError, ConflictError, MediaTooLargeError, NetworkError, RateLimitedError } from "../src/modules/whatsappAgent/client.js";
+import { AgentError, errorFor, ForbiddenError, HttpAgentClient, InvalidKeyError, ConflictError, MediaTooLargeError, NetworkError, NoRecipientError, RateLimitedError, trustedMediaUrl } from "../src/modules/whatsappAgent/client.js";
 import { AgentConnectionManager, backoffMs, MISSED_REPLY, setAgentManager, type HandlerIO } from "../src/modules/whatsappAgent/connectionManager.js";
 import { agentCopy, CHANNEL, handleAgentUpdate } from "../src/modules/whatsappAgent/inbound.js";
 import { PgAdvisoryLock } from "../src/modules/whatsappAgent/lock.js";
@@ -21,8 +21,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentStatus, connectAgent, disconnectAgent, remindersViaAgent, updateAgentSettings } from "../src/modules/whatsappAgent/service.js";
-import { nextOffset, normalizeUpdate, type AgentUpdate } from "../src/modules/whatsappAgent/shapes.js";
-import { FakeAgentServer, textPdf } from "./fakes/fakeAgentServer.js";
+import { normalizeMessage, parseUpdates, type AgentUpdate } from "../src/modules/whatsappAgent/shapes.js";
+import { FakeAgentServer, textPdf, USER } from "./fakes/fakeAgentServer.js";
 import { dbAvailable } from "./fixtures.js";
 
 const skip = !dbAvailable && "no database";
@@ -107,7 +107,7 @@ function collectingIO(limiter = new ConnectionLimiter()): HandlerIO & { replies:
   };
 }
 
-const update = (over: Partial<AgentUpdate>): AgentUpdate => ({ id: String(Math.floor(Math.random() * 1e9)), kind: "text", text: null, media: null, chatRef: "chat-1", messageId: null, ...over });
+const update = (over: Partial<AgentUpdate>): AgentUpdate => ({ id: String(Math.floor(Math.random() * 1e9)), kind: "text", text: null, media: null, chatRef: USER, messageId: null, ...over });
 
 /* ================================================================== pure */
 
@@ -149,22 +149,45 @@ test("secrets: without WHATSAPP_KEY_SECRET the server makes one, keeps it in a f
   }
 });
 
-test("shapes: text, voice, photo and PDF updates in the assumed and alternative layouts", () => {
-  assert.deepEqual(normalizeUpdate({ update_id: 7, message: { chat_id: "c", message_id: "m7", type: "text", text: "hi" } }), { id: "7", kind: "text", text: "hi", media: null, chatRef: "c", messageId: "m7" });
-  const voice = normalizeUpdate({ update_id: 8, message: { chat: { id: 42 }, voice: { media_id: "v", mime_type: "audio/ogg; codecs=opus", file_size: 900, duration: 4 } } });
-  assert.equal(voice?.kind, "voice");
-  assert.deepEqual(voice?.media, { id: "v", mimeType: "audio/ogg; codecs=opus", size: 900, duration: 4, fileName: null });
-  assert.equal(voice?.chatRef, "42");
-  assert.equal(normalizeUpdate({ id: "u9", message: { image: { id: "img", mime_type: "image/jpeg" }, caption: "timetable" } })?.kind, "image");
-  const pdf = normalizeUpdate({ update_id: 10, message: { document: { file_id: "d", mime_type: "application/pdf", file_name: "outline.pdf" } } });
-  assert.equal(pdf?.kind, "document");
-  assert.equal(pdf?.media?.fileName, "outline.pdf");
-  assert.equal(normalizeUpdate({ update_id: 11, message: { document: { file_id: "d2", mime_type: "image/png" } } })?.kind, "image", "an image sent as a file is still an image");
-  assert.equal(normalizeUpdate({ update_id: 12, message: { type: "text", text: { body: "nested" } } })?.text, "nested");
-  assert.equal(normalizeUpdate({ message: { text: "no id" } }), null);
-  assert.equal(nextOffset("41"), "42");
-  assert.equal(nextOffset("9007199254740993"), "9007199254740994");
-  assert.equal(nextOffset("abc"), "abc");
+test("shapes: the real /updates envelope (entry → changes → value.messages, next_offset) and Cloud-API messages", () => {
+  const body = {
+    object: "whatsapp_agent",
+    next_offset: "opaque-token-2",
+    entry: [
+      {
+        changes: [
+          {
+            value: {
+              messages: [
+                { id: "wamid.1", from: "user:42", timestamp: "1761600000", type: "text", text: { body: "hi" } },
+                { id: "wamid.2", from: "user:42", type: "audio", audio: { id: "v1", mime_type: "audio/ogg; codecs=opus", voice: true } },
+                { id: "wamid.3", from: "user:42", type: "image", image: { id: "img", mime_type: "image/jpeg", caption: "timetable" } },
+                { id: "wamid.4", from: "user:42", type: "document", document: { id: "d1", mime_type: "application/pdf", filename: "outline.pdf" } },
+                { id: "wamid.5", from: "user:42", type: "document", document: { id: "d2", mime_type: "image/png", filename: "scan.png" } },
+                { from: "user:42", type: "text", text: { body: "no id" } },
+                { id: "wamid.6", from: "user:42", type: "reaction", reaction: { emoji: "x" } },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const batch = parseUpdates(body);
+  assert.equal(batch.nextOffset, "opaque-token-2");
+  assert.deepEqual(batch.updates[0], { id: "wamid.1", kind: "text", text: "hi", media: null, chatRef: "user:42", messageId: "wamid.1" });
+  assert.equal(batch.updates[1].kind, "voice");
+  assert.deepEqual(batch.updates[1].media, { id: "v1", mimeType: "audio/ogg; codecs=opus", size: null, duration: null, fileName: null });
+  assert.equal(batch.updates[2].kind, "image");
+  assert.equal(batch.updates[2].text, "timetable", "a caption is the text");
+  assert.equal(batch.updates[3].kind, "document");
+  assert.equal(batch.updates[3].media?.fileName, "outline.pdf");
+  assert.equal(batch.updates[4].kind, "image", "an image sent as a file is still an image");
+  assert.equal(batch.updates.length, 6, "a message without an id is dropped");
+  assert.equal(batch.updates[5].kind, "other");
+  assert.equal(normalizeMessage({ type: "text" }), null);
+  assert.deepEqual(parseUpdates(null), { updates: [], nextOffset: null });
+  assert.deepEqual(parseUpdates({ entry: [] }), { updates: [], nextOffset: null });
 });
 
 test("client errors: 401 and 400/100 are an invalid key, 403, 409, 429 with Retry-After, 5xx is network", () => {
@@ -173,6 +196,7 @@ test("client errors: 401 and 400/100 are an invalid key, 403, 409, 429 with Retr
   assert.ok(!(errorFor(400, { error: { code: 131047 } }, null) instanceof InvalidKeyError));
   assert.ok(errorFor(403, { error: { code: 131005 } }, null) instanceof ForbiddenError);
   assert.ok(errorFor(409, null, null) instanceof ConflictError);
+  assert.ok(errorFor(409, { error: { code: 1752041 } }, null) instanceof ConflictError);
   const limited = errorFor(429, null, "12");
   assert.ok(limited instanceof RateLimitedError && limited.retryAfterMs === 12000);
   assert.ok(errorFor(503, null, null) instanceof NetworkError);
@@ -261,24 +285,32 @@ test("reminder message: one item gets its numbered options; a burst lists the re
   assert.match(two.text, /Options for "Essay":\n\n1\. Done/);
 });
 
-test("HTTP client against the fake API: updates, send, media as bytes or a URL, size cap; the key is never shown", async () => {
+test("HTTP client against the fake API: updates + next_offset, 204, Cloud send body, media metadata then download, size cap; the key is never shown", async () => {
   const client = new HttpAgentClient(KEY, fake.base);
   assert.ok(!JSON.stringify(client).includes(KEY));
   assert.ok(!inspect(client, { depth: 5, showHidden: true }).includes(KEY));
   const id = fake.text(KEY, "hello");
   const got = await client.getUpdates({ offset: null, limit: 10, timeoutS: 0 });
-  assert.equal(got.at(-1)?.id, String(id));
-  assert.equal(got.at(-1)?.text, "hello");
-  await client.getUpdates({ offset: nextOffset(String(id)), limit: 10, timeoutS: 0 }); // acknowledge
-  await client.sendText("hi there", "chat-1");
-  assert.deepEqual(fake.sent.at(-1)?.body, { chat_id: "chat-1", text: "hi there" });
-  fake.media.set("bytes-1", { bytes: Buffer.from("OggS-voice"), type: "audio/ogg" });
-  fake.media.set("url-1", { url: true, bytes: Buffer.from("%PDF-1.4"), type: "application/pdf" });
-  assert.equal((await client.getMedia("bytes-1", 1000)).bytes.toString(), "OggS-voice");
-  assert.equal((await client.getMedia("url-1", 1000)).bytes.toString(), "%PDF-1.4");
-  await assert.rejects(client.getMedia("bytes-1", 4), MediaTooLargeError);
-  await client.markRead("m1", "chat-1");
-  assert.equal(fake.statuses.at(-1)?.status, "read");
+  assert.equal(got.updates.at(-1)?.id, id);
+  assert.equal(got.updates.at(-1)?.text, "hello");
+  assert.equal(got.updates.at(-1)?.chatRef, USER);
+  assert.ok(got.nextOffset);
+  const empty = await client.getUpdates({ offset: got.nextOffset, limit: 10, timeoutS: 0 }); // acknowledges; nothing new → 204
+  assert.deepEqual(empty, { updates: [], nextOffset: null });
+  await client.sendText("hi there", USER);
+  assert.deepEqual(fake.sent.at(-1)?.body, { messaging_product: "whatsapp", to: USER, type: "text", text: { body: "hi there" } });
+  await assert.rejects(client.sendText("nobody", null), NoRecipientError);
+  fake.media.set("voice-bytes", { bytes: Buffer.from("OggS-voice"), type: "audio/ogg" });
+  const got2 = await client.getMedia("voice-bytes", 1000);
+  assert.equal(got2.bytes.toString(), "OggS-voice");
+  assert.equal(got2.mimeType, "audio/ogg");
+  await assert.rejects(client.getMedia("voice-bytes", 4), MediaTooLargeError);
+  await assert.rejects(client.getMedia("../etc/passwd", 1000), /Invalid media id/);
+  assert.equal(trustedMediaUrl(new URL("https://lookaside.fbsbx.com/x"), "https://api.whatsapp.com/agent/v1"), true);
+  assert.equal(trustedMediaUrl(new URL("https://evil.example/x"), "https://api.whatsapp.com/agent/v1"), false);
+  assert.equal(trustedMediaUrl(new URL("http://mmg.whatsapp.net/x"), "https://api.whatsapp.com/agent/v1"), false, "HTTPS only");
+  await client.markRead("wamid.m1");
+  assert.deepEqual(fake.statuses.at(-1), { messaging_product: "whatsapp", status: "read", message_id: "wamid.m1" });
   const bad = new HttpAgentClient(`${KEY}-revoked`, fake.base);
   await assert.rejects(bad.getUpdates({ offset: null, limit: 1, timeoutS: 0 }), (e: Error) => e instanceof InvalidKeyError && !e.message.includes(KEY));
 });
@@ -302,8 +334,8 @@ function manager(handler?: (c: WhatsAppAgentConnection, u: AgentUpdate, io: Hand
 /** Drains whatever is queued for a key so tests start from a clean API. */
 async function drain(key: string): Promise<void> {
   const c = new HttpAgentClient(key, fake.base);
-  const list = await c.getUpdates({ offset: null, limit: 100, timeoutS: 0 });
-  if (list.length) await c.getUpdates({ offset: nextOffset(list[list.length - 1].id), limit: 1, timeoutS: 0 });
+  const batch = await c.getUpdates({ offset: null, limit: 100, timeoutS: 0 });
+  if (batch.nextOffset) await c.getUpdates({ offset: batch.nextOffset, limit: 1, timeoutS: 0 });
 }
 
 test("connect: a wrong key is refused without echoing it; a good key is stored encrypted and history is skipped", { skip }, async () => {
@@ -312,7 +344,8 @@ test("connect: a wrong key is refused without echoing it; a good key is stored e
   fake.code100Keys.add("code-100-key-xyz");
   await assert.rejects(connectAgent(user.id, "code-100-key-xyz"), (e: Error & { code?: string }) => e.code === "INVALID_KEY");
   await drain(KEY);
-  const old = [fake.text(KEY, "sent before connecting 1"), fake.text(KEY, "sent before connecting 2")];
+  fake.text(KEY, "sent before connecting 1");
+  fake.text(KEY, "sent before connecting 2");
   const status = await connectAgent(user.id, KEY);
   responses.push(JSON.stringify(status));
   assert.equal(status.status, "CONNECTED");
@@ -320,7 +353,9 @@ test("connect: a wrong key is refused without echoing it; a good key is stored e
   const row = await prisma.whatsAppAgentConnection.findUniqueOrThrow({ where: { userId: user.id } });
   assert.ok(!row.encryptedKey.includes(KEY));
   assert.equal(decryptSecret(row.encryptedKey, user.id), KEY);
-  assert.equal(row.lastOffset, String(old[1] + 1), "starts after the newest update: nothing old is replayed");
+  assert.equal(row.lastOffset, fake.lastOffset, "starts after the newest message: nothing old is replayed");
+  assert.ok(row.chatRef && !row.chatRef.includes(USER), "who to answer is kept, encrypted");
+  assert.equal(decryptSecret(row.chatRef, user.id), USER);
   await disconnectAgent(user.id);
 });
 
@@ -394,13 +429,13 @@ test("dedupe, offset and crash recovery: a duplicated update is handled once; a 
   const handled: string[] = [];
   const m1 = manager(async (_c, u) => void handled.push(u.text ?? ""));
   fake.duplicateNext = true;
-  const a = fake.text(KEY, "one");
-  const b = fake.text(KEY, "two");
+  fake.text(KEY, "one");
+  fake.text(KEY, "two");
   await m1.add(row.id);
   await waitFor(() => handled.length >= 2);
   await new Promise((r) => setTimeout(r, 300));
   assert.deepEqual(handled, ["one", "two"]);
-  await waitFor(async () => (await prisma.whatsAppAgentConnection.findUniqueOrThrow({ where: { id: row.id } })).lastOffset === String(b + 1));
+  await waitFor(async () => (await prisma.whatsAppAgentConnection.findUniqueOrThrow({ where: { id: row.id } })).lastOffset === fake.lastOffset);
   await m1.stop();
 
   // A crash between the claim and the end of handling: the row stays unfinished.
@@ -409,10 +444,9 @@ test("dedupe, offset and crash recovery: a duplicated update is handled once; a 
   const m2 = manager(async (_c, u) => void handled.push(u.text ?? ""));
   await m2.add(row.id);
   await waitFor(() => fake.sent.length > before);
-  assert.equal(fake.sent.at(-1)?.body.text, MISSED_REPLY);
+  assert.equal(fake.lastSentText(), MISSED_REPLY);
   await new Promise((r) => setTimeout(r, 300));
   assert.deepEqual(handled, ["one", "two"], "nothing handled twice after the restart");
-  assert.ok(a < b);
   await m2.stop();
   await disconnectAgent(user.id);
 });
@@ -450,7 +484,7 @@ test("text end to end: fake API → poller → the one assistant engine → repl
   const before = fake.sent.length;
   fake.text(KEY, "Complete math assignment by Friday 3 PM");
   await waitFor(() => fake.sent.length > before, 15000);
-  const reply = String(fake.sent.at(-1)?.body.text);
+  const reply = fake.lastSentText();
   assert.match(reply, /math assignment/i);
   const tasks = await prisma.task.findMany({ where: { userId: user.id } });
   assert.equal(tasks.length, 1);
@@ -571,6 +605,12 @@ test("reminders: on by default (WhatsApp + phone), a server kill switch; sent on
   const m = manager();
   await m.add(row.id);
   const now = new Date();
+  await updateAgentSettings(user.id, { reminders: "WHATSAPP" });
+  assert.equal(await remindersViaAgent(user.id), false, "the agent can't write first: the phone keeps reminders until the user has written");
+  await updateAgentSettings(user.id, { reminders: "BOTH" });
+  await m.remove(row.id);
+  await prisma.whatsAppAgentConnection.update({ where: { id: row.id }, data: { chatRef: encryptSecret(USER, user.id) } }); // the user wrote once
+  await m.add(row.id);
   const taskRow = await prisma.task.create({ data: { userId: user.id, title: "Submit essay", dueAt: new Date(now.getTime() + 2 * 3600000), dueDate: new Date(now.getTime() + 2 * 3600000), dueTime: "11:59 PM" } });
   const log = await prisma.reminderLog.create({ data: { userId: user.id, taskId: taskRow.id, fireAt: new Date(now.getTime() - 60000), level: "normal", status: "SCHEDULED" } });
 
@@ -586,7 +626,7 @@ test("reminders: on by default (WhatsApp + phone), a server kill switch; sent on
     assert.equal(await remindersViaAgent(user.id), true, "the phone leaves these reminders to WhatsApp");
     const before = fake.sent.length;
     assert.equal(await sendDueAgentReminders(m, now), 1);
-    const text = String(fake.sent.at(-1)?.body.text);
+    const text = fake.lastSentText();
     assert.ok(fake.sent.length > before);
     assert.match(text, /Reminder: Submit essay/);
     assert.match(text, /1\. Done\n2\. Snooze 15 min/);
@@ -616,6 +656,7 @@ test("reminders: on by default (WhatsApp + phone), a server kill switch; sent on
 
 test("disconnect: the poller stops, the key is deleted, reminders go back to the phone", { skip }, async () => {
   await drain(KEY2);
+  fake.text(KEY2, "hi"); // the user has written to the agent, so it can answer
   const { user, row } = await connected(KEY2);
   const m = manager();
   setAgentManager(m);

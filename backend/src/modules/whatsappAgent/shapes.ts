@@ -1,25 +1,36 @@
 /**
- * Reading WhatsApp Agent payloads whose exact shape is not documented. The parser is tolerant on purpose: it
- * looks for the update id, message kind, text, media and chat reference under the names the community
- * implementation uses and a few likely alternatives. The probe (scripts/whatsapp-agent-probe.ts) records the
- * real shapes; tighten these once docs/whatsapp-agent-findings.md has them.
+ * WhatsApp Agent payloads, as seen working against the real API (docs/whatsapp-agent-findings.md):
+ *
+ *   GET /updates → 200 { entry: [{ changes: [{ value: { messages: [Message, …] } }] }], next_offset: "<opaque>" }
+ *                  204 (no body) when the long poll ends with nothing new
+ *   Message      = WhatsApp Cloud API message: { id, from: "user:<id>", timestamp, type,
+ *                  text?: { body }, image|audio|video|document|sticker?: { id, mime_type, caption?, filename?, voice? } }
+ *
+ * The offset is opaque: send back next_offset as it came. Messages carry their own ids (used to de-duplicate);
+ * there is no per-update id.
  */
 
 type Json = unknown;
 type Obj = Record<string, Json>;
 const isObj = (v: Json): v is Obj => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+const str = (v: Json): string | null => (typeof v === "string" && v.length > 0 ? v : typeof v === "number" ? String(v) : null);
+const num = (v: Json): number | null => (typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : null);
 
 export type AgentMedia = { id: string; mimeType: string | null; size: number | null; duration: number | null; fileName: string | null };
 export type AgentKind = "text" | "voice" | "image" | "document" | "other";
 export type AgentUpdate = {
+  /** The message id (de-duplication key). */
   id: string;
   kind: AgentKind;
+  /** Text body, or a media caption. */
   text: string | null;
   media: AgentMedia | null;
+  /** Who sent it ("user:<id>"): the only recipient a reply can go to. */
   chatRef: string | null;
   /** For read receipts. */
   messageId: string | null;
 };
+export type UpdateBatch = { updates: AgentUpdate[]; nextOffset: string | null };
 
 /** Field names and value types only (for the probe and for logs). */
 export function shape(value: Json, depth = 0): Json {
@@ -31,94 +42,58 @@ export function shape(value: Json, depth = 0): Json {
   return typeof value;
 }
 
-/** The list of updates inside a /updates response, wherever it is. */
-export function updatesOf(json: Json): Json[] {
-  if (Array.isArray(json)) return json;
-  if (isObj(json)) for (const k of ["result", "updates", "data", "items", "messages"]) if (Array.isArray(json[k])) return json[k] as Json[];
-  return [];
-}
-
-export function updateIdOf(u: Json): string | null {
-  if (!isObj(u)) return null;
-  for (const k of ["update_id", "updateId", "id", "offset"]) if (typeof u[k] === "number" || typeof u[k] === "string") return String(u[k]);
-  return null;
-}
-
-/** The offset that acknowledges this update: id + 1 for numeric ids (Telegram-style), else the id itself. Unverified. */
-export function nextOffset(updateId: string): string {
-  return /^\d+$/.test(updateId) ? (BigInt(updateId) + 1n).toString() : updateId;
-}
-
-const MEDIA_KEYS: Array<[string, AgentKind]> = [
-  ["voice", "voice"],
-  ["audio", "voice"],
-  ["image", "image"],
-  ["photo", "image"],
-  ["document", "document"],
-  ["file", "document"],
-  ["video", "other"],
-  ["sticker", "other"],
-];
-
-/** The message object: `message`, `msg` or the update itself. */
-function messageOf(u: Obj): Obj {
-  for (const k of ["message", "msg", "data"]) if (isObj(u[k])) return u[k] as Obj;
-  return u;
-}
-
-function str(o: Obj, ...keys: string[]): string | null {
-  for (const k of keys) if (typeof o[k] === "string" || typeof o[k] === "number") return String(o[k]);
-  return null;
-}
-function num(o: Obj, ...keys: string[]): number | null {
-  for (const k of keys) if (typeof o[k] === "number") return o[k] as number;
-  return null;
-}
-
-function mediaFrom(o: Obj): AgentMedia | null {
-  const id = str(o, "media_id", "mediaId", "file_id", "fileId", "id");
-  if (!id) return null;
-  return {
-    id,
-    mimeType: str(o, "mime_type", "mimeType", "mimetype", "content_type", "contentType"),
-    size: num(o, "file_size", "fileSize", "size", "bytes"),
-    duration: num(o, "duration", "seconds"),
-    fileName: str(o, "file_name", "fileName", "filename", "name"),
-  };
-}
-
-function kindFromMime(mime: string | null): AgentKind | null {
-  if (!mime) return null;
-  if (mime.startsWith("audio/")) return "voice";
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("application/") || mime.startsWith("text/")) return "document";
-  return null;
-}
-
-/** One update in our own terms; null when it has no id (it can't be acknowledged or de-duplicated). */
-export function normalizeUpdate(u: Json): AgentUpdate | null {
-  const id = updateIdOf(u);
-  if (!id || !isObj(u)) return null;
-  const m = messageOf(u);
-  let media: AgentMedia | null = null;
-  let kind: AgentKind | null = null;
-  for (const [key, k] of MEDIA_KEYS) {
-    if (isObj(m[key])) {
-      media = mediaFrom(m[key] as Obj);
-      kind = k;
-      break;
+/** The raw message objects inside a /updates response. */
+export function rawMessages(json: Json): Json[] {
+  if (!isObj(json)) return [];
+  const out: Json[] = [];
+  for (const entry of Array.isArray(json.entry) ? json.entry : []) {
+    if (!isObj(entry)) continue;
+    for (const change of Array.isArray(entry.changes) ? entry.changes : []) {
+      const value = isObj(change) && isObj(change.value) ? change.value : null;
+      if (value && Array.isArray(value.messages)) out.push(...value.messages);
     }
   }
-  if (!media && (m.media_id || m.mediaId || m.file_id)) {
-    media = mediaFrom(m);
-    kind = kindFromMime(media?.mimeType ?? null) ?? "other";
-  }
-  if (media && kind === "document") kind = kindFromMime(media.mimeType) === "image" ? "image" : "document";
-  const typeName = str(m, "type", "message_type", "messageType");
-  if (!kind && typeName && /voice|audio|ptt/i.test(typeName)) kind = "voice";
-  const rawText = isObj(m.text) ? str(m.text as Obj, "body", "text") : str(m, "text", "body", "caption");
-  if (!kind) kind = rawText !== null ? "text" : "other";
-  const chat = isObj(m.chat) ? str(m.chat as Obj, "id") : str(m, "chat_id", "chatId", "conversation_id", "conversationId", "thread_id");
-  const chatTop = chat ?? (isObj(u.chat) ? str(u.chat as Obj, "id") : str(u, "chat_id", "chatId"));
-  return { id, kind, text: rawText, media, chatRef: chatTop, messageId: str(m, "message_id", "messageId") ?? (m !== u ? str(m, "id") : null) };
+  return out;
+}
+
+const MEDIA_KEYS = ["image", "audio", "video", "document", "sticker"] as const;
+
+/** One message in our own terms; null without an id (it couldn't be de-duplicated). */
+export function normalizeMessage(raw: Json): AgentUpdate | null {
+  if (!isObj(raw)) return null;
+  const id = str(raw.id);
+  if (!id) return null;
+  const type = str(raw.type) ?? "unknown";
+  const mediaKey = MEDIA_KEYS.find((k) => isObj(raw[k]));
+  const m = mediaKey ? (raw[mediaKey] as Obj) : null;
+  const mediaId = m ? str(m.id) : str(raw.media_id);
+  const media: AgentMedia | null = mediaId
+    ? {
+        id: mediaId,
+        mimeType: str(m?.mime_type) ?? str(raw.mime_type),
+        size: num(m?.file_size) ?? num(raw.file_size),
+        duration: num(m?.duration),
+        fileName: str(m?.filename) ?? str(raw.filename),
+      }
+    : null;
+  const mime = media?.mimeType?.toLowerCase() ?? "";
+  let kind: AgentKind;
+  if (type === "text") kind = "text";
+  else if (type === "audio" || mediaKey === "audio") kind = "voice"; // voice notes have audio.voice = true; other audio is read the same way
+  else if (type === "image" || mediaKey === "image" || (mediaKey === "document" && mime.startsWith("image/"))) kind = "image";
+  else if (type === "document" || mediaKey === "document") kind = "document";
+  else kind = "other";
+  const textObj = isObj(raw.text) ? raw.text : null;
+  const text = str(textObj?.body) ?? str(raw.body) ?? str(m?.caption) ?? str(raw.caption);
+  return { id, kind, text, media: kind === "text" ? null : media, chatRef: str(raw.from) ?? str(raw.sender), messageId: id };
+}
+
+/** A /updates body: its messages and the offset to send next time (null = keep the current one). */
+export function parseUpdates(json: Json): UpdateBatch {
+  return {
+    updates: rawMessages(json)
+      .map(normalizeMessage)
+      .filter((u): u is AgentUpdate => u !== null),
+    nextOffset: isObj(json) ? str(json.next_offset) : null,
+  };
 }

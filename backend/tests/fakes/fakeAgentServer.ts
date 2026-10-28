@@ -2,25 +2,31 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 
 /**
- * A local stand-in for the WhatsApp Agent API (unverified shapes, as assumed in src/modules/whatsappAgent/shapes.ts).
- * GET /updates long-polls with Telegram-style offsets (offset = last id + 1 acknowledges), POST /messages,
- * GET /media/:id, POST /media, POST /statuses. Knobs for 400/401/403/409/429, slow polls and duplicated updates.
- * A second poll on the same key while one is open gets 409, like the real API is said to.
+ * A local stand-in for the WhatsApp Agent API, in the shapes seen working against the real one
+ * (docs/whatsapp-agent-findings.md):
+ *   GET /updates?offset&limit&timeout → { entry: [{ changes: [{ value: { messages } }] }], next_offset } or 204
+ *   POST /messages { messaging_product: "whatsapp", to: "user:<id>", type: "text", text: { body } }
+ *   GET /media/:id → { url, mime_type, file_size }, then GET <url> → the bytes
+ *   POST /media (multipart) → { id }, POST /statuses
+ * Offsets are opaque tokens ("o<seq>"); a poll with an offset acknowledges everything before it. A second poll on
+ * the same key while one is open gets 409 with error code 1752041. Knobs for 400/401/403/429, slow polls and
+ * duplicated deliveries.
  */
 
-type Update = { update_id: number; message: Record<string, unknown> };
+type Message = Record<string, unknown> & { id: string };
+
+export const USER = "user:4242";
 
 export class FakeAgentServer {
   private server = http.createServer((req, res) => void this.route(req, res));
-  private updates = new Map<string, Update[]>();
-  private nextId = 100;
+  private queues = new Map<string, Array<{ seq: number; message: Message }>>();
+  private seq = 100;
   private waiters = new Map<string, Array<() => void>>();
   private openPolls = new Map<string, number>();
-  readonly media = new Map<string, { bytes: Buffer; type: string } | { url: true; bytes: Buffer; type: string }>();
+  readonly media = new Map<string, { bytes: Buffer; type: string }>();
   readonly sent: Array<{ key: string; body: Record<string, unknown> }> = [];
   readonly statuses: Array<Record<string, unknown>> = [];
   readonly polls: Array<{ key: string; offset: string | null }> = [];
-  /** Keys the API accepts. */
   readonly validKeys = new Set<string>();
   /** Keys that answer 400 with error code 100 instead of 401. */
   readonly code100Keys = new Set<string>();
@@ -30,10 +36,11 @@ export class FakeAgentServer {
   retryAfter = "0";
   /** Next N sends answer with this status. */
   failSends: { count: number; status: number; code?: number } = { count: 0, status: 0 };
-  /** Every poll waits this long before answering (slow network). */
   slowMs = 0;
-  /** The next poll answers its updates twice (a duplicate delivery). */
+  /** The next poll delivers its messages twice. */
   duplicateNext = false;
+  /** The last next_offset handed out. */
+  lastOffset: string | null = null;
   base = "";
 
   async start(): Promise<this> {
@@ -48,21 +55,24 @@ export class FakeAgentServer {
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }
 
-  /** Queues an inbound message for this key; returns its update id. */
-  push(key: string, message: Record<string, unknown>): number {
-    const id = this.nextId++;
-    this.updates.set(key, [...(this.updates.get(key) ?? []), { update_id: id, message: { chat_id: "chat-1", message_id: `m${id}`, ...message } }]);
+  /** Queues an incoming message (Cloud-API shape) for this key; returns its message id. */
+  push(key: string, message: Record<string, unknown>): string {
+    const seq = this.seq++;
+    const id = `wamid.TEST${seq}`;
+    this.queues.set(key, [...(this.queues.get(key) ?? []), { seq, message: { id, from: USER, timestamp: String(Math.floor(Date.now() / 1000)), ...message } }]);
     for (const w of this.waiters.get(key) ?? []) w();
     this.waiters.set(key, []);
     return id;
   }
 
-  text(key: string, text: string): number {
-    return this.push(key, { type: "text", text });
+  text(key: string, body: string): string {
+    return this.push(key, { type: "text", text: { body } });
   }
 
-  sentTexts(key?: string): string[] {
-    return this.sent.filter((s) => !key || s.key === key).map((s) => String(s.body.text));
+  /** Text of the last message the agent sent. */
+  lastSentText(): string {
+    const text = this.sent.at(-1)?.body.text as { body?: string } | undefined;
+    return String(text?.body ?? "");
   }
 
   private keyOf(req: http.IncomingMessage): string {
@@ -91,16 +101,17 @@ export class FakeAgentServer {
         this.rateLimitPolls -= 1;
         return this.json(res, 429, { error: { code: 4, message: "Too many calls" } }, { "retry-after": this.retryAfter });
       }
-      if ((this.openPolls.get(key) ?? 0) > 0) return this.json(res, 409, { error: { code: 409, message: "Conflict: another poller" } });
+      if ((this.openPolls.get(key) ?? 0) > 0) return this.json(res, 409, { error: { code: 1752041, message: "Updates poll already active" } });
       this.openPolls.set(key, (this.openPolls.get(key) ?? 0) + 1);
       this.maxConcurrentPolls = Math.max(this.maxConcurrentPolls, this.openPolls.get(key) ?? 0);
       const offset = url.searchParams.get("offset");
       this.polls.push({ key, offset });
       try {
         if (this.slowMs) await new Promise((r) => setTimeout(r, this.slowMs));
-        const pending = () => (this.updates.get(key) ?? []).filter((u) => offset === null || u.update_id >= Number(offset));
+        const from = offset ? Number(offset.replace(/^o/, "")) : 0;
         // Acknowledge: everything before the offset is gone for good.
-        if (offset !== null) this.updates.set(key, pending());
+        this.queues.set(key, (this.queues.get(key) ?? []).filter((q) => q.seq >= from));
+        const pending = () => this.queues.get(key) ?? [];
         const timeoutS = Number(url.searchParams.get("timeout") ?? 0);
         if (!pending().length && timeoutS > 0) {
           await new Promise<void>((resolve) => {
@@ -109,12 +120,19 @@ export class FakeAgentServer {
             req.once("close", () => (clearTimeout(t), resolve()));
           });
         }
-        let list = pending().slice(0, Number(url.searchParams.get("limit") ?? 10));
-        if (this.duplicateNext && list.length) {
-          list = [...list, ...list];
+        const batch = pending().slice(0, Number(url.searchParams.get("limit") ?? 50));
+        if (res.destroyed) return;
+        if (!batch.length) {
+          res.writeHead(204);
+          return void res.end();
+        }
+        let messages = batch.map((q) => q.message);
+        if (this.duplicateNext) {
+          messages = [...messages, ...messages];
           this.duplicateNext = false;
         }
-        if (!res.destroyed) this.json(res, 200, { ok: true, result: list });
+        this.lastOffset = `o${batch[batch.length - 1].seq + 1}`;
+        this.json(res, 200, { object: "whatsapp_agent", entry: [{ id: "agent", changes: [{ field: "messages", value: { messages } }] }], next_offset: this.lastOffset });
       } finally {
         this.openPolls.set(key, (this.openPolls.get(key) ?? 1) - 1);
       }
@@ -126,32 +144,35 @@ export class FakeAgentServer {
         this.failSends.count -= 1;
         return this.json(res, this.failSends.status, { error: { code: this.failSends.code ?? this.failSends.status } }, this.failSends.status === 429 ? { "retry-after": "0" } : {});
       }
-      if (String(body.text ?? "").length > 4096) return this.json(res, 400, { error: { code: 100, message: "text too long" } });
+      const text = body.text as { body?: unknown } | undefined;
+      if (body.messaging_product !== "whatsapp" || typeof body.to !== "string" || body.type !== "text" || typeof text?.body !== "string") {
+        return this.json(res, 400, { error: { code: 100, message: "Invalid parameter" } });
+      }
+      if (text.body.length > 4096) return this.json(res, 400, { error: { code: 131009, message: "text too long" } });
       this.sent.push({ key, body });
-      return this.json(res, 200, { message_id: `out-${this.sent.length}` });
+      return this.json(res, 200, { messaging_product: "whatsapp", messages: [{ id: `wamid.OUT${this.sent.length}` }] });
     }
     const media = /^\/media\/(.+)$/.exec(url.pathname);
     if (req.method === "GET" && media) {
-      const m = this.media.get(decodeURIComponent(media[1]));
-      if (!m) return this.json(res, 404, { error: { code: 404 } });
-      if ("url" in m) return this.json(res, 200, { url: `${this.base}/download/${encodeURIComponent(media[1])}`, mime_type: m.type });
-      res.writeHead(200, { "content-type": m.type, "content-length": String(m.bytes.length) });
-      return void res.end(m.bytes);
+      const id = decodeURIComponent(media[1]);
+      const m = this.media.get(id);
+      if (!m) return this.json(res, 404, { error: { code: 100, message: "Unknown media" } });
+      return this.json(res, 200, { id, url: `${this.base}/download/${encodeURIComponent(id)}`, mime_type: m.type, file_size: m.bytes.length });
     }
     const dl = /^\/download\/(.+)$/.exec(url.pathname);
     if (req.method === "GET" && dl) {
       const m = this.media.get(decodeURIComponent(dl[1]));
       if (!m) return this.json(res, 404, {});
-      res.writeHead(200, { "content-type": m.type });
+      res.writeHead(200, { "content-type": m.type, "content-length": String(m.bytes.length) });
       return void res.end(m.bytes);
     }
     if (req.method === "POST" && url.pathname === "/media") {
       await this.body(req);
-      return this.json(res, 200, { media_id: `up-${this.media.size + 1}` });
+      return this.json(res, 200, { id: `up-${this.media.size + 1}` });
     }
     if (req.method === "POST" && url.pathname === "/statuses") {
       this.statuses.push(JSON.parse((await this.body(req)).toString("utf8") || "{}"));
-      return this.json(res, 200, { ok: true });
+      return this.json(res, 200, { success: true });
     }
     this.json(res, 404, { error: { code: 404 } });
   }

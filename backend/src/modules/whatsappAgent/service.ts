@@ -8,7 +8,6 @@ import { agentEnabled, agentRemindersEnabled, agentVoiceEnabled, POLL_LIMIT } fr
 import { getAgentManager } from "./connectionManager.js";
 import { PRIORITY } from "./outbox.js";
 import { encryptSecret, last4, secretConfigured } from "./secrets.js";
-import { nextOffset } from "./shapes.js";
 
 /** Connect / status / settings / disconnect for the user's WhatsApp Agent. The key is never returned or logged. */
 
@@ -36,6 +35,8 @@ export type AgentStatus = {
   enabled: boolean;
   pro: boolean;
   connected: boolean;
+  /** The user has written to the agent at least once: it can only reply and send reminders after that. */
+  hasChat: boolean;
   status: string | null;
   keyLast4: string | null;
   polling: boolean;
@@ -58,6 +59,7 @@ export async function agentStatus(userId: string): Promise<AgentStatus> {
     enabled: agentEnabled(),
     pro: settings?.tier === "PRO",
     connected: row?.status === "CONNECTED",
+    hasChat: Boolean(row?.chatRef),
     status: row?.status ?? null,
     keyLast4: row?.keyLast4 ?? null,
     polling: row ? (getAgentManager()?.isPolling(row.id) ?? false) : false,
@@ -71,19 +73,21 @@ export async function agentStatus(userId: string): Promise<AgentStatus> {
 }
 
 /**
- * Checks the key with one short poll and starts from the newest update: messages sent to the agent before it
- * was connected are skipped, not replayed (up to 4 polls of backlog; anything beyond is acknowledged unread).
+ * Checks the key with short polls and starts after the newest message: messages sent to the agent before it was
+ * connected are skipped, not replayed (up to 4 polls of backlog). The newest sender is kept as the chat to answer,
+ * so "Send test message" works at once if the user already wrote to the agent.
  */
-async function latestOffset(apiKey: string): Promise<string | null> {
+async function latestOffset(apiKey: string): Promise<{ offset: string | null; chatRef: string | null }> {
   const client = createAgentClient(apiKey);
   let offset: string | null = null;
+  let chatRef: string | null = null;
   for (let i = 0; i < 4; i += 1) {
-    const updates = await client.getUpdates({ offset, limit: POLL_LIMIT, timeoutS: 0 });
-    if (!updates.length) break;
-    offset = nextOffset(updates[updates.length - 1].id);
-    if (updates.length < POLL_LIMIT) break;
+    const batch = await client.getUpdates({ offset, limit: POLL_LIMIT, timeoutS: 1 });
+    chatRef = [...batch.updates].reverse().find((u) => u.chatRef)?.chatRef ?? chatRef;
+    if (batch.nextOffset) offset = batch.nextOffset;
+    if (batch.updates.length < POLL_LIMIT || !batch.nextOffset) break;
   }
-  return offset;
+  return { offset, chatRef };
 }
 
 export async function connectAgent(userId: string, apiKey: string): Promise<AgentStatus> {
@@ -93,14 +97,14 @@ export async function connectAgent(userId: string, apiKey: string): Promise<Agen
   const existing = await prisma.whatsAppAgentConnection.findUnique({ where: { userId } });
   // Our own poller would make the check poll a 409: stop it while the new key is checked.
   if (existing) await getAgentManager()?.remove(existing.id);
-  let offset: string | null;
+  let start: { offset: string | null; chatRef: string | null };
   try {
-    offset = await latestOffset(key);
+    start = await latestOffset(key);
   } catch (error) {
     if (existing?.status === "CONNECTED") await getAgentManager()?.add(existing.id);
     throw asHttp(error);
   }
-  const data = { encryptedKey: encryptSecret(key, userId), keyLast4: last4(key), status: "CONNECTED", lastOffset: offset, consentAt: new Date(), lastError: null, chatRef: null, rateLimitedUntil: null, lastPollAt: new Date() };
+  const data = { encryptedKey: encryptSecret(key, userId), keyLast4: last4(key), status: "CONNECTED", lastOffset: start.offset, consentAt: new Date(), lastError: null, chatRef: start.chatRef ? encryptSecret(start.chatRef, userId) : null, rateLimitedUntil: null, lastPollAt: new Date() };
   const row = await prisma.whatsAppAgentConnection.upsert({ where: { userId }, create: { userId, ...data }, update: data });
   // A new key may be a new agent whose update ids start again: forget the old ones.
   await prisma.whatsAppProcessedUpdate.deleteMany({ where: { connectionId: row.id } });
@@ -131,6 +135,7 @@ export async function sendTestMessage(userId: string, language: string): Promise
   await requirePro(userId);
   const row = await connectedRow(userId);
   const text = language === "ur" ? TEST_MESSAGE.ur : TEST_MESSAGE.en;
+  if (!row.chatRef) throw new HttpError(409, "NO_CHAT_YET", "Send any message to your agent in WhatsApp first; it can only reply to you after that.");
   const queued = getAgentManager()?.send(row.id, text, PRIORITY.reply);
   if (!queued) throw new HttpError(503, "NOT_POLLING", "The connection is starting. Try again in a minute.");
   const outcome = await queued;
@@ -152,8 +157,9 @@ export async function updateAgentSettings(userId: string, input: { reminders?: "
 export async function remindersViaAgent(userId: string): Promise<boolean> {
   if (!agentRemindersEnabled()) return false;
   const [row, settings] = await Promise.all([
-    prisma.whatsAppAgentConnection.findUnique({ where: { userId }, select: { status: true } }),
+    prisma.whatsAppAgentConnection.findUnique({ where: { userId }, select: { status: true, chatRef: true } }),
     prisma.userSettings.findUnique({ where: { userId }, select: { waAgentReminders: true, tier: true } }),
   ]);
-  return row?.status === "CONNECTED" && settings?.tier === "PRO" && settings.waAgentReminders === "WHATSAPP";
+  // Not before the user has written to the agent once: it can't send to anyone until then.
+  return row?.status === "CONNECTED" && Boolean(row.chatRef) && settings?.tier === "PRO" && settings.waAgentReminders === "WHATSAPP";
 }

@@ -158,16 +158,19 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 Pro only, on by default (`WHATSAPP_AGENT=off` switches it off; docs/whatsapp-agent.md).
 
-- **Unverified API.** Endpoints, payloads, limits and error codes come from a community implementation; the probe
-  hasn't been run yet (docs/whatsapp-agent-findings.md). The update parser and the send body are best guesses.
+- **No published manual.** Payload shapes follow a separate working project (docs/whatsapp-agent-findings.md); limits
+  and error codes come from a community implementation.
+- **The user must write first.** The agent can only send to someone who has messaged it (`to` = their `from`), so
+  test messages and reminders wait until the user has said something once.
 - **Availability depends on Meta.** Agents may not exist for an account or region (Pakistan unconfirmed); the app
   says so and everything else keeps working.
 - **Not end-to-end encrypted.** Meta handles these chats; users must consent before connecting.
 - **Reminders go to WhatsApp and the phone** by default, because the agent may not be allowed to message first
   (unconfirmed); a user who picks "WhatsApp only" may miss reminders if WhatsApp drops them silently. When several reminders are due together, the numbered options act on the first one only.
   A routine snoozed on WhatsApp and the phone's own routine snoozes don't know about each other.
-- **Voice notes need whisper.cpp running on the server** (not installed by npm: build, model ≈ 0.5 GB, ffmpeg).
-  Without it users are asked to type. CPU transcription can take several seconds. No benchmark has been run (it
+- **Voice notes need faster-whisper on the server** (`pip install -r backend/scripts/requirements-voice.txt`; the
+  model ≈ 0.5 GB downloads on first use). Without it users are asked to type. Each note loads the model again (about
+  10 s on a laptop CPU) and notes are transcribed one at a time. No benchmark has been run (it
   needs real recordings). Whisper tends to write spoken Urdu in Urdu script, not Roman Urdu.
 - **The generated key-encryption secret** lives in `backend/.secrets/`; losing it (a fresh server, a deleted folder)
   means every user must paste their key again. Set `WHATSAPP_KEY_SECRET` or back the file up on a real server.

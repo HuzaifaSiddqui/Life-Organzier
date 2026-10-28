@@ -133,6 +133,8 @@ export function composeReminder(items: Due[]): { text: string; actions: QuickAct
 }
 
 async function deliverFor(manager: AgentConnectionManager, conn: WhatsAppAgentConnection, s: UserSettings, now: Date): Promise<number> {
+  // The agent can only write to someone who has written to it; until then reminders stay on the phone.
+  if (!conn.chatRef) return 0;
   const planned = await currentPlan(conn.userId, s, now);
   const items = [...(await dueTasks(conn.userId, s, now)), ...(await dueRoutines(conn.userId, s, now, planned))];
   if (!items.length) return 0;

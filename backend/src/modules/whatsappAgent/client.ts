@@ -1,9 +1,10 @@
 import { agentBaseUrl } from "./config.js";
-import { normalizeUpdate, updatesOf, type AgentUpdate } from "./shapes.js";
+import { parseUpdates, type UpdateBatch } from "./shapes.js";
 
 /**
- * WhatsApp Agent HTTP API (unverified: from a community implementation, see docs/whatsapp-agent-findings.md).
- * Bearer key; GET /updates (long poll), POST /messages, GET /media/{id}, POST /media, POST /statuses.
+ * WhatsApp Agent HTTP API (docs/whatsapp-agent-findings.md): Bearer key; GET /updates (long poll, Cloud-API style
+ * envelope, opaque next_offset), POST /messages (Cloud-API message body, `to` = the sender's "user:<id>"),
+ * GET /media/{id} (metadata with a download URL on a Meta host), POST /media, POST /statuses.
  *
  * The key lives in a private field: it is never part of an error message, a log line, JSON.stringify or
  * util.inspect output. Errors carry only the HTTP status and the API's numeric error code.
@@ -16,7 +17,7 @@ export class AgentError extends Error {
 }
 /** 401, or 400 with error code 100: the key is wrong, revoked or regenerated. */
 export class InvalidKeyError extends AgentError {}
-/** 409: another poller is using this key. */
+/** 409 (error code 1752041): another poller is using this key. */
 export class ConflictError extends AgentError {}
 /** 429: this minute's budget is used up. */
 export class RateLimitedError extends AgentError {
@@ -33,11 +34,21 @@ export class MediaTooLargeError extends AgentError {}
 export type GetUpdatesOptions = { offset: string | null; limit: number; timeoutS: number; signal?: AbortSignal };
 
 export interface WhatsAppAgentClient {
-  getUpdates(opts: GetUpdatesOptions): Promise<AgentUpdate[]>;
-  sendText(text: string, chatRef: string | null): Promise<{ messageId: string | null }>;
+  getUpdates(opts: GetUpdatesOptions): Promise<UpdateBatch>;
+  /** `to` is the "user:<id>" of a message the user sent: the agent can only answer someone it heard from. */
+  sendText(text: string, to: string | null): Promise<{ messageId: string | null }>;
   getMedia(mediaId: string, maxBytes: number): Promise<{ bytes: Buffer; mimeType: string | null }>;
   uploadMedia(bytes: Buffer, mimeType: string, fileName: string): Promise<{ mediaId: string | null }>;
-  markRead(messageId: string, chatRef: string | null): Promise<void>;
+  markRead(messageId: string): Promise<void>;
+}
+
+/** Raised before calling the API when there is nobody to send to yet (the user hasn't messaged the agent). */
+export class NoRecipientError extends AgentError {}
+
+/** Download URLs from GET /media/{id} must be HTTPS on a Meta host (the key is sent with the download). */
+export function trustedMediaUrl(url: URL, baseUrl: string): boolean {
+  if (url.host === new URL(baseUrl).host) return true; // same API host (also how the tests' fake server serves files)
+  return url.protocol === "https:" && /(^|\.)(whatsapp\.com|whatsapp\.net|fbcdn\.net|facebook\.com|fbsbx\.com)$/i.test(url.hostname);
 }
 
 type Json = unknown;
@@ -84,6 +95,8 @@ export class HttpAgentClient implements WhatsAppAgentClient {
     const headers: Record<string, string> = { Authorization: `Bearer ${this.#key}`, Accept: "application/json" };
     if (init.raw) {
       const form = new FormData();
+      form.append("messaging_product", "whatsapp");
+      form.append("type", init.raw.type);
       form.append("file", new Blob([new Uint8Array(init.raw.bytes)], { type: init.raw.type }), init.raw.name);
       body = form;
     } else if (init.body !== undefined) {
@@ -104,51 +117,49 @@ export class HttpAgentClient implements WhatsAppAgentClient {
     return res;
   }
 
-  async getUpdates(opts: GetUpdatesOptions): Promise<AgentUpdate[]> {
+  async getUpdates(opts: GetUpdatesOptions): Promise<UpdateBatch> {
     const q = new URLSearchParams({ limit: String(opts.limit), timeout: String(opts.timeoutS) });
     if (opts.offset !== null) q.set("offset", opts.offset);
     const res = await this.request("GET", `/updates?${q}`, { timeoutMs: (opts.timeoutS + 15) * 1000, signal: opts.signal });
-    const json = await res.json().catch(() => null);
-    return updatesOf(json)
-      .map(normalizeUpdate)
-      .filter((u): u is AgentUpdate => u !== null);
+    if (res.status === 204) return { updates: [], nextOffset: null }; // nothing new; keep the offset
+    return parseUpdates(await res.json().catch(() => null));
   }
 
-  async sendText(text: string, chatRef: string | null): Promise<{ messageId: string | null }> {
-    // Unverified body: the probe records which form the API accepts (docs/whatsapp-agent-findings.md).
-    const res = await this.request("POST", "/messages", { body: chatRef ? { chat_id: chatRef, text } : { text }, timeoutMs: 20000 });
+  async sendText(text: string, to: string | null): Promise<{ messageId: string | null }> {
+    if (!to) throw new NoRecipientError("Nobody to send to yet");
+    const res = await this.request("POST", "/messages", { body: { messaging_product: "whatsapp", to, type: "text", text: { body: text } }, timeoutMs: 20000 });
     const json = (await res.json().catch(() => null)) as Record<string, Json> | null;
-    const id = json?.message_id ?? json?.id ?? (json?.result as Record<string, Json> | undefined)?.message_id;
-    return { messageId: typeof id === "string" || typeof id === "number" ? String(id) : null };
+    const first = Array.isArray(json?.messages) ? (json?.messages[0] as Record<string, Json> | undefined) : undefined;
+    const id = first?.id ?? json?.id;
+    return { messageId: typeof id === "string" ? id : null };
   }
 
+  /** GET /media/{id} gives { url, mime_type, file_size? }; the file is then downloaded from that (Meta) URL with the key. */
   async getMedia(mediaId: string, maxBytes: number): Promise<{ bytes: Buffer; mimeType: string | null }> {
-    const res = await this.request("GET", `/media/${encodeURIComponent(mediaId)}`, { timeoutMs: 60000 });
-    const type = res.headers.get("content-type");
-    if (type && /json/i.test(type)) {
-      // Some APIs answer with a download URL instead of the bytes; follow it (with the key only on the same host).
-      const json = (await res.json()) as Record<string, Json>;
-      const url = [json.url, json.download_url, (json.result as Record<string, Json> | undefined)?.url].find((u) => typeof u === "string") as string | undefined;
-      if (!url) throw new AgentError("Media answer had no file");
-      const sameHost = new URL(url).host === new URL(this.baseUrl).host;
-      const file = await fetch(url, { headers: sameHost ? { Authorization: `Bearer ${this.#key}` } : {}, signal: AbortSignal.timeout(60000) }).catch(() => {
-        throw new NetworkError("No connection");
-      });
-      if (!file.ok) throw errorFor(file.status, null, file.headers.get("retry-after"));
-      return { bytes: await readCapped(file, maxBytes), mimeType: file.headers.get("content-type") ?? (typeof json.mime_type === "string" ? json.mime_type : null) };
-    }
-    return { bytes: await readCapped(res, maxBytes), mimeType: type };
+    if (!/^[A-Za-z0-9._:-]+$/.test(mediaId)) throw new AgentError("Invalid media id");
+    const res = await this.request("GET", `/media/${encodeURIComponent(mediaId)}`, { timeoutMs: 30000 });
+    const json = (await res.json().catch(() => null)) as Record<string, Json> | null;
+    if (typeof json?.file_size === "number" && json.file_size > maxBytes) throw new MediaTooLargeError("File too large");
+    if (typeof json?.url !== "string") throw new AgentError("Media answer had no download URL");
+    const url = new URL(json.url);
+    if (!trustedMediaUrl(url, this.baseUrl)) throw new AgentError("Media URL is not on a WhatsApp host");
+    const file = await fetch(url, { headers: { Authorization: `Bearer ${this.#key}`, Accept: "application/octet-stream" }, signal: AbortSignal.timeout(60000) }).catch(() => {
+      throw new NetworkError("No connection");
+    });
+    if (!file.ok) throw errorFor(file.status, null, file.headers.get("retry-after"));
+    const declared = typeof json.mime_type === "string" ? json.mime_type : null;
+    return { bytes: await readCapped(file, maxBytes), mimeType: declared ?? file.headers.get("content-type") };
   }
 
   async uploadMedia(bytes: Buffer, mimeType: string, fileName: string): Promise<{ mediaId: string | null }> {
     const res = await this.request("POST", "/media", { raw: { bytes, type: mimeType, name: fileName }, timeoutMs: 60000 });
     const json = (await res.json().catch(() => null)) as Record<string, Json> | null;
-    const id = json?.media_id ?? json?.id;
-    return { mediaId: typeof id === "string" ? id : null };
+    return { mediaId: typeof json?.id === "string" ? json.id : null };
   }
 
-  async markRead(messageId: string, chatRef: string | null): Promise<void> {
-    await this.request("POST", "/statuses", { body: { message_id: messageId, status: "read", ...(chatRef ? { chat_id: chatRef } : {}) }, timeoutMs: 15000 });
+  /** Read receipt in the Cloud API form. Not seen working yet; callers treat it as best effort. */
+  async markRead(messageId: string): Promise<void> {
+    await this.request("POST", "/statuses", { body: { messaging_product: "whatsapp", status: "read", message_id: messageId }, timeoutMs: 15000 });
   }
 }
 

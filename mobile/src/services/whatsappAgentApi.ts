@@ -6,6 +6,7 @@ export type AgentStatus = {
   enabled: boolean;
   pro: boolean;
   connected: boolean;
+  hasChat: boolean;
   status: "PENDING" | "CONNECTED" | "NEEDS_RECONNECT" | "ERROR" | "DISABLED" | null;
   keyLast4: string | null;
   polling: boolean;

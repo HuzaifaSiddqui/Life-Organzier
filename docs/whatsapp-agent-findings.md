@@ -1,39 +1,33 @@
 # WhatsApp Agent API: findings
 
-What the WhatsApp Agent API actually does, as measured by `npm run wa:probe` (see
-[whatsapp-agent.md](whatsapp-agent.md#how-to-run-the-probe-phase-0)). Every value here is **redacted**: field names,
-value types, MIME types, sizes, durations, status codes and timings only; no message text, names, phone numbers, ids
-or keys.
+What the WhatsApp Agent API actually does. Two sources:
 
-**Status: the probe has not been run yet.** Until it has, every row is the community implementation's claim, not a
-measurement. Rows move to *Confirmed* (with the probe run's date) or *Different* (with what was seen).
+- **Working project** — the separate test project (`D:\Academic\BSE\FYP\Whatsapp agen api key test`), which
+  polls a real agent, receives texts, voice notes and images, downloads media, transcribes voice notes locally and
+  replies. Life Organizer's client, parser and fake server (`backend/tests/fakes/fakeAgentServer.ts`) follow it.
+- **Probe** — `npm run wa:probe` (redacted: field names, types, MIME types, sizes, status codes only).
 
-| # | Question | Community claim (unverified) | Probe result |
+| # | Question | Answer | Source |
 |---|---|---|---|
-| 1 | Base URL and auth | `https://api.whatsapp.com/agent/v1`, `Authorization: Bearer <key>` | pending |
-| 2 | `/updates` envelope | Unknown; code accepts an array or `{result \| updates \| data \| items \| messages: [...]}` | pending (step 1 `poll_envelope`) |
-| 3 | Update id type, step | Unknown; code accepts number or string | pending (`offset_semantics.updateIdType`, `idStep`) |
-| 4 | Acknowledge with `offset = last + 1`? Re-delivered without it? | Assumed Telegram-style | pending (`redeliveredWithoutOffset`, `redeliveredAfterOffsetLastPlus1`) |
-| 5 | Long-poll hold time with `timeout=25` | ~25 s | pending (`poll.held`) |
-| 6 | Text message shape | Unknown; code reads `message.text` (string or `{body}`), `body`, `caption` | pending (`update` kind text) |
-| 7 | Voice note: shape, MIME, size, duration, format | Unknown | pending (`update` kind voice, `media.magicHex` — `4f676753` = Ogg) |
-| 8 | Photo: shape, MIME, size | Unknown | pending |
-| 9 | PDF: shape, MIME, size, file name field | Unknown | pending |
-| 10 | `GET /media/{id}`: bytes or a URL? | Unknown; code handles both | pending (`media.returns`) |
-| 11 | `POST /messages` body that works | Unknown; code sends `{chat_id, text}` (or `{text}` without a chat ref) | pending (`send.variant`, `requestShape`) |
-| 12 | `POST /messages` response shape | Unknown | pending (`send.responseShape`) |
-| 13 | Agent-first message after ≥ 30 quiet minutes | **Unconfirmed**; reminders stay off until this is yes *and* the message arrived | pending (step 4 `proactive.accepted` + your phone) |
-| 14 | `POST /statuses` (read receipts) body | Unknown; code sends `{message_id, status: "read", chat_id}` best effort | not probed (avoids extra calls) |
-| 15 | Limits: 12/min messages, statuses, each media method; 15/min polls | Claimed | not tested on purpose; a 429 seen in normal use is recorded |
-| 16 | Text limit 4000 soft / 4096 hard | Claimed | not tested; the server splits at 4000 |
-| 17 | Non-creator → 403 code 131005; second poller → 409; bad key → 400 code 100 / 401 | Claimed | 409 / 401 are recorded if they happen |
-| 18 | Not end-to-end encrypted | Claimed (shown to users) | can't be measured by the probe |
-| 19 | Media size and format limits, retention, Pakistan availability | Unknown | partly: sizes seen; availability = whether Agents appear in your WhatsApp |
+| 1 | Base URL and auth | `https://api.whatsapp.com/agent/v1`, `Authorization: Bearer <key>` | Working project |
+| 2 | `GET /updates` | `?offset&limit&timeout`; 200 → `{ entry: [{ changes: [{ value: { messages: [...] } }] }], next_offset: "<opaque string>" }`; **204** with no body when nothing new | Working project |
+| 3 | Offset | Opaque: send back `next_offset` as received. Messages have their own ids (`id`), used to de-duplicate | Working project |
+| 4 | Message shape | WhatsApp Cloud API: `{ id, from: "user:<id>", timestamp, type, text?: { body }, image / audio / video / document / sticker?: { id, mime_type, caption?, filename? } }`; voice notes are `type: "audio"` with `audio.voice: true` | Working project |
+| 5 | Send | `POST /messages` `{ messaging_product: "whatsapp", to: "user:<id>", type: "text", text: { body } }`; `to` is the `from` of a message the user sent | Working project |
+| 6 | Media | `GET /media/{id}` → `{ url, mime_type, … }`; the file is downloaded from `url` (a Meta host) with the same Bearer key. Voice notes are Ogg/Opus, photos JPEG | Working project |
+| 7 | Upload | `POST /media` multipart (`messaging_product`, `type`, `file`) → `{ id }`; a document is then sent as `{ type: "document", document: { id, filename } }` | Working project |
+| 8 | Second poller | 409 with error code `1752041` | Working project |
+| 9 | Local transcription | faster-whisper "small" on CPU: a real voice note took 11.3 s (model load included), language detected, confidence 0.66 | Working project's script, run from Life Organizer |
+| 10 | Agent messages first (reminders without a recent user message) | **Unconfirmed.** Reminders therefore default to WhatsApp **and** the phone | Probe step 4 pending |
+| 11 | Recipient before any inbound message | **None known**: replies and reminders need the user to have written once | Working project |
+| 12 | `POST /statuses` (read receipts) | Unconfirmed; sent best effort in the Cloud form `{ messaging_product, status: "read", message_id }` | — |
+| 13 | Limits: 12/min messages, statuses, each media method; 15/min polls; text 4000 soft / 4096 hard | Community implementation; not tested on purpose | — |
+| 14 | Non-creator → 403 code 131005; bad key → 400 code 100 / 401 | Community implementation | — |
+| 15 | Not end-to-end encrypted | Community implementation (shown to users) | — |
+| 16 | Media size limits, retention, availability in Pakistan | Unknown (Agents work on the developer's own account in Pakistan) | — |
 
-## After the probe
+## Still to do
 
-1. Fill the table from `backend/.probe/findings-*.json` (it is already redacted; check it before sharing).
-2. Tighten `backend/src/modules/whatsappAgent/shapes.ts` and the send body in `client.ts` to the real shapes.
-3. Replace the assumed shapes in `backend/tests/fakes/fakeAgentServer.ts` with the recorded ones and add contract
-   tests that parse the redacted fixtures.
-4. If row 13 is confirmed (accepted **and** delivered), reminders can be turned on with `WHATSAPP_AGENT_REMINDERS=on`.
+1. Probe step 4 (`npm run wa:probe -- proactive --quiet 30`): if the agent-first message is accepted **and**
+   arrives, "WhatsApp only" reminders are safe; until then the default "Both" keeps the phone notification.
+2. Save one redacted `findings-*.json` from the probe and add it as a contract-test fixture.

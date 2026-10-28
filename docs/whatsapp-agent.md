@@ -10,23 +10,25 @@ reminders are **on by default**, and the key-encryption secret is generated on f
 The existing Twilio WhatsApp number (FR-WA-001/002, `modules/whatsapp/`) is untouched and keeps working; both can
 run at the same time.
 
-> **Status of the API facts.** Everything we know about the Agent API comes from a community implementation, not
-> from Meta's documentation. The probe (`npm run wa:probe`) checks it on a real phone; results go in
-> [whatsapp-agent-findings.md](whatsapp-agent-findings.md). Nothing marked *unconfirmed* below should be relied on.
+> **Status of the API facts.** The payload shapes come from a separate project that works against a real agent
+> (polling, texts, voice notes, images, media download, replies); see
+> [whatsapp-agent-findings.md](whatsapp-agent-findings.md). Not confirmed yet: whether the agent may message
+> first, and the documented limits. Meta has not published a manual we could check.
 
 ## What is confirmed and what is not
 
 | Item | Status |
 |---|---|
-| Base URL `https://api.whatsapp.com/agent/v1`, `Authorization: Bearer <key>` | Community implementation; probe pending |
-| `GET /updates` long poll (`offset`, `limit`, `timeout`), `POST /messages`, `GET /media/{id}`, `POST /media`, `POST /statuses` | Community implementation; probe pending |
-| Limits: 12/min messages, statuses, each media method; 15/min polls; text 4000 soft / 4096 hard | Community implementation; probe records what it sees but never tests limits on purpose |
-| Only the creator can chat with the agent (others 403, code 131005); second poller 409; bad key 400 code 100 / 401; 429 = budget used | Community implementation; probe pending |
-| Chats with an agent are **not end-to-end encrypted** | Community implementation (and shown to users as such) |
-| Offset / acknowledgement semantics (Telegram-style `offset = last id + 1`) | **Unconfirmed** — assumed by the code (`shapes.ts nextOffset`); probe step 1 checks it |
-| Exact JSON payloads (update envelope, message fields, send body, media answer) | **Unconfirmed** — the parser is tolerant (`shapes.ts`); probe records redacted shapes |
-| The agent may message first (reminders with no recent message from the user) | **Unconfirmed** — probe step 4. Reminders are on by default in **Both** mode, so the phone's own notification still arrives if WhatsApp doesn't deliver |
-| Media size and format limits, voice note format, retention, availability in Pakistan | **Unconfirmed** |
+| `GET /updates` long poll → `{ entry[].changes[].value.messages[], next_offset }`, 204 when empty; opaque offset | **Confirmed** (working project) |
+| Cloud-API messages (`id`, `from: "user:<id>"`, `type`, `text.body`, `image/audio/document {id, mime_type, …}`, `audio.voice`) | **Confirmed** |
+| Send `{ messaging_product: "whatsapp", to: "user:<id>", type: "text", text: { body } }` | **Confirmed** |
+| Media: `GET /media/{id}` → `{ url, mime_type }`, download from a Meta host with the key | **Confirmed** |
+| Second poller → 409 code `1752041` | **Confirmed** |
+| The agent can only write to a user who has written to it (`to` comes from an incoming message) | **Confirmed** as far as known: no other recipient form |
+| The agent may message first (hours after the user's last message) | **Unconfirmed** — reminders default to WhatsApp **and** the phone |
+| Limits: 12/min messages, statuses, each media method; 15/min polls; text 4000/4096 | Community implementation; enforced conservatively |
+| Not end-to-end encrypted | Community implementation (shown to users) |
+| Read receipts, media size limits, retention | Unconfirmed |
 
 ## Configuration (`backend/.env`): nothing required
 
@@ -38,8 +40,9 @@ Everything is on by default; the variables only switch things off or move them.
 | `WHATSAPP_KEY_SECRET` | generated | Encrypts API keys at rest (32 bytes, 64 hex characters or base64). If unset, the server creates one on first start in `backend/.secrets/whatsapp-key-secret` (git-ignored; `WHATSAPP_KEY_SECRET_FILE` moves it) and logs where. **Back it up**: losing it means every user must paste their key again. An invalid value is an error, never silently replaced |
 | `WHATSAPP_AGENT_REMINDERS` | on | `off` stops reminders on WhatsApp for everyone (phones keep their notifications) |
 | `WHATSAPP_VOICE` | on | `off` stops transcribing voice notes (users are asked to type) |
-| `STT_PROVIDER` | `whisper-local` | `none` turns transcription off |
-| `WHISPER_URL` | `http://127.0.0.1:8178` | The local whisper.cpp server |
+| `STT_PROVIDER` | `faster-whisper` | `whisper-local` (whisper.cpp server) or `none` |
+| `WHISPER_MODEL` / `WHISPER_PYTHON` | `small` / `python` (`python3` off Windows) | faster-whisper model and interpreter |
+| `WHISPER_URL` | `http://127.0.0.1:8178` | The whisper.cpp server for `whisper-local` |
 | `WHATSAPP_AGENT_BASE_URL` | `https://api.whatsapp.com/agent/v1` | Only for tests / a different endpoint |
 
 **Pro only.** Connecting needs Pro (403 `PRO_REQUIRED`); Free users see a locked card. A user who goes back to Free
@@ -104,10 +107,13 @@ green). Memory is shared across channels.
   reconnecting", data `{type: "sync"}` so the phone also re-plans its reminders). **403** → `ERROR`, same. **409** →
   wait 30–35 s and re-check the lock. **429** → the poll bucket waits for Retry-After (a minute if absent);
   `rateLimitedUntil` drives the "Paused for a minute" chip.
-- **No duplicates.** Each update id is claimed in `WhatsAppProcessedUpdate` before it is handled; a repeat is skipped.
-  The offset is saved only after handling. An update claimed but not finished (crash) gets one "Sorry, I missed your
+- **No duplicates.** Each message id is claimed in `WhatsAppProcessedUpdate` before it is handled; a repeat is
+  skipped. The API's `next_offset` is saved only after the whole batch was handled. An update claimed but not finished (crash) gets one "Sorry, I missed your
   last message. Please send it again." when that connection's poller starts again. Rows are purged after 7 days.
-- **No history replay.** Connecting reads the backlog once and starts after the newest update.
+- **No history replay.** Connecting reads the backlog once and starts after the newest message. The newest
+  sender is kept (encrypted) as the chat to answer, so a user who already wrote to the agent can send a test at once.
+- **Who to send to.** The agent can only write to `from` of a message the user sent. Until the user has written once,
+  "Send test message" answers `NO_CHAT_YET`, reminders stay on the phone, and the card asks the user to say hi.
 - **Graceful shutdown** (SIGINT/SIGTERM) aborts the open polls, waits for the current message and releases the locks.
 
 ### Rate limits and the outbound queue
@@ -145,26 +151,26 @@ reply lists the dated items (8 at most, "…and N more"), says how many need a d
 
 ### Voice notes
 
-On by default (the user can turn it off in the card). At most 2 minutes / 5 MB. The note is downloaded,
-transcribed **locally** by whisper.cpp on the server (audio never leaves it; the app's own voice input uses the
-phone's speech recognizer, which can't read WhatsApp audio) and handled as text; the reply starts with
-`I heard: "…"`. If the whisper.cpp server isn't running (checked at most once a minute) the user gets "I can't
-listen to voice notes on this server yet. Please type your message."; a failure, noise or low confidence → "Sorry,
-I couldn't make that out. Could you type it?". The card shows "On, but the server can't transcribe right now"
-while the transcriber is down. Install on the server:
+On by default (the user can turn it off in the card). At most 2 minutes / 5 MB. The note is downloaded and
+transcribed **locally** with **faster-whisper**, the same way the working test project does it
+(`backend/scripts/transcribe.py`, CPU, int8; audio never leaves the server and its temporary file is deleted). The
+app's own voice input uses the phone's speech recognizer, which can't read WhatsApp audio. The transcript is handled
+as text and the reply starts with `I heard: "…"`. If faster-whisper isn't installed (checked at most every 10 min)
+the user gets "please type your message"; a failure, noise or low confidence → "Sorry, I couldn't make that out.
+Could you type it?". The card says "On, but the server can't transcribe right now" while it is unavailable.
 
-1. Build whisper.cpp with its server (`cmake -B build && cmake --build build --config Release`; the binary is
-   `whisper-server`), or use a release build.
-2. Download a multilingual model: `ggml-small.bin` (≈ 0.5 GB) is a reasonable start; `ggml-medium.bin` is better for
-   Urdu but slower.
-3. Install ffmpeg (WhatsApp voice notes are Ogg/Opus).
-4. Run `whisper-server -m models/ggml-small.bin --convert --port 8178` next to the backend.
+Install once on the server: `python -m pip install -r backend/scripts/requirements-voice.txt`. The model downloads on
+first use (`small` ≈ 0.5 GB). `WHISPER_MODEL=base` or `tiny` is faster on a slow machine, `medium` better for Urdu;
+`WHISPER_PYTHON` picks the interpreter. One note is transcribed at a time; each run loads the model (about 10 s on
+a laptop CPU for a short note). `STT_PROVIDER=whisper-local` uses a whisper.cpp server instead
+(`whisper-server -m models/ggml-small.bin --convert --port 8178`, `WHISPER_URL`).
 
 Other candidates if local is too slow (not implemented; verify each one's terms before approving):
 
 | Candidate | Where the audio goes | Notes |
 |---|---|---|
-| **whisper.cpp, local** (default, implemented) | Stays on the server | Open source. Needs whisper.cpp built with `whisper-server`, a multilingual model (`ggml-small.bin` ≈ 0.5 GB, `medium` better for Urdu) and ffmpeg for WhatsApp's Ogg/Opus: `whisper-server -m models/ggml-small.bin --convert --port 8178`. No npm dependency. CPU latency depends on the machine |
+| **faster-whisper, local** (default, implemented) | Stays on the server | `pip install faster-whisper`; as in the working test project |
+| whisper.cpp, local (`STT_PROVIDER=whisper-local`, implemented) | Stays on the server | Open source. Needs whisper.cpp built with `whisper-server`, a multilingual model (`ggml-small.bin` ≈ 0.5 GB, `medium` better for Urdu) and ffmpeg for WhatsApp's Ogg/Opus: `whisper-server -m models/ggml-small.bin --convert --port 8178`. No npm dependency. CPU latency depends on the machine |
 | OpenAI transcription API | OpenAI | Not implemented. Per OpenAI's API terms API data is not used for training by default and may be kept for a limited time for abuse monitoring; check the current policy |
 | Google Cloud Speech-to-Text (`ur-PK`, `en-PK`) | Google Cloud | Not implemented. Data logging is opt-in; check current terms |
 | Gemini (already an optional LLM provider) | Google | Not implemented. Free-tier terms differ from paid-tier terms on use of data; check before approving |
@@ -256,10 +262,10 @@ See [known-limitations.md](known-limitations.md#whatsapp-agent).
 ## Phone checklist
 
 1. Settings → WhatsApp Agent: read the steps and privacy notice, paste the key, agree, Connect → chip "Connected",
-   key shown as ••••last4.
+   key shown as ••••last4. If you never wrote to the agent, the card asks you to send it "hi" first.
 2. Send test message → it arrives in the agent's chat.
 3. Text "Add assignment due Friday 3 PM" → reply; the task is in the app.
-4. Voice note (whisper.cpp running on the server) → reply starts "I heard: …"; with it stopped → "please type".
+4. Voice note (faster-whisper installed on the server) → reply starts "I heard: …" (about 10 s); without it → "please type".
 5. Photo of a timetable / deadline sheet → summary with 1 / 2 / 3; nothing created yet; "1" → added.
 6. PDF → same; a ZIP or a > 10 MB file → clear refusal.
 7. Numbered reply: "help" → "1" runs the first option.

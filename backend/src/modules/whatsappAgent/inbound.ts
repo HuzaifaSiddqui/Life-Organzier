@@ -138,7 +138,7 @@ async function handleVoice(user: Awaited<ReturnType<typeof loadUser>>["user"], s
   if (!file) return void (await io.reply(c.downloadFailed));
   let transcript: Transcript | null = null;
   try {
-    transcript = await stt.transcribe(file.bytes, file.mimeType ?? update.media?.mimeType ?? "audio/ogg", { languages: ["en", "ur"], timeoutMs: 60000 });
+    transcript = await stt.transcribe(file.bytes, file.mimeType ?? update.media?.mimeType ?? "audio/ogg", { languages: ["en", "ur"], timeoutMs: 180000 });
   } catch (error) {
     console.warn("WhatsApp Agent: transcription failed:", error instanceof Error ? error.message : "error");
   }

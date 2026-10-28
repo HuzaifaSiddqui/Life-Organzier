@@ -139,6 +139,14 @@ export function WhatsappAgentCard() {
             </Text>
           </View>
         ) : null}
+        {status.hasChat ? null : (
+          <View style={[styles.row, { backgroundColor: colors.info.bg, borderRadius: radii.md, padding: spacing.sm }]}>
+            <Icon name="assistant" size={16} color={colors.info.fg} />
+            <Text variant="caption" color="info" style={styles.flex}>
+              {t("waAgent.sayHi")}
+            </Text>
+          </View>
+        )}
         <Button title={t("waAgent.test")} kind="secondary" size="sm" loading={busy === "test"} onPress={() => void test()} style={styles.start} />
 
         <View style={{ gap: spacing.xs }}>
