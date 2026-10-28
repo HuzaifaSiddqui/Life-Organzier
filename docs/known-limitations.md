@@ -151,8 +151,32 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Snooze** only works by replying to a WhatsApp reminder sent in the last 6 hours (otherwise "Nothing to snooze right now"; max 3 per task, 15 min–4 h, never past the due time). A snooze that lands in quiet hours or Do Not Disturb moves to when they end and the reply says the new time; it is refused only if that is after the due time. In the app, use the notification's Snooze button.
 - **Sign-out push removal** is queued on the phone when offline and retried on app start/foreground for up to 48 hours (no login needed: the server checks the token plus the device's install id). Until it goes through, that phone can still get "Added from WhatsApp" pushes for the signed-out account.
 - **Check-ins don't go to WhatsApp.** With notification devices set to "WhatsApp only", the phone schedules neither reminders nor check-ins, and check-ins have no WhatsApp path yet.
-- **Routine reminders** (not tasks) are not sent on WhatsApp.
+- **Routine reminders** (not tasks) are not sent on the Twilio WhatsApp number (the WhatsApp Agent can send them once its reminders are turned on).
 - **Classes are routines.** "Next class" counts Academic timetable routines, routines with a room, and routines named like a class (class, lecture, lab, tutorial, period, seminar). "Next week" questions aren't understood yet.
+
+## WhatsApp Agent
+
+Beta path behind `WHATSAPP_AGENT=on` (docs/whatsapp-agent.md).
+
+- **Unverified API.** Endpoints, payloads, limits and error codes come from a community implementation; the probe
+  hasn't been run yet (docs/whatsapp-agent-findings.md). The update parser and the send body are best guesses.
+- **Availability depends on Meta.** Agents may not exist for an account or region (Pakistan unconfirmed); the app
+  says so and everything else keeps working.
+- **Not end-to-end encrypted.** Meta handles these chats; users must consent before connecting.
+- **Reminders on WhatsApp are off** until the probe confirms the agent may message first; until then reminders come
+  as phone notifications. When several reminders are due together, the numbered options act on the first one only.
+  A routine snoozed on WhatsApp and the phone's own routine snoozes don't know about each other.
+- **Voice notes are off** until a speech-to-text provider is approved; no benchmark has been run (it needs real
+  recordings). Whisper-style models tend to write spoken Urdu in Urdu script, not Roman Urdu.
+- **English or Roman Urdu only** for this feature's own messages and screen (an app set to Urdu shows this card in
+  Roman Urdu).
+- **One instance per connection.** A connection's send budget and queue live on the instance that polls it; "Send test
+  message" answers "starting" if another instance holds it. In memory: route rate limits and the reminder plan cache.
+- **Lost while down.** Messages sent while the server is off are fetched on the next poll only if the API keeps them
+  (retention unconfirmed). An update that crashed mid-way gets one "please send it again".
+- **Read receipts** are best effort and skipped when the status budget is used up.
+- **Re-connecting** while another server instance polls the same key gets `KEY_IN_USE` (409).
+- **Not Pro-gated** (the user brings their own agent; no cost per message). The Twilio number stays Pro-only.
 
 ## Check-in first steps
 

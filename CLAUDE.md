@@ -27,6 +27,7 @@ backend/
     tasks/ routines/ reminders/ scheduling/ sync/ documents/ memory/ mood/ patterns/
     checkins/   (FR-RN-004: checkinPlanner.ts pure rules, copy/templates first steps, checkinService.ts plan+respond, evaluation.ts report aggregation)
     analytics/ conversations/ settings/ account/ auth/ users/ events/ preferences/ whatsapp/
+    whatsappAgent/ (beta, WHATSAPP_AGENT=on: the user's own WhatsApp Agent; poller, client, outbox, inbound)
   prisma/schema.prisma, migrations/
   tests/*.test.ts              node:test unit tests (DB-backed ones skip without Postgres; CI sets REQUIRE_DB=true)
   tests/eval/                  Fixed evaluation sets (assistant-eval.json, Roman Urdu held-out set — see its README)
@@ -86,6 +87,7 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 - `docs/API_IMPLEMENTATION.md` — REST API reference.
 - `docs/FRs/FUNCTIONAL REQUIREMENTS.md` — functional requirements (FR-xx-nnn codes).
 - `docs/known-limitations.md` — known gaps and platform restrictions.
+- `docs/whatsapp-agent.md` — WhatsApp Agent beta (flags, confirmed vs unconfirmed, probe); results in `docs/whatsapp-agent-findings.md`.
 - `docs/checkins-evaluation-method.md` — how check-ins are evaluated (research mode, measures, privacy, validity).
 
 ## Out of scope (future work — do not implement)
