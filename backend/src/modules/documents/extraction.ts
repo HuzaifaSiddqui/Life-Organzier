@@ -417,6 +417,11 @@ export function dateGrounded(ymd: string, text: string): boolean {
  * always confirms them.
  */
 export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000): Promise<ExtractedDeadline[]> {
+  return (await llmActionItemsOrNull(text, todayYmd, tz, timeoutMs)) ?? [];
+}
+
+/** llmActionItems, but null when the model's reply failed (unparseable, e.g. cut mid-JSON, or invalid) instead of []. */
+async function llmActionItemsOrNull(text: string, todayYmd: string, tz: string, timeoutMs: number): Promise<ExtractedDeadline[] | null> {
   if (text.replace(/\s+/g, "").length < 30) return [];
   const result = await getAi().json(
     [
@@ -449,8 +454,9 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
       timeoutMs,
     },
   );
+  if (!result) return null;
   const out: ExtractedDeadline[] = [];
-  for (const item of result?.items ?? []) {
+  for (const item of result.items) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date) || Number.isNaN(Date.parse(item.date))) continue;
     if (!dateGrounded(item.date, text)) continue; // hallucinated or misread date
     const clock = item.time.match(/^(\d{1,2}):(\d{2})$/);
@@ -551,7 +557,57 @@ export async function aiDeadlines(text: string, todayYmd: string, tz: string, op
   for (let i = 0; i < chunks.length; i += 1) {
     const left = deadline - Date.now();
     if (left < 5000) return { items, cutShort: true };
-    items.push(...(await llmActionItems(chunks[i], todayYmd, tz, Math.min(60000, left))));
+    if (process.env.DOC_AI_SPLIT === "on") {
+      const r = await splitActionItems(chunks[i], todayYmd, tz, deadline);
+      items.push(...r.items);
+      if (r.cutShort) return { items, cutShort: true };
+    } else items.push(...(await llmActionItems(chunks[i], todayYmd, tz, Math.min(60000, left))));
   }
+  return { items, cutShort: false };
+}
+
+/** Dated lines per model call under DOC_AI_SPLIT: about 8 items fit the 500-token, 10-item reply. */
+export const DATED_LINES_PER_CALL = 8;
+const DATED_LINE = new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${MONTHS.join("|")})|\\b(?:${MONTHS.join("|")})[a-z]*\\.?\\s+\\d{1,2}\\b|\\b\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2,4}\\b|\\b\\d{4}-\\d{2}-\\d{2}\\b`, "i");
+
+/**
+ * The chunk in pieces of at most `per` dated lines; every piece after the first starts with the chunk's first line
+ * (usually the heading) so the model keeps the context.
+ */
+export function splitDense(chunk: string, per = DATED_LINES_PER_CALL): string[] {
+  const lines = chunk.split("\n");
+  if (lines.filter((l) => DATED_LINE.test(l)).length <= per) return [chunk];
+  const pieces: string[][] = [[]];
+  let dated = 0;
+  for (const line of lines) {
+    if (DATED_LINE.test(line) && dated === per) {
+      pieces.push([lines[0]]);
+      dated = 0;
+    }
+    pieces[pieces.length - 1].push(line);
+    if (DATED_LINE.test(line)) dated += 1;
+  }
+  return pieces.map((p) => p.join("\n"));
+}
+
+/**
+ * DOC_AI_SPLIT (default off): a dense chunk (a date sheet) is read in pieces of at most 8 dated lines, so its reply
+ * fits the 500-token / 10-item cap instead of being cut mid-JSON and lost; a piece whose reply still fails is halved
+ * and each half tried once more (one retry level). Off: one call per chunk, as before.
+ */
+async function splitActionItems(chunk: string, todayYmd: string, tz: string, deadline: number): Promise<{ items: ExtractedDeadline[]; cutShort: boolean }> {
+  const items: ExtractedDeadline[] = [];
+  const read = async (piece: string, retry: boolean): Promise<boolean> => {
+    const left = deadline - Date.now();
+    if (left < 5000) return false;
+    const got = await llmActionItemsOrNull(piece, todayYmd, tz, Math.min(60000, left));
+    if (got) items.push(...got);
+    else if (retry) {
+      const dated = piece.split("\n").filter((l) => DATED_LINE.test(l)).length;
+      if (dated >= 2) for (const half of splitDense(piece, Math.ceil(dated / 2))) if (!(await read(half, false))) return false;
+    }
+    return true;
+  };
+  for (const piece of splitDense(chunk)) if (!(await read(piece, true))) return { items, cutShort: true };
   return { items, cutShort: false };
 }
