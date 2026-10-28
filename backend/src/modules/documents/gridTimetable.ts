@@ -589,3 +589,21 @@ export async function gridSchedulesFromImage(buffer: Buffer, language: string, d
     };
   });
 }
+
+/**
+ * DOC_LAYOUT: OCR words rebuilt into rows and columns ("Paper | Date | Time"), so a photographed table keeps which
+ * date belongs to which paper. Phrases (words close together on a line) are cells; cells on the same visual line
+ * are a row. Null when the page doesn't look like a table (fewer than 3 rows of 2+ cells): the flat text is used.
+ */
+export function layoutRows(words: OcrWord[]): string | null {
+  const cells = phrases(dedupeWords(cleanWords(words)));
+  const mid = (w: OcrWord) => (w.y0 + w.y1) / 2;
+  const rows: OcrWord[][] = [];
+  for (const c of [...cells].sort((a, b) => mid(a) - mid(b))) {
+    const row = rows.find((r) => Math.abs(mid(r[0]) - mid(c)) < Math.min(r[0].y1 - r[0].y0, c.y1 - c.y0) * 0.6);
+    if (row) row.push(c);
+    else rows.push([c]);
+  }
+  if (rows.filter((r) => r.length >= 2).length < 3) return null;
+  return rows.map((r) => r.sort((a, b) => a.x0 - b.x0).map((c) => c.text).join(" | ")).join("\n");
+}

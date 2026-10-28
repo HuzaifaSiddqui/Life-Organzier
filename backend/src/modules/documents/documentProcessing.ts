@@ -1,14 +1,15 @@
 import crypto from "node:crypto";
 import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
-import { getAi } from "../../ai/llm.js";
+import { AiService, getAi, OllamaProvider } from "../../ai/llm.js";
 import { prisma } from "../../config/db.js";
 import { dueDateFromYmd, localYmd } from "../../lib/time.js";
 import { extractInterval } from "../assistant/entities.js";
 import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
-import { aiDeadlines, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
-import { gridSchedulesFromImage, gridSchedulesFromPdf, hasClockGrid } from "./gridTimetable.js";
+import { aiDeadlines, chunkText, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmActionItems, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
+import { AGREE_MAX_CALLS, agreeOnAiItems, classifyDocument, docFlag, documentPriority, kindByRules, routeItems, verifyEvidence, type DocKind, type KindResult } from "./routing.js";
+import { gridSchedulesFromImage, gridSchedulesFromPdf, hasClockGrid, layoutRows } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
 export const DOC_TYPES = ["SYLLABUS", "SCHEDULE", "NOTES", "OTHER"] as const;
@@ -39,7 +40,7 @@ export async function existingRoutineId(userId: string, title: string, daysOfWee
 
 /** Auto-creation thresholds from FR-DP-002 §4 and FR-DP-003 §4. */
 export const DEADLINE_AUTO = 95;
-const SCHEDULE_AUTO = 90;
+export const SCHEDULE_AUTO = 90;
 /** Below this OCR confidence a title may be misread ("Broject"), so OCR'd deadlines always go to review. */
 export const OCR_AUTO_MIN = 90;
 
@@ -62,6 +63,8 @@ type Extracted = {
   method: string;
   /** EXTRACTOR_VERSION that produced it; a saved result from another version is read again, not reused. */
   extractorVersion?: number;
+  /** DOC_ROUTING: the detected (or picked) type. Absent on older documents. */
+  kind?: KindResult;
 };
 
 /**
@@ -81,6 +84,8 @@ export type AnalyzeInput = {
   now?: Date;
   /** Test hook: a shorter DOCUMENT_TIME_LIMIT_MS. */
   timeLimitMs?: number;
+  /** DOC_ROUTING: the type the user picked ("wrong type?"), instead of detecting it. */
+  kind?: DocKind;
 };
 
 export type Analysis = {
@@ -94,6 +99,8 @@ export type Analysis = {
   needsLanguage: boolean;
   method: string;
   grid: boolean;
+  /** DOC_ROUTING (or DOC_AGREE): the detected or picked document type. */
+  kind?: KindResult;
 };
 
 /**
@@ -120,7 +127,9 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   const raw = input.text !== undefined
     ? { text: input.text, confidence: 100, method: "text" as const, warning: null, needsLanguage: false }
     : await extractText(input.buffer as Buffer, input.mimeType, input.fileName, input.language, started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS));
-  const text = maskPersonalNumbers(cleanDocumentText(raw.text));
+  // DOC_LAYOUT: an OCR'd table read as rows and columns (the flat text stays the fallback).
+  const table = docFlag("DOC_LAYOUT") && "words" in raw && raw.words?.length ? layoutRows(raw.words) : null;
+  const text = maskPersonalNumbers(cleanDocumentText(table ?? raw.text));
   const now = input.now ?? new Date();
   let deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
   let schedules = input.docType === "NOTES" ? [] : extractSchedules(text, now, tz);
@@ -153,11 +162,32 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
     const aiOn = getAi().enabled && getAi().available;
     const pass = aiOn && left() >= MIN_AI_MS ? await aiDeadlines(text, todayYmd, tz, { budgetMs: left() }) : { items: [], cutShort: aiOn };
     timedOut = pass.cutShort;
-    deadlines = mergeDeadlines(deadlines, pass.items);
+    if (docFlag("DOC_EVIDENCE")) {
+      // Only items whose source line is in the text (and gives their date) may agree with the rules.
+      const checked = pass.items.map((i) => verifyEvidence(i, text));
+      deadlines = mergeDeadlines(mergeDeadlines(deadlines, checked.filter((i) => i.verified)), checked.filter((i) => !i.verified), { agree: false });
+    } else deadlines = mergeDeadlines(deadlines, pass.items);
     const dated = deadlines.filter((d) => d.date);
     if (dated.length && !schedules.length && dated.every((d) => d.date! < todayYmd)) aiNote = "Heads up: the dates in this file have already passed.";
   }
   capOcrConfidence(deadlines, raw.method, raw.confidence);
+  let kind: KindResult | undefined;
+  const routing = docFlag("DOC_ROUTING");
+  if (input.docType !== "NOTES" && (routing || docFlag("DOC_AGREE"))) {
+    const found = { deadlines, schedules, grid };
+    kind = input.kind ? { kind: input.kind, confidence: 1, via: "user" } : routing && left() >= MIN_AI_MS ? await classifyDocument(text, found, Math.min(15000, left())) : kindByRules(text, found);
+  }
+  if (docFlag("DOC_AGREE") && kind && (kind.kind === "other" || raw.confidence < 70) && getAi().enabled && left() >= MIN_AI_MS) {
+    // A second, local model on the same masked text (private documents stay on this machine).
+    const second = new AiService([new OllamaProvider(undefined, process.env.DOC_AGREE_MODEL ?? "qwen2.5:14b")]);
+    const end = Date.now() + left() - 5000;
+    deadlines = (await agreeOnAiItems(deadlines, async () => {
+      const out: ExtractedDeadline[] = [];
+      for (const c of chunkText(text, 2500, 200, AGREE_MAX_CALLS)) if (end - Date.now() > 5000) out.push(...(await llmActionItems(c, todayYmd, tz, Math.min(60000, end - Date.now()), second)));
+      return out;
+    })).deadlines;
+  }
+  if (routing && kind) ({ deadlines, schedules } = routeItems(kind.kind, deadlines, schedules));
   // A grid lists many courses — picking one as "the course" would store a wrong memory.
   const course = extractCourseInfo(grid ? "" : text);
   if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200 && left() >= MIN_AI_MS) course.topics = await llmTopics(text, Math.min(45000, left()));
@@ -167,10 +197,13 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
     }
   }
   const intervalNote = input.docType !== "NOTES" && extractInterval(text) ? INTERVAL_WARNING : null;
-  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : intervalNote ?? aiNote), needsLanguage: raw.needsLanguage, method: grid ? (/pdf/i.test(input.mimeType) ? "pdf-grid" : "image-grid") : raw.method, grid };
+  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : intervalNote ?? aiNote), needsLanguage: raw.needsLanguage, method: grid ? (/pdf/i.test(input.mimeType) ? "pdf-grid" : "image-grid") : raw.method, grid, ...(kind ? { kind } : {}) };
 }
 
 type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean };
+
+/** DOC_FALLBACK_UI: how much of the extracted (masked) text the phone gets to show ("See what was read"). */
+export const TEXT_FOR_VIEW = 20000;
 
 /** A retry of the same file within this long gets the saved result instead of a second document. */
 export const REUSE_WITHIN_MS = 24 * 3600000;
@@ -209,7 +242,7 @@ async function reuseOrProcess(user: User, settings: UserSettings, input: Process
   const saved = recent?.extracted as unknown as Extracted | null;
   if (recent && saved && saved.extractorVersion === EXTRACTOR_VERSION) {
     const { text, ...doc } = recent;
-    return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), reused: true };
+    return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), ...(docFlag("DOC_FALLBACK_UI") ? { text: text.slice(0, TEXT_FOR_VIEW) } : {}), reused: true };
   }
   return processDocumentOnce(user, settings, input, hash);
 }
@@ -258,7 +291,8 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
     },
   });
 
-  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method, extractorVersion: EXTRACTOR_VERSION };
+  const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method, extractorVersion: EXTRACTOR_VERSION, ...(a.kind ? { kind: a.kind } : {}) };
+  const todayYmd = localYmd(new Date(), tz);
   const createdTasks = [];
   const createdRoutines = [];
   if (input.autoCreate && !raw.needsLanguage && raw.confidence >= 70) {
@@ -275,7 +309,7 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
         { userId: user.id, tz },
         {
           title: d.title,
-          priority: /final|midterm|exam/i.test(d.activity) ? Priority.HIGH : Priority.MEDIUM,
+          priority: docFlag("DOC_PRIORITY_V2") ? documentPriority(d, todayYmd, course.grading).priority : /final|midterm|exam/i.test(d.activity) ? Priority.HIGH : Priority.MEDIUM,
           category: "Academic",
           source: TaskSource.DOCUMENT,
           confidence: d.confidence,
@@ -335,6 +369,6 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
 
   const updated = await prisma.document.update({ where: { id: document.id }, data: { extracted: extracted as unknown as Prisma.InputJsonValue } });
   const { text: _t, ...doc } = updated;
-  return { document: doc, extracted, createdTasks, createdRoutines, textPreview: text.slice(0, 1500), reused: false };
+  return { document: doc, extracted, createdTasks, createdRoutines, textPreview: text.slice(0, 1500), ...(docFlag("DOC_FALLBACK_UI") ? { text: text.slice(0, TEXT_FOR_VIEW) } : {}), reused: false };
 }
 

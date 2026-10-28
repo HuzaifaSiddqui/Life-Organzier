@@ -17,7 +17,7 @@ if (!flags.has("--ai")) {
   process.env.AI_ENABLED = "false";
   process.env.GEMINI_API_KEY = "";
 }
-const { analyzeDocument } = await import("../src/modules/documents/documentProcessing.js");
+const { analyzeDocument, DEADLINE_AUTO, SCHEDULE_AUTO } = await import("../src/modules/documents/documentProcessing.js");
 const { AiService, setAi } = await import("../src/ai/llm.js");
 const { shutdownOcr } = await import("../src/modules/documents/textExtraction.js");
 
@@ -41,7 +41,7 @@ const MIME: Record<string, string> = { ".txt": "text/plain", ".png": "image/png"
 const lower = (s: string | null | undefined) => (s ?? "").toLowerCase();
 const sameDays = (a: number[], b: number[]) => [...new Set(a)].sort().join() === [...new Set(b)].sort().join();
 
-type Row = { file: string; categories: string[]; expected: number; found: number; extracted: number; correct: number; ocr: number; method: string; failures: string[]; ms: number };
+type Row = { file: string; categories: string[]; expected: number; found: number; extracted: number; correct: number; ocr: number; method: string; failures: string[]; ms: number; wrongAuto: number };
 
 async function evaluate(): Promise<Row[]> {
   const rows: Row[] = [];
@@ -84,8 +84,13 @@ async function evaluate(): Promise<Row[]> {
             : `wrong time for "${e.titleContains || near.title}": got ${near.time ?? "none"}, expected ${e.time}`,
       );
     }
+    // Wrong items that auto-create would have created (same rule as processDocument): must stay 0.
+    const autoOk = a.ocrConfidence >= 70 && !a.needsLanguage;
+    let wrongAuto = 0;
     a.deadlines.forEach((d, i) => {
-      if (!used.has(i)) failures.push(`extra deadline "${d.title}" ${d.date ?? "(undated)"}${d.time ? ` ${d.time}` : ""}`);
+      if (used.has(i)) return;
+      failures.push(`extra deadline "${d.title}" ${d.date ?? "(undated)"}${d.time ? ` ${d.time}` : ""}`);
+      if (autoOk && d.date && d.confidence >= DEADLINE_AUTO) wrongAuto += 1;
     });
 
     // Schedules: rows with the same title and time are combined (a class on Mon and Wed may be two rows).
@@ -108,10 +113,12 @@ async function evaluate(): Promise<Row[]> {
       );
     }
     a.schedules.forEach((s, i) => {
-      if (!usedS.has(i)) failures.push(`extra class "${s.title}" ${s.daysOfWeek.join(",")} ${s.time ?? ""}`);
+      if (usedS.has(i)) return;
+      failures.push(`extra class "${s.title}" ${s.daysOfWeek.join(",")} ${s.time ?? ""}`);
+      if (autoOk && a.schedules.length <= 5 && s.daysOfWeek.length && s.confidence >= SCHEDULE_AUTO) wrongAuto += 1;
     });
 
-    rows.push({ file: doc.file, categories: doc.categories ?? [], expected: expD.length + expS.length, found, extracted: a.deadlines.length + a.schedules.length, correct, ocr: a.ocrConfidence, method: a.method, failures, ms: Date.now() - started });
+    rows.push({ file: doc.file, categories: doc.categories ?? [], expected: expD.length + expS.length, found, extracted: a.deadlines.length + a.schedules.length, correct, ocr: a.ocrConfidence, method: a.method, failures, ms: Date.now() - started, wrongAuto });
   }
   return rows;
 }
@@ -156,6 +163,8 @@ function section(title: string, rows: Row[], compare: Baseline | null): string[]
     `| Set | Expected | Found | Recall | Extracted | Precision |${compare ? " Baseline recall | Baseline precision |" : ""}`,
     `|---|---|---|---|---|---|${compare ? "---|---|" : ""}`,
     ...summary.map(([name, s]) => `| ${name} | ${s.expected} | ${s.found} | ${recall(s)} | ${s.extracted} | ${precision(s)} |${compare ? ` ${compare[name]?.recall ?? "–"} | ${compare[name]?.precision ?? "–"} |` : ""}`),
+    "",
+    `Wrong items reaching auto-create (confidence at or above the auto-create gate, not matching any expected item): **${rows.reduce((n, r) => n + r.wrongAuto, 0)}** (must stay 0).`,
     "",
     "### Per document",
     "",
@@ -213,6 +222,7 @@ function print(title: string, rows: Row[]): void {
   const summary = summaryOf(rows);
   const all = summary[0][1];
   console.log(`\n${title}: recall ${recall(all)} (${all.found}/${all.expected}), precision ${precision(all)} (${all.correct}/${all.extracted}) over ${rows.length} documents.`);
+  console.log(`  wrong items reaching auto-create: ${rows.reduce((n, r) => n + r.wrongAuto, 0)}`);
   for (const [name, s] of summary.slice(1)) console.log(`  ${name.padEnd(22)} recall ${recall(s).padStart(6)}  precision ${precision(s).padStart(6)}`);
   const failing = rows.filter((r) => r.failures.length);
   if (failing.length) console.log(`Failures:\n${failing.map((r) => `  ${r.file}\n    ${r.failures.join("\n    ")}`).join("\n")}`);
