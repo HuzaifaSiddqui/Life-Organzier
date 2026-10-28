@@ -31,7 +31,7 @@ type PlanResponse = {
   checkins?: PlannedCheckin[];
   /** Routine occurrences still pending (a snoozed routine alarm comes back only for these). */
   pendingOccurrences?: string[];
-  settings: { method: "APP" | "SOUND" | "VIBRATION" | "SOUND_VIBRATION"; devices: string; dndUntil: string | null; frequency: string };
+  settings: { method: "APP" | "SOUND" | "VIBRATION" | "SOUND_VIBRATION"; devices: string; dndUntil: string | null; frequency: string; viaWhatsappAgent?: boolean };
 };
 
 const PREFIX = "lo:";
@@ -302,7 +302,10 @@ export async function syncReminders(): Promise<number | null> {
   // Routine snoozes made on this phone move that occurrence's reminders (utils/routineSnooze.ts).
   const snoozes = await readSnoozes();
   const repeats = snoozeRepeats(snoozes, plan.pendingOccurrences ?? [], Date.now());
-  const upcoming = applySnoozes(plan.reminders, snoozes)
+  // WhatsApp Agent reminders instead of notifications: the server sends task and routine reminders there (and a
+  // push if a send fails), so the phone leaves them out. Snoozes made on this phone and check-ins stay local.
+  const planned = plan.settings.viaWhatsappAgent ? [] : plan.reminders;
+  const upcoming = applySnoozes(planned, snoozes)
     .filter((r) => new Date(r.fireAt).getTime() > Date.now() + 5000)
     .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime());
   let count = 0;

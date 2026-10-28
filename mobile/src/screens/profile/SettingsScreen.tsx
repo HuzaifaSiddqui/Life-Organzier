@@ -28,6 +28,7 @@ import {
 } from "../../services/settingsApi";
 import { resetLocalData, syncNow } from "../../services/syncEngine";
 import { LocationOnboardingSheet } from "../../components/LocationOnboardingSheet";
+import { WhatsappAgentCard } from "../../components/WhatsappAgentCard";
 import { WhatsappLinkCard } from "../../components/WhatsappLinkCard";
 import { isLocationRemindersEnabled, setLocationRemindersEnabled, takeLocationOnboarding } from "../../services/locationReminders";
 import { listPlaces } from "../../services/locationsApi";
@@ -383,6 +384,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         <SectionTitle title="WhatsApp" />
         <WhatsappLinkCard />
+        <WhatsappAgentCard />
 
         <SectionTitle title="Help & tutorials" />
         <Card style={{ gap: 8 }}>
