@@ -2,12 +2,89 @@
   "about": "Models shortlisted per provider and job from the live model lists on 2026-10-28 (npx tsx scripts/list-models.ts; raw list in docs/baselines/models-2026-10-28.json). Read by scripts/bench-providers.ts. Change by re-listing, never from memory.",
   "listedAt": "2026-10-28",
   "candidates": {
-    "ollama": { "chat": ["qwen2.5:7b"], "docs": ["qwen2.5:7b"] },
-    "groq": { "chat": ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"], "docs": ["openai/gpt-oss-120b"] },
-    "cerebras": { "chat": ["gpt-oss-120b", "qwen-3.8-27b"], "docs": ["gpt-oss-120b"] },
-    "gemini": { "chat": ["gemini-3.5-flash-lite", "gemini-3.8-flash"], "docs": ["gemini-3.5-flash-lite", "gemini-3.8-flash"], "vision": ["gemini-3.5-flash-lite", "gemini-3.8-flash"], "embed": ["gemini-embedding-2"] },
-    "together": { "chat": [], "docs": [], "note": "API key rejected (HTTP 401) on 2026-10-28: no models could be listed." },
-    "deploy": { "chat": ["deepseek-ai/deepseek-v4.1-flash-1017", "zai-org/glm-5.3-flash"], "docs": ["deepseek-ai/deepseek-v4.1-flash-1017", "zai-org/glm-5.3-flash"] },
-    "openrouter": { "chat": ["google/gemma-4-26b-a4b-it:free", "nvidia/nemotron-3.5-lightning:free"], "docs": ["thinkingmachines/inkling:free", "nvidia/nemotron-3-ultra-550b-a55b:free"], "vision": ["google/gemma-4-26b-a4b-it:free"], "embed": ["nvidia/nemotron-3.5-embed-8b:free"], "unavailable": ["nvidia/nemotron-3-super-120b-a12b:free", "qwen/qwen3.8-27b:free"] }
+    "ollama": {
+      "chat": [
+        "qwen2.5:7b"
+      ],
+      "docs": [
+        "qwen2.5:7b"
+      ],
+      "embed": [
+        "nomic-embed-text"
+      ]
+    },
+    "groq": {
+      "chat": [
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3.8-27b"
+      ],
+      "docs": [
+        "openai/gpt-oss-120b"
+      ]
+    },
+    "cerebras": {
+      "chat": [
+        "gpt-oss-120b",
+        "qwen-3.8-27b"
+      ],
+      "docs": [
+        "gpt-oss-120b"
+      ]
+    },
+    "gemini": {
+      "chat": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash"
+      ],
+      "docs": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash"
+      ],
+      "vision": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash"
+      ],
+      "embed": [
+        "gemini-embedding-2"
+      ]
+    },
+    "together": {
+      "chat": [],
+      "docs": [],
+      "note": "API key rejected (HTTP 401) on 2026-10-28: no models could be listed."
+    },
+    "deploy": {
+      "chat": [
+        "deepseek-ai/deepseek-v4.1-flash-1017",
+        "zai-org/glm-5.3-flash"
+      ],
+      "docs": [
+        "deepseek-ai/deepseek-v4.1-flash-1017",
+        "zai-org/glm-5.3-flash"
+      ]
+    },
+    "openrouter": {
+      "chat": [
+        "google/gemma-4-26b-a4b-it:free",
+        "nvidia/nemotron-3.5-lightning:free"
+      ],
+      "docs": [
+        "nvidia/nemotron-3.5-lightning:free"
+      ],
+      "vision": [
+        "google/gemma-4-26b-a4b-it:free"
+      ],
+      "embed": [
+        "nvidia/nemotron-3.5-embed-8b:free"
+      ],
+      "unavailable": [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "qwen/qwen3.8-27b:free"
+      ],
+      "gated": {
+        "thinkingmachines/inkling:free": "HTTP 403 on 2026-10-28: 'only available on agentic harnesses' (approved coding/productivity apps), not usable by this app"
+      }
+    }
   }
 }

@@ -24,6 +24,8 @@ export type ProviderSpec = {
   perDay?: number;
   disabled?: boolean;
   extraBody?: Record<string, unknown>;
+  /** Reasoning models spend output tokens thinking before they answer: never ask for fewer than this. */
+  minOutputTokens?: number;
   evidence: string;
 };
 export type Usage = { inputTokens?: number; outputTokens?: number; costUsd?: number };
@@ -61,6 +63,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     private readonly baseUrl: string,
     private readonly apiKey: string | undefined,
     private readonly extraBody: Record<string, unknown> = {},
+    private readonly minOutputTokens = 0,
   ) {}
 
   async chat(messages: ChatMessage[], options: CompletionOptions): Promise<string> {
@@ -81,7 +84,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         return { role: m.role, content: [{ type: "text", text: content }, ...options.images.map((img) => ({ type: "image_url", image_url: { url: `data:${img.mimeType};base64,${img.data}` } }))] };
       }),
       temperature: options.temperature ?? 0.2,
-      max_tokens: options.maxTokens ?? 400,
+      max_tokens: Math.max(options.maxTokens ?? 400, this.minOutputTokens),
       stream: false,
       ...(options.json ? { response_format: { type: "json_object" } } : {}),
       ...this.extraBody,
@@ -89,7 +92,11 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const response = await post(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, body, { Authorization: `Bearer ${this.apiKey}` }, options.timeoutMs ?? 8000);
     const remaining = response.headers.get("x-ratelimit-remaining-requests");
     if (remaining !== null) this.rateLimit = { remainingRequests: Number(remaining), limitRequests: Number(response.headers.get("x-ratelimit-limit-requests") ?? NaN) };
-    if (!response.ok) throw new ProviderHttpError(response.status, `${this.name} returned HTTP ${response.status}`);
+    if (!response.ok) {
+      // Error code only (e.g. json_validate_failed): never the message, which can echo the prompt.
+      const code = await response.json().then((b: { error?: { code?: unknown } }) => b.error?.code, () => undefined);
+      throw new ProviderHttpError(response.status, `${this.name} returned HTTP ${response.status}${typeof code === "string" ? ` (${code.slice(0, 40)})` : ""}`);
+    }
     const json = (await response.json()) as {
       choices?: Array<{ message?: { content?: string | null } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
@@ -220,7 +227,7 @@ export function makeProvider(name: string, model: string, keyIndex = 0): LlmProv
   if (spec.kind === "openai") {
     if (spec.freeOnly && !model.endsWith(":free")) return null; // $0 cap: OpenRouter free models only
     const key = providerKey(name, keyIndex);
-    return key && spec.baseUrl ? new OpenAiCompatibleProvider(name, model, spec.baseUrl, key, spec.extraBody) : null;
+    return key && spec.baseUrl ? new OpenAiCompatibleProvider(name, model, spec.baseUrl, key, spec.extraBody, spec.minOutputTokens) : null;
   }
   return null;
 }

@@ -72,7 +72,7 @@ export async function embedOne(text: string, kind: "query" | "document" = "docum
  * Gemini batchEmbedContents (e.g. gemini-embedding-2). Masked text only; plain fetch. Not used by the app unless
  * EMBEDDING_PROVIDER names one (the benchmark decides; default: Ollama nomic-embed-text, then the hashed fallback).
  */
-export async function embedHosted(provider: "openrouter" | "gemini", model: string, texts: string[], kind: "query" | "document" = "document", timeoutMs = 20000): Promise<number[][]> {
+export async function embedHosted(provider: "openrouter" | "gemini", model: string, texts: string[], kind: "query" | "document" = "document", timeoutMs = 20000, pauseMs = 0): Promise<number[][]> {
   const { maskForProvider } = await import("../lib/mask.js");
   const input = texts.map((t) => maskForProvider(t).slice(0, 2000));
   if (provider === "openrouter") {
@@ -92,6 +92,8 @@ export async function embedHosted(provider: "openrouter" | "gemini", model: stri
   }
   const out: number[][] = [];
   for (let i = 0; i < input.length; i += 100) {
+    // Free tiers refuse batches sent back to back (HTTP 429): a pause between them for bulk use.
+    if (i && pauseMs) await new Promise((res) => setTimeout(res, pauseMs));
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:batchEmbedContents`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" },

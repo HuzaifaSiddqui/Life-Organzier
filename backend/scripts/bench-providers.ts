@@ -31,6 +31,11 @@ const jobArg = arg("job") ?? "all";
 const modelArg = arg("model");
 const MAX = Number(arg("max") ?? 40);
 const RUNS = Number(arg("runs") ?? 3);
+/** --pace ms between calls (overrides the per-provider default); --tag names the pass (e.g. slow) in the results. */
+const PACE_ARG = arg("pace") ? Number(arg("pace")) : null;
+const TAG = arg("tag") ?? "";
+/** --timeout ms per hosted call (default 8000, the production limit); a longer one is a diagnostic pass, never ranked. */
+const TIMEOUT = Number(arg("timeout") ?? 8000);
 const DATE = arg("date") ?? new Date().toISOString().slice(0, 10);
 const OUT = join(root, `../docs/baselines/providers-${DATE}.json`);
 
@@ -59,11 +64,11 @@ const quantile = (xs: number[], q: number) => (xs.length ? [...xs].sort((a, b) =
 
 /* ------------------------------------------------------------------ the measured provider */
 
-type Tally = { calls: number; invalidJson: number; schemaFail: number; failures: number; rateLimited: number; billing: number; inputTokens: number; outputTokens: number; latencies: number[]; headroom: number | null };
+type Tally = { errors: Record<string, number>; calls: number; invalidJson: number; schemaFail: number; failures: number; rateLimited: number; billing: number; inputTokens: number; outputTokens: number; latencies: number[]; headroom: number | null };
 function measured(name: string, model: string, needKeys: string[] | null) {
   const inner = name === "ollama" ? new OllamaProvider(undefined, model) : makeProvider(name, model);
   if (!inner) throw new Error(`${name}/${model}: not configured`);
-  const t: Tally = { calls: 0, invalidJson: 0, schemaFail: 0, failures: 0, rateLimited: 0, billing: 0, inputTokens: 0, outputTokens: 0, latencies: [], headroom: null };
+  const t: Tally = { errors: {}, calls: 0, invalidJson: 0, schemaFail: 0, failures: 0, rateLimited: 0, billing: 0, inputTokens: 0, outputTokens: 0, latencies: [], headroom: null };
   let last = 0;
   let stopped = false;
   const provider = {
@@ -71,14 +76,14 @@ function measured(name: string, model: string, needKeys: string[] | null) {
     model,
     chat: async (messages: Msg[], options: Record<string, unknown>): Promise<string> => {
       if (stopped) throw new Error("stopped: billing");
-      const wait = last + (PACE[name] ?? 2500) - Date.now();
+      const wait = last + (PACE_ARG ?? PACE[name] ?? 2500) - Date.now();
       if (wait > 0) await sleep(wait);
       last = Date.now();
       const sent = name === "ollama" ? messages : messages.map((m) => ({ ...m, content: maskForProvider(m.content) }));
       t.calls += 1;
       const t0 = performance.now();
       try {
-        const r = inner.call ? await inner.call(sent, { ...options, timeoutMs: name === "ollama" ? 60000 : 8000 }) : { text: await inner.chat(sent, options) };
+        const r = inner.call ? await inner.call(sent, { ...options, timeoutMs: name === "ollama" ? 60000 : TIMEOUT }) : { text: await inner.chat(sent, options) };
         t.latencies.push(performance.now() - t0);
         const u = "usage" in r ? r.usage : undefined;
         t.inputTokens += u?.inputTokens ?? 0;
@@ -102,7 +107,11 @@ function measured(name: string, model: string, needKeys: string[] | null) {
         t.latencies.push(performance.now() - t0);
         t.failures += 1;
         const msg = error instanceof Error ? error.message : String(error);
+        // Cause only (HTTP status, timeout, empty reply), never the message body.
+        const cause = /HTTP (\d{3})/.exec(msg)?.[1] ?? (/timeout|abort/i.test(msg) ? "timeout" : /empty/i.test(msg) ? "empty" : "other");
+        t.errors[cause] = (t.errors[cause] ?? 0) + 1;
         if (/HTTP 429/.test(msg)) t.rateLimited += 1;
+        if (/json_validate_failed/.test(msg)) t.invalidJson += 1; // the provider rejected the model's reply as not JSON
         if (/HTTP 402/.test(msg)) {
           t.billing += 1;
           stopped = true;
@@ -132,7 +141,7 @@ const longDoc = { name: "long (all fixtures joined)", text: docSet.map((d) => d.
 
 /* ------------------------------------------------------------------ jobs */
 
-type JobResult = { provider: string; model: string; job: string; run: number; n: number; correct: number; accuracy: number; bySet?: Record<string, { n: number; correct: number }>; tally: Omit<Tally, "latencies"> & { p50: number; p95: number }; note?: string };
+type JobResult = { tag?: string; pace?: number; provider: string; model: string; job: string; run: number; n: number; correct: number; accuracy: number; bySet?: Record<string, { n: number; correct: number }>; tally: Omit<Tally, "latencies"> & { p50: number; p95: number }; note?: string };
 
 function summary(t: Tally) {
   const { latencies, ...rest } = t;
@@ -199,10 +208,17 @@ async function docsJob(name: string, model: string, run: number, max: number): P
   return { provider: name, model, job: "docs", run, n: expected, correct: found, accuracy: expected ? found / expected : 0, bySet, tally: summary(m.tally), note: `precision ${(precision * 100).toFixed(1)}% (${found}/${extracted})` };
 }
 
-const VISION = [
-  { file: "images/datesheet-portal.screenshot.png", expect: [["operating systems", "2026-11-09", "13:00"], ["database systems", "2026-11-11", "09:00"], ["technical and business writing", "2026-11-13", "13:00"], ["cloud computing", "2026-11-16", "09:00"]] },
-  { file: "images/table-datesheet.clean.png", expect: [["calculus", "2026-11-02", "09:00"], ["physics", "2026-11-04", "09:00"], ["english", "2026-11-06", "13:00"]] },
-];
+/** The clean synthetic page images (no personal data) with the expectations of their text fixtures; times as 24 h. */
+const to24 = (t?: string) => {
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i.exec(t ?? "");
+  if (!m) return "";
+  const h = (Number(m[1]) % 12) + (m[3].toUpperCase() === "PM" ? 12 : 0);
+  return `${String(h).padStart(2, "0")}:${m[2] ?? "00"}`;
+};
+const VISION = manifest.documents
+  .filter((d) => d.from && d.file.endsWith(".clean.png"))
+  .map((d) => ({ file: d.file, expect: (manifest.documents.find((x) => x.file === `fixtures/${d.from}.txt`)?.expectedDeadlines ?? []).map((e) => [e.titleContains.toLowerCase(), e.date ?? "", to24(e.time)]) }))
+  .filter((v) => v.expect.length);
 async function visionJob(name: string, model: string, run: number): Promise<JobResult> {
   const m = measured(name, model, ["items"]);
   let n = 0;
@@ -261,19 +277,26 @@ async function embedJob(name: string, model: string, run: number): Promise<JobRe
     const r = await embedTexts(bank.map((r) => r.text), "document");
     vectors = r.vectors;
     note = `local (${r.model}), unmasked`;
-  } else vectors = await embedHosted(name as "openrouter" | "gemini", model, bank.map((r) => r.text));
+  } else vectors = await embedHosted(name as "openrouter" | "gemini", model, bank.map((r) => r.text), "document", 60000, 65000);
   const bySet = looAccuracy(vectors);
   const n = Object.values(bySet).reduce((a, s) => a + s.n, 0);
   const correct = Object.values(bySet).reduce((a, s) => a + s.correct, 0);
   const ms = performance.now() - t0;
-  return { provider: name, model, job: "embed", run, n, correct, accuracy: correct / n, bySet, tally: { calls: name === "hash" ? 0 : Math.ceil(bank.length / 100), invalidJson: 0, schemaFail: 0, failures: 0, rateLimited: 0, billing: 0, inputTokens: 0, outputTokens: 0, headroom: null, p50: Math.round(ms), p95: Math.round(ms) }, note };
+  return { provider: name, model, job: "embed", run, n, correct, accuracy: correct / n, bySet, tally: { errors: {}, calls: name === "hash" ? 0 : Math.ceil(bank.length / 100), invalidJson: 0, schemaFail: 0, failures: 0, rateLimited: 0, billing: 0, inputTokens: 0, outputTokens: 0, headroom: null, p50: Math.round(ms), p95: Math.round(ms) }, note };
 }
 
 /* ------------------------------------------------------------------ run */
 
 const candidates = (JSON.parse(readFileSync(join(root, "config/provider-candidates.json"), "utf8")) as { candidates: Record<string, Partial<Record<"chat" | "docs" | "vision" | "embed", string[]>>> }).candidates;
 const saved: JobResult[] = existsSync(OUT) ? (JSON.parse(readFileSync(OUT, "utf8")) as { results: JobResult[] }).results : [];
-const save = () => writeFileSync(OUT, `${JSON.stringify({ date: DATE, about: "Raw provider benchmark results (scripts/bench-providers.ts). No keys, no prompts.", chatSet: { size: chatSet.length, sets: [...new Set(chatSet.map((c) => c.set))] }, docSet: { documents: docSet.length, long: longDoc.text.length }, results: saved }, null, 1)}\n`);
+// Re-read before each write and append only this process's new runs, so parallel runs (and hand re-tags) survive.
+let written = saved.length;
+const save = () => {
+  const onDisk: JobResult[] = existsSync(OUT) ? (JSON.parse(readFileSync(OUT, "utf8")) as { results: JobResult[] }).results : [];
+  const results = [...onDisk, ...saved.slice(written)];
+  written = saved.length;
+  writeFileSync(OUT, `${JSON.stringify({ date: DATE, about: "Raw provider benchmark results (scripts/bench-providers.ts). No keys, no prompts.", chatSet: { size: chatSet.length, sets: [...new Set(chatSet.map((c) => c.set))] }, docSet: { documents: docSet.length, long: longDoc.text.length }, results }, null, 1)}\n`);
+};
 
 if (!process.argv.includes("--rank")) {
   if (!providersArg.length) throw new Error("--provider is required (e.g. --provider groq)");
@@ -288,13 +311,13 @@ if (!process.argv.includes("--rank")) {
           const max = name === "openrouter" ? Math.min(MAX, job === "chat" ? 10 : 8) : MAX;
           try {
             const r = job === "chat" ? await chatJob(name, model, run, max) : job === "docs" ? await docsJob(name, model, run, max) : job === "vision" ? await visionJob(name, model, run) : await embedJob(name, model, run);
-            saved.push(r);
+            saved.push({ ...r, tag: TAG, pace: PACE_ARG ?? PACE[name] ?? 2500 });
             save();
-            console.log(`${name} ${model} ${job} run ${run}: ${(r.accuracy * 100).toFixed(1)}% (${r.correct}/${r.n}) p95 ${r.tally.p95} ms, calls ${r.tally.calls}, failures ${r.tally.failures}, 429 ${r.tally.rateLimited}, invalid JSON ${r.tally.invalidJson}, schema ${r.tally.schemaFail}${r.tally.billing ? ", BILLING: stopped" : ""}${r.note ? `, ${r.note}` : ""}`);
+            console.log(`${TAG ? `[${TAG}] ` : ""}${name} ${model} ${job} run ${run}: ${(r.accuracy * 100).toFixed(1)}% (${r.correct}/${r.n}) p95 ${r.tally.p95} ms, calls ${r.tally.calls}, failures ${r.tally.failures}${Object.keys(r.tally.errors ?? {}).length ? ` ${JSON.stringify(r.tally.errors)}` : ""}, 429 ${r.tally.rateLimited}, invalid JSON ${r.tally.invalidJson}, schema ${r.tally.schemaFail}${r.tally.billing ? ", BILLING: stopped" : ""}${r.note ? `, ${r.note}` : ""}`);
             if (r.tally.billing) break;
           } catch (error) {
             console.log(`${name} ${model} ${job} run ${run}: FAILED ${error instanceof Error ? error.message.slice(0, 160) : error}`);
-            saved.push({ provider: name, model, job, run, n: 0, correct: 0, accuracy: 0, tally: { calls: 0, invalidJson: 0, schemaFail: 0, failures: 1, rateLimited: 0, billing: 0, inputTokens: 0, outputTokens: 0, headroom: null, p50: 0, p95: 0 }, note: `failed: ${error instanceof Error ? error.message.slice(0, 120) : String(error)}` });
+            saved.push({ provider: name, model, job, run, n: 0, correct: 0, accuracy: 0, tally: { errors: { setup: 1 }, calls: 0, invalidJson: 0, schemaFail: 0, failures: 1, rateLimited: 0, billing: 0, inputTokens: 0, outputTokens: 0, headroom: null, p50: 0, p95: 0 }, note: `failed: ${error instanceof Error ? error.message.slice(0, 120) : String(error)}` });
             save();
             break;
           }
@@ -307,18 +330,23 @@ if (!process.argv.includes("--rank")) {
 
 /* ------------------------------------------------------------------ rank (--rank): from all saved runs */
 
-type Agg = { provider: string; model: string; job: string; runs: number; mean: number; min: number; max: number; spread: number; p95: number; invalidRate: number; schemaRate: number; failures: number; r429: number; tokens: number; headroom: number | null; tier: string; n: number; bySet: Record<string, string>; note?: string };
+type Agg = { tag: string; provider: string; model: string; job: string; runs: number; mean: number; min: number; max: number; spread: number; p95: number; invalidRate: number; schemaRate: number; failures: number; r429: number; tokens: number; headroom: number | null; tier: string; n: number; bySet: Record<string, string>; note?: string };
 const groups = new Map<string, JobResult[]>();
 for (const r of saved) {
-  const k = `${r.job}|${r.provider}|${r.model}`;
+  if (r.tag === "pre-fix" || r.tag?.startsWith("diag")) continue; // before an adapter fix, or a diagnostic pass: reported, not ranked
+  const k = `${r.job}|${r.provider}|${r.model}|${r.tag ?? ""}`;
   groups.set(k, [...(groups.get(k) ?? []), r]);
 }
-const aggs: Agg[] = [...groups.values()].map((rs) => {
+const aggs: Agg[] = [...groups.values()].map((all) => {
+  // A run that failed before it started (setup error, refused batch) is a failure, not a 0% accuracy sample.
+  const setupFailures = all.filter((r) => r.note?.startsWith("failed:")).length;
+  const rs = all.filter((r) => !r.note?.startsWith("failed:")).length ? all.filter((r) => !r.note?.startsWith("failed:")) : all;
   const acc = rs.map((r) => r.accuracy);
   const calls = rs.reduce((a, r) => a + r.tally.calls, 0);
   const bySet: Record<string, string> = {};
   for (const r of rs) for (const [k, v] of Object.entries(r.bySet ?? {})) bySet[k] = `${(bySet[k] ? `${bySet[k]} / ` : "")}${v.correct}/${v.n}`;
   return {
+    tag: rs[0].tag ?? "",
     provider: rs[0].provider,
     model: rs[0].model,
     job: rs[0].job,
@@ -328,9 +356,10 @@ const aggs: Agg[] = [...groups.values()].map((rs) => {
     max: Math.max(...acc),
     spread: Math.max(...acc) - Math.min(...acc),
     p95: Math.round(quantile(rs.map((r) => r.tally.p95), 0.5)),
-    invalidRate: calls ? rs.reduce((a, r) => a + r.tally.invalidJson, 0) / calls : 0,
+    // Groq's HTTP 400 is json_validate_failed (checked 28 Oct); runs before that code was logged only saved "400".
+    invalidRate: calls ? rs.reduce((a, r) => a + (r.provider === "groq" ? Math.max(r.tally.invalidJson, r.tally.errors?.["400"] ?? 0) : r.tally.invalidJson), 0) / calls : 0,
     schemaRate: calls ? rs.reduce((a, r) => a + r.tally.schemaFail, 0) / calls : 0,
-    failures: rs.reduce((a, r) => a + r.tally.failures, 0),
+    failures: rs.reduce((a, r) => a + r.tally.failures, 0) + (rs === all ? 0 : setupFailures),
     r429: rs.reduce((a, r) => a + r.tally.rateLimited, 0),
     tokens: rs.reduce((a, r) => a + r.tally.inputTokens + r.tally.outputTokens, 0),
     headroom: rs.map((r) => r.tally.headroom).filter((h): h is number => h !== null).pop() ?? null,
@@ -347,7 +376,17 @@ const aggs: Agg[] = [...groups.values()].map((rs) => {
  * TIED; 3) a tie is broken by p95 latency, then by failures + 429s (reliability/headroom).
  */
 function rank(job: string) {
-  const all = aggs.filter((a) => a.job === job && a.provider !== "hash");
+  // A model with a slow pass is ranked on it (accuracy without free-tier throttling); its normal-pace 429s stay in the table.
+  // One entry per model: the slow pass, else a retry, else the normal run.
+  // "slow-<fix>" is a slow pass rerun after an adapter fix (e.g. slow-1024: Groq output limit raised), so it wins over "slow".
+  const prio = (t: string) => (t.startsWith("slow-") ? -1 : t === "slow" ? 0 : t === "retry" ? 1 : 2);
+  const best = new Map<string, Agg>();
+  for (const a of aggs.filter((x) => x.job === job && x.provider !== "hash")) {
+    const k = `${a.provider}|${a.model}`;
+    const cur = best.get(k);
+    if (!cur || prio(a.tag) < prio(cur.tag)) best.set(k, a);
+  }
+  const all = [...best.values()];
   const eligible = all.filter((a) => a.invalidRate <= 0.02 && a.n > 0 && a.mean > 0);
   const excluded = all.filter((a) => !eligible.includes(a)).map((a) => ({ provider: a.provider, model: a.model, why: a.n === 0 || a.mean === 0 ? "failed / no correct answers" : `invalid JSON ${(a.invalidRate * 100).toFixed(1)}%` }));
   const tied = (a: Agg, b: Agg) => Math.abs(a.mean - b.mean) <= Math.max(a.spread, b.spread, 1e-9);
@@ -369,7 +408,7 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const lines = [`# Provider benchmark ${DATE}`, "", "Raw: `providers-" + DATE + ".json`. Accuracy is the mean over runs, spread = max - min. Masked text for every hosted provider.", ""];
 for (const job of ["chat", "docs", "vision", "embed"] as const) {
   lines.push(`## ${job}`, "", "| provider / model | tier | runs | accuracy (mean, min-max) | by set | p95 ms | invalid JSON | schema fail | failures | 429 | tokens | headroom |", "|---|---|---|---|---|---|---|---|---|---|---|---|");
-  for (const a of aggs.filter((x) => x.job === job).sort((x, y) => y.mean - x.mean)) lines.push(`| ${a.provider} / ${a.model} | ${a.tier} | ${a.runs} | ${pct(a.mean)} (${pct(a.min)}-${pct(a.max)}) | ${Object.entries(a.bySet).map(([k, v]) => `${k}: ${v}`).join("; ")} | ${a.p95} | ${pct(a.invalidRate)} | ${pct(a.schemaRate)} | ${a.failures} | ${a.r429} | ${a.tokens} | ${a.headroom ?? "–"} |${a.note ? ` ${a.note}` : ""}`);
+  for (const a of aggs.filter((x) => x.job === job).sort((x, y) => y.mean - x.mean)) lines.push(`| ${a.provider} / ${a.model}${a.tag ? ` [${a.tag}]` : ""} | ${a.tier} | ${a.runs} | ${pct(a.mean)} (${pct(a.min)}-${pct(a.max)}) | ${Object.entries(a.bySet).map(([k, v]) => `${k}: ${v}`).join("; ")} | ${a.p95} | ${pct(a.invalidRate)} | ${pct(a.schemaRate)} | ${a.failures} | ${a.r429} | ${a.tokens} | ${a.headroom ?? "–"} |${a.note ? ` ${a.note}` : ""}`);
   if (job !== "embed") lines.push("", `Order: ${ranked[job].order.map((o) => `${o.provider}/${o.model}`).join(" → ") || "(none)"}`, `Ties: ${ranked[job].ties.join("; ") || "none"}`, `Excluded: ${ranked[job].excluded.map((e) => `${e.provider}/${e.model} (${e.why})`).join("; ") || "none"}`);
   lines.push("");
 }
