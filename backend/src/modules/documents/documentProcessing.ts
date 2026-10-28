@@ -39,7 +39,7 @@ export async function existingRoutineId(userId: string, title: string, daysOfWee
 
 /** Auto-creation thresholds from FR-DP-002 §4 and FR-DP-003 §4. */
 export const DEADLINE_AUTO = 95;
-const SCHEDULE_AUTO = 90;
+export const SCHEDULE_AUTO = 90;
 /** Below this OCR confidence a title may be misread ("Broject"), so OCR'd deadlines always go to review. */
 export const OCR_AUTO_MIN = 90;
 

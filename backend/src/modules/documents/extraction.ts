@@ -383,7 +383,7 @@ export async function llmTopics(text: string, timeoutMs = 45000): Promise<string
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-const actionSchema = z.object({
+const actionSchema = (maxItems: number) => z.object({
   items: z
     .array(
       z.object({
@@ -394,7 +394,7 @@ const actionSchema = z.object({
         evidence: z.string(),
       }),
     )
-    .max(10),
+    .max(maxItems),
 });
 
 /** True when the document itself contains this date (day-first, month-first, ISO or month name). */
@@ -416,7 +416,7 @@ export function dateGrounded(ymd: string, text: string): boolean {
  * appears in the document survive. Confidence stays below the auto-create threshold, so the user
  * always confirms them.
  */
-export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000): Promise<ExtractedDeadline[]> {
+export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000, maxTokens = 500, maxItems = 10): Promise<ExtractedDeadline[]> {
   if (text.replace(/\s+/g, "").length < 30) return [];
   const result = await getAi().json(
     [
@@ -428,14 +428,14 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
       },
       { role: "user", content: text.slice(0, 3000) },
     ],
-    actionSchema,
+    actionSchema(maxItems),
     {
       json: {
         type: "object",
         properties: {
           items: {
             type: "array",
-            maxItems: 10,
+            maxItems,
             items: {
               type: "object",
               properties: { kind: { type: "string" }, title: { type: "string" }, date: { type: "string" }, time: { type: "string" }, evidence: { type: "string" } },
@@ -445,7 +445,7 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
         },
         required: ["items"],
       },
-      maxTokens: 500,
+      maxTokens,
       timeoutMs,
     },
   );
@@ -547,11 +547,16 @@ export async function aiDeadlines(text: string, todayYmd: string, tz: string, op
   if (!ai.enabled || !ai.available) return { items: [], cutShort: false };
   const deadline = Date.now() + (opts.budgetMs ?? 120_000);
   const items: ExtractedDeadline[] = [];
-  const chunks = chunkText(text, 2500, 200, opts.maxChunks ?? 6);
+  // DOC_CHUNKING (default off). Off: 2500-character chunks, the first 6 only (about 15k characters), 500-token
+  // replies, so a dense date sheet's reply is cut mid-JSON and a long document's later pages are never read.
+  // On: 600-character chunks (a dense sheet's rows fit in one reply), every chunk the time budget allows, replies of
+  // up to 15 items in 900 tokens. More chunks means more model calls: a long document can hit the time budget instead.
+  const chunked = process.env.DOC_CHUNKING === "true";
+  const chunks = chunked ? chunkText(text, 600, 100, opts.maxChunks ?? 60) : chunkText(text, 2500, 200, opts.maxChunks ?? 6);
   for (let i = 0; i < chunks.length; i += 1) {
     const left = deadline - Date.now();
     if (left < 5000) return { items, cutShort: true };
-    items.push(...(await llmActionItems(chunks[i], todayYmd, tz, Math.min(60000, left))));
+    items.push(...(await llmActionItems(chunks[i], todayYmd, tz, Math.min(60000, left), chunked ? 900 : 500, chunked ? 15 : 10)));
   }
   return { items, cutShort: false };
 }

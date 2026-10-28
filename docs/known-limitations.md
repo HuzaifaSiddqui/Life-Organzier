@@ -51,6 +51,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Documents and OCR
 
+- **The AI pass reads about the first 15k characters and loses dense chunks** (flag `DOC_CHUNKING`, off). With AI
+  on, the model reads at most 6 chunks of 2,500 characters, so deadlines later in a long document are left to the
+  rules; and a chunk with many dates (a date sheet) needs a longer reply than its 500 tokens and 10 items, so the reply
+  is cut mid-JSON and that chunk's AI items are lost (the rules' items stay). This is why the provider benchmark's
+  joined "long" document scored 0 for every model. `DOC_CHUNKING=true` fixes both (`tests/documentAi.test.ts`), but
+  failed the latency gate on 29 Oct 2026: recall and precision unchanged on the fixtures (82/82, 0 wrong items
+  reaching auto-create, AI on and off) while the p95 time per document with AI on rose from 29.3 s to 40.1 s
+  (more model calls). It stays off.
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
   directory. Only `eng.traineddata` is committed (`backend/eng.traineddata`, ~5 MB, used when the server is started
   from `backend/`). Every other language offered in the app — including Urdu (`urd`) — is downloaded from the

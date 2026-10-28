@@ -50,6 +50,39 @@ test("AI pass: every chunk is read, invented dates are dropped, AI off returns n
   assert.deepEqual(await aiDeadlines(text, "2026-10-05", TZ), { items: [], cutShort: false });
 });
 
+/**
+ * A model that lists every "<d> December 2026" date in the chunk it is sent, like a real one would, but whose reply is
+ * cut mid-JSON when the items need more than its token limit (about 60 tokens an item).
+ */
+function readsDates() {
+  setAi(new AiService([{ name: "reads-dates", chat: async (messages, options) => {
+    const chunk = messages[messages.length - 1].content;
+    const items = [...chunk.matchAll(/(\d{1,2}) December 2026/g)].map((m) => ({ kind: "deadline", title: `Item ${m[1]}`, date: `2026-12-${m[1].padStart(2, "0")}`, time: "", evidence: m[0] }));
+    const reply = JSON.stringify({ items });
+    return items.length * 60 > (options.maxTokens ?? 500) ? reply.slice(0, reply.length / 2) : reply;
+  } }]));
+}
+
+test("DOC_CHUNKING: a late-page deadline and a dense date sheet are found only when it is on", async () => {
+  const filler = Array.from({ length: 400 }, (_, i) => `Week ${i % 16} reading: chapter ${i} of the course text, with notes`).join("\n");
+  const late = `${filler}\nFinal project report due 20 December 2026.`;
+  const dense = Array.from({ length: 12 }, (_, i) => `Paper ${i + 1}: Final examination, Main Hall, morning sitting, bring your card: ${i + 1} December 2026`).join("\n");
+  assert.ok(late.length > 15000);
+  const keep = process.env.DOC_CHUNKING;
+  try {
+    readsDates();
+    delete process.env.DOC_CHUNKING;
+    assert.deepEqual((await aiDeadlines(late, "2026-10-05", TZ)).items, [], "off: only the first ~15k characters are read");
+    assert.deepEqual((await aiDeadlines(dense, "2026-10-05", TZ)).items, [], "off: the reply for 12 dates is cut mid-JSON");
+    process.env.DOC_CHUNKING = "true";
+    assert.deepEqual((await aiDeadlines(late, "2026-10-05", TZ)).items.map((d) => d.date), ["2026-12-20"]);
+    assert.equal(new Set((await aiDeadlines(dense, "2026-10-05", TZ)).items.map((d) => d.date)).size, 12, "every date, read in several small chunks");
+  } finally {
+    if (keep === undefined) delete process.env.DOC_CHUNKING;
+    else process.env.DOC_CHUNKING = keep;
+  }
+});
+
 test("analyzeDocument runs the AI pass on documents the rules already understand; only masked text is sent", async () => {
   const seen = scripted([{ title: "Midterm exam", date: "2026-11-15", time: "10:00" }, { title: "Pay hostel fee", date: "2026-10-30" }]);
   const a = await analyzeDocument({ text: "Midterm Exam\nDate: 15 Nov 2026\nTime: 10 AM\nHostel fee due 30 October 2026. Call 0300-1234567", fileName: "n.txt", mimeType: "text/plain", docType: "SYLLABUS", language: "eng", tz: TZ, now: NOW });
