@@ -1,8 +1,20 @@
 # Hosted LLM providers
 
 Ollama (local) stays the default. Hosted providers are used only when a job's chain is configured
-(`LLM_PROVIDERS_CHAT`, `LLM_PROVIDERS_DOCS`, `LLM_PROVIDERS_VISION`; see `docs/rollout.md`), in the order the benchmark
-writes to `backend/config/provider-order.json`. Static facts (endpoints, key variable names, tiers, limits) are in
+(`LLM_PROVIDERS_CHAT`, `LLM_PROVIDERS_DOCS`, `LLM_PROVIDERS_VISION`; see `docs/rollout.md`), in the order of the
+`chains` in `backend/config/provider-order.json`.
+
+## Decisions (29 Oct 2026)
+
+- **Ollama `qwen2.5:7b` stays the primary and the reference** for chat and documents.
+- Fallback chains (used only when the env names them): **chat** = Ollama → Groq `openai/gpt-oss-20b` (tier A) →
+  Deploy `zai-org/glm-5.3-flash` (tier B, masked text only, never leads); **documents** = Ollama → Groq
+  `openai/gpt-oss-120b`.
+- **No tier B embeddings**: `nomic-embed-text` with the hashed fallback stays (revisit with Bedrock embeddings).
+  **No hosted vision**: `DOC_VISION` stays off.
+- No more providers. Cerebras, Gemini and OpenRouter stay benchmarked and documented only; Together is skipped until a
+  new key is confirmed (the configured one returns HTTP 401).
+- English only until after the FYP evaluation (10 Nov 2026): benchmarks skip Roman Urdu and Urdu. Static facts (endpoints, key variable names, tiers, limits) are in
 `backend/config/providers.json`; candidate models in `backend/config/provider-candidates.json` (from the live model
 lists, `npx tsx scripts/list-models.ts`). Checked **28 Oct 2026**.
 
@@ -59,18 +71,27 @@ The unknown-message log masks every capitalised word that is not the first ("log
 
 `nomic-embed-text` runs in Ollama. Without Ollama, the app uses the hashed bag-of-words fallback (no dependency, works
 offline, weaker: it only sees shared words). Hosted options, masked text only, measured by the benchmark: OpenRouter
-`nvidia/nemotron-3.5-embed-8b:free` and Gemini `gemini-embedding-2` (both tier B). `EMBEDDING_PROVIDER` would switch to
-one only if it beats the hashed fallback by more than the measured spread; no new dependency either way.
+`nvidia/nemotron-3.5-embed-8b:free` (59.5%) and Gemini `gemini-embedding-2` (61.8%, one run) beat both
+`nomic-embed-text` (45.2%) and the hashed fallback (39.8%) on 28 Oct, but both are tier B: **not used** (decision,
+29 Oct). Revisit with Bedrock embeddings once AWS access exists.
 
 ## Benchmark and scoring (`npx tsx scripts/bench-providers.ts`)
 
-Same formula for every provider and job:
+Same formula for every provider and job (`--rank`):
 
-1. **Hard filters**: invalid-JSON rate ≤ 2%; the job must have produced answers; privacy tier rules (tier B never
-   leads without approval and never gets images: applied by `ai/chains.ts` on top of the order).
-2. **Accuracy** (largest weight): mean over runs. Two entries whose means differ by **no more than the larger of their
-   spreads** (max − min over runs) are **tied** and are not ranked on accuracy.
-3. Ties are broken by **p95 latency**, then by **failures + 429s** (reliability / quota headroom).
+1. **Hard filters**: invalid-JSON rate ≤ 2%; some correct answers; on chat, every ranked entry scored the same
+   messages. Ollama `qwen2.5:7b` is the reference: it is never dropped, and a filter it fails is shown as a flag.
+   Tier rules (tier B never leads without approval, never gets images) are applied by `ai/chains.ts` on top.
+2. **Accuracy**: mean over runs, with two measures of uncertainty: the run-to-run spread (max − min) and a **95%
+   bootstrap interval over items** (each message or expected date scored as its mean over the runs, 2000 resamples,
+   fixed seed; `scripts/bootstrap.ts`). In mean order, an entry whose interval overlaps any entry of the current group
+   joins that group: **tied**. Only non-overlapping intervals rank.
+3. **Ties** are broken by privacy tier (local, then A, then B), then p95 latency, then availability (failures + 429s).
 
-Each provider runs 3 times (OpenRouter once: 50 free requests a day). `--rank` writes
-`docs/baselines/providers-<date>.md` and `backend/config/provider-order.json`; re-running regenerates both.
+A run in which more than half the calls were refused with HTTP 429 measured the free tier's quota, not the model:
+it is listed under "Quota-bound runs" and not ranked.
+
+Ranked: the **normal pass** (production pacing, 8 s per call) and the **few-shot condition** (`--fewshot`: the 5
+nearest English bank rows from the app's own kNN, leave-one-out). Slow, retry and diagnostic passes are reported only.
+`--rank` writes `docs/baselines/providers-<date>.md` and the `ranking` part of `backend/config/provider-order.json`;
+it never changes the `chains`.
