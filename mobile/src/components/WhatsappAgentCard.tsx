@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet, Switch, TextInput, View } from "react-native";
+import { usePreferences } from "../context/PreferencesContext";
 import { useLocale } from "../i18n/LocaleProvider";
 import type { StringKey } from "../i18n/strings";
 import { apiErrorCode, isNetworkError } from "../services/api";
@@ -19,6 +20,8 @@ import { Button, Card, Chip, Skeleton, Text } from "./ui";
 export function WhatsappAgentCard() {
   const { t } = useLocale();
   const { colors, spacing, radii, type } = useTheme();
+  // Same Pro source as the rest of Settings, so switching to Pro on this screen unlocks the card at once.
+  const { isPro } = usePreferences();
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [key, setKey] = useState("");
@@ -38,7 +41,7 @@ export function WhatsappAgentCard() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, isPro]); // re-read after a plan change (the server decides what Pro unlocks)
 
   const fail = (e: unknown) => setNote({ text: t(agentErrorKey(apiErrorCode(e), isNetworkError(e)) as StringKey), tone: "danger" });
 
@@ -107,7 +110,7 @@ export function WhatsappAgentCard() {
     </Text>
   ) : null;
 
-  if (!status.pro) {
+  if (!isPro) {
     return (
       <Card style={{ gap: spacing.sm }}>
         <View style={styles.row}>
