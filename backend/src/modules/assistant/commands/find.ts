@@ -1,3 +1,4 @@
+import { isWhatsapp } from "../channel.js";
 import type { Priority } from "@prisma/client";
 import { normalizeSpelled } from "../../../lib/spelled.js";
 import { truncate } from "../../../lib/text.js";
@@ -153,7 +154,7 @@ export async function findReply(turn: Turn, filter: FindFilter): Promise<Out> {
       : `• ${i.routine.title} (${T.routine}, ${scheduleLabel(i.routine)}) · ${where}`;
   };
   const content = [T.found(items.length, q), ...items.slice(0, FIND_LIMIT).map(line)].join("\n");
-  if (turn.channel === "WHATSAPP") return { content, intent: "find_items" };
+  if (isWhatsapp(turn.channel)) return { content, intent: "find_items" };
   const cards: Card[] = [
     ...(tasks.length ? [{ type: "task_list" as const, title: `Matching "${q}"`, tasks: tasks.map((t) => serializeTask(t.task, turn.now)) }] : []),
     ...items.filter((i): i is Extract<Found, { kind: "routine" }> => i.kind === "routine").map((r) => ({ type: "routine" as const, routine: r.routine as unknown as Record<string, unknown> })),

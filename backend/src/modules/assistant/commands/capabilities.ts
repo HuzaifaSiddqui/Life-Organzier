@@ -1,3 +1,4 @@
+import { isWhatsapp } from "../channel.js";
 import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,7 @@ export function helpReply(turn: Turn): Out {
     `You can ask for two things at once ("add X tomorrow and move Y to Friday"), and say "undo" after any change.`,
   ].join("\n");
   const picks = ["create_task", "query_tasks", "plan_day", "routine_list", "insights_completed", "settings_dnd"].map(byName).filter((c): c is Command => Boolean(c));
-  return { content, actions: picks.slice(0, turn.channel === "WHATSAPP" ? 5 : 6).map((c) => sayAction(truncate(c.examples[0], 32), c.name, c.examples[0])), intent: "help" };
+  return { content, actions: picks.slice(0, isWhatsapp(turn.channel) ? 5 : 6).map((c) => sayAction(truncate(c.examples[0], 32), c.name, c.examples[0])), intent: "help" };
 }
 
 const DEFAULTS = ["create_task", "query_tasks", "plan_day", "routine_list", "insights_completed"];

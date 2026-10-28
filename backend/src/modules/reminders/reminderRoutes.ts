@@ -5,6 +5,7 @@ import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { logEvent } from "../events/eventService.js";
 import { planCheckins } from "../checkins/checkinService.js";
+import { remindersViaAgent } from "../whatsappAgent/service.js";
 import { pendingRoutineOccurrenceIds, planReminders, recordReminderAction } from "./reminderService.js";
 
 export const reminderRouter = Router();
@@ -28,6 +29,8 @@ reminderRouter.get(
         devices: req.settings.notificationDevices,
         dndUntil: req.settings.dndUntil,
         frequency: req.settings.notificationFrequency,
+        // WhatsApp Agent reminders instead of phone notifications: the phone leaves task and routine reminders out.
+        viaWhatsappAgent: await remindersViaAgent(req.user.id),
       },
       generatedAt: new Date().toISOString(),
     });

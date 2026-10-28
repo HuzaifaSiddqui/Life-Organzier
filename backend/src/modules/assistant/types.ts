@@ -108,6 +108,8 @@ export type ActionPayload =
   | { type: "cancel_pending" }
   | { type: "complete_task"; taskId: string }
   | { type: "snooze_task"; taskId: string; minutes: number }
+  /** "Snooze 15 min" on a routine reminder sent on the WhatsApp Agent (the phone snoozes its own alarms locally). */
+  | { type: "snooze_routine"; occurrenceId: string; minutes: number }
   | { type: "undo_task"; taskId: string }
   | { type: "undo_command" }
   | { type: "restore_task"; taskId: string }

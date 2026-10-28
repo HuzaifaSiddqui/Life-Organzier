@@ -42,6 +42,7 @@ model User {
   savedLocations       SavedLocation[]
   whatsappLinkCode     WhatsappLinkCode?
   pushTokens           PushToken[]
+  whatsappAgent        WhatsAppAgentConnection?
 }
 
 model Task {
@@ -207,6 +208,10 @@ model UserSettings {
   checkinTone           String    @default("FUNNY")
   /// Research mode: randomly include/omit the first step (50/50)
   checkinResearchMode   Boolean   @default(false)
+  /// WhatsApp Agent reminders: OFF (push only, default) | WHATSAPP (instead of phone notifications; push if a send fails) | BOTH
+  waAgentReminders      String    @default("OFF")
+  /// WhatsApp Agent voice notes are transcribed (needs WHATSAPP_VOICE=on and an approved speech-to-text provider)
+  waAgentVoice          Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -553,4 +558,46 @@ model PushToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// The user's own WhatsApp Agent (WHATSAPP_AGENT=on). The API key is a secret: AES-256-GCM with WHATSAPP_KEY_SECRET,
+/// only the last 4 characters in clear. lastError never holds a secret. See docs/whatsapp-agent.md.
+model WhatsAppAgentConnection {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  /// v1:<iv>:<tag>:<ciphertext>, base64
+  encryptedKey     String
+  keyLast4         String
+  /// PENDING | CONNECTED | NEEDS_RECONNECT | ERROR | DISABLED
+  status           String    @default("PENDING")
+  /// Next offset to poll from (the API's update ids may be numbers or strings, so it is kept as text)
+  lastOffset       String?
+  lastPollAt       DateTime?
+  /// Chat reference from the first inbound message, encrypted like the key (it may be a phone number)
+  chatRef          String?
+  consentAt        DateTime
+  lastError        String?
+  rateLimitedUntil DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user      User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  processed WhatsAppProcessedUpdate[]
+
+  @@index([status])
+}
+
+/// Update ids already handled, so a retry or a restart never acts twice. processedAt null = being handled (still
+/// null when the poller starts again = lost in a crash: the user is asked to resend). Rows older than 7 days are purged.
+model WhatsAppProcessedUpdate {
+  id           String    @id @default(uuid())
+  connectionId String
+  updateId     String
+  processedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  connection WhatsAppAgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, updateId])
+  @@index([processedAt, createdAt])
 }

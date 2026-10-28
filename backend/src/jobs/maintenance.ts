@@ -5,6 +5,7 @@ import { computeDueAt } from "../lib/time.js";
 import { expireCheckins } from "../modules/checkins/checkinService.js";
 import { checkPushReceipts } from "../modules/push/pushService.js";
 import { purgeOldInbound, recoverStuckInbound } from "../modules/whatsapp/inbound.js";
+import { purgeProcessedUpdates, runAgentJobs } from "../modules/whatsappAgent/index.js";
 import { replanStaleWhatsappUsers, sendDueWhatsappReminders, sendUrgentWhatsappAlerts } from "../modules/whatsapp/whatsappService.js";
 
 /** Permanent deletion & retention rules from the FRD (FR-TM-005, FR-MS-004, FR-AP-001). */
@@ -14,6 +15,7 @@ export async function runMaintenance(now = new Date()): Promise<void> {
   await prisma.reminderLog.deleteMany({ where: { fireAt: { lt: new Date(now.getTime() - 90 * 86400000) } } });
   await expireCheckins(now);
   await purgeOldInbound(now);
+  await purgeProcessedUpdates(now);
   await prisma.activityEvent.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 400 * 86400000) } } });
 
   const expired = await prisma.user.findMany({ where: { deletionRequestedAt: { lt: new Date(now.getTime() - 30 * 86400000) } } });
@@ -61,8 +63,11 @@ export function startJobs(): () => void {
   safe("maintenance", () => runMaintenance())();
   const hourly = setInterval(safe("maintenance", () => runMaintenance()), 3600000);
   const whatsapp = setInterval(safe("whatsapp", () => runWhatsappJobs()), 5 * 60000);
+  // WhatsApp Agent reminders (does nothing unless WHATSAPP_AGENT and WHATSAPP_AGENT_REMINDERS are on).
+  const agent = setInterval(safe("whatsapp-agent", () => runAgentJobs()), 60000);
   return () => {
     clearInterval(hourly);
     clearInterval(whatsapp);
+    clearInterval(agent);
   };
 }

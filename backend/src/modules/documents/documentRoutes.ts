@@ -1,15 +1,12 @@
-import { Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskType } from "@prisma/client";
 import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { prisma } from "../../config/db.js";
 import { handle, HttpError, parseBody, requireUser } from "../../lib/http.js";
-import { dueDateFromYmd, parseClock } from "../../lib/time.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
-import { createRoutine } from "../routines/routineService.js";
-import { createTask, serializeTask } from "../tasks/taskService.js";
-import { DOC_TYPES, existingRoutineId, existingTaskId, processDocument } from "./documentProcessing.js";
+import { applyDocumentItems } from "./applyItems.js";
+import { DOC_TYPES, processDocument } from "./documentProcessing.js";
 import { OcrBusyError } from "./textExtraction.js";
 import { SUPPORTED_MIME } from "./textExtraction.js";
 
@@ -153,44 +150,7 @@ documentRouter.post(
     );
     const document = await prisma.document.findFirst({ where: { id: req.params.id, userId: req.user.id } });
     if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
-    const tz = req.settings.timezone;
-    const tasks = [];
-    let skipped = 0;
-    for (const d of body.deadlines) {
-      const time = d.time && parseClock(d.time) ? d.time : "11:59 PM";
-      if (await existingTaskId(req.user.id, d.title, dueDateFromYmd(d.date, tz), time)) {
-        skipped += 1;
-        continue;
-      }
-      tasks.push(
-        serializeTask(
-          await createTask(
-            { userId: req.user.id, tz, deviceId: req.deviceId },
-            { title: d.title, priority: Priority.MEDIUM, category: "Academic", source: TaskSource.DOCUMENT, dueDate: dueDateFromYmd(d.date, tz), dueTime: time, taskType: TaskType.DEADLINE, documentId: document.id, confidence: 100 },
-          ),
-        ),
-      );
-    }
-    const routines = [];
-    for (const s of body.schedules) {
-      if (await existingRoutineId(req.user.id, s.title, s.daysOfWeek, s.time && parseClock(s.time) ? s.time : null, s.location)) {
-        skipped += 1;
-        continue;
-      }
-      routines.push(
-        await createRoutine(req.user.id, tz, {
-          title: s.title,
-          frequency: RoutineFrequency.WEEKLY,
-          daysOfWeek: s.daysOfWeek,
-          dueTime: s.time && parseClock(s.time) ? s.time : null,
-          durationMinutes: s.durationMinutes ?? null,
-          category: "Academic",
-          priority: RoutinePriority.IMPORTANT,
-          timeLocked: true,
-          location: s.location ?? null,
-        }),
-      );
-    }
+    const { tasks, routines, skipped } = await applyDocumentItems({ userId: req.user.id, tz: req.settings.timezone, deviceId: req.deviceId }, document.id, body);
     sendSuccess(res, { tasks, routines, skipped }, `Created ${tasks.length} tasks and ${routines.length} routines${skipped ? ` (${skipped} already existed)` : ""}`);
   }),
 );

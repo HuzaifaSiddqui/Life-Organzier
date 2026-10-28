@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 /**
@@ -9,7 +10,7 @@ import test from "node:test";
  * can't see (casts, untyped arrays, JSON built by hand). Fix a hit with commandAction / sayAction / answerAction
  * from assistant/actions.ts.
  */
-const SRC = new URL("../src/", import.meta.url).pathname;
+const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

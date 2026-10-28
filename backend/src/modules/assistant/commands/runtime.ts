@@ -60,7 +60,7 @@ async function runCommandInner(turn: Turn, name: string, rawArgs: CommandArgs, o
       return {
         content: p.confirm.question,
         cards: p.confirm.cards,
-        actions: [
+        actions: p.confirm.actions ?? [
           { label: c.yes, payload: { type: "confirm_pending" }, style: "danger" },
           { label: c.cancel, payload: { type: "cancel_pending" } },
         ],

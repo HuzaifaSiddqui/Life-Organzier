@@ -4,7 +4,8 @@
  * - Tests use TEST_DATABASE_URL, never the development database. Before this, Prisma Client loaded
  *   backend/.env by itself, so tests wrote to whatever DATABASE_URL pointed at (the dev database).
  *   npm test refuses to run without TEST_DATABASE_URL, or if its database name doesn't contain "test".
- * - No real WhatsApp messages or pushes: Twilio and Expo credentials are blanked (blank, not deleted, so
+ * - No real WhatsApp messages or pushes: Twilio and Expo credentials are blanked (and api.whatsapp.com, the WhatsApp
+ *   Agent API, is never called: its tests use tests/fakes/fakeAgentServer.ts) (blank, not deleted, so
  *   Prisma's own .env loading can't fill them back in), any request to their hosts throws, and pushes go
  *   to a fake provider.
  * - No real model: AI is switched off (AI_ENABLED=false, as in CI) and GEMINI_API_KEY is blanked, so the
@@ -46,7 +47,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const host = /^https?:\/\//i.test(url) ? new URL(url).host : "";
-  if (/^https?:\/\/(?:[\w-]+\.)*(?:twilio\.com|exp\.host|expo\.dev|generativelanguage\.googleapis\.com)(?:[:/]|$)/i.test(url) || ollamaHosts.has(host)) {
+  if (/^https?:\/\/(?:[\w-]+\.)*(?:twilio\.com|exp\.host|expo\.dev|generativelanguage\.googleapis\.com|whatsapp\.com)(?:[:/]|$)/i.test(url) || ollamaHosts.has(host)) {
     throw new Error(`A test tried to call ${new URL(url).host} for real.`);
   }
   return realFetch(input, init);

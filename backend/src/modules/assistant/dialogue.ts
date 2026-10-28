@@ -1,3 +1,4 @@
+import { isWhatsapp } from "./channel.js";
 import { answerAction, commandAction, sayAction } from "./actions.js";
 import {
   ConversationRole,
@@ -90,7 +91,8 @@ import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
-export type Channel = "APP" | "VOICE" | "WHATSAPP";
+export type { Channel } from "./channel.js";
+import type { Channel } from "./channel.js";
 
 export type Turn = {
   user: User;
@@ -170,6 +172,8 @@ export async function handleAssistantMessage(input: {
   now?: Date;
   /** Sent by the app: false when its Location reminders toggle is off or access is refused. */
   locationReminders?: boolean;
+  /** Recent turns to use instead of the stored ones (the WhatsApp Agent passes its trimmed, masked context window). */
+  history?: ChatMessage[];
 }): Promise<AssistantReply> {
   const now = input.now ?? new Date();
   const tz = input.settings.timezone;
@@ -181,10 +185,10 @@ export async function handleAssistantMessage(input: {
     now,
     todayYmd: localYmd(now, tz),
     channel: input.channel,
-    source: input.channel === "WHATSAPP" ? "WHATSAPP" : input.channel === "VOICE" ? "VOICE" : "CHAT",
+    source: isWhatsapp(input.channel) ? "WHATSAPP" : input.channel === "VOICE" ? "VOICE" : "CHAT",
     conversation,
     state: readState(conversation),
-    history: await recentChat(conversation.id, 8),
+    history: input.history ?? (await recentChat(conversation.id, 8)),
     task: { userId: input.user.id, tz, deviceId: input.deviceId },
     learned: [],
     memoriesUsed: 0,
@@ -826,7 +830,7 @@ export async function proceedWithDraft(
 
   const taskSource = source === "WHATSAPP" ? TaskSource.WHATSAPP : source === "VOICE" ? TaskSource.VOICE : TaskSource.CHAT;
   const task = await createTask(turn.task, draftToCreateInput(draft, turn.tz, taskSource, confidence));
-  if (turn.channel === "WHATSAPP") notifyAddedFromWhatsapp(turn.user.id, [task.title]); // P2: shows up on the phone now
+  if (isWhatsapp(turn.channel)) notifyAddedFromWhatsapp(turn.user.id, [task.title]); // P2: shows up on the phone now
   turn.state.pending = null;
   focusOn(turn, task.id);
 
@@ -892,16 +896,16 @@ export async function proPlace(turn: Turn, task: { id: string; title: string }, 
     await attachLocation(turn.user.id, task.id, saved.id);
     line = remindersOff ? L.turnOn(shown) : L.set(saved.name, L.range[saved.preset] ?? L.range.NEARBY);
   } else if (needsPlace) {
-    line = remindersOff ? L.turnOn(shown) : turn.channel === "WHATSAPP" ? L.whereIsApp(shown) : L.whereIs(shown);
+    line = remindersOff ? L.turnOn(shown) : isWhatsapp(turn.channel) ? L.whereIsApp(shown) : L.whereIs(shown);
   } else {
     const r = await placeLine(turn, task, place);
     attached = r.attached;
     // Not on the map ("KFC kalma chowk"): the picker searches near the user, or they drop the pin.
     needsPlace = !r.found;
-    line = r.found ? r.line : turn.channel === "WHATSAPP" ? r.line : L.notFoundSet(shown);
+    line = r.found ? r.line : isWhatsapp(turn.channel) ? r.line : L.notFoundSet(shown);
     if (remindersOff) line += `\n${L.turnOn(shown)}`;
   }
-  const card: Card | null = turn.channel !== "WHATSAPP" && (remindersOff || needsPlace) ? { type: "location_setup", taskId: task.id, place: shown, saved: !needsPlace, remindersOn: !remindersOff } : null;
+  const card: Card | null = !isWhatsapp(turn.channel) && (remindersOff || needsPlace) ? { type: "location_setup", taskId: task.id, place: shown, saved: !needsPlace, remindersOn: !remindersOff } : null;
   return { line, card, attached };
 }
 
@@ -1247,7 +1251,7 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
     noReminder: draft.noReminder,
   }, turn.now);
   if (draft.intervalDays && draft.doneToday) await markTodayDone(turn.user.id, turn.tz, routine.id, turn.now);
-  if (turn.channel === "WHATSAPP") notifyAddedFromWhatsapp(turn.user.id, [routine.title]);
+  if (isWhatsapp(turn.channel)) notifyAddedFromWhatsapp(turn.user.id, [routine.title]);
   turn.state.pending = null;
   const freq = draft.intervalDays
     ? intervalLabel(draft.intervalDays)

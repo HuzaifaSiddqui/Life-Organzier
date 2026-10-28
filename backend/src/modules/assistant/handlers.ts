@@ -1,3 +1,4 @@
+import { isWhatsapp } from "./channel.js";
 import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
 import { answerAction, commandAction, sayAction } from "./actions.js";
 import { prisma } from "../../config/db.js";
@@ -49,6 +50,7 @@ import {
 import { findReply, parseFindQuery } from "./commands/find.js";
 import { resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
+import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
@@ -139,8 +141,8 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
  * sent in the last 6 hours; with none, there is nothing to snooze.
  */
 async function snoozeReply(turn: Turn, minutes: number, taskId?: string): Promise<Out> {
-  if (turn.channel !== "WHATSAPP") return { content: "Snooze works for WhatsApp reminders. In the app, use Snooze on the notification.", intent: "snooze_unsupported" };
-  const reminded = await recentlyRemindedTaskId(turn.user.id, turn.now, taskId);
+  if (!isWhatsapp(turn.channel)) return { content: "Snooze works for WhatsApp reminders. In the app, use Snooze on the notification.", intent: "snooze_unsupported" };
+  const reminded = await recentlyRemindedTaskId(turn.user.id, turn.now, taskId, turn.channel);
   const task = reminded ? await taskById(turn, reminded) : null;
   if (!task || (task.status !== TaskStatus.PENDING && task.status !== TaskStatus.IN_PROGRESS)) {
     return { content: "Nothing to snooze right now.", intent: "snooze_nothing" };
@@ -566,7 +568,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
  * short summary sits above the task card (capped at 12). Both say "…and N more" when cut.
  */
 function taskListReply(turn: Turn, label: string, list: Task[], routines: string): Out {
-  const whatsapp = turn.channel === "WHATSAPP";
+  const whatsapp = isWhatsapp(turn.channel);
   const shown = list.slice(0, whatsapp ? WHATSAPP_LIST_CAP : APP_LIST_CAP);
   focusOn(turn, ...shown.slice(0, 3).map((t) => t.id).reverse());
   turn.state.listed = shown.map((t) => t.id);
@@ -609,7 +611,7 @@ async function classQuery(turn: Turn, q: { kind: "classes"; day: "today" | "tomo
     return formatClock(p.h, p.mi);
   };
   const content =
-    q.kind === "classes" ? classesForDay(slots, q.day === "tomorrow" ? "tomorrow" : "today", clock, turn.channel === "WHATSAPP" ? WHATSAPP_LIST_CAP : APP_LIST_CAP) : currentOrNextClass(slots, turn.now, clock, q.kind === "where_class" ? "where" : "next");
+    q.kind === "classes" ? classesForDay(slots, q.day === "tomorrow" ? "tomorrow" : "today", clock, isWhatsapp(turn.channel) ? WHATSAPP_LIST_CAP : APP_LIST_CAP) : currentOrNextClass(slots, turn.now, clock, q.kind === "where_class" ? "where" : "next");
   return { content, intent: "query_classes" };
 }
 
@@ -777,6 +779,11 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       return { content: "Okay, cancelled.", intent: "cancel" };
     case "snooze_task":
       return snoozeReply(turn, payload.minutes, payload.taskId);
+    case "snooze_routine": {
+      if (!isWhatsapp(turn.channel)) return { content: "Snooze works for WhatsApp reminders. In the app, use Snooze on the notification.", intent: "snooze_unsupported" };
+      const r = await snoozeRoutineOccurrence(turn.user.id, payload.occurrenceId, payload.minutes, turn.tz, turn.now);
+      return r ? { content: `Okay, I'll remind you about ${r.title} again at ${r.at}.`, intent: "snoozed" } : { content: "Nothing to snooze right now.", intent: "snooze_nothing" };
+    }
     case "complete_task": {
       const task = await getTaskForUser(turn.user.id, payload.taskId);
       return task ? completeTask(turn, task) : { content: "That task no longer exists.", intent: "not_found" };

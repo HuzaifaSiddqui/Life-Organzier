@@ -36,6 +36,8 @@ export function settings(overrides: Partial<UserSettings> = {}): UserSettings {
     checkinsEnabled: true,
     checkinTone: "FUNNY",
     checkinResearchMode: false,
+    waAgentReminders: "OFF",
+    waAgentVoice: false,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,

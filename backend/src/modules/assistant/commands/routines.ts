@@ -1,3 +1,4 @@
+import { isWhatsapp } from "../channel.js";
 import { RoutineFrequency, RoutineOccurrenceStatus, RoutinePriority, type Routine } from "@prisma/client";
 import { sayAction } from "../actions.js";
 import { z } from "zod";
@@ -120,7 +121,7 @@ const routineList: Command = {
   async execute(turn) {
     const routines = await listRoutines(turn.user.id, turn.tz);
     if (!routines.length) return { content: 'You don\'t have any routines yet. Try "Daily meditation at 6 AM for 10 minutes".', intent: "routine_list" };
-    const cap = turn.channel === "WHATSAPP" ? WHATSAPP_LIST_CAP : APP_LIST_CAP;
+    const cap = isWhatsapp(turn.channel) ? WHATSAPP_LIST_CAP : APP_LIST_CAP;
     const lines = routines.slice(0, cap).map((r) => `• ${r.title}: ${scheduleLabel(r)}${r.active ? "" : " (paused)"}${r.priority === RoutinePriority.MANDATORY ? ", mandatory" : ""}`);
     if (routines.length > cap) lines.push(`…and ${routines.length - cap} more in the Routines screen.`);
     return { content: [`Your routines (${routines.length}):`, ...lines].join("\n"), actions: [{ label: "Open routines", payload: { type: "navigate", screen: "Routines" } }], intent: "routine_list" };
@@ -301,7 +302,7 @@ function todayStatus(name: "routine_skip_today" | "routine_complete_today", stat
       const o = await updateOccurrence(turn.user.id, occurrenceId, status, { confirmMandatory: true });
       if (!o) return { content: "That routine isn't scheduled any more.", intent: "not_found" };
       recordUndo(turn, { kind: "occurrence", occurrenceId, before: { status: before.status, occurrenceDate: before.occurrenceDate.toISOString(), dueTime: before.dueTime }, label: `${o.routine.title} ${skip ? "skipped" : "done"} today` });
-      if (turn.channel === "WHATSAPP") notifyRoutineFromWhatsapp(turn.user.id, o.routine.title, skip ? "skipped" : "done");
+      if (isWhatsapp(turn.channel)) notifyRoutineFromWhatsapp(turn.user.id, o.routine.title, skip ? "skipped" : "done");
       return { content: skip ? `Skipped "${o.routine.title}" for today.` : `"${o.routine.title}" done for today. Keep the streak going!`, actions: [UNDO_ACTION], intent: skip ? "routine_skipped" : "routine_done" };
     },
   };

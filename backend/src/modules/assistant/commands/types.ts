@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { ExtractOptions } from "../entities.js";
 import type { Out, Turn } from "../dialogue.js";
-import type { Card } from "../types.js";
+import type { Card, QuickAction } from "../types.js";
 
 export type CommandCategory = "tasks" | "routines" | "settings" | "insights" | "bulk" | "general";
 
@@ -15,7 +15,8 @@ export type CommandArgs = Record<string, unknown>;
  * user must confirm first, e.g. a bulk preview) or an immediate reply (not found, which one, not allowed).
  * The resolved args are what gets executed, so a confirmed preview runs on exactly the tasks it showed.
  */
-export type Prepared = { args: CommandArgs; confirm?: { question: string; cards?: Card[] } } | { out: Out };
+/** `confirm.actions`: the options to offer instead of Yes / Cancel (each still carries a payload). */
+export type Prepared = { args: CommandArgs; confirm?: { question: string; cards?: Card[]; actions?: QuickAction[] } } | { out: Out };
 
 export type Command = {
   name: string;

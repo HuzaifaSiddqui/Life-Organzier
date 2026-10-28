@@ -4,7 +4,7 @@ import type { ChatMessage } from "../../ai/llm.js";
 import { emptyState, type DialogueState } from "../assistant/types.js";
 
 /** Messages within this window continue the same conversation (FR-WA-001 §3 uses 24h for WhatsApp). */
-const CONTINUE_WINDOW_HOURS: Record<string, number> = { APP: 12, VOICE: 12, WHATSAPP: 24 };
+const CONTINUE_WINDOW_HOURS: Record<string, number> = { APP: 12, VOICE: 12, WHATSAPP: 24, WHATSAPP_AGENT: 24 };
 
 export async function getOrCreateConversation(userId: string, channel: string, conversationId?: string | null): Promise<Conversation> {
   if (conversationId) {
@@ -74,14 +74,14 @@ export async function addOutboundMessage(
   userId: string,
   channel: string,
   content: string,
-  opts: { focusTaskId?: string; actions?: Array<{ label: string; payload: Record<string, unknown> }> } = {},
+  opts: { focusTaskId?: string; actions?: Array<{ label: string; payload: Record<string, unknown> }>; expiresAt?: Date } = {},
 ): Promise<void> {
   const conversation = await getOrCreateConversation(userId, channel);
   const state = readState(conversation);
   if (opts.focusTaskId) state.focus = [opts.focusTaskId, ...state.focus.filter((id) => id !== opts.focusTaskId)].slice(0, 8);
   state.pending = null;
   await saveState(conversation.id, state);
-  await addMessage({ conversationId: conversation.id, userId, role: ConversationRole.ASSISTANT, content, metadata: { intent: "reminder", taskId: opts.focusTaskId ?? null, actions: opts.actions ?? [] } as Prisma.InputJsonValue });
+  await addMessage({ conversationId: conversation.id, userId, role: ConversationRole.ASSISTANT, content, metadata: { intent: "reminder", taskId: opts.focusTaskId ?? null, actions: opts.actions ?? [], ...(opts.expiresAt ? { expiresAt: opts.expiresAt.toISOString() } : {}) } as Prisma.InputJsonValue });
 }
 
 export async function recentChat(conversationId: string, limit = 8): Promise<ChatMessage[]> {

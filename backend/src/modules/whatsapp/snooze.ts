@@ -20,11 +20,12 @@ export const SNOOZE_REMINDER_WINDOW_MS = 6 * 3600000;
  * The task of the latest WhatsApp reminder (or urgent alert) sent in the last 6 hours, or, with `taskId`,
  * that task if it was reminded in that time. Null = nothing to snooze.
  */
-export async function recentlyRemindedTaskId(userId: string, now: Date, taskId?: string): Promise<string | null> {
+/** `channel`: the WhatsApp conversation the reminder went to (Twilio "WHATSAPP" or the user's agent "WHATSAPP_AGENT"). */
+export async function recentlyRemindedTaskId(userId: string, now: Date, taskId?: string, channel = "WHATSAPP"): Promise<string | null> {
   const filters: Prisma.ConversationMessageWhereInput[] = [{ metadata: { path: ["intent"], equals: "reminder" } }];
   if (taskId) filters.push({ metadata: { path: ["taskId"], equals: taskId } });
   const last = await prisma.conversationMessage.findFirst({
-    where: { userId, role: ConversationRole.ASSISTANT, conversation: { channel: "WHATSAPP" }, createdAt: { gte: new Date(now.getTime() - SNOOZE_REMINDER_WINDOW_MS) }, AND: filters },
+    where: { userId, role: ConversationRole.ASSISTANT, conversation: { channel }, createdAt: { gte: new Date(now.getTime() - SNOOZE_REMINDER_WINDOW_MS) }, AND: filters },
     orderBy: { createdAt: "desc" },
     select: { metadata: true },
   });

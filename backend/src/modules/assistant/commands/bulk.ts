@@ -1,3 +1,4 @@
+import { isWhatsapp } from "../channel.js";
 import { Priority, TaskStatus, TaskType, type Task } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
@@ -49,7 +50,7 @@ export function nonUrgentSoon(turn: Turn, tasks: Task[]): Task[] {
 /** The preview: one question, the titles (WhatsApp: first 8 + "…and N more"), one confirmation. */
 function preview(turn: Turn, question: string, tasks: Task[], total: number): Prepared {
   const c = commandText(turn.settings.language);
-  const whatsapp = turn.channel === "WHATSAPP";
+  const whatsapp = isWhatsapp(turn.channel);
   const shownTitles = tasks.slice(0, whatsapp ? WHATSAPP_LIST_CAP : BULK_CAP).map((t) => `• ${t.title}`);
   const extra = tasks.length - shownTitles.length;
   const capped = total > tasks.length ? `\n${c.bulkCapped(BULK_CAP, total)}` : "";

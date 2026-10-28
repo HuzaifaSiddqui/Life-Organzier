@@ -3,6 +3,7 @@ import type { ExtractOptions } from "../entities.js";
 import { rulesUnderstand } from "../nlu.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 import { bulkCommands } from "./bulk.js";
+import { internalCommands } from "./documents.js";
 import { findItemsCommand } from "./find.js";
 import { insightCommands } from "./insights.js";
 import { parseMulti } from "./multi.js";
@@ -18,7 +19,8 @@ import { wrappedCommands } from "./wrapped.js";
  */
 export const COMMANDS: Command[] = [...bulkCommands, ...settingsCommands, ...insightCommands, ...routineCommands, findItemsCommand, ...taskCommands, ...wrappedCommands];
 
-const byName = new Map(COMMANDS.map((c) => [c.name, c]));
+/** COMMANDS plus internal ones (commands/documents.ts) that only a button starts: never matched, listed or routed. */
+const byName = new Map([...COMMANDS, ...internalCommands].map((c) => [c.name, c]));
 
 export function getCommand(name: string): Command | undefined {
   return byName.get(name);
