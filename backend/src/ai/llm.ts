@@ -23,6 +23,8 @@ export type CompletionOptions = {
   providers?: string[];
   /** Which job's provider chain to use when hosted chains are configured (LLM_PROVIDERS_CHAT/_DOCS/_VISION). Default chat. */
   job?: "chat" | "docs" | "vision";
+  /** Hosted chains: the same request with few-shot examples, sent to providers marked fewShot in provider-order.json. */
+  fewShotMessages?: ChatMessage[];
   /** Images for the last user message (base64), for providers that accept them. */
   images?: Array<{ mimeType: string; data: string }>;
 };

@@ -35,8 +35,16 @@ const MAX = Number(arg("max") ?? 40);
 const RUNS = Number(arg("runs") ?? 3);
 /** --pace ms between calls (overrides the per-provider default); --tag names the pass (e.g. slow) in the results. */
 const PACE_ARG = arg("pace") ? Number(arg("pace")) : null;
-const TAG = arg("tag") ?? "";
-const FEWSHOT = process.argv.includes("--fewshot");
+/**
+ * --set selection: the classmates' selection half (tests/eval/chat-selection.json) instead of the default unsure set.
+ * --set heldout (classmates) / --set holdout (teammates' chat-holdout.json): reporting only; tagged report-*, never ranked.
+ */
+const SET = arg("set") ?? "default";
+if (!["default", "selection", "heldout", "holdout"].includes(SET)) throw new Error("--set default|selection|heldout|holdout");
+const TAG = SET === "heldout" || SET === "holdout" ? `report-${SET}` : (arg("tag") ?? "") + (SET === "selection" ? `${arg("tag") ? "-" : ""}selection` : "");
+/** --fewshot-hash: few-shot with the hashed-vector neighbours (what the app has when Ollama, and so nomic-embed-text, is down). */
+const FEWSHOT_HASH = process.argv.includes("--fewshot-hash");
+const FEWSHOT = process.argv.includes("--fewshot") || FEWSHOT_HASH;
 /** --timeout ms per hosted call (default 8000, the production limit); a longer one is a diagnostic pass, never ranked. */
 const TIMEOUT = Number(arg("timeout") ?? 8000);
 const DATE = arg("date") ?? new Date().toISOString().slice(0, 10);
@@ -137,6 +145,17 @@ const chatSet = [
   ...para.filter((r) => unsure(r.text)).map((r) => ({ text: r.text, lang: "en", command: r.command, alsoOk: [] as string[], set: "en-untuned" })),
   ...bank.filter((r) => r.lang === "en" && unsure(r.text)).map((r) => ({ ...r, alsoOk: r.alsoOk ?? [], set: "en-bank(tuned)" })),
 ] as Array<{ id?: string; text: string; lang: string; command: string; alsoOk: string[]; set: string }>;
+if (SET !== "default") {
+  // Whole file, English only; only messages the rules are unsure about reach the router, like the default set.
+  const file = { selection: "chat-selection.json", heldout: "chat-heldout-classmates.json", holdout: "chat-holdout.json" }[SET as "selection" | "heldout" | "holdout"];
+  const path = join(root, "tests/eval", file);
+  if (!existsSync(path)) throw new Error(`${file} not found (scripts/split-eval-set.ts writes the classmates' sets)`);
+  const data = JSON.parse(readFileSync(path, "utf8")) as { rows?: Row[]; commands?: Row[] };
+  type Row = { id?: string; text: string; lang?: string; command?: string; intent?: string; alsoOk?: string[]; example?: boolean };
+  const rows = [...(data.rows ?? []), ...(data.commands ?? []).filter((r) => !r.example)].filter((r) => (r.lang ?? "en") === "en" && (r.command ?? r.intent));
+  chatSet.splice(0, chatSet.length, ...rows.filter((r) => unsure(r.text)).map((r) => ({ id: r.id, text: r.text, lang: "en", command: (r.command ?? r.intent) as string, alsoOk: r.alsoOk ?? [], set: SET })));
+  console.log(`${file}: ${rows.length} English rows, ${chatSet.length} the rules are unsure about`);
+}
 
 type Exp = { titleContains: string; date: string | null; time?: string };
 const manifest = JSON.parse(readFileSync(join(root, "tests/eval/documents/manifest.json"), "utf8")) as { documents: Array<{ file: string; from?: string; expectedDeadlines?: Exp[] }> };
@@ -159,7 +178,7 @@ async function chatJob(name: string, model: string, run: number, max: number): P
   const bySet: Record<string, { n: number; correct: number }> = {};
   const perItem: number[] = [];
   let correct = 0;
-  const index = FEWSHOT ? await bankIndex(true, loadBank().filter((r) => r.lang === "en")) : null;
+  const index = FEWSHOT ? await bankIndex(!FEWSHOT_HASH, loadBank().filter((r) => r.lang === "en")) : null;
   for (const it of items) {
     if (m.stopped()) break;
     setAi(new AiService([m.provider as never])); // fresh per message: the service's own cooldown must not hide later answers
@@ -344,7 +363,7 @@ if (!process.argv.includes("--rank")) {
  * Passes and conditions. Ranked: the normal pass ("" tag, production pacing and limits) and the --fewshot condition.
  * Reported, not ranked: slow / retry / slow-<fix> passes (throttling or adapter diagnostics), diag-* and pre-fix runs.
  */
-const RANKED_TAGS = new Set(["", "fewshot"]);
+const RANKED_TAGS = new Set(["", "fewshot", "fewshot-hash", "selection", "fewshot-selection", "fewshot-hash-selection"]);
 type Agg = { tag: string; provider: string; model: string; job: string; runs: number; mean: number; min: number; max: number; spread: number; ci: [number, number] | null; p95: number; invalidRate: number; schemaRate: number; failures: number; r429: number; tokens: number; headroom: number | null; tier: string; n: number; bySet: Record<string, string>; note?: string };
 
 const groups = new Map<string, JobResult[]>();
@@ -414,7 +433,9 @@ const isReference = (a: Agg) => a.provider === "ollama" && a.model === "qwen2.5:
  * 3) inside a tie group: privacy tier (local, A, B), then p95 latency, then availability (failures + 429s).
  */
 function rank(job: string) {
-  const candidates = aggs.filter((a) => a.job === job && a.provider !== "hash" && RANKED_TAGS.has(a.tag));
+  const ranked = aggs.filter((a) => a.job === job && a.provider !== "hash" && RANKED_TAGS.has(a.tag));
+  // Once the classmates' selection set has runs, chat is ranked on it alone (one set, equal messages).
+  const candidates = job === "chat" && ranked.some((a) => a.tag.endsWith("selection")) ? ranked.filter((a) => a.tag.endsWith("selection")) : ranked;
   const fullN = Math.max(0, ...candidates.map((a) => a.n));
   const reasons = (a: Agg) => [a.invalidRate > 0.02 ? `invalid JSON ${(a.invalidRate * 100).toFixed(1)}%` : "", a.n === 0 || a.mean === 0 ? "no correct answers" : "", job === "chat" && a.n !== fullN ? `scored ${a.n} of ${fullN} messages` : ""].filter(Boolean);
   const eligible = candidates.filter((a) => isReference(a) || !reasons(a).length);
@@ -459,6 +480,7 @@ const pairs: Array<[string, [string, string, string], [string, string, string]]>
   ["14b vs 7b", ["ollama", "qwen2.5:14b", ""], ["ollama", "qwen2.5:7b", ""]],
   ["7b few-shot vs 7b", ["ollama", "qwen2.5:7b", "fewshot"], ["ollama", "qwen2.5:7b", ""]],
   ["GLM few-shot vs GLM", ["deploy", "zai-org/glm-5.3-flash", "fewshot"], ["deploy", "zai-org/glm-5.3-flash", ""]],
+  ["GLM few-shot (hashed neighbours) vs GLM", ["deploy", "zai-org/glm-5.3-flash", "fewshot-hash"], ["deploy", "zai-org/glm-5.3-flash", ""]],
   ["Groq 20b few-shot vs Groq 20b", ["groq", "openai/gpt-oss-20b", "fewshot"], ["groq", "openai/gpt-oss-20b", ""]],
   ["Groq 20b vs Ollama 7b", ["groq", "openai/gpt-oss-20b", ""], ["ollama", "qwen2.5:7b", ""]],
   ["GLM vs Ollama 7b", ["deploy", "zai-org/glm-5.3-flash", ""], ["ollama", "qwen2.5:7b", ""]],

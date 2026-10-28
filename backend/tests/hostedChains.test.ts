@@ -34,11 +34,11 @@ const ask: ChatMessage[] = [{ role: "user", content: "call Mooz at 0300-1234567,
 
 function chains(env: Record<string, string>, order: Array<{ provider: string; model: string }>, instances: Record<string, LlmProvider>, now = () => 1_800_000_000_000) {
   const keep = { ...process.env };
-  Object.assign(process.env, { LLM_LOG: "off", ...env });
+  Object.assign(process.env, { LLM_LOG: "off", CLOUD_FALLBACK: "on", ...env });
   try {
     return new HostedChains({ chat: order, docs: order, vision: order }, now, (name) => instances[name] ?? null);
   } finally {
-    for (const k of Object.keys(env)) if (keep[k] === undefined) delete process.env[k];
+    for (const k of [...Object.keys(env), "CLOUD_FALLBACK"]) if (keep[k] === undefined) delete process.env[k];
     else process.env[k] = keep[k];
   }
 }

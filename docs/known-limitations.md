@@ -9,6 +9,19 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   tests and rows stay and must keep passing; everything below that mentions them describes what exists today, not
   what was measured for the evaluation. The provider benchmark (`scripts/bench-providers.ts`) is English only.
 
+## Cloud fallback (off by default)
+
+- **Masking is not anonymisation.** With `CLOUD_FALLBACK=on`, unclear messages (and, with a docs chain, document text)
+  can reach Deploy (tier B) or Groq when Ollama is down or fails. Numbers, e-mails, links and names after a cue word
+  are masked; everything else in the message is sent as written (`docs/rollout.md`).
+- **Few-shot examples when Ollama is down come from the hashed vectors.** The bank's nearest rows are found with
+  `nomic-embed-text`, which runs in Ollama; when Ollama is down (the case the fallback exists for) the hashed
+  bag-of-words index is used instead, which only sees shared words. Measured on 29 Oct (33 English unsure messages,
+  paired bootstrap): Deploy GLM few-shot vs none +15.2 points (7.1 to 24.2) with `nomic-embed-text` neighbours and
+  +10.1 points (3.0 to 17.2) with hashed neighbours, so the gain holds, smaller, when Ollama is down.
+- **Groq's free tier is small**: 8,000 tokens a minute and 200,000 a day per model (about 17 router calls a minute for
+  all users together); past that it returns 429 and the chain moves on.
+
 ## Reminders
 
 - **Google Play and exact alarms.** `app.json` requests `USE_EXACT_ALARM` and `SCHEDULE_EXACT_ALARM` so reminders
