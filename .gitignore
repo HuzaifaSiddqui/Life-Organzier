@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # Real documents for npm run eval:documents -- --private (personal data, never committed)
 backend/tests/eval/documents/private/
+
+# WhatsApp Agent probe output (redacted findings + local chat reference; never commit)
+backend/.probe/

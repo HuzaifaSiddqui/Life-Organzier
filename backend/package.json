@@ -22,7 +22,9 @@
     "unknown:review": "tsx scripts/unknown-review.ts",
     "bank:approve": "tsx scripts/bank-approve.ts",
     "paraphrases": "tsx scripts/gen-paraphrases.ts",
-    "collect": "tsx scripts/collect-to-holdout.ts"
+    "collect": "tsx scripts/collect-to-holdout.ts",
+    "wa:probe": "tsx scripts/whatsapp-agent-probe.ts",
+    "stt:bench": "tsx scripts/stt-benchmark.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
