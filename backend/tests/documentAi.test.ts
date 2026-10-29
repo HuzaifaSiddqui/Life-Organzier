@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { analyzeDocument, TIME_LIMIT_WARNING } from "../src/modules/documents/documentProcessing.js";
-import { AI_ONLY_MAX, aiDeadlines, chunkText, mergeDeadlines, type ExtractedDeadline } from "../src/modules/documents/extraction.js";
+import { AI_ONLY_MAX, aiDeadlines, chunkText, mergeDeadlines, splitDense, type ExtractedDeadline } from "../src/modules/documents/extraction.js";
 import { NOW, TZ } from "./fixtures.js";
 
 const item = (o: Partial<ExtractedDeadline>): ExtractedDeadline => ({ index: 0, title: "X", activity: "deadline", date: "2026-11-01", time: "9 AM", assumedTime: false, confidence: 88, source: "", ...o });
@@ -48,6 +48,45 @@ test("AI pass: every chunk is read, invented dates are dropped, AI off returns n
   assert.deepEqual(found.map((f) => f.date), ["2026-11-20"]);
   setAi(new AiService([]));
   assert.deepEqual(await aiDeadlines(text, "2026-10-05", TZ), { items: [], cutShort: false });
+});
+
+/**
+ * A model that lists every "<d> December 2026" date in what it is sent, but whose reply is cut mid-JSON when it holds
+ * more than `fits` items (a 500-token reply holds about 8); records each call.
+ */
+function truncating(fits: number) {
+  const calls: number[] = [];
+  setAi(new AiService([{ name: "truncating", chat: async (messages) => {
+    const items = [...messages[messages.length - 1].content.matchAll(/(\d{1,2}) December 2026/g)].map((m) => ({ kind: "exam", title: `Paper ${m[1]}`, date: `2026-12-${m[1].padStart(2, "0")}`, time: "", evidence: m[0] }));
+    calls.push(items.length);
+    const reply = JSON.stringify({ items });
+    return items.length > fits ? reply.slice(0, reply.length / 2) : reply;
+  } }]));
+  return calls;
+}
+
+test("DOC_AI_SPLIT: a dense date sheet is read in pieces, a failed piece is halved once; off loses the chunk", async () => {
+  const sheet = ["Final examination date sheet", ...Array.from({ length: 12 }, (_, i) => `Paper ${i + 1}  ${i + 1} December 2026  9:00 AM`)].join("\n");
+  assert.deepEqual(splitDense(sheet).map((p) => p.split("\n").length), [9, 5], "8 dated lines, then the heading + the last 4");
+  const keep = process.env.DOC_AI_SPLIT;
+  try {
+    delete process.env.DOC_AI_SPLIT;
+    truncating(8);
+    assert.equal((await aiDeadlines(sheet, "2026-10-05", TZ)).items.length, 0, "off: one reply for 12 dates, cut mid-JSON");
+    process.env.DOC_AI_SPLIT = "on";
+    let calls = truncating(8);
+    assert.equal(new Set((await aiDeadlines(sheet, "2026-10-05", TZ)).items.map((d) => d.date)).size, 12);
+    assert.deepEqual(calls, [8, 4], "two calls, no retry needed");
+    calls = truncating(4);
+    assert.equal(new Set((await aiDeadlines(sheet, "2026-10-05", TZ)).items.map((d) => d.date)).size, 12, "the 8-line piece fails, its halves succeed");
+    assert.deepEqual(calls, [8, 4, 4, 4]);
+    calls = truncating(1);
+    assert.equal((await aiDeadlines(sheet, "2026-10-05", TZ)).items.length, 0, "halves that fail too are dropped: one retry level, no loop");
+    assert.equal(calls.length, 2 + 4, "two pieces, each halved once");
+  } finally {
+    if (keep === undefined) delete process.env.DOC_AI_SPLIT;
+    else process.env.DOC_AI_SPLIT = keep;
+  }
 });
 
 test("analyzeDocument runs the AI pass on documents the rules already understand; only masked text is sent", async () => {

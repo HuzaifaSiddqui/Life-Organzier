@@ -1,5 +1,6 @@
 import cors, { type CorsOptions } from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
+import { chainConfigured, getChains } from "./ai/chains.js";
 import { getAi, getModelStatus } from "./ai/llm.js";
 import { setTimezoneChangeHandler } from "./lib/http.js";
 import { accountRouter } from "./modules/account/accountRoutes.js";
@@ -53,6 +54,16 @@ export function createApp() {
     const models = getModelStatus();
     const available = getAi().available && models.chat !== false;
     res.json({ ok: true, ai: { enabled: getAi().enabled, available, models, gemini: getAi().providerStatus("gemini") } });
+
+/**
+ * Hosted model providers: each job's chain (empty = the baseline Ollama path) and each provider's state
+ * (up / down / rate_limited / billing_blocked, requests today). No keys, no prompts.
+ */
+app.get("/health/ai", (_req, res) => {
+  const chains = getChains();
+  const jobs = (["chat", "docs", "vision"] as const).map((job) => ({ job, configured: chainConfigured(job), chain: chainConfigured(job) ? chains.chain(job) : [] }));
+  res.json({ ok: true, aiEnabled: getAi().enabled, baseline: { provider: process.env.AI_PROVIDER ?? "ollama", model: process.env.OLLAMA_MODEL ?? "qwen2.5:7b" }, jobs, providers: chains.status() });
+});
   });
 
   app.get("/", (_req, res) => {

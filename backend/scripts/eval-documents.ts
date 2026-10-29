@@ -20,10 +20,20 @@ if (!flags.has("--ai")) {
 const { analyzeDocument, DEADLINE_AUTO, SCHEDULE_AUTO } = await import("../src/modules/documents/documentProcessing.js");
 const { AiService, setAi } = await import("../src/ai/llm.js");
 const { shutdownOcr } = await import("../src/modules/documents/textExtraction.js");
+const { timeMatches, titleMatches } = await import("./docMatch.js");
 
-type ExpDeadline = { titleContains: string; date: string | null; time?: string };
-type ExpSchedule = { titleContains: string; days: number[]; time: string; room?: string };
-type Doc = { file: string; docType: "SYLLABUS" | "SCHEDULE" | "NOTES" | "OTHER"; language?: string; categories?: string[]; from?: string; expectedDeadlines?: ExpDeadline[]; expectedSchedules?: ExpSchedule[] };
+/**
+ * Expected items. Synthetic fixtures use `titleContains` (exact case-insensitive substring) and an exact `time`.
+ * The private manifest (npm run docs:manifest-template) uses `title` (word match, scripts/docMatch.ts), `time` compared
+ * as a clock time, and `kind` (reported, not scored); an entry whose title and date are both empty is a blank
+ * template row and is skipped. `shouldNotCreate`: dates in the document that are not deadlines; an extracted item on
+ * that date (and with that title, when one is given) is reported, and counts as a wrong auto-create if it would be
+ * created automatically.
+ */
+type ExpDeadline = { titleContains?: string; title?: string; date: string | null; time?: string; kind?: string };
+type ExpSchedule = { titleContains?: string; title?: string; days: number[]; time: string; room?: string };
+type NotItem = { date: string; title?: string; reason?: string };
+type Doc = { file: string; docType: "SYLLABUS" | "SCHEDULE" | "NOTES" | "OTHER" | ""; language?: string; categories?: string[]; from?: string; expectedDeadlines?: ExpDeadline[]; expectedSchedules?: ExpSchedule[]; shouldNotCreate?: NotItem[] };
 type Manifest = { now: string; timezone: string; documents: Doc[] };
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,29 +44,42 @@ if (!existsSync(join(dir, "manifest.json"))) {
   process.exit(0);
 }
 const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Manifest;
+if (isPrivate && !manifest.now) {
+  console.log("Fill \"now\" in the private manifest first (the date the documents are read as).");
+  process.exit(0);
+}
 const now = new Date(manifest.now ?? Date.now());
 const tz = manifest.timezone ?? "Asia/Karachi";
 const MIME: Record<string, string> = { ".txt": "text/plain", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
 
 const lower = (s: string | null | undefined) => (s ?? "").toLowerCase();
+const named = (e: { titleContains?: string; title?: string }) => e.title ?? e.titleContains ?? "";
+const titleOk = (e: { titleContains?: string; title?: string }, got: string) => (e.title !== undefined ? titleMatches(e.title, got) : lower(got).includes(lower(e.titleContains)));
+const timeOk = (e: { title?: string; time?: string }, got: string | null) => (e.title !== undefined ? timeMatches(e.time, got) : !e.time || got === e.time);
+const filled = (e: { titleContains?: string; title?: string; date?: string | null; days?: number[] }) => Boolean(named(e).trim() || e.date || e.days?.length);
 const sameDays = (a: number[], b: number[]) => [...new Set(a)].sort().join() === [...new Set(b)].sort().join();
 
-type Row = { file: string; categories: string[]; expected: number; found: number; extracted: number; correct: number; ocr: number; method: string; failures: string[]; ms: number; wrongAuto: number };
+type Row = { file: string; categories: string[]; expected: number; found: number; extracted: number; correct: number; ocr: number; method: string; failures: string[]; ms: number; wrongAuto: number; notCreated: number };
 
 async function evaluate(): Promise<Row[]> {
   const rows: Row[] = [];
   for (const doc of manifest.documents) {
     if (flags.has("--text-only") && doc.from) continue;
+    if (!doc.docType) {
+      console.log(`skipped ${isPrivate ? "a private document" : doc.file}: no docType yet (fill the manifest)`);
+      continue;
+    }
     const source = doc.from ? manifest.documents.find((d) => d.file === `fixtures/${doc.from}.txt`) : doc;
-    const expD = source?.expectedDeadlines ?? [];
-    const expS = source?.expectedSchedules ?? [];
+    const expD = (source?.expectedDeadlines ?? []).filter(filled);
+    const expS = (source?.expectedSchedules ?? []).filter(filled);
+    const nots = (source?.shouldNotCreate ?? []).filter((n) => n.date);
     const started = Date.now();
     const a = await analyzeDocument({
       buffer: readFileSync(join(dir, doc.file)),
       fileName: doc.file,
       mimeType: MIME[extname(doc.file).toLowerCase()] ?? "application/octet-stream",
       docType: doc.docType,
-      language: doc.language ?? "eng",
+      language: doc.language || "eng",
       tz,
       now,
     });
@@ -67,8 +90,8 @@ async function evaluate(): Promise<Row[]> {
     // Deadlines: one extracted item per expected item.
     const used = new Set<number>();
     for (const e of expD) {
-      const titled = a.deadlines.filter((d, i) => !used.has(i) && lower(d.title).includes(lower(e.titleContains)));
-      const hit = titled.find((d) => d.date === e.date && (!e.time || d.time === e.time));
+      const titled = a.deadlines.filter((d, i) => !used.has(i) && titleOk(e, d.title));
+      const hit = titled.find((d) => d.date === e.date && timeOk(e, d.time));
       if (hit) {
         used.add(a.deadlines.indexOf(hit));
         found += 1;
@@ -78,25 +101,28 @@ async function evaluate(): Promise<Row[]> {
       const near = titled.find((d) => d.date === e.date) ?? titled[0];
       failures.push(
         !near
-          ? `missed deadline "${e.titleContains || "(any)"}" ${e.date ?? "(undated)"}${e.time ? ` ${e.time}` : ""}`
+          ? `missed deadline "${named(e) || "(any)"}" ${e.date ?? "(undated)"}${e.time ? ` ${e.time}` : ""}`
           : near.date !== e.date
-            ? `wrong date for "${e.titleContains || near.title}": got ${near.date ?? "none"}, expected ${e.date ?? "none"}`
-            : `wrong time for "${e.titleContains || near.title}": got ${near.time ?? "none"}, expected ${e.time}`,
+            ? `wrong date for "${named(e) || near.title}": got ${near.date ?? "none"}, expected ${e.date ?? "none"}`
+            : `wrong time for "${named(e) || near.title}": got ${near.time ?? "none"}, expected ${e.time}`,
       );
     }
     // Wrong items that auto-create would have created (same rule as processDocument): must stay 0.
     const autoOk = a.ocrConfidence >= 70 && !a.needsLanguage;
     let wrongAuto = 0;
+    let notCreated = 0;
     a.deadlines.forEach((d, i) => {
       if (used.has(i)) return;
-      failures.push(`extra deadline "${d.title}" ${d.date ?? "(undated)"}${d.time ? ` ${d.time}` : ""}`);
+      const not = nots.find((n) => n.date === d.date && (!n.title || titleMatches(n.title, d.title)));
+      if (not) notCreated += 1;
+      failures.push(`${not ? `should-not item ("${not.reason ?? "not a deadline"}")` : "extra deadline"} "${d.title}" ${d.date ?? "(undated)"}${d.time ? ` ${d.time}` : ""}`);
       if (autoOk && d.date && d.confidence >= DEADLINE_AUTO) wrongAuto += 1;
     });
 
     // Schedules: rows with the same title and time are combined (a class on Mon and Wed may be two rows).
     const usedS = new Set<number>();
     for (const e of expS) {
-      const group = a.schedules.map((s, i) => ({ s, i })).filter(({ s }) => lower(s.title).includes(lower(e.titleContains)) && s.time === e.time);
+      const group = a.schedules.map((s, i) => ({ s, i })).filter(({ s }) => titleOk(e, s.title) && (e.title !== undefined ? timeMatches(e.time, s.time) : s.time === e.time));
       const days = group.flatMap(({ s }) => s.daysOfWeek);
       const roomOk = !e.room || group.some(({ s }) => lower(s.room) === lower(e.room));
       if (group.length && sameDays(days, e.days) && roomOk) {
@@ -105,11 +131,11 @@ async function evaluate(): Promise<Row[]> {
         correct += group.length;
         continue;
       }
-      const titled = a.schedules.filter((s) => lower(s.title).includes(lower(e.titleContains)));
+      const titled = a.schedules.filter((s) => titleOk(e, s.title));
       failures.push(
         !titled.length
-          ? `missed class "${e.titleContains}" ${e.days.join(",")} ${e.time}`
-          : `wrong class "${e.titleContains}": got ${titled.map((s) => `${s.daysOfWeek.join(",")} ${s.time ?? "?"}${s.room ? ` ${s.room}` : ""}`).join(" + ")}, expected ${e.days.join(",")} ${e.time}${e.room ? ` ${e.room}` : ""}`,
+          ? `missed class "${named(e)}" ${e.days.join(",")} ${e.time}`
+          : `wrong class "${named(e)}": got ${titled.map((s) => `${s.daysOfWeek.join(",")} ${s.time ?? "?"}${s.room ? ` ${s.room}` : ""}`).join(" + ")}, expected ${e.days.join(",")} ${e.time}${e.room ? ` ${e.room}` : ""}`,
       );
     }
     a.schedules.forEach((s, i) => {
@@ -118,7 +144,7 @@ async function evaluate(): Promise<Row[]> {
       if (autoOk && a.schedules.length <= 5 && s.daysOfWeek.length && s.confidence >= SCHEDULE_AUTO) wrongAuto += 1;
     });
 
-    rows.push({ file: doc.file, categories: doc.categories ?? [], expected: expD.length + expS.length, found, extracted: a.deadlines.length + a.schedules.length, correct, ocr: a.ocrConfidence, method: a.method, failures, ms: Date.now() - started, wrongAuto });
+    rows.push({ file: doc.file, categories: doc.categories ?? [], expected: expD.length + expS.length, found, extracted: a.deadlines.length + a.schedules.length, correct, ocr: a.ocrConfidence, method: a.method, failures, ms: Date.now() - started, wrongAuto, notCreated });
   }
   return rows;
 }
@@ -168,9 +194,9 @@ function section(title: string, rows: Row[], compare: Baseline | null): string[]
     "",
     "### Per document",
     "",
-    "| Document | Found / expected | Extracted (correct) | OCR conf. | Method | Time |",
-    "|---|---|---|---|---|---|",
-    ...rows.map((r) => `| ${r.file} | ${r.found}/${r.expected} | ${r.extracted} (${r.correct}) | ${r.ocr} | ${r.method} | ${(r.ms / 1000).toFixed(1)} s |`),
+    "| Document | Found / expected | Recall | Extracted (correct) | Precision | Wrong auto-create | Should-not items | OCR conf. | Method | Time |",
+    "|---|---|---|---|---|---|---|---|---|---|",
+    ...rows.map((r) => `| ${r.file} | ${r.found}/${r.expected} | ${pct(r.found, r.expected)} | ${r.extracted} (${r.correct}) | ${pct(r.correct, r.extracted)} | ${r.wrongAuto} | ${r.notCreated} | ${r.ocr} | ${r.method} | ${(r.ms / 1000).toFixed(1)} s |`),
     "",
     "### Failures by category",
     "",

@@ -1,4 +1,5 @@
 import type { ZodType } from "zod";
+import { chainConfigured, getChains } from "./chains.js";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -20,6 +21,12 @@ export type CompletionOptions = {
    * what chat uses. Unknown or unconfigured names are skipped; the circuit breaker still applies.
    */
   providers?: string[];
+  /** Which job's provider chain to use when hosted chains are configured (LLM_PROVIDERS_CHAT/_DOCS/_VISION). Default chat. */
+  job?: "chat" | "docs" | "vision";
+  /** Hosted chains: the same request with few-shot examples, sent to providers marked fewShot in provider-order.json. */
+  fewShotMessages?: ChatMessage[];
+  /** Images for the last user message (base64), for providers that accept them. */
+  images?: Array<{ mimeType: string; data: string }>;
 };
 
 export interface LlmProvider {
@@ -29,6 +36,8 @@ export interface LlmProvider {
   /** Minimum gap between this provider's background calls (pacing against rate limits). */
   readonly minIntervalMs?: number;
   chat(messages: ChatMessage[], options: CompletionOptions): Promise<string>;
+  /** Text plus token counts (hosted providers); chat() is used when absent. */
+  call?(messages: ChatMessage[], options: CompletionOptions): Promise<{ text: string; usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number } }>;
 }
 
 /** HTTP failure from a provider; `status` drives the circuit-breaker cooldown. */
@@ -239,7 +248,21 @@ export class AiService {
   }
 
   get available(): boolean {
-    return this.chain.some((s) => s.downUntil <= Date.now());
+    return this.chain.some((s) => s.downUntil <= Date.now()) || (this.hostedAllowed && (["chat", "docs", "vision"] as const).some((j) => chainConfigured(j) && getChains().chain(j).length > 0));
+  }
+
+  /** Hosted chains (ai/chains.ts) only for the shared service with AI on; a service built from explicit providers (tests) never uses them. */
+  private hostedAllowed = false;
+  allowHosted(): this {
+    this.hostedAllowed = this.chain.length > 0;
+    return this;
+  }
+
+  /** The job's hosted chain when one is configured (LLM_PROVIDERS_<JOB>); otherwise the baseline path runs unchanged. */
+  private hostedJob(options: CompletionOptions): "chat" | "docs" | "vision" | null {
+    if (!this.hostedAllowed || options.providers) return null;
+    const job = options.job ?? "chat";
+    return chainConfigured(job) ? job : null;
   }
 
   private foregroundInFlight = 0;
@@ -247,6 +270,8 @@ export class AiService {
   private backgroundQueue: Promise<unknown> = Promise.resolve();
 
   async complete(messages: ChatMessage[], options: CompletionOptions = {}): Promise<string | null> {
+    const hosted = this.hostedJob(options);
+    if (hosted) return getChains().complete(hosted, messages, options);
     if (!options.background) {
       this.foregroundInFlight += 1;
       this.lastForegroundAt = Date.now();
@@ -298,6 +323,8 @@ export class AiService {
 
   /** Structured completion validated with zod. Returns null instead of throwing on any failure. */
   async json<T>(messages: ChatMessage[], schema: ZodType<T>, options: CompletionOptions = {}): Promise<T | null> {
+    const hosted = this.hostedJob(options);
+    if (hosted) return getChains().json(hosted, messages, schema, options);
     const text = await this.complete(messages, { temperature: 0.1, ...options, json: options.json ?? true });
     if (!text) return null;
     try {
@@ -312,7 +339,7 @@ export class AiService {
 let shared: AiService | null = null;
 
 export function getAi(): AiService {
-  shared ??= new AiService();
+  shared ??= new AiService().allowHosted();
   return shared;
 }
 
