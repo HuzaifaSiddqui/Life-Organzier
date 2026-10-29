@@ -376,7 +376,7 @@ export async function llmTopics(text: string, timeoutMs = 45000): Promise<string
       { role: "user", content: text.slice(0, 2500) },
     ],
     topicSchema,
-    { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs },
+    { json: { type: "object", properties: { topics: { type: "array", items: { type: "string" }, maxItems: 8 } }, required: ["topics"] }, maxTokens: 150, timeoutMs, job: "docs" },
   );
   return result?.topics ?? [];
 }
@@ -447,6 +447,7 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
       },
       maxTokens: 500,
       timeoutMs,
+      job: "docs",
     },
   );
   const out: ExtractedDeadline[] = [];

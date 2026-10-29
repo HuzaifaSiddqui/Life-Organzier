@@ -2,6 +2,13 @@
 
 Gaps and platform restrictions in the current release. Feature status: [AI_ASSISTANT_ARCHITECTURE.md](AI_ASSISTANT_ARCHITECTURE.md).
 
+## Scope until the FYP evaluation (10 Nov 2026)
+
+- **Urdu and Roman Urdu are deferred.** Until after the evaluation there is no new Urdu or Roman Urdu work: no
+  benchmarks, utterance-bank rows, paraphrases, voice tests or replies. The existing Urdu and Roman Urdu code, strings,
+  tests and rows stay and must keep passing; everything below that mentions them describes what exists today, not
+  what was measured for the evaluation. The provider benchmark (`scripts/bench-providers.ts`) is English only.
+
 ## Reminders
 
 - **Google Play and exact alarms.** `app.json` requests `USE_EXACT_ALARM` and `SCHEDULE_EXACT_ALARM` so reminders
