@@ -1,0 +1,2806 @@
+{
+ "date": "2026-10-28",
+ "about": "Raw provider benchmark results (scripts/bench-providers.ts). No keys, no prompts.",
+ "chatSet": {
+  "size": 35,
+  "sets": [
+   "en-untuned",
+   "en-bank(tuned)",
+   "ru-bank(tuned)"
+  ]
+ },
+ "docSet": {
+  "documents": 32,
+  "long": 3637
+ },
+ "results": [
+  {
+   "provider": "hash",
+   "model": "bag-of-words",
+   "job": "embed",
+   "run": 1,
+   "n": 259,
+   "correct": 103,
+   "accuracy": 0.39768339768339767,
+   "bySet": {
+    "en": {
+     "n": 201,
+     "correct": 86
+    },
+    "ru": {
+     "n": 58,
+     "correct": 17
+    }
+   },
+   "tally": {
+    "calls": 0,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 30,
+    "p95": 30
+   },
+   "note": "local hashed vectors"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 22,
+   "accuracy": 0.6285714285714286,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 17
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 66,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 947,
+    "p95": 2629
+   }
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 2,
+   "n": 35,
+   "correct": 21,
+   "accuracy": 0.6,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 16
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 66,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 936,
+    "p95": 2399
+   }
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 3,
+   "n": 35,
+   "correct": 21,
+   "accuracy": 0.6,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 16
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 66,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 1171,
+    "p95": 2771
+   }
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "docs",
+   "run": 1,
+   "n": 142,
+   "correct": 51,
+   "accuracy": 0.3591549295774648,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 51
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 12684,
+    "p95": 22790
+   },
+   "note": "precision 96.2% (51/53)"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "docs",
+   "run": 2,
+   "n": 142,
+   "correct": 52,
+   "accuracy": 0.36619718309859156,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 52
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "calls": 34,
+    "invalidJson": 2,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 16446,
+    "p95": 48214
+   },
+   "note": "precision 96.3% (52/54)"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "docs",
+   "run": 3,
+   "n": 142,
+   "correct": 51,
+   "accuracy": 0.3591549295774648,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 51
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "calls": 34,
+    "invalidJson": 2,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 15801,
+    "p95": 54524
+   },
+   "note": "precision 96.2% (51/53)"
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 17,
+   "accuracy": 0.4857142857142857,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 13
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 64,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 3,
+    "rateLimited": 1,
+    "billing": 0,
+    "inputTokens": 27376,
+    "outputTokens": 2513,
+    "headroom": 937,
+    "p50": 989,
+    "p95": 2403
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 2,
+   "n": 35,
+   "correct": 13,
+   "accuracy": 0.37142857142857144,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 9
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 62,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 10,
+    "rateLimited": 8,
+    "billing": 0,
+    "inputTokens": 21832,
+    "outputTokens": 2017,
+    "headroom": 883,
+    "p50": 949,
+    "p95": 2669
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 3,
+   "n": 35,
+   "correct": 11,
+   "accuracy": 0.3142857142857143,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 8
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 1
+    }
+   },
+   "tally": {
+    "calls": 61,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 14,
+    "rateLimited": 10,
+    "billing": 0,
+    "inputTokens": 19374,
+    "outputTokens": 1876,
+    "headroom": 833,
+    "p50": 886,
+    "p95": 1807
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 16,
+   "accuracy": 0.45714285714285713,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 12
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 59,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 24136,
+    "outputTokens": 2295,
+    "headroom": 941,
+    "p50": 678,
+    "p95": 1869
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 2,
+   "n": 35,
+   "correct": 15,
+   "accuracy": 0.42857142857142855,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 11
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 60,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 1,
+    "billing": 0,
+    "inputTokens": 23690,
+    "outputTokens": 2337,
+    "headroom": 882,
+    "p50": 701,
+    "p95": 2079
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 3,
+   "n": 35,
+   "correct": 15,
+   "accuracy": 0.42857142857142855,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 11
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "calls": 58,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 23546,
+    "outputTokens": 2245,
+    "headroom": 824,
+    "p50": 754,
+    "p95": 2316
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "qwen/qwen3.8-27b",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 9,
+   "accuracy": 0.2571428571428571,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 6
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 1
+    }
+   },
+   "tally": {
+    "calls": 42,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 28,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 6328,
+    "outputTokens": 842,
+    "headroom": 963,
+    "p50": 255,
+    "p95": 888
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "qwen/qwen3.8-27b",
+   "job": "chat",
+   "run": 2,
+   "n": 35,
+   "correct": 11,
+   "accuracy": 0.3142857142857143,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 8
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 1
+    }
+   },
+   "tally": {
+    "calls": 44,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 26,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 8240,
+    "outputTokens": 1022,
+    "headroom": 927,
+    "p50": 246,
+    "p95": 492
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "qwen/qwen3.8-27b",
+   "job": "chat",
+   "run": 3,
+   "n": 35,
+   "correct": 8,
+   "accuracy": 0.22857142857142856,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 5
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 1
+    }
+   },
+   "tally": {
+    "calls": 41,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 30,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 5086,
+    "outputTokens": 624,
+    "headroom": 898,
+    "p50": 294,
+    "p95": 870
+   }
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "docs",
+   "run": 1,
+   "n": 142,
+   "correct": 42,
+   "accuracy": 0.29577464788732394,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 42
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1,
+     "timeout": 1
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 2,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 12783,
+    "outputTokens": 6277,
+    "headroom": 814,
+    "p50": 1206,
+    "p95": 4257
+   },
+   "note": "precision 95.5% (42/44)"
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "docs",
+   "run": 2,
+   "n": 142,
+   "correct": 31,
+   "accuracy": 0.21830985915492956,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 31
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 6,
+     "timeout": 1
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 7,
+    "rateLimited": 6,
+    "billing": 0,
+    "inputTokens": 10639,
+    "outputTokens": 5101,
+    "headroom": 786,
+    "p50": 1298,
+    "p95": 3830
+   },
+   "note": "precision 81.6% (31/38)"
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "docs",
+   "run": 3,
+   "n": 142,
+   "correct": 34,
+   "accuracy": 0.23943661971830985,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 34
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 6
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 6,
+    "rateLimited": 6,
+    "billing": 0,
+    "inputTokens": 11103,
+    "outputTokens": 5615,
+    "headroom": 759,
+    "p50": 1152,
+    "p95": 2897
+   },
+   "note": "precision 89.5% (34/38)"
+  },
+  {
+   "provider": "cerebras",
+   "model": "gpt-oss-120b",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 3,
+   "accuracy": 0.08571428571428572,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 0
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 1
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 31,
+     "timeout": 1
+    },
+    "calls": 37,
+    "invalidJson": 1,
+    "schemaFail": 0,
+    "failures": 32,
+    "rateLimited": 31,
+    "billing": 0,
+    "inputTokens": 2061,
+    "outputTokens": 267,
+    "headroom": null,
+    "p50": 397,
+    "p95": 4861
+   }
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 7,
+   "accuracy": 0.2,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 4
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 2
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 1
+    }
+   },
+   "tally": {
+    "errors": {
+     "empty": 24
+    },
+    "calls": 39,
+    "invalidJson": 4,
+    "schemaFail": 0,
+    "failures": 24,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 5672,
+    "outputTokens": 744,
+    "headroom": null,
+    "p50": 3612,
+    "p95": 5832
+   },
+   "tag": "pre-fix"
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 0,
+   "accuracy": 0,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 20
+    },
+    "calls": 20,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 20,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 8003,
+    "p95": 8666
+   }
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 0,
+   "accuracy": 0,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 20
+    },
+    "calls": 20,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 20,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 8002,
+    "p95": 8006
+   }
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "vision",
+   "run": 1,
+   "n": 0,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "setup": 1
+    },
+    "calls": 0,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 0,
+    "p95": 0
+   },
+   "note": "failed: ENOENT: no such file or directory, open '/private/tmp/claude-501/-Users-huzaifasiddiqui-Desktop-Huzaifa-6-Semester-FYP-L"
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "vision",
+   "run": 1,
+   "n": 0,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "setup": 1
+    },
+    "calls": 0,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 0,
+    "p95": 0
+   },
+   "note": "failed: ENOENT: no such file or directory, open '/private/tmp/claude-501/-Users-huzaifasiddiqui-Desktop-Huzaifa-6-Semester-FYP-L"
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-embedding-2",
+   "job": "embed",
+   "run": 1,
+   "n": 0,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "setup": 1
+    },
+    "calls": 0,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 0,
+    "p95": 0
+   },
+   "note": "failed: gemini embeddings HTTP 429"
+  },
+  {
+   "provider": "openrouter",
+   "model": "google/gemma-4-26b-a4b-it:free",
+   "job": "chat",
+   "run": 1,
+   "n": 10,
+   "correct": 0,
+   "accuracy": 0,
+   "bySet": {
+    "en-untuned": {
+     "n": 10,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 10
+    },
+    "calls": 11,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 10,
+    "rateLimited": 10,
+    "billing": 0,
+    "inputTokens": 246,
+    "outputTokens": 196,
+    "headroom": null,
+    "p50": 324,
+    "p95": 4888
+   },
+   "tag": "",
+   "pace": 3500
+  },
+  {
+   "provider": "openrouter",
+   "model": "thinkingmachines/inkling:free",
+   "job": "docs",
+   "run": 1,
+   "n": 85,
+   "correct": 0,
+   "accuracy": 0,
+   "bySet": {
+    "single": {
+     "n": 14,
+     "correct": 0
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "403": 8
+    },
+    "calls": 8,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 8,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 187,
+    "p95": 870
+   },
+   "note": "precision 100.0% (0/0)",
+   "tag": "",
+   "pace": 3500
+  },
+  {
+   "provider": "openrouter",
+   "model": "google/gemma-4-26b-a4b-it:free",
+   "job": "vision",
+   "run": 1,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "429": 5
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 5,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 817,
+    "p95": 1244
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 3500
+  },
+  {
+   "provider": "openrouter",
+   "model": "nvidia/nemotron-3.5-embed-8b:free",
+   "job": "embed",
+   "run": 1,
+   "n": 259,
+   "correct": 154,
+   "accuracy": 0.5945945945945946,
+   "bySet": {
+    "en": {
+     "n": 201,
+     "correct": 115
+    },
+    "ru": {
+     "n": 58,
+     "correct": 39
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 3,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 9477,
+    "p95": 9477
+   },
+   "note": "masked bank text",
+   "tag": "",
+   "pace": 3500
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 18,
+   "accuracy": 0.5142857142857142,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 13
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 3
+    },
+    "calls": 63,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 3,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 22199,
+    "outputTokens": 6358,
+    "headroom": null,
+    "p50": 4811,
+    "p95": 7162
+   },
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "chat",
+   "run": 2,
+   "n": 35,
+   "correct": 19,
+   "accuracy": 0.5428571428571428,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 14
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 3
+    },
+    "calls": 65,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 3,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 23386,
+    "outputTokens": 6426,
+    "headroom": null,
+    "p50": 4640,
+    "p95": 7200
+   },
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "chat",
+   "run": 3,
+   "n": 35,
+   "correct": 20,
+   "accuracy": 0.5714285714285714,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 15
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 66,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 25772,
+    "outputTokens": 6648,
+    "headroom": null,
+    "p50": 4463,
+    "p95": 6637
+   },
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 1,
+   "n": 35,
+   "correct": 20,
+   "accuracy": 0.5714285714285714,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 14
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 4
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 67,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 25278,
+    "outputTokens": 12194,
+    "headroom": null,
+    "p50": 2825,
+    "p95": 3871
+   },
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 2,
+   "n": 35,
+   "correct": 20,
+   "accuracy": 0.5714285714285714,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 14
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 4
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 67,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 24074,
+    "outputTokens": 11931,
+    "headroom": null,
+    "p50": 2979,
+    "p95": 4210
+   },
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 3,
+   "n": 35,
+   "correct": 20,
+   "accuracy": 0.5714285714285714,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 14
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 4
+    },
+    "ru-bank(tuned)": {
+     "n": 2,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 2
+    },
+    "calls": 66,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 2,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 24107,
+    "outputTokens": 10841,
+    "headroom": null,
+    "p50": 3214,
+    "p95": 6134
+   },
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "docs",
+   "run": 1,
+   "n": 142,
+   "correct": 26,
+   "accuracy": 0.18309859154929578,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 26
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 15
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 15,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 6399,
+    "outputTokens": 4842,
+    "headroom": null,
+    "p50": 7194,
+    "p95": 8004
+   },
+   "note": "precision 96.3% (26/27)",
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "docs",
+   "run": 2,
+   "n": 142,
+   "correct": 33,
+   "accuracy": 0.2323943661971831,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 33
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 11
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 11,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 7795,
+    "outputTokens": 5906,
+    "headroom": null,
+    "p50": 5568,
+    "p95": 8003
+   },
+   "note": "precision 100.0% (33/33)",
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+   "job": "docs",
+   "run": 3,
+   "n": 142,
+   "correct": 36,
+   "accuracy": 0.2535211267605634,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 36
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 11
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 11,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 7746,
+    "outputTokens": 7150,
+    "headroom": null,
+    "p50": 6597,
+    "p95": 8004
+   },
+   "note": "precision 97.3% (36/37)",
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "docs",
+   "run": 1,
+   "n": 142,
+   "correct": 27,
+   "accuracy": 0.19014084507042253,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 27
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 4,
+     "other": 2
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 6,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 8683,
+    "outputTokens": 10717,
+    "headroom": null,
+    "p50": 4027,
+    "p95": 8002
+   },
+   "note": "precision 75.0% (27/36)",
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "docs",
+   "run": 2,
+   "n": 142,
+   "correct": 36,
+   "accuracy": 0.2535211267605634,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 36
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 1,
+     "other": 1,
+     "empty": 2
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 4,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 9318,
+    "outputTokens": 11014,
+    "headroom": null,
+    "p50": 3933,
+    "p95": 7796
+   },
+   "note": "precision 80.0% (36/45)",
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "docs",
+   "run": 3,
+   "n": 142,
+   "correct": 34,
+   "accuracy": 0.23943661971830985,
+   "bySet": {
+    "single": {
+     "n": 71,
+     "correct": 34
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 3
+    },
+    "calls": 33,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 3,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 9641,
+    "outputTokens": 12240,
+    "headroom": null,
+    "p50": 3837,
+    "p95": 8001
+   },
+   "note": "precision 77.3% (34/44)",
+   "tag": "",
+   "pace": 2000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 10,
+   "accuracy": 0.5,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 10
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 38,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17563,
+    "outputTokens": 1569,
+    "headroom": 866,
+    "p50": 728,
+    "p95": 3116
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 10,
+   "accuracy": 0.5,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 10
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 38,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17563,
+    "outputTokens": 1709,
+    "headroom": 828,
+    "p50": 808,
+    "p95": 3212
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 10,
+   "accuracy": 0.5,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 10
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 39,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17828,
+    "outputTokens": 1570,
+    "headroom": 789,
+    "p50": 870,
+    "p95": 1928
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 9,
+   "accuracy": 0.45,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 9
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 2,
+     "timeout": 1
+    },
+    "calls": 37,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 3,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 15582,
+    "outputTokens": 1472,
+    "headroom": 773,
+    "p50": 815,
+    "p95": 3154
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 9,
+   "accuracy": 0.45,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 9
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1
+    },
+    "calls": 37,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 16291,
+    "outputTokens": 1597,
+    "headroom": 736,
+    "p50": 810,
+    "p95": 1931
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 8,
+   "accuracy": 0.4,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 8
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 3
+    },
+    "calls": 36,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 3,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 14875,
+    "outputTokens": 1437,
+    "headroom": 700,
+    "p50": 834,
+    "p95": 2319
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "qwen/qwen3.8-27b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 7,
+   "accuracy": 0.35,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 7
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 13
+    },
+    "calls": 27,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 13,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 6713,
+    "outputTokens": 862,
+    "headroom": 933,
+    "p50": 346,
+    "p95": 963
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "qwen/qwen3.8-27b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 6,
+   "accuracy": 0.3,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 6
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 14
+    },
+    "calls": 26,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 14,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 5756,
+    "outputTokens": 766,
+    "headroom": 903,
+    "p50": 399,
+    "p95": 697
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "qwen/qwen3.8-27b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 4,
+   "accuracy": 0.2,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 4
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 16
+    },
+    "calls": 24,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 16,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 3832,
+    "outputTokens": 478,
+    "headroom": 879,
+    "p50": 336,
+    "p95": 541
+   },
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "docs",
+   "run": 1,
+   "n": 115,
+   "correct": 23,
+   "accuracy": 0.2,
+   "bySet": {
+    "single": {
+     "n": 44,
+     "correct": 23
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1
+    },
+    "calls": 20,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 7763,
+    "outputTokens": 4112,
+    "headroom": 682,
+    "p50": 1211,
+    "p95": 1797
+   },
+   "note": "precision 88.5% (23/26)",
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "docs",
+   "run": 2,
+   "n": 115,
+   "correct": 20,
+   "accuracy": 0.17391304347826086,
+   "bySet": {
+    "single": {
+     "n": 44,
+     "correct": 20
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1
+    },
+    "calls": 20,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 7763,
+    "outputTokens": 3843,
+    "headroom": 662,
+    "p50": 1124,
+    "p95": 2491
+   },
+   "note": "precision 87.0% (20/23)",
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "docs",
+   "run": 3,
+   "n": 115,
+   "correct": 21,
+   "accuracy": 0.1826086956521739,
+   "bySet": {
+    "single": {
+     "n": 44,
+     "correct": 21
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1
+    },
+    "calls": 20,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 7763,
+    "outputTokens": 3795,
+    "headroom": 642,
+    "p50": 1500,
+    "p95": 4340
+   },
+   "note": "precision 91.3% (21/23)",
+   "tag": "slow",
+   "pace": 8000
+  },
+  {
+   "provider": "cerebras",
+   "model": "gpt-oss-120b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 2,
+   "accuracy": 0.1,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 12,
+     "empty": 1
+    },
+    "calls": 32,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 13,
+    "rateLimited": 12,
+    "billing": 0,
+    "inputTokens": 7539,
+    "outputTokens": 901,
+    "headroom": null,
+    "p50": 634,
+    "p95": 1734
+   },
+   "tag": "slow",
+   "pace": 10000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "vision",
+   "run": 1,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "timeout": 5
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 8004,
+    "p95": 8896
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "vision",
+   "run": 2,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "timeout": 5
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 8002,
+    "p95": 8004
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "vision",
+   "run": 3,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "timeout": 5
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 8003,
+    "p95": 8013
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "vision",
+   "run": 1,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "503": 2,
+     "timeout": 3
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 8004,
+    "p95": 8006
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "vision",
+   "run": 2,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "429": 3,
+     "503": 1,
+     "timeout": 1
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 3,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 985,
+    "p95": 8005
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "vision",
+   "run": 3,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "429": 1,
+     "503": 3,
+     "timeout": 1
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 1,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 4326,
+    "p95": 8003
+   },
+   "note": "synthetic images only",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-embedding-2",
+   "job": "embed",
+   "run": 1,
+   "n": 259,
+   "correct": 160,
+   "accuracy": 0.6177606177606177,
+   "bySet": {
+    "en": {
+     "n": 201,
+     "correct": 125
+    },
+    "ru": {
+     "n": 58,
+     "correct": 35
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 3,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 150117,
+    "p95": 150117
+   },
+   "note": "masked bank text",
+   "tag": "",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-embedding-2",
+   "job": "embed",
+   "run": 2,
+   "n": 0,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "setup": 1
+    },
+    "calls": 0,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 0,
+    "p95": 0
+   },
+   "note": "failed: gemini embeddings HTTP 429"
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 11,
+   "accuracy": 0.55,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 11
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 40,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 14802,
+    "outputTokens": 472,
+    "headroom": null,
+    "p50": 15934,
+    "p95": 22667
+   },
+   "tag": "diag-25s",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 0,
+   "accuracy": 0,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 13,
+     "503": 5,
+     "timeout": 2
+    },
+    "calls": 20,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 20,
+    "rateLimited": 13,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 611,
+    "p95": 25009
+   },
+   "tag": "diag-25s",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "docs",
+   "run": 1,
+   "n": 91,
+   "correct": 7,
+   "accuracy": 0.07692307692307693,
+   "bySet": {
+    "single": {
+     "n": 20,
+     "correct": 7
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 11,
+    "invalidJson": 2,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 5068,
+    "outputTokens": 2131,
+    "headroom": null,
+    "p50": 16794,
+    "p95": 18069
+   },
+   "note": "precision 58.3% (7/12)",
+   "tag": "diag-25s",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "docs",
+   "run": 1,
+   "n": 91,
+   "correct": 0,
+   "accuracy": 0,
+   "bySet": {
+    "single": {
+     "n": 20,
+     "correct": 0
+    },
+    "long": {
+     "n": 71,
+     "correct": 0
+    }
+   },
+   "tally": {
+    "errors": {
+     "429": 10
+    },
+    "calls": 10,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 10,
+    "rateLimited": 10,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 528,
+    "p95": 558
+   },
+   "note": "precision 100.0% (0/0)",
+   "tag": "diag-25s",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.5-flash-lite",
+   "job": "vision",
+   "run": 1,
+   "n": 11,
+   "correct": 10,
+   "accuracy": 0.9090909090909091,
+   "tally": {
+    "errors": {},
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 5762,
+    "outputTokens": 493,
+    "headroom": null,
+    "p50": 14182,
+    "p95": 19698
+   },
+   "note": "synthetic images only",
+   "tag": "diag-25s",
+   "pace": 5000
+  },
+  {
+   "provider": "gemini",
+   "model": "gemini-3.8-flash",
+   "job": "vision",
+   "run": 1,
+   "n": 11,
+   "correct": 0,
+   "accuracy": 0,
+   "tally": {
+    "errors": {
+     "429": 5
+    },
+    "calls": 5,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 5,
+    "rateLimited": 5,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 786,
+    "p95": 867
+   },
+   "note": "synthetic images only",
+   "tag": "diag-25s",
+   "pace": 5000
+  },
+  {
+   "provider": "ollama",
+   "model": "nomic-embed-text",
+   "job": "embed",
+   "run": 1,
+   "n": 259,
+   "correct": 117,
+   "accuracy": 0.4517374517374517,
+   "bySet": {
+    "en": {
+     "n": 201,
+     "correct": 98
+    },
+    "ru": {
+     "n": 58,
+     "correct": 19
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 3,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 3384,
+    "p95": 3384
+   },
+   "note": "local (nomic-embed-text), unmasked",
+   "tag": "",
+   "pace": 0
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 9,
+   "accuracy": 0.45,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 9
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 38,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 16903,
+    "outputTokens": 1745,
+    "headroom": 624,
+    "p50": 731,
+    "p95": 2091
+   },
+   "tag": "slow-1024",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 9,
+   "accuracy": 0.45,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 9
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 38,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17319,
+    "outputTokens": 1756,
+    "headroom": 586,
+    "p50": 729,
+    "p95": 1604
+   },
+   "tag": "slow-1024",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 8,
+   "accuracy": 0.4,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 8
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 37,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 16295,
+    "outputTokens": 1632,
+    "headroom": 549,
+    "p50": 729,
+    "p95": 1260
+   },
+   "tag": "slow-1024",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 10,
+   "accuracy": 0.5,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 10
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 39,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17828,
+    "outputTokens": 1764,
+    "headroom": 804,
+    "p50": 589,
+    "p95": 2047
+   },
+   "tag": "diag-groq-congested",
+   "pace": 8000,
+   "note": "Groq congested (timeouts); rerun"
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 5,
+   "accuracy": 0.25,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 5
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 11
+    },
+    "calls": 30,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 11,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 9522,
+    "outputTokens": 901,
+    "headroom": 784,
+    "p50": 1624,
+    "p95": 8006
+   },
+   "tag": "diag-groq-congested",
+   "pace": 8000,
+   "note": "Groq congested (timeouts); rerun"
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 2,
+   "accuracy": 0.1,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 2
+    }
+   },
+   "tally": {
+    "errors": {
+     "timeout": 13
+    },
+    "calls": 27,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 13,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 5821,
+    "outputTokens": 504,
+    "headroom": 769,
+    "p50": 3790,
+    "p95": 8003
+   },
+   "tag": "diag-groq-congested",
+   "pace": 8000,
+   "note": "Groq congested (timeouts); rerun"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 11,
+   "accuracy": 0.55,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 11
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 39,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 901,
+    "p95": 1827
+   },
+   "tag": "first20",
+   "pace": 0
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 12,
+   "accuracy": 0.6,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 12
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 39,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 844,
+    "p95": 1870
+   },
+   "tag": "first20",
+   "pace": 0
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 13,
+   "accuracy": 0.65,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 13
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 39,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 909,
+    "p95": 1840
+   },
+   "tag": "first20",
+   "pace": 0
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 1,
+   "n": 20,
+   "correct": 11,
+   "accuracy": 0.55,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 11
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1
+    },
+    "calls": 38,
+    "invalidJson": 1,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17740,
+    "outputTokens": 1539,
+    "headroom": 717,
+    "p50": 627,
+    "p95": 2156
+   },
+   "tag": "slow-1024",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 2,
+   "n": 20,
+   "correct": 10,
+   "accuracy": 0.5,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 10
+    }
+   },
+   "tally": {
+    "errors": {},
+    "calls": 39,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17828,
+    "outputTokens": 1696,
+    "headroom": 678,
+    "p50": 655,
+    "p95": 1819
+   },
+   "tag": "slow-1024",
+   "pace": 8000
+  },
+  {
+   "provider": "groq",
+   "model": "openai/gpt-oss-20b",
+   "job": "chat",
+   "run": 3,
+   "n": 20,
+   "correct": 10,
+   "accuracy": 0.5,
+   "bySet": {
+    "en-untuned": {
+     "n": 20,
+     "correct": 10
+    }
+   },
+   "tally": {
+    "errors": {
+     "400": 1
+    },
+    "calls": 39,
+    "invalidJson": 1,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 17563,
+    "outputTokens": 1636,
+    "headroom": 639,
+    "p50": 643,
+    "p95": 1776
+   },
+   "tag": "slow-1024",
+   "pace": 8000
+  }
+ ]
+}

@@ -1,0 +1,235 @@
+{
+ "about": "Chains per job: a decision (29 Oct 2026), not generated. Used only when LLM_PROVIDERS_<JOB> names the providers; unset = today's Ollama path. ai/chains.ts still keeps tier B from leading without LLM_TIER_B_LEAD_APPROVED, from receiving images, and sends masked text to every non-Ollama provider. `npx tsx scripts/bench-providers.ts --rank` rewrites \"ranking\" (the evidence) only.",
+ "decided": "2026-10-29: Ollama stays primary and the reference for chat and documents; cloud fallback (any non-Ollama provider) only when CLOUD_FALLBACK=on (default off); few-shot per provider: on for Deploy GLM only; no hosted vision (DOC_VISION off); no tier B embeddings.",
+ "chains": {
+  "chat": [
+   {
+    "provider": "ollama",
+    "model": "qwen2.5:7b",
+    "fewShot": false
+   },
+   {
+    "provider": "deploy",
+    "model": "zai-org/glm-5.3-flash",
+    "fewShot": true
+   },
+   {
+    "provider": "groq",
+    "model": "openai/gpt-oss-20b",
+    "fewShot": false
+   }
+  ],
+  "docs": [
+   {
+    "provider": "ollama",
+    "model": "qwen2.5:7b"
+   },
+   {
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b"
+   }
+  ],
+  "vision": []
+ },
+ "ranking": {
+  "generatedAt": "2026-10-28T22:49:29.267Z",
+  "source": "docs/baselines/providers-2026-10-29.json",
+  "chat": {
+   "order": [
+    {
+     "group": 1,
+     "entry": "ollama/qwen2.5:7b",
+     "provider": "ollama",
+     "model": "qwen2.5:7b",
+     "condition": "normal",
+     "tier": "local",
+     "accuracy": 0.576,
+     "ci95": [
+      0.414,
+      0.747
+     ],
+     "spread": 0.061,
+     "p95": 5594,
+     "availability": 0
+    },
+    {
+     "group": 1,
+     "entry": "ollama/qwen2.5:14b",
+     "provider": "ollama",
+     "model": "qwen2.5:14b",
+     "condition": "normal",
+     "tier": "local",
+     "accuracy": 0.566,
+     "ci95": [
+      0.394,
+      0.727
+     ],
+     "spread": 0.03,
+     "p95": 5781,
+     "availability": 2
+    },
+    {
+     "group": 1,
+     "entry": "ollama/qwen2.5:7b [fewshot]",
+     "provider": "ollama",
+     "model": "qwen2.5:7b",
+     "condition": "fewshot",
+     "tier": "local",
+     "accuracy": 0.606,
+     "ci95": [
+      0.455,
+      0.788
+     ],
+     "spread": 0,
+     "p95": 6264,
+     "availability": 0
+    },
+    {
+     "group": 1,
+     "entry": "groq/openai/gpt-oss-120b",
+     "provider": "groq",
+     "model": "openai/gpt-oss-120b",
+     "condition": "normal",
+     "tier": "A",
+     "accuracy": 0.348,
+     "ci95": [
+      0.212,
+      0.5
+     ],
+     "spread": 0.152,
+     "p95": 1446,
+     "availability": 36
+    },
+    {
+     "group": 1,
+     "entry": "groq/openai/gpt-oss-20b",
+     "provider": "groq",
+     "model": "openai/gpt-oss-20b",
+     "condition": "normal",
+     "tier": "A",
+     "accuracy": 0.439,
+     "ci95": [
+      0.288,
+      0.591
+     ],
+     "spread": 0.152,
+     "p95": 1719,
+     "availability": 14
+    },
+    {
+     "group": 1,
+     "entry": "deploy/zai-org/glm-5.3-flash [fewshot-hash]",
+     "provider": "deploy",
+     "model": "zai-org/glm-5.3-flash",
+     "condition": "fewshot-hash",
+     "tier": "B",
+     "accuracy": 0.525,
+     "ci95": [
+      0.354,
+      0.687
+     ],
+     "spread": 0.061,
+     "p95": 3840,
+     "availability": 2
+    },
+    {
+     "group": 1,
+     "entry": "deploy/zai-org/glm-5.3-flash [fewshot]",
+     "provider": "deploy",
+     "model": "zai-org/glm-5.3-flash",
+     "condition": "fewshot",
+     "tier": "B",
+     "accuracy": 0.576,
+     "ci95": [
+      0.394,
+      0.758
+     ],
+     "spread": 0,
+     "p95": 4141,
+     "availability": 3
+    },
+    {
+     "group": 1,
+     "entry": "deploy/deepseek-ai/deepseek-v4.1-flash-1017",
+     "provider": "deploy",
+     "model": "deepseek-ai/deepseek-v4.1-flash-1017",
+     "condition": "normal",
+     "tier": "B",
+     "accuracy": 0.525,
+     "ci95": [
+      0.354,
+      0.697
+     ],
+     "spread": 0.061,
+     "p95": 5136,
+     "availability": 6
+    },
+    {
+     "group": 1,
+     "entry": "deploy/zai-org/glm-5.3-flash",
+     "provider": "deploy",
+     "model": "zai-org/glm-5.3-flash",
+     "condition": "normal",
+     "tier": "B",
+     "accuracy": 0.424,
+     "ci95": [
+      0.273,
+      0.576
+     ],
+     "spread": 0.091,
+     "p95": 8003,
+     "availability": 21
+    }
+   ],
+   "ties": [
+    "ollama/qwen2.5:7b = ollama/qwen2.5:14b = ollama/qwen2.5:7b [fewshot] = groq/openai/gpt-oss-120b = groq/openai/gpt-oss-20b = deploy/zai-org/glm-5.3-flash [fewshot-hash] = deploy/zai-org/glm-5.3-flash [fewshot] = deploy/deepseek-ai/deepseek-v4.1-flash-1017 = deploy/zai-org/glm-5.3-flash (tie broken by tier, then p95, then failures + 429s)"
+   ],
+   "excluded": [],
+   "flagged": [],
+   "fullN": 33
+  },
+  "docs": {
+   "order": [
+    {
+     "group": 1,
+     "entry": "ollama/qwen2.5:7b",
+     "provider": "ollama",
+     "model": "qwen2.5:7b",
+     "condition": "normal",
+     "tier": "local",
+     "accuracy": 0.761,
+     "ci95": [
+      0.657,
+      0.851
+     ],
+     "spread": 0,
+     "p95": 57149,
+     "availability": 2
+    }
+   ],
+   "ties": [],
+   "excluded": [],
+   "flagged": [
+    {
+     "entry": "ollama/qwen2.5:7b",
+     "flags": "invalid JSON 3.2%"
+    }
+   ],
+   "fullN": 67
+  },
+  "vision": {
+   "order": [],
+   "ties": [],
+   "excluded": [],
+   "flagged": [],
+   "fullN": 0
+  },
+  "embed": {
+   "order": [],
+   "ties": [],
+   "excluded": [],
+   "flagged": [],
+   "fullN": 0
+  }
+ }
+}

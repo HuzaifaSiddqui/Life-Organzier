@@ -1,0 +1,179 @@
+{
+ "groq": {
+  "status": 200,
+  "count": 11,
+  "ids": [
+   "openai/gpt-oss-120b",
+   "meta-llama/llama-prompt-guard-2-86m",
+   "canopylabs/orpheus-v1-english",
+   "whisper-large-v3-turbo",
+   "openai/gpt-oss-20b",
+   "openai/gpt-oss-safeguard-20b",
+   "allam-2-7b",
+   "meta-llama/llama-prompt-guard-2-22m",
+   "canopylabs/orpheus-arabic-saudi",
+   "whisper-large-v3",
+   "qwen/qwen3.8-27b"
+  ]
+ },
+ "cerebras": {
+  "status": 200,
+  "count": 2,
+  "ids": [
+   "gpt-oss-120b",
+   "qwen-3.8-27b"
+  ]
+ },
+ "together": {
+  "status": 401,
+  "count": 0,
+  "error": "{\"error\":{\"message\":\"Unauthorized\"}}",
+  "sample": []
+ },
+ "openrouter": {
+  "status": 200,
+  "count": 464,
+  "freeIds": [
+   "recursive/flint-v1.0:free|ctx 262144|in:text",
+   "xingchen-agi/xing4.0-29b-a4b:free|ctx 262144|in:text",
+   "nvidia/nemotron-3.5-super-vl:free|ctx 1000000|in:text+image+video",
+   "dots-studio/dots-3-note-preview:free|ctx 512000|in:text+image",
+   "liquid/lfm-2.5-2.6b:free|ctx 65536|in:text",
+   "nvidia/nemotron-3.5-lightning:free|ctx 1000000|in:text",
+   "thinkingmachines/inkling-small:free|ctx 1048576|in:text+image+audio",
+   "poolside/laguna-s-2.1:free|ctx 262144|in:text",
+   "thinkingmachines/inkling:free|ctx 1048576|in:text+image+audio",
+   "poolside/laguna-xs-2.1:free|ctx 262144|in:text",
+   "cohere/north-mini-code:free|ctx 256000|in:text",
+   "nvidia/nemotron-3.5-content-safety:free|ctx 128000|in:text+image",
+   "nvidia/nemotron-3-ultra-550b-a55b:free|ctx 1000000|in:text",
+   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free|ctx 256000|in:text+audio+image+video",
+   "google/gemma-4-26b-a4b-it:free|ctx 262144|in:image+text+video",
+   "google/gemma-4-31b-it:free|ctx 262144|in:image+text+video"
+  ]
+ },
+ "deploy#1": {
+  "status": 200,
+  "count": 2,
+  "ids": [
+   "deepseek-ai/deepseek-v4.1-flash-1017",
+   "zai-org/glm-5.3-flash"
+  ]
+ },
+ "deploy#2": {
+  "status": 200,
+  "count": 2,
+  "ids": [
+   "deepseek-ai/deepseek-v4.1-flash-1017",
+   "zai-org/glm-5.3-flash"
+  ]
+ },
+ "gemini": {
+  "status": 200,
+  "ids": [
+   "gemini-2.5-flash|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-2.5-pro|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-2.5-flash-preview-tts|countTokens,generateContent",
+   "gemini-2.5-pro-preview-tts|countTokens,generateContent,batchGenerateContent",
+   "gemma-4-26b-a4b-it|generateContent,countTokens",
+   "gemma-4-31b-it|generateContent,countTokens",
+   "gemini-flash-latest|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-flash-lite-latest|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-pro-latest|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-2.5-flash-lite|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-2.5-flash-image|generateContent,countTokens,batchGenerateContent",
+   "gemini-3-flash-preview|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.1-pro-preview|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.1-pro-preview-customtools|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.1-flash-lite-preview|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.1-flash-lite|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3-pro-image-preview|generateContent,countTokens,batchGenerateContent",
+   "gemini-3-pro-image|generateContent,countTokens,batchGenerateContent",
+   "nano-banana-pro-preview|generateContent,countTokens,batchGenerateContent",
+   "gemini-3.1-flash-image-preview|generateContent,countTokens,batchGenerateContent",
+   "gemini-3.1-flash-image|generateContent,countTokens,batchGenerateContent",
+   "gemini-3.1-flash-lite-image|generateContent,countTokens,batchGenerateContent",
+   "gemini-nano-banana-2.1|generateContent,countTokens,batchGenerateContent",
+   "gemini-3.5-flash|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.5-flash-lite|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-omni-flash-preview|generateContent,countTokens",
+   "gemini-omni-1.1-flash|generateContent,countTokens",
+   "gemini-3.5-transcribe|generateContent,countTokens",
+   "gemini-3.6-flash|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.7-flash|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-3.8-flash|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-4-argon|generateContent,countTokens,batchGenerateContent",
+   "lyria-3-clip-preview|generateContent,countTokens",
+   "lyria-3-pro-preview|generateContent,countTokens",
+   "lyria-3.5|generateContent,countTokens",
+   "gemini-3.1-flash-tts-preview|generateContent,countTokens,batchGenerateContent",
+   "gemini-3.8-flash-tts|generateContent,countTokens,batchGenerateContent",
+   "gemini-3.8-flash-lite-tts|generateContent,countTokens,batchGenerateContent",
+   "gemini-robotics-er-2-preview|generateContent,countTokens,createCachedContent,batchGenerateContent",
+   "gemini-2.5-computer-use-preview-10-2025|generateContent,countTokens",
+   "antigravity-preview-05-2026|generateContent,countTokens",
+   "antigravity-preview-09-2026|generateContent,countTokens",
+   "antigravity-preview-latest|generateContent,countTokens",
+   "deep-research-max-preview-04-2026|generateContent,countTokens",
+   "deep-research-preview-04-2026|generateContent,countTokens",
+   "deep-research-pro-preview-12-2025|generateContent,countTokens",
+   "gemini-embedding-001|embedContent,countTextTokens,countTokens,asyncBatchEmbedContent",
+   "gemini-embedding-2-preview|embedContent,countTextTokens,countTokens,asyncBatchEmbedContent",
+   "gemini-embedding-2|embedContent,countTextTokens,countTokens,asyncBatchEmbedContent",
+   "aqa|generateAnswer",
+   "gemini-3.5-transcribe-live|bidiGenerateContent",
+   "gemini-2.5-flash-native-audio-latest|countTokens,bidiGenerateContent",
+   "gemini-2.5-flash-native-audio-preview-09-2025|countTokens,bidiGenerateContent",
+   "gemini-2.5-flash-native-audio-preview-12-2025|countTokens,bidiGenerateContent",
+   "gemini-3.1-flash-live-preview|bidiGenerateContent",
+   "gemini-3.8-live|bidiGenerateContent",
+   "gemini-3.8-live-extended-thinking|bidiGenerateContent",
+   "gemini-robotics-er-2-streaming-preview|bidiGenerateContent",
+   "gemini-3.5-live-translate-preview|bidiGenerateContent",
+   "lyria-realtime-exp|bidiGenerateMusic"
+  ]
+ },
+ "openrouter-key": {
+  "status": 200,
+  "limit": 50,
+  "usage": 0,
+  "is_free_tier": true,
+  "rate_limit": {
+   "requests": -1,
+   "interval": "10s",
+   "note": "This field is deprecated and safe to ignore."
+  },
+  "free_model_daily_requests": {
+   "used": 0,
+   "limit": 50,
+   "remaining": 50
+  },
+  "keys": [
+   "label",
+   "is_management_key",
+   "is_provisioning_key",
+   "limit",
+   "limit_reset",
+   "limit_remaining",
+   "include_byok_in_limit",
+   "budgets",
+   "effective_budget",
+   "usage",
+   "usage_daily",
+   "usage_weekly",
+   "usage_monthly",
+   "byok_usage",
+   "byok_usage_daily",
+   "byok_usage_weekly",
+   "byok_usage_monthly",
+   "is_free_tier",
+   "expires_at",
+   "creator_user_id",
+   "organization_id",
+   "workspace_id",
+   "allowed_data_regions",
+   "free_model_daily_requests",
+   "rate_limit"
+  ]
+ }
+}

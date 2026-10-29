@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/http-smoke.ts",
     "eval:documents": "tsx scripts/eval-documents.ts",
+    "docs:manifest-template": "tsx scripts/doc-manifest-template.ts",
     "eval:assistant": "tsx scripts/eval-assistant.ts",
     "eval:queries": "tsx scripts/eval-queries.ts",
     "eval:router": "tsx scripts/eval-router.ts",
