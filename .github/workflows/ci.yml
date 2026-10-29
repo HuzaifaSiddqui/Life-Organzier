@@ -5,6 +5,17 @@ on:
   pull_request:
 
 jobs:
+  # Fails on key-like strings in any tracked file, or a value for a secret in an .env.example (scripts/check-secrets.mjs).
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test scripts/check-secrets.test.mjs
+      - run: node scripts/check-secrets.mjs
+
   backend:
     runs-on: ubuntu-latest
     defaults:

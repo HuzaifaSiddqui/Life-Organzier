@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks commits that contain key-like strings. Enable once per clone: git config core.hooksPath .githooks
+exec node scripts/check-secrets.mjs --staged
