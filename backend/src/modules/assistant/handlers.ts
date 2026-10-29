@@ -52,6 +52,7 @@ import { parseQuery } from "./queries.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
+import { bareImperative } from "./nlu.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
@@ -66,7 +67,21 @@ import type { CommandArgs } from "./commands/types.js";
 
 /* ======================================================================== intents */
 
+/**
+ * OOS_CONFIRM (default off): a bare imperative the app can't carry out itself ("book me a taxi", "call my mother") is
+ * not turned into a task silently; the reply says so and offers one tap to add it. The button sends "remind me to …",
+ * which has a task cue, so tapping it creates the task (no second question).
+ */
+function outOfScopeConfirm(u: Understanding, text: string): Out | null {
+  if (process.env.OOS_CONFIRM?.toLowerCase() !== "on" || !bareImperative(text, u.entities)) return null;
+  return { content: "I can't do that myself. Add it as a task?", actions: [sayAction("Add as a task", "create_task", `remind me to ${text.trim()}`)], intent: "out_of_scope" };
+}
+
 export async function handleIntent(turn: Turn, u: Understanding, text: string): Promise<Out> {
+  if (u.intent === "create_task" || u.intent === "create_routine") {
+    const ask = outOfScopeConfirm(u, text);
+    if (ask) return ask;
+  }
   switch (u.intent) {
     case "create_task": {
       if (u.mood?.explicit && !u.entities.date && !u.entities.time) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);

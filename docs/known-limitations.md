@@ -9,6 +9,16 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   tests and rows stay and must keep passing; everything below that mentions them describes what exists today, not
   what was measured for the evaluation. The provider benchmark (`scripts/bench-providers.ts`) is English only.
 
+## Chat: what the rules decide alone
+
+- **Most chat misses are confident rule mistakes, which no model can fix in this design.** The model is only asked
+  when the rules are unsure. On the AI-written held-out set (150 English rows, `tests/eval/chat-heldout-ai-written.json`,
+  29 Oct 2026) the rules were sure about 132 rows and wrong on 27 of them; 18 rows reached a model. The 27 are listed
+  for adjudication (label problem, real bug, capability gap) before any rule changes; fixes are tested on new rows.
+- **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
+  tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
+  for bare imperatives instead; questions like "what's the weather" are not covered by it.
+
 ## Cloud fallback (off by default)
 
 - **Masking is not anonymisation.** With `CLOUD_FALLBACK=on`, unclear messages (and, with a docs chain, document text)

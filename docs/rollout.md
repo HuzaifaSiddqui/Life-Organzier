@@ -25,7 +25,22 @@ of these needs a migration; turning one off loses no data (new fields are option
 | `DOC_EVIDENCE` | `off` | AI items must quote a document line that gives their date; otherwise review only. | `off` | feat/document-routing | see PR |
 | `DOC_LAYOUT` | `off` | OCR'd tables rebuilt into rows and columns. | `off` | feat/document-routing | see PR |
 | `DOC_AGREE`, `DOC_AGREE_MODEL` | `off`, `qwen2.5:14b` | Second local model for type "other" or OCR < 70; agreement shown, never auto-created. | `off` | feat/document-routing | see PR |
+| `OOS_CONFIRM` | `off` | A bare imperative the app can't carry out ("book me a taxi", "call my mother": a verb, no task cue, no date, time, duration or repeat) gets "I can't do that myself. Add it as a task?" with an **Add as a task** button, instead of becoming a task. On the AI-written held-out set: 4 of the 6 out-of-scope actions become the question; 4 real tasks also ask first (one extra tap). | `off` | feat/chat-model-upgrade | proposal; your call |
 | `MEANING_ROUTER` | `off` | Bank neighbours guide the router (stays off unless held-out data shows it beats the rules). | `off` | before the baseline | – |
+
+## Demo setting (FYP evaluation only)
+
+To show the fallback chain working (for example with Ollama stopped), set in `backend/.env` for the demo and revert
+afterwards (default stays off):
+
+```dotenv
+CLOUD_FALLBACK=on
+LLM_PROVIDERS_CHAT=ollama,deploy,groq
+# leave LLM_PROVIDERS_DOCS and LLM_PROVIDERS_VISION empty: documents stay local
+```
+
+Use a demo account with made-up tasks only: what the router sends to Deploy and Groq is masked, not anonymised (below).
+`GET /health/ai` shows each provider's state during the demo. Revert: `CLOUD_FALLBACK=off` and restart.
 
 ## Cloud fallback: the privacy trade-off
 

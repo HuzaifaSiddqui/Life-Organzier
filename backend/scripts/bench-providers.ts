@@ -35,16 +35,16 @@ const MAX = Number(arg("max") ?? 40);
 const RUNS = Number(arg("runs") ?? 3);
 /** --pace ms between calls (overrides the per-provider default); --tag names the pass (e.g. slow) in the results. */
 const PACE_ARG = arg("pace") ? Number(arg("pace")) : null;
+/** --fewshot-hash: few-shot with the hashed-vector neighbours (what the app has when Ollama, and so nomic-embed-text, is down). */
+const FEWSHOT_HASH = process.argv.includes("--fewshot-hash");
+const FEWSHOT = process.argv.includes("--fewshot") || FEWSHOT_HASH;
 /**
  * --set selection: the classmates' selection half (tests/eval/chat-selection.json) instead of the default unsure set.
  * --set heldout (classmates) / --set holdout (teammates' chat-holdout.json): reporting only; tagged report-*, never ranked.
  */
 const SET = arg("set") ?? "default";
-if (!["default", "selection", "heldout", "holdout"].includes(SET)) throw new Error("--set default|selection|heldout|holdout");
-const TAG = SET === "heldout" || SET === "holdout" ? `report-${SET}` : (arg("tag") ?? "") + (SET === "selection" ? `${arg("tag") ? "-" : ""}selection` : "");
-/** --fewshot-hash: few-shot with the hashed-vector neighbours (what the app has when Ollama, and so nomic-embed-text, is down). */
-const FEWSHOT_HASH = process.argv.includes("--fewshot-hash");
-const FEWSHOT = process.argv.includes("--fewshot") || FEWSHOT_HASH;
+if (!["default", "selection", "heldout", "holdout", "heldout-ai"].includes(SET)) throw new Error("--set default|selection|heldout|holdout|heldout-ai");
+const TAG = SET.startsWith("heldout") || SET === "holdout" ? `report-${SET}${FEWSHOT_HASH ? "-fewshot-hash" : FEWSHOT ? "-fewshot" : ""}` : (arg("tag") ?? "") + (SET === "selection" ? `${arg("tag") ? "-" : ""}selection` : "");
 /** --timeout ms per hosted call (default 8000, the production limit); a longer one is a diagnostic pass, never ranked. */
 const TIMEOUT = Number(arg("timeout") ?? 8000);
 const DATE = arg("date") ?? new Date().toISOString().slice(0, 10);
@@ -147,7 +147,7 @@ const chatSet = [
 ] as Array<{ id?: string; text: string; lang: string; command: string; alsoOk: string[]; set: string }>;
 if (SET !== "default") {
   // Whole file, English only; only messages the rules are unsure about reach the router, like the default set.
-  const file = { selection: "chat-selection.json", heldout: "chat-heldout-classmates.json", holdout: "chat-holdout.json" }[SET as "selection" | "heldout" | "holdout"];
+  const file = { selection: "chat-selection.json", heldout: "chat-heldout-classmates.json", holdout: "chat-holdout.json", "heldout-ai": "chat-heldout-ai-written.json" }[SET as "selection" | "heldout" | "holdout" | "heldout-ai"];
   const path = join(root, "tests/eval", file);
   if (!existsSync(path)) throw new Error(`${file} not found (scripts/split-eval-set.ts writes the classmates' sets)`);
   const data = JSON.parse(readFileSync(path, "utf8")) as { rows?: Row[]; commands?: Row[] };
@@ -187,7 +187,8 @@ async function chatJob(name: string, model: string, run: number, max: number): P
     const examples = index ? (await nearest(it.text, index, { k: 6, exclude: it.id })).filter((n) => n.row.text.trim().toLowerCase() !== it.text.trim().toLowerCase()).slice(0, 5).map((n) => ({ text: n.row.text, command: n.row.command })) : [];
     const routed = await routeWithLlm(it.text, ctx, examples).catch(() => null);
     const final = routed?.command ?? classify(it.text, ctx).command;
-    const ok = final === it.command || it.alsoOk.includes(final);
+    // "none" (AI-written held-out set): no action, i.e. the router and the rules both answer smalltalk or unclear.
+    const ok = final === it.command || it.alsoOk.includes(final) || (it.command === "none" && (final === "smalltalk" || final === "unclear"));
     if (ok) correct += 1;
     perItem.push(ok ? 1 : 0);
     const s = (bySet[it.set] ??= { n: 0, correct: 0 });
