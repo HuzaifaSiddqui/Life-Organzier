@@ -1,8 +1,9 @@
 import { Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskType } from "@prisma/client";
-import { dueDateFromYmd, parseClock } from "../../lib/time.js";
+import { dueDateFromYmd, localYmd, parseClock } from "../../lib/time.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
 import { existingRoutineId, existingTaskId } from "./documentProcessing.js";
+import { docFlag, documentPriority } from "./routing.js";
 
 export type ApplyDeadline = { title: string; date: string; time?: string | null };
 export type ApplySchedule = { title: string; daysOfWeek: number[]; time?: string | null; durationMinutes?: number | null; location?: string | null };
@@ -30,7 +31,7 @@ export async function applyDocumentItems(
       serializeTask(
         await createTask(
           { userId, tz, deviceId: ctx.deviceId },
-          { title: d.title, priority: Priority.MEDIUM, category: "Academic", source: TaskSource.DOCUMENT, dueDate: dueDateFromYmd(d.date, tz), dueTime: time, taskType: TaskType.DEADLINE, documentId, confidence: 100 },
+          { title: d.title, priority: docFlag("DOC_PRIORITY_V2") ? documentPriority({ title: d.title, activity: "", date: d.date, source: "" }, localYmd(new Date(), tz)).priority : Priority.MEDIUM, category: "Academic", source: TaskSource.DOCUMENT, dueDate: dueDateFromYmd(d.date, tz), dueTime: time, taskType: TaskType.DEADLINE, documentId, confidence: 100 },
         ),
       ),
     );

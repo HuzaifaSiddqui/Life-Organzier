@@ -1,6 +1,6 @@
 import { RoutineFrequency } from "@prisma/client";
 import { z } from "zod";
-import { getAi } from "../../ai/llm.js";
+import { getAi, type AiService } from "../../ai/llm.js";
 import { formatClock } from "../../lib/time.js";
 import { fuzzySimilarity } from "../../lib/text.js";
 import { cleanTitle, extractEntities } from "../assistant/entities.js";
@@ -416,14 +416,15 @@ export function dateGrounded(ymd: string, text: string): boolean {
  * appears in the document survive. Confidence stays below the auto-create threshold, so the user
  * always confirms them.
  */
-export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000): Promise<ExtractedDeadline[]> {
-  return (await llmActionItemsOrNull(text, todayYmd, tz, timeoutMs)) ?? [];
+/** `ai`: another service for a second opinion (DOC_AGREE); the configured one by default. */
+export async function llmActionItems(text: string, todayYmd: string, tz: string, timeoutMs = 60000, ai: AiService = getAi()): Promise<ExtractedDeadline[]> {
+  return (await llmActionItemsOrNull(text, todayYmd, tz, timeoutMs, ai)) ?? [];
 }
 
 /** llmActionItems, but null when the model's reply failed (unparseable, e.g. cut mid-JSON, or invalid) instead of []. */
-async function llmActionItemsOrNull(text: string, todayYmd: string, tz: string, timeoutMs: number): Promise<ExtractedDeadline[] | null> {
+async function llmActionItemsOrNull(text: string, todayYmd: string, tz: string, timeoutMs: number, ai: AiService = getAi()): Promise<ExtractedDeadline[] | null> {
   if (text.replace(/\s+/g, "").length < 30) return [];
-  const result = await getAi().json(
+  const result = await ai.json(
     [
       {
         role: "system",
@@ -504,7 +505,7 @@ export function chunkText(text: string, size = 2500, overlap = 200, max = 6): st
   return chunks.slice(0, max);
 }
 
-function sameItem(a: string, b: string): boolean {
+export function sameItem(a: string, b: string): boolean {
   const x = a.toLowerCase();
   const y = b.toLowerCase();
   if (x.includes(y) || y.includes(x) || fuzzySimilarity(x, y) >= 0.5) return true;
@@ -527,12 +528,14 @@ function sameLine(rule: ExtractedDeadline, item: ExtractedDeadline): boolean {
   return ev.length >= 12 && (src.includes(ev) || ev.includes(src.slice(0, 40)));
 }
 
-export function mergeDeadlines(rules: ExtractedDeadline[], ai: ExtractedDeadline[]): ExtractedDeadline[] {
+/** `agree: false` (unverified AI items, DOC_EVIDENCE): a match adds no agreement bonus; the item is just not repeated. */
+export function mergeDeadlines(rules: ExtractedDeadline[], ai: ExtractedDeadline[], opts: { agree?: boolean } = {}): ExtractedDeadline[] {
   const out = rules.map((r) => ({ ...r }));
   for (const item of ai) {
     // Agreement is with what the rules found; a second model-only copy is a duplicate, not a confirmation.
     const match = out.find((r) => !r.aiOnly && r.date && r.date === item.date && (sameItem(r.title, item.title) || sameLine(r, item)));
     if (match) {
+      if (opts.agree === false) continue;
       if (!match.aiAgrees) match.confidence = Math.min(match.review || match.assumedTime ? 90 : 99, match.confidence + 5);
       match.aiAgrees = true;
       continue;

@@ -218,6 +218,11 @@ switched off with `WHATSAPP_AGENT=off`; connect and test need Pro (403 `PRO_REQU
 - **`POST /api/whatsapp-agent/test`** sends a short message (3 a minute). **`PATCH /api/whatsapp-agent/settings`** `{ reminders?: "OFF"|"WHATSAPP"|"BOTH", voice?: boolean }` (409 when switched off on the server). **`DELETE /api/whatsapp-agent`** stops polling and deletes the key.
 - `GET /api/reminders/plan` → `settings.viaWhatsappAgent`: true when the phone should leave task and routine reminders to WhatsApp.
 - `POST /api/documents/:id/apply` now calls `documents/applyItems.ts` (same behaviour); the WhatsApp Agent's "Add all" uses it too.
+- **Document routing flags (all off by default; additive fields the app tolerates missing):**
+  - `DOC_FALLBACK_UI=on`: upload / text responses add `text` (the extracted, masked text, up to 20,000 characters). `POST /api/documents/:id/pick-lines` `{ lines: string[] (1–40, each a line of the document's text) }` → `{ deadlines }`: review items (dated by the rules, or undated), nothing created; `400 VALIDATION_ERROR` for a line not in the document. 404 when the flag is off.
+  - `DOC_ROUTING=on`: `extracted.kind` `{ kind: "timetable" | "schedule" | "notice" | "assignment" | "other", confidence, via: "rules" | "model" | "user" }`. `POST /api/documents/:id/reextract` `{ kind }` → `{ extracted }`: the stored text read again as that type and saved; nothing created. 404 when the flag is off.
+  - `DOC_EVIDENCE=on`: AI items add `verified` (boolean) and `evidence` (the document line, or null). `DOC_AGREE=on`: AI-only items both models found add `modelsAgree: true`.
+  - `DOC_PRIORITY_V2=on`: tasks created from documents get the documented priority score (`documents/routing.ts` → `documentPriority`). `DOC_LAYOUT=on`: no API change (OCR'd tables are read as rows and columns).
 
 ### Push (P2)
 

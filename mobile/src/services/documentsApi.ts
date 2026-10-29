@@ -26,7 +26,17 @@ export type ExtractedDeadline = {
   removedSinceUpload?: boolean;
   created?: boolean;
   existing?: boolean;
+  /** DOC_EVIDENCE: the AI's source line was found in the text and gives the date. Absent when the check is off. */
+  verified?: boolean;
+  /** DOC_EVIDENCE: the document line the item came from. */
+  evidence?: string | null;
+  /** DOC_AGREE: two AI readers found it. */
+  modelsAgree?: boolean;
 };
+
+/** DOC_ROUTING document types (the server's DOC_KINDS). */
+export const DOC_KINDS = ["timetable", "schedule", "notice", "assignment", "other"] as const;
+export type DocKind = (typeof DOC_KINDS)[number];
 
 export type ExtractedSchedule = {
   index: number;
@@ -67,10 +77,14 @@ export type ProcessResult = {
     warning: string | null;
     needsLanguage: boolean;
     method: string;
+    /** DOC_ROUTING: the detected (or picked) type; absent when routing is off. */
+    kind?: { kind: DocKind; confidence: number; via: "rules" | "model" | "user" };
   };
   createdTasks: Task[];
   createdRoutines: Array<{ id: string; title: string }>;
   textPreview: string;
+  /** DOC_FALLBACK_UI: the extracted (masked) text for "See what was read"; absent when that view is off. */
+  text?: string;
 };
 
 export type DocumentSummary = {
@@ -166,4 +180,14 @@ export async function applyDocument(
   void syncNow();
   scheduleReminderSync();
   return result;
+}
+
+/** DOC_FALLBACK_UI "Pick lines": review items from lines of the document's text (nothing is created). */
+export function pickLines(id: string, lines: string[]): Promise<{ deadlines: ExtractedDeadline[] }> {
+  return apiPost<{ deadlines: ExtractedDeadline[] }>(`/documents/${id}/pick-lines`, { lines });
+}
+
+/** DOC_ROUTING "Wrong type?": the document read again as `kind` (nothing is created). */
+export function reextractDocument(id: string, kind: DocKind): Promise<{ extracted: ProcessResult["extracted"] }> {
+  return apiPost<{ extracted: ProcessResult["extracted"] }>(`/documents/${id}/reextract`, { kind });
 }

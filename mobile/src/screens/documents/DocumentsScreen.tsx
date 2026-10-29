@@ -5,6 +5,7 @@ import * as Network from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineReviewItem";
+import { DocumentTextView } from "../../components/DocumentTextView";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
@@ -14,10 +15,15 @@ import { getApiErrorMessage } from "../../services/api";
 import {
   applyDocument,
   deleteDocument,
+  DOC_KINDS,
   listDocuments,
+  pickLines,
   processText,
+  reextractDocument,
   uploadDocument,
+  type DocKind,
   type DocType,
+  type ExtractedDeadline,
   type DocumentSummary,
   type ProcessResult,
 } from "../../services/documentsApi";
@@ -55,6 +61,23 @@ function confColor(c: number): string {
   return c >= 90 ? palette.success : c >= 80 ? palette.warning : palette.danger;
 }
 
+function toEditable(d: ExtractedDeadline): EditableDeadline {
+  return {
+    index: d.index,
+    title: d.title,
+    date: d.date ?? "",
+    time: d.time ?? "",
+    confidence: d.confidence,
+    // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
+    include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload,
+    created: Boolean(d.created),
+    existing: Boolean(d.existing),
+    // DOC_EVIDENCE: the document line it came from, when the server checked it.
+    source: d.evidence ?? d.source,
+    flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, removedSinceUpload: d.removedSinceUpload, verified: d.verified, modelsAgree: d.modelsAgree },
+  };
+}
+
 export function DocumentsScreen({ navigation }: Props) {
   const { t } = useLocale();
   const [picked, setPicked] = useState<Picked | null>(null);
@@ -70,6 +93,8 @@ export function DocumentsScreen({ navigation }: Props) {
   const [usedBytes, setUsedBytes] = useState(0);
   const [applying, setApplying] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  /** DOC_ROUTING "Wrong type?" re-read, or DOC_FALLBACK_UI "Pick lines", in progress. */
+  const [rereading, setRereading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const [elapsed, setElapsed] = useState(0);
   const busy = progress !== null;
@@ -113,21 +138,7 @@ export function DocumentsScreen({ navigation }: Props) {
           : "No deadlines or classes found in this file",
     );
     setTimeout(() => scrollRef.current?.scrollTo({ y: resultsY.current, animated: true }), 300);
-    setDeadlines(
-      r.extracted.deadlines.map((d) => ({
-        index: d.index,
-        title: d.title,
-        date: d.date ?? "",
-        time: d.time ?? "",
-        confidence: d.confidence,
-        // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
-        include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload,
-        created: Boolean(d.created),
-        existing: Boolean(d.existing),
-        source: d.source,
-        flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, removedSinceUpload: d.removedSinceUpload },
-      })),
-    );
+    setDeadlines(r.extracted.deadlines.map(toEditable));
     setSchedules(
       r.extracted.schedules.map((s) => ({
         index: s.index,
@@ -144,6 +155,38 @@ export function DocumentsScreen({ navigation }: Props) {
       })),
     );
     void load();
+  };
+
+  /** DOC_ROUTING: read the same document again as the type the user picked. */
+  const reread = async (kind: DocKind) => {
+    if (!result) return;
+    setRereading(true);
+    try {
+      const r = await reextractDocument(result.document.id, kind);
+      showResult({ ...result, extracted: r.extracted, reused: false });
+    } catch (e) {
+      setToast(getApiErrorMessage(e));
+    } finally {
+      setRereading(false);
+    }
+  };
+
+  /** DOC_FALLBACK_UI: picked lines become review items (ticked only when they have a date). */
+  const addPicked = async (lines: string[]) => {
+    if (!result) return;
+    setRereading(true);
+    try {
+      const r = await pickLines(result.document.id, lines);
+      setDeadlines((l) => {
+        const base = Math.max(-1, ...l.map((d) => d.index)) + 1;
+        return [...l, ...r.deadlines.map((d, i) => ({ ...toEditable({ ...d, index: base + i }), include: Boolean(d.date) }))];
+      });
+      setToast(`Added ${r.deadlines.length} item${r.deadlines.length === 1 ? "" : "s"} for review`);
+    } catch (e) {
+      setToast(getApiErrorMessage(e));
+    } finally {
+      setRereading(false);
+    }
   };
 
   const pick = async () => {
@@ -287,7 +330,7 @@ export function DocumentsScreen({ navigation }: Props) {
         {result ? (
           <>
             <View onLayout={(e) => (resultsY.current = e.nativeEvent.layout.y)} />
-            {!result.extracted.deadlines.length && !result.extracted.schedules.length && !result.extracted.warning ? (
+            {!result.text && !result.extracted.deadlines.length && !result.extracted.schedules.length && !result.extracted.warning ? (
               <Card tone="warning" style={{ gap: 6 }}>
                 <Text style={ui.body}>I couldn't find any dated deadlines or class times in this file.</Text>
                 <Text style={styles.meta}>Make sure it has dates like "Oct 20, 2026" or class times like "Mon 9:00 AM", or try "Paste text".</Text>
@@ -308,6 +351,28 @@ export function DocumentsScreen({ navigation }: Props) {
               </Card>
             ) : null}
             {result.extracted.method === "ocr" ? <Text style={styles.meta}>OCR confidence {result.extracted.ocrConfidence}%</Text> : null}
+            {result.extracted.kind ? (
+              <Card style={{ gap: 8 }}>
+                <Text style={ui.body}>{t("docRoute.readAs", { kind: t(`docRoute.kind.${result.extracted.kind.kind}`) })}</Text>
+                {result.extracted.kind.kind === "other" ? <Text style={styles.meta}>{t("docRoute.otherNote")}</Text> : null}
+                <Text style={styles.meta}>{t("docRoute.wrongType")}</Text>
+                <View style={ui.wrap}>
+                  {DOC_KINDS.filter((k) => k !== result.extracted.kind?.kind).map((k) => (
+                    <Chip key={k} small label={t(`docRoute.kind.${k}`)} onPress={rereading ? undefined : () => void reread(k)} />
+                  ))}
+                </View>
+              </Card>
+            ) : null}
+            {result.text ? (
+              <DocumentTextView
+                key={result.document.id}
+                text={result.text}
+                empty={!deadlines.length && !schedules.length}
+                busy={rereading}
+                onPick={(lines) => void addPicked(lines)}
+                onAddManually={() => navigation.navigate("AddTask")}
+              />
+            ) : null}
 
             <SectionTitle title={`Extracted deadlines (${deadlines.length})`} />
             {deadlines.length ? (

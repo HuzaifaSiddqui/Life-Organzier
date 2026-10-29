@@ -81,6 +81,17 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Documents and OCR
 
+- **Document routing flags (all off): `DOC_FALLBACK_UI`, `DOC_ROUTING`, `DOC_PRIORITY_V2`, `DOC_EVIDENCE`,
+  `DOC_LAYOUT`, `DOC_AGREE`.** Gate (29 Oct 2026, Ollama qwen2.5:7b, laptop kept awake): AI off, every flag equals the
+  baseline on the text fixtures (82/82 recall and precision, 0 wrong items reaching auto-create). AI on:
+  `DOC_ROUTING` and `DOC_EVIDENCE` **pass** (82/82, 0 wrong auto-creates, p95 per document 29.1 s and 22.7 s against
+  32.2 s); `DOC_LAYOUT` **fails** on the image fixtures (AI off recall 150/154 against 153/154; AI on 153/154 and one
+  wrong item against 154/154); `DOC_AGREE` **fails** the latency gate (the second, 14b model next to 7b made a 16 GB
+  machine swap: 2 h 12 min for the text fixtures against about 15 min). `DOC_FALLBACK_UI` and `DOC_PRIORITY_V2` don't
+  change extraction; `DOC_PRIORITY_V2` changes 27 of 65 fixture items' priority (mostly far-off items down a level)
+  with no ground truth to score against. "Wrong type?" re-reads the stored text, so a timetable read by position from
+  a photo or PDF grid loses that layout when re-read. Copy for the new screens is English only until after
+  10 Nov 2026.
 - **The AI pass loses a dense chunk's items** (flag `DOC_AI_SPLIT`, off). A chunk with many dates (a date sheet)
   needs a longer reply than the 500-token / 10-item cap, so the reply is cut mid-JSON and that chunk's AI items are
   dropped (the rules' items stay). `DOC_AI_SPLIT=on` reads such a chunk in pieces of at most 8 dated lines and halves a
