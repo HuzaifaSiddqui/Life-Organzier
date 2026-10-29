@@ -52,13 +52,16 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 ## Documents and OCR
 
 - **Document routing flags (all off): `DOC_FALLBACK_UI`, `DOC_ROUTING`, `DOC_PRIORITY_V2`, `DOC_EVIDENCE`,
-  `DOC_LAYOUT`, `DOC_AGREE`.** Gate so far (29 Oct 2026): with AI off every flag equals the baseline (82/82 recall and
-  precision, 0 wrong items reaching auto-create). With AI on, `DOC_AGREE` **failed** the latency gate (the second,
-  14b model next to 7b made a 16 GB machine swap: 2 h 12 min for the text fixtures against about 15 min) and the other
-  flags' AI-on runs are **not measured yet** (the laptop slept during them). `DOC_PRIORITY_V2` changes 27 of 65 fixture
-  items' priority (mostly far-off items down a level) and has no ground truth to score against. "Wrong type?" re-reads
-  the stored text, so a timetable read by position from a photo or PDF grid loses that layout when re-read. Copy for
-  the new screens is English only until after 10 Nov 2026.
+  `DOC_LAYOUT`, `DOC_AGREE`.** Gate (29 Oct 2026, Ollama qwen2.5:7b, laptop kept awake): AI off, every flag equals the
+  baseline on the text fixtures (82/82 recall and precision, 0 wrong items reaching auto-create). AI on:
+  `DOC_ROUTING` and `DOC_EVIDENCE` **pass** (82/82, 0 wrong auto-creates, p95 per document 29.1 s and 22.7 s against
+  32.2 s); `DOC_LAYOUT` **fails** on the image fixtures (AI off recall 150/154 against 153/154; AI on 153/154 and one
+  wrong item against 154/154); `DOC_AGREE` **fails** the latency gate (the second, 14b model next to 7b made a 16 GB
+  machine swap: 2 h 12 min for the text fixtures against about 15 min). `DOC_FALLBACK_UI` and `DOC_PRIORITY_V2` don't
+  change extraction; `DOC_PRIORITY_V2` changes 27 of 65 fixture items' priority (mostly far-off items down a level)
+  with no ground truth to score against. "Wrong type?" re-reads the stored text, so a timetable read by position from
+  a photo or PDF grid loses that layout when re-read. Copy for the new screens is English only until after
+  10 Nov 2026.
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
   directory. Only `eng.traineddata` is committed (`backend/eng.traineddata`, ~5 MB, used when the server is started
   from `backend/`). Every other language offered in the app — including Urdu (`urd`) — is downloaded from the
