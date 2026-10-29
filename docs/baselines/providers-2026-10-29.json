@@ -2,10 +2,9 @@
  "date": "2026-10-29",
  "about": "Raw provider benchmark results (scripts/bench-providers.ts). No keys, no prompts.",
  "chatSet": {
-  "size": 33,
+  "size": 18,
   "sets": [
-   "en-untuned",
-   "en-bank(tuned)"
+   "heldout-ai"
   ]
  },
  "docSet": {
@@ -2474,6 +2473,862 @@
    "tag": "clean-latency",
    "pace": 0,
    "at": "2026-10-28T21:12:45.554Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 1,
+   "n": 33,
+   "correct": 18,
+   "accuracy": 0.5454545454545454,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 14
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 4
+    }
+   },
+   "items": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 64,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 26321,
+    "outputTokens": 10041,
+    "headroom": null,
+    "p50": 2609,
+    "p95": 4166
+   },
+   "note": "few-shot: hash-bow-256",
+   "tag": "fewshot-hash",
+   "pace": 2000,
+   "at": "2026-10-28T22:43:17.919Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 2,
+   "n": 33,
+   "correct": 16,
+   "accuracy": 0.48484848484848486,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 13
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 3
+    }
+   },
+   "items": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    0
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 65,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 27114,
+    "outputTokens": 10092,
+    "headroom": null,
+    "p50": 2537,
+    "p95": 3451
+   },
+   "note": "few-shot: hash-bow-256",
+   "tag": "fewshot-hash",
+   "pace": 2000,
+   "at": "2026-10-28T22:46:13.484Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 3,
+   "n": 33,
+   "correct": 18,
+   "accuracy": 0.5454545454545454,
+   "bySet": {
+    "en-untuned": {
+     "n": 28,
+     "correct": 14
+    },
+    "en-bank(tuned)": {
+     "n": 5,
+     "correct": 4
+    }
+   },
+   "items": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0
+   ],
+   "tally": {
+    "errors": {
+     "timeout": 2
+    },
+    "calls": 64,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 2,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 25147,
+    "outputTokens": 9703,
+    "headroom": null,
+    "p50": 2606,
+    "p95": 3840
+   },
+   "note": "few-shot: hash-bow-256",
+   "tag": "fewshot-hash",
+   "pace": 2000,
+   "at": "2026-10-28T22:49:19.484Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 1,
+   "n": 18,
+   "correct": 16,
+   "accuracy": 0.8888888888888888,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 16
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 32,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 10709,
+    "outputTokens": 3846,
+    "headroom": null,
+    "p50": 2532,
+    "p95": 3235
+   },
+   "tag": "report-heldout-ai",
+   "pace": 2000,
+   "at": "2026-10-29T13:42:30.723Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 2,
+   "n": 18,
+   "correct": 16,
+   "accuracy": 0.8888888888888888,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 16
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {
+     "timeout": 1
+    },
+    "calls": 31,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 10283,
+    "outputTokens": 3046,
+    "headroom": null,
+    "p50": 2446,
+    "p95": 3497
+   },
+   "tag": "report-heldout-ai",
+   "pace": 2000,
+   "at": "2026-10-29T13:43:55.085Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 3,
+   "n": 18,
+   "correct": 16,
+   "accuracy": 0.8888888888888888,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 16
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 32,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 10709,
+    "outputTokens": 4086,
+    "headroom": null,
+    "p50": 2612,
+    "p95": 3863
+   },
+   "tag": "report-heldout-ai",
+   "pace": 2000,
+   "at": "2026-10-29T13:45:22.288Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 1,
+   "n": 18,
+   "correct": 16,
+   "accuracy": 0.8888888888888888,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 16
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {
+     "timeout": 1
+    },
+    "calls": 31,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 12450,
+    "outputTokens": 2596,
+    "headroom": null,
+    "p50": 2800,
+    "p95": 6134
+   },
+   "note": "few-shot: hash-bow-256",
+   "tag": "report-heldout-ai-fewshot-hash",
+   "pace": 2000,
+   "at": "2026-10-29T13:47:07.613Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 2,
+   "n": 18,
+   "correct": 17,
+   "accuracy": 0.9444444444444444,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 17
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 31,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 12834,
+    "outputTokens": 2618,
+    "headroom": null,
+    "p50": 2374,
+    "p95": 3359
+   },
+   "note": "few-shot: hash-bow-256",
+   "tag": "report-heldout-ai-fewshot-hash",
+   "pace": 2000,
+   "at": "2026-10-29T13:48:26.325Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 3,
+   "n": 18,
+   "correct": 17,
+   "accuracy": 0.9444444444444444,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 17
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 31,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 12834,
+    "outputTokens": 3025,
+    "headroom": null,
+    "p50": 2393,
+    "p95": 3552
+   },
+   "note": "few-shot: hash-bow-256",
+   "tag": "report-heldout-ai-fewshot-hash",
+   "pace": 2000,
+   "at": "2026-10-29T13:49:44.029Z"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 1,
+   "n": 18,
+   "correct": 13,
+   "accuracy": 0.7222222222222222,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 13
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 29,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 1158,
+    "p95": 5086
+   },
+   "tag": "report-heldout-ai",
+   "pace": 0,
+   "at": "2026-10-29T14:37:39.506Z"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 2,
+   "n": 18,
+   "correct": 13,
+   "accuracy": 0.7222222222222222,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 13
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 29,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 1219,
+    "p95": 3307
+   },
+   "tag": "report-heldout-ai",
+   "pace": 0,
+   "at": "2026-10-29T14:38:28.615Z"
+  },
+  {
+   "provider": "ollama",
+   "model": "qwen2.5:7b",
+   "job": "chat",
+   "run": 3,
+   "n": 18,
+   "correct": 13,
+   "accuracy": 0.7222222222222222,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 13
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 29,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "headroom": null,
+    "p50": 1354,
+    "p95": 3918
+   },
+   "tag": "report-heldout-ai",
+   "pace": 0,
+   "at": "2026-10-29T14:39:19.120Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 1,
+   "n": 18,
+   "correct": 16,
+   "accuracy": 0.8888888888888888,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 16
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {
+     "timeout": 2
+    },
+    "calls": 31,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 2,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 12427,
+    "outputTokens": 2569,
+    "headroom": null,
+    "p50": 2526,
+    "p95": 8010
+   },
+   "note": "few-shot: nomic-embed-text",
+   "tag": "report-heldout-ai-fewshot",
+   "pace": 2000,
+   "at": "2026-10-29T14:41:00.271Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 2,
+   "n": 18,
+   "correct": 16,
+   "accuracy": 0.8888888888888888,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 16
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {
+     "timeout": 1
+    },
+    "calls": 30,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 1,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 12313,
+    "outputTokens": 2750,
+    "headroom": null,
+    "p50": 2422,
+    "p95": 7829
+   },
+   "note": "few-shot: nomic-embed-text",
+   "tag": "report-heldout-ai-fewshot",
+   "pace": 2000,
+   "at": "2026-10-29T14:42:29.842Z"
+  },
+  {
+   "provider": "deploy",
+   "model": "zai-org/glm-5.3-flash",
+   "job": "chat",
+   "run": 3,
+   "n": 18,
+   "correct": 17,
+   "accuracy": 0.9444444444444444,
+   "bySet": {
+    "heldout-ai": {
+     "n": 18,
+     "correct": 17
+    }
+   },
+   "items": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "tally": {
+    "errors": {},
+    "calls": 31,
+    "invalidJson": 0,
+    "schemaFail": 0,
+    "failures": 0,
+    "rateLimited": 0,
+    "billing": 0,
+    "inputTokens": 13022,
+    "outputTokens": 2959,
+    "headroom": null,
+    "p50": 2363,
+    "p95": 3929
+   },
+   "note": "few-shot: nomic-embed-text",
+   "tag": "report-heldout-ai-fewshot",
+   "pace": 2000,
+   "at": "2026-10-29T14:43:53.242Z"
   }
  ]
 }

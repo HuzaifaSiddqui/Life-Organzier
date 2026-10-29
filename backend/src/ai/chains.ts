@@ -23,13 +23,15 @@ import { makeProvider, providerKey, providerSpecs, type Tier } from "./providers
  */
 
 export type Job = "chat" | "docs" | "vision";
-type Entry = { provider: string; model: string };
+/** fewShot: this provider gets the router prompt with the nearest bank examples (set per provider in provider-order.json). */
+type Entry = { provider: string; model: string; fewShot?: boolean };
 type State = {
   name: string;
   model: string;
   tier: Tier;
   images: boolean;
   instance: LlmProvider;
+  fewShot: boolean;
   failures: number;
   openUntil: number;
   probing: boolean;
@@ -49,8 +51,18 @@ export const BREAKER_OPEN_MS = 60000;
 
 const ENV: Record<Job, string> = { chat: "LLM_PROVIDERS_CHAT", docs: "LLM_PROVIDERS_DOCS", vision: "LLM_PROVIDERS_VISION" };
 
+/**
+ * CLOUD_FALLBACK=on (default off) is required for any hosted chain. Off: every model call takes the baseline path
+ * (Ollama, as before), whatever LLM_PROVIDERS_* say. Masking hides numbers, e-mails, links and names after a cue; it
+ * does not remove what a message is about, so turning this on sends the content of unclear messages to a cloud
+ * provider (docs/providers.md → Cloud fallback).
+ */
+export function cloudFallbackOn(): boolean {
+  return process.env.CLOUD_FALLBACK?.toLowerCase() === "on";
+}
+
 export function chainConfigured(job: Job): boolean {
-  return Boolean(process.env[ENV[job]]?.trim());
+  return cloudFallbackOn() && Boolean(process.env[ENV[job]]?.trim());
 }
 
 function readOrder(): Record<Job, Entry[]> {
@@ -75,7 +87,7 @@ export class HostedChains {
     for (const job of Object.keys(ENV) as Job[]) {
       const allowed = (process.env[ENV[job]] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
       if (!allowed.length) continue;
-      let entries = order[job].filter((e) => allowed.includes(e.provider));
+      let entries = order[job].filter((e) => allowed.includes(e.provider) && (e.provider === "ollama" || cloudFallbackOn()));
       if (process.env.BEDROCK_ENABLED === "true" && process.env.BEDROCK_MODEL) entries = [{ provider: "bedrock", model: process.env.BEDROCK_MODEL }, ...entries.filter((e) => e.provider !== "bedrock")];
       const states: State[] = [];
       for (const e of entries) {
@@ -87,7 +99,7 @@ export class HostedChains {
         if (!state) {
           const instance = makeInstance(e.provider, e.model);
           if (!instance) continue;
-          state = { name: e.provider, model: e.model, tier: spec.tier, images: spec.images, instance, failures: 0, openUntil: 0, probing: false, day: "", today: 0, minute: [], billingBlocked: false, lastStatus: "idle", lastAt: null };
+          state = { name: e.provider, model: e.model, tier: spec.tier, images: spec.images, instance, fewShot: Boolean(e.fewShot), failures: 0, openUntil: 0, probing: false, day: "", today: 0, minute: [], billingBlocked: false, lastStatus: "idle", lastAt: null };
           this.states.set(key, state);
         }
         states.push(state);
@@ -100,8 +112,13 @@ export class HostedChains {
     }
   }
 
-  chain(job: Job): Array<{ provider: string; model: string; tier: Tier }> {
-    return this.chains[job].map((s) => ({ provider: s.name, model: s.model, tier: s.tier }));
+  chain(job: Job): Array<{ provider: string; model: string; tier: Tier; fewShot: boolean }> {
+    return this.chains[job].map((s) => ({ provider: s.name, model: s.model, tier: s.tier, fewShot: s.fewShot }));
+  }
+
+  /** True when some provider in the job's chain wants few-shot examples (so the caller retrieves them once). */
+  wantsFewShot(job: Job): boolean {
+    return this.chains[job].some((s) => s.fewShot);
   }
 
   /** Daily and per-minute counters; false when a limit or the $0 spend cap is reached. */
@@ -188,7 +205,8 @@ export class HostedChains {
     const deadline = this.now() + CHAIN_BUDGET_MS;
     for (const s of this.chains[job]) {
       if (!this.available(s)) continue;
-      const r = await this.callOne(s, messages, { temperature: 0.1, ...options, json: options.json ?? true }, deadline);
+      const sent = s.fewShot && options.fewShotMessages ? options.fewShotMessages : messages;
+      const r = await this.callOne(s, sent, { temperature: 0.1, ...options, json: options.json ?? true }, deadline);
       if (r) {
         try {
           const parsed = schema.safeParse(extractJson(r.text));

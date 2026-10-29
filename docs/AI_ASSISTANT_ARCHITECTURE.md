@@ -26,6 +26,14 @@ memory extraction, sub-task names, topics), while **dates, clarity scoring, sche
 reminders, patterns and safety are deterministic code**. If Ollama is down, a circuit breaker
 skips it and the assistant keeps working on rules.
 
+**Cloud fallback (off by default; `docs/rollout.md`).** With `CLOUD_FALLBACK=on` and `LLM_PROVIDERS_CHAT` set, the
+router's model calls go through a hosted chain (`backend/src/ai/chains.ts`, order in `config/provider-order.json`):
+Ollama → Deploy GLM-5.3-flash (tier B, masked text, few-shot: the 5 nearest English bank rows) → Groq gpt-oss-20b
+(tier A, masked) → rules. 8 s per hosted call, 15 s per chain, failover on timeout, 429, 5xx, invalid JSON or schema
+failure, breaker 3 failures → 60 s, $0 spend guard. Off: every model call takes the path above, unchanged
+(`tests/baselineRegression.test.ts` pins chat to `docs/baselines/ollama-v1.json`). Status: built and tested with fake
+providers (`tests/chatFailover.test.ts`); not turned on (gate in the PR).
+
 ## Check-in copy (FR-RN-004)
 
 Check-in message text always comes from reviewed templates (`backend/src/modules/checkins/templates.ts`,

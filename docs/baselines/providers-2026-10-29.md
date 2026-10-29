@@ -12,6 +12,7 @@ Raw: `providers-2026-10-29.json`. English only. Accuracy = mean over runs; sprea
 | ollama/qwen2.5:7b | local | 3 | 33 | 57.6% (54.5%-60.6%) | 41.4%-74.7% | en-untuned: 15/28 / 16/28 / 17/28; en-bank(tuned): 3/5 / 3/5 / 3/5 | 5594 | 0.0% | 0.0% | 0 | 0 | 0 | – | p95 from the clean-latency run (5594 ms; with other jobs on the machine: 6398 ms)
 | ollama/qwen2.5:14b | local | 3 | 33 | 56.6% (54.5%-57.6%) | 39.4%-72.7% | en-untuned: 15/28 / 16/28 / 16/28; en-bank(tuned): 3/5 / 3/5 / 3/5 | 5781 | 0.0% | 0.0% | 2 | 0 | 0 | – |
 | deploy/deepseek-ai/deepseek-v4.1-flash-1017 | B | 3 | 33 | 52.5% (48.5%-54.5%) | 35.4%-69.7% | en-untuned: 13/28 / 15/28 / 15/28; en-bank(tuned): 3/5 / 3/5 / 3/5 | 5136 | 0.0% | 0.0% | 6 | 0 | 87322 | – |
+| deploy/zai-org/glm-5.3-flash [fewshot-hash] | B | 3 | 33 | 52.5% (48.5%-54.5%) | 35.4%-68.7% | en-untuned: 14/28 / 13/28 / 14/28; en-bank(tuned): 4/5 / 3/5 / 4/5 | 3840 | 0.0% | 0.0% | 2 | 0 | 108418 | – | few-shot: hash-bow-256
 | groq/openai/gpt-oss-20b | A | 2 | 33 | 43.9% (36.4%-51.5%) | 28.8%-59.1% | en-untuned: 14/28 / 10/28; en-bank(tuned): 3/5 / 2/5 | 1719 | 0.8% | 0.0% | 8 | 6 | 55469 | 600 |
 | deploy/zai-org/glm-5.3-flash | B | 3 | 33 | 42.4% (36.4%-45.5%) | 27.3%-57.6% | en-untuned: 11/28 / 11/28 / 10/28; en-bank(tuned): 4/5 / 4/5 / 2/5 | 8003 | 0.0% | 0.0% | 21 | 0 | 85572 | – |
 | groq/openai/gpt-oss-120b | A | 2 | 33 | 34.8% (27.3%-42.4%) | 21.2%-50.0% | en-untuned: 12/28 / 7/28; en-bank(tuned): 2/5 / 2/5 | 1446 | 0.0% | 0.0% | 18 | 18 | 42852 | 567 |
@@ -23,11 +24,12 @@ Ranking (group = entries whose intervals overlap: tied):
 3. [group 1] ollama/qwen2.5:7b [fewshot]: 60.6% (CI 45.5%-78.8%), tier local, p95 6264 ms
 4. [group 1] groq/openai/gpt-oss-120b: 34.8% (CI 21.2%-50.0%), tier A, p95 1446 ms
 5. [group 1] groq/openai/gpt-oss-20b: 43.9% (CI 28.8%-59.1%), tier A, p95 1719 ms
-6. [group 1] deploy/zai-org/glm-5.3-flash [fewshot]: 57.6% (CI 39.4%-75.8%), tier B, p95 4141 ms
-7. [group 1] deploy/deepseek-ai/deepseek-v4.1-flash-1017: 52.5% (CI 35.4%-69.7%), tier B, p95 5136 ms
-8. [group 1] deploy/zai-org/glm-5.3-flash: 42.4% (CI 27.3%-57.6%), tier B, p95 8003 ms
+6. [group 1] deploy/zai-org/glm-5.3-flash [fewshot-hash]: 52.5% (CI 35.4%-68.7%), tier B, p95 3840 ms
+7. [group 1] deploy/zai-org/glm-5.3-flash [fewshot]: 57.6% (CI 39.4%-75.8%), tier B, p95 4141 ms
+8. [group 1] deploy/deepseek-ai/deepseek-v4.1-flash-1017: 52.5% (CI 35.4%-69.7%), tier B, p95 5136 ms
+9. [group 1] deploy/zai-org/glm-5.3-flash: 42.4% (CI 27.3%-57.6%), tier B, p95 8003 ms
 
-Ties: ollama/qwen2.5:7b = ollama/qwen2.5:14b = ollama/qwen2.5:7b [fewshot] = groq/openai/gpt-oss-120b = groq/openai/gpt-oss-20b = deploy/zai-org/glm-5.3-flash [fewshot] = deploy/deepseek-ai/deepseek-v4.1-flash-1017 = deploy/zai-org/glm-5.3-flash (tie broken by tier, then p95, then failures + 429s)
+Ties: ollama/qwen2.5:7b = ollama/qwen2.5:14b = ollama/qwen2.5:7b [fewshot] = groq/openai/gpt-oss-120b = groq/openai/gpt-oss-20b = deploy/zai-org/glm-5.3-flash [fewshot-hash] = deploy/zai-org/glm-5.3-flash [fewshot] = deploy/deepseek-ai/deepseek-v4.1-flash-1017 = deploy/zai-org/glm-5.3-flash (tie broken by tier, then p95, then failures + 429s)
 Reference flags: none
 Excluded: none
 
@@ -78,6 +80,7 @@ Accuracy difference with a 95% paired bootstrap interval; an interval that exclu
 | 14b vs 7b | -1.0 pts | -16.2 to 14.1 | no clear difference |
 | 7b few-shot vs 7b | +3.0 pts | -15.2 to 21.2 | no clear difference |
 | GLM few-shot vs GLM | +15.2 pts | 7.1 to 24.2 | better |
+| GLM few-shot (hashed neighbours) vs GLM | +10.1 pts | 3.0 to 17.2 | better |
 | Groq 20b few-shot vs Groq 20b | – | – | not measured (no unthrottled runs) |
 | Groq 20b vs Ollama 7b | -13.6 pts | -32.8 to 4.0 | no clear difference |
 | GLM vs Ollama 7b | -15.2 pts | -34.3 to 4.0 | no clear difference |

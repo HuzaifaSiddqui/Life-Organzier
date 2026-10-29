@@ -6,6 +6,11 @@ Ollama (local) stays the default. Hosted providers are used only when a job's ch
 
 ## Decisions (29 Oct 2026)
 
+- **Cloud fallback only with `CLOUD_FALLBACK=on` (default off).** Chat chain: Ollama → Deploy GLM with few-shot
+  (tier B, masked) → Groq gpt-oss-20b → rules; documents: Ollama → Groq gpt-oss-120b. Masking does not remove what a
+  message is about; the trade-off is spelled out in `docs/rollout.md` → Cloud fallback.
+- Few-shot is a per-provider setting (`fewShot` in `config/provider-order.json`): on for Deploy GLM, off for Ollama.
+
 - **Ollama `qwen2.5:7b` stays the primary and the reference** for chat and documents.
 - Fallback chains (used only when the env names them): **chat** = Ollama → Groq `openai/gpt-oss-20b` (tier A) →
   Deploy `zai-org/glm-5.3-flash` (tier B, masked text only, never leads); **documents** = Ollama → Groq

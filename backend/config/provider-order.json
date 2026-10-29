@@ -1,19 +1,22 @@
 {
  "about": "Chains per job: a decision (29 Oct 2026), not generated. Used only when LLM_PROVIDERS_<JOB> names the providers; unset = today's Ollama path. ai/chains.ts still keeps tier B from leading without LLM_TIER_B_LEAD_APPROVED, from receiving images, and sends masked text to every non-Ollama provider. `npx tsx scripts/bench-providers.ts --rank` rewrites \"ranking\" (the evidence) only.",
- "decided": "2026-10-29: Ollama stays primary and the reference for chat and documents; no hosted vision (DOC_VISION off); no tier B embeddings.",
+ "decided": "2026-10-29: Ollama stays primary and the reference for chat and documents; cloud fallback (any non-Ollama provider) only when CLOUD_FALLBACK=on (default off); few-shot per provider: on for Deploy GLM only; no hosted vision (DOC_VISION off); no tier B embeddings.",
  "chains": {
   "chat": [
    {
     "provider": "ollama",
-    "model": "qwen2.5:7b"
-   },
-   {
-    "provider": "groq",
-    "model": "openai/gpt-oss-20b"
+    "model": "qwen2.5:7b",
+    "fewShot": false
    },
    {
     "provider": "deploy",
-    "model": "zai-org/glm-5.3-flash"
+    "model": "zai-org/glm-5.3-flash",
+    "fewShot": true
+   },
+   {
+    "provider": "groq",
+    "model": "openai/gpt-oss-20b",
+    "fewShot": false
    }
   ],
   "docs": [
@@ -29,7 +32,7 @@
   "vision": []
  },
  "ranking": {
-  "generatedAt": "2026-10-28T21:13:24.936Z",
+  "generatedAt": "2026-10-28T22:49:29.267Z",
   "source": "docs/baselines/providers-2026-10-29.json",
   "chat": {
    "order": [
@@ -115,6 +118,22 @@
     },
     {
      "group": 1,
+     "entry": "deploy/zai-org/glm-5.3-flash [fewshot-hash]",
+     "provider": "deploy",
+     "model": "zai-org/glm-5.3-flash",
+     "condition": "fewshot-hash",
+     "tier": "B",
+     "accuracy": 0.525,
+     "ci95": [
+      0.354,
+      0.687
+     ],
+     "spread": 0.061,
+     "p95": 3840,
+     "availability": 2
+    },
+    {
+     "group": 1,
      "entry": "deploy/zai-org/glm-5.3-flash [fewshot]",
      "provider": "deploy",
      "model": "zai-org/glm-5.3-flash",
@@ -163,7 +182,7 @@
     }
    ],
    "ties": [
-    "ollama/qwen2.5:7b = ollama/qwen2.5:14b = ollama/qwen2.5:7b [fewshot] = groq/openai/gpt-oss-120b = groq/openai/gpt-oss-20b = deploy/zai-org/glm-5.3-flash [fewshot] = deploy/deepseek-ai/deepseek-v4.1-flash-1017 = deploy/zai-org/glm-5.3-flash (tie broken by tier, then p95, then failures + 429s)"
+    "ollama/qwen2.5:7b = ollama/qwen2.5:14b = ollama/qwen2.5:7b [fewshot] = groq/openai/gpt-oss-120b = groq/openai/gpt-oss-20b = deploy/zai-org/glm-5.3-flash [fewshot-hash] = deploy/zai-org/glm-5.3-flash [fewshot] = deploy/deepseek-ai/deepseek-v4.1-flash-1017 = deploy/zai-org/glm-5.3-flash (tie broken by tier, then p95, then failures + 429s)"
    ],
    "excluded": [],
    "flagged": [],

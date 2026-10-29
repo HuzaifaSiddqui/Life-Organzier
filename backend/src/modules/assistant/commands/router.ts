@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { chainConfigured, getChains } from "../../../ai/chains.js";
 import { getAi, type ChatMessage } from "../../../ai/llm.js";
 import { normalizeSpelled } from "../../../lib/spelled.js";
 import { extractEntities, extractTargetDay, extractTimeRange, extractWeekdays } from "../entities.js";
 import { findDateRange } from "./find.js";
+import { bankIndex, loadBank, nearest } from "./neighbours.js";
 import { COMMANDS, getCommand } from "./registry.js";
 import type { Command, CommandArgs, CommandCategory, ParseCtx } from "./types.js";
 
@@ -135,14 +137,18 @@ function adapt(command: Command, words: Record<string, string>): CommandArgs {
 export async function routeWithLlm(text: string, ctx: ParseCtx, examples: RouteExample[] = []): Promise<{ command: string; args: CommandArgs } | null> {
   const ai = getAi();
   if (!ai.enabled || !ai.available) return null;
-  const options = { maxTokens: 60, timeoutMs: 15000 };
-  const first = await ai.json(routerMessages(text, 1, undefined, examples), stage1Schema, { ...options, json: { type: "object", properties: { category: { type: "string", enum: [...CATEGORY_IDS, "none"] } }, required: ["category"] } });
+  // Cloud fallback only: providers marked fewShot get the nearest English bank rows as examples (Ollama does not).
+  const shots = !examples.length && chainConfigured("chat") && getChains().wantsFewShot("chat") ? await fewShotExamples(text) : [];
+  const withShots = (stage: 1 | 2, category?: CommandCategory) => (shots.length ? { fewShotMessages: routerMessages(text, stage, category, shots) } : {});
+  const options = { maxTokens: 60, timeoutMs: 15000, job: "chat" as const };
+  const first = await ai.json(routerMessages(text, 1, undefined, examples), stage1Schema, { ...options, ...withShots(1), json: { type: "object", properties: { category: { type: "string", enum: [...CATEGORY_IDS, "none"] } }, required: ["category"] } });
   if (!first || first.category === "none") return null;
   const names = COMMANDS.filter((c) => c.category === first.category).map((c) => c.name);
   if (!names.length) return null;
   const all: [string, ...string[]] = ["none", ...names];
   const second = await ai.json(routerMessages(text, 2, first.category, examples), stage2Schema(all), {
     ...options,
+    ...withShots(2, first.category),
     maxTokens: 120,
     json: { type: "object", properties: { command: { type: "string", enum: all }, args: { type: "object", additionalProperties: { type: "string" } } }, required: ["command"] },
   });
@@ -156,4 +162,13 @@ export async function routeWithLlm(text: string, ctx: ParseCtx, examples: RouteE
   const args: CommandArgs = rules ?? { ...(command.wrapped ? { text } : {}), ...adapt(command, second.args ?? {}), ...fromParser };
   const valid = command.schema.safeParse(args);
   return valid.success ? { command: command.name, args: valid.data } : null;
+}
+
+/**
+ * The 5 nearest English bank rows for the few-shot providers (the benchmark's --fewshot condition, same kNN:
+ * commands/neighbours.ts). The embedding model when it is up, else the hashed vectors (weaker: shared words only).
+ */
+export async function fewShotExamples(text: string): Promise<RouteExample[]> {
+  const index = await bankIndex(true, loadBank().filter((r) => r.lang === "en"));
+  return (await nearest(text, index, { k: 5 })).map((n) => ({ text: n.row.text, command: n.row.command }));
 }

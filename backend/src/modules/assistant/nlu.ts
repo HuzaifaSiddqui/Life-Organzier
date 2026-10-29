@@ -77,6 +77,21 @@ const CREATE_CUE =
   /\b(?:remind (?:me|us)|let us|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
 const IMPERATIVE_START =
   /^(?:please\s+)?(?:do(?!\s+(?:i|you|we|they|he|she|it|my|your|our|their|u)\b)|call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
+/**
+ * Words that say "make this a task" outright. Narrower than CREATE_CUE: action verbs that are also cues there ("book",
+ * "schedule") are left out, so "book me a taxi" is a bare imperative and "book flights, remind me Friday" is not.
+ */
+const TASK_CUE = /\b(?:remind (?:me|us)|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|set (?:a )?reminder|i will|i'?ll|task)\b/i;
+
+/**
+ * OOS_CONFIRM: a request that starts with a verb but has no task cue and no date, time, duration or repeat ("order a
+ * pizza", "book me a taxi", "call my mother"). The app can't do the action itself; with the flag on it asks "Add it as a
+ * task?" instead of creating one. Deterministic, no verb list of its own (IMPERATIVE_START is the one the rules use).
+ */
+export function bareImperative(text: string, e: { date: unknown; time: unknown; durationMinutes: unknown; frequency: unknown }): boolean {
+  const t = text.trim();
+  return IMPERATIVE_START.test(t) && !TASK_CUE.test(t) && !e.date && !e.time && !e.durationMinutes && !e.frequency;
+}
 const SMALLTALK =
   /^(?:(?:hi|hey|hello)[,!\s]+)?(?:how are you|how(?:'s| is) it going|how do you do|what'?s up|who are you|what are you|are you (?:there|real|a bot|human)|tell me (?:a joke|about yourself)|good (?:night|job)|nice|cool|lol|haha|ok cool)\b/i;
 const ASK_TO_UPDATE =
