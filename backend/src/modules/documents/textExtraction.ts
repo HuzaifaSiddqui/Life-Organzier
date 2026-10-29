@@ -10,7 +10,12 @@ export type TextResult = {
   method: "pdf" | "pdf-ocr" | "docx" | "ocr" | "text";
   warning: string | null;
   needsLanguage: boolean;
+  /** DOC_LAYOUT (images only): the best OCR pass's word boxes, so rows and columns can be rebuilt. */
+  words?: OcrBox[];
 };
+
+/** One OCR word with its box (pixels) and the OCR line it came from. */
+export type OcrBox = { text: string; conf: number; x0: number; y0: number; x1: number; y1: number; line: number };
 
 /** Scanned PDFs: pages read with OCR, and the time allowed for all of them. */
 export const MAX_SCANNED_PAGES = 10;
@@ -117,7 +122,7 @@ export async function preprocessForOcr(buffer: Buffer, strong = false): Promise<
     .toBuffer();
 }
 
-type Pass = { text: string; confidence: number; label: string };
+type Pass = { text: string; confidence: number; label: string; words?: OcrBox[] };
 
 /**
  * OCR with a few variants, keeping the most confident: the preprocessed image with three page-segmentation
@@ -129,8 +134,20 @@ type Pass = { text: string; confidence: number; label: string };
  * job finally starts with less than MIN_OCR_START_MS left, it is refused as busy instead of running past the limit.
  * The image's own budget counts from when the job starts (not from the queue), capped by the deadline.
  */
+/** Word boxes from a recognize() result read with { blocks: true }. */
+function boxes(data: { blocks?: Array<{ paragraphs: Array<{ lines: Array<{ words: Array<{ text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }> }> }> }> | null }): OcrBox[] {
+  const out: OcrBox[] = [];
+  let line = 0;
+  for (const b of data.blocks ?? []) for (const p of b.paragraphs) for (const l of p.lines) {
+    line += 1;
+    for (const w of l.words) if (w.text.trim()) out.push({ text: w.text.trim(), conf: w.confidence, line, ...w.bbox });
+  }
+  return out;
+}
+
 export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAGE_BUDGET_MS, deadline = Infinity): Promise<Pass> {
   const lang = ocrLanguages(language);
+  const layout = process.env.DOC_LAYOUT?.toLowerCase() === "on";
   const prepared = await preprocessForOcr(buffer).catch(() => null);
   const plan: Array<{ image: Buffer; psm: PSM; label: string }> = [
     ...(prepared
@@ -151,11 +168,11 @@ export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAG
     for (const step of plan) {
       if (best.confidence >= 0 && Date.now() - started > budgetMs) break;
       await worker.setParameters({ tessedit_pageseg_mode: step.psm });
-      const { data } = await worker.recognize(step.image);
+      const { data } = layout ? await worker.recognize(step.image, {}, { blocks: true }) : await worker.recognize(step.image);
       // A pass that read (almost) nothing can still report high confidence: it only competes when all did.
       const readable = (data.text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 15;
       const confidence = readable ? Math.round(data.confidence ?? 0) : 0;
-      if (confidence > best.confidence || (confidence === best.confidence && data.text.length > best.text.length)) best = { text: data.text, confidence, label: step.label };
+      if (confidence > best.confidence || (confidence === best.confidence && data.text.length > best.text.length)) best = { text: data.text, confidence, label: step.label, ...(layout ? { words: boxes(data) } : {}) };
       if (best.confidence >= 92) break;
     }
     // Still unsure (grainy photo): a heavier denoise, read as a page and as sparse text.
@@ -164,10 +181,10 @@ export async function ocrImage(buffer: Buffer, language: string, budgetMs = IMAG
       for (const psm of strong ? [PSM.AUTO, PSM.SPARSE_TEXT] : []) {
         if (Date.now() - started > budgetMs) break;
         await worker.setParameters({ tessedit_pageseg_mode: psm });
-        const { data } = await worker.recognize(strong as Buffer);
+        const { data } = layout ? await worker.recognize(strong as Buffer, {}, { blocks: true }) : await worker.recognize(strong as Buffer);
         const readable = (data.text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 15;
         const confidence = readable ? Math.round(data.confidence ?? 0) : 0;
-        if (confidence > best.confidence) best = { text: data.text, confidence, label: `strong/${psm}` };
+        if (confidence > best.confidence) best = { text: data.text, confidence, label: `strong/${psm}`, ...(layout ? { words: boxes(data) } : {}) };
       }
     }
     return best;
@@ -250,7 +267,7 @@ export async function extractText(buffer: Buffer, mimeType: string, fileName: st
   }
   // Images → Tesseract OCR (FR-DP-001 §3)
   const pass = await ocrImage(buffer, language, IMAGE_BUDGET_MS, deadline);
-  return ocrResult(pass.text, pass.confidence, language, "ocr");
+  return { ...ocrResult(pass.text, pass.confidence, language, "ocr"), ...(pass.words ? { words: pass.words } : {}) };
 }
 
 export async function shutdownOcr(): Promise<void> {

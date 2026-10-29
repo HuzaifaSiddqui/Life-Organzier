@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -6,7 +7,9 @@ import { handle, HttpError, parseBody, requireUser } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { applyDocumentItems } from "./applyItems.js";
-import { DOC_TYPES, processDocument } from "./documentProcessing.js";
+import { analyzeDocument, DOC_TYPES, EXTRACTOR_VERSION, processDocument } from "./documentProcessing.js";
+import { extractDeadlines } from "./extraction.js";
+import { DOC_KINDS, docFlag, itemsFromPickedLines } from "./routing.js";
 import { OcrBusyError } from "./textExtraction.js";
 import { SUPPORTED_MIME } from "./textExtraction.js";
 
@@ -152,5 +155,34 @@ documentRouter.post(
     if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
     const { tasks, routines, skipped } = await applyDocumentItems({ userId: req.user.id, tz: req.settings.timezone, deviceId: req.deviceId }, document.id, body);
     sendSuccess(res, { tasks, routines, skipped }, `Created ${tasks.length} tasks and ${routines.length} routines${skipped ? ` (${skipped} already existed)` : ""}`);
+  }),
+);
+
+/** DOC_FALLBACK_UI: review items from lines the user picked in "See what was read". Creates nothing. */
+documentRouter.post(
+  "/:id/pick-lines",
+  handle(async (req, res) => {
+    if (!docFlag("DOC_FALLBACK_UI")) throw new HttpError(404, "NOT_FOUND", "Not found");
+    const body = parseBody(z.object({ lines: z.array(z.string().trim().min(1).max(300)).min(1).max(40) }), req.body);
+    const document = await prisma.document.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+    if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    const deadlines = itemsFromPickedLines(body.lines, document.text, (line) => extractDeadlines(line, new Date(), req.settings.timezone));
+    if (!deadlines) throw new HttpError(400, "VALIDATION_ERROR", "Pick lines from the document's text");
+    sendSuccess(res, { deadlines });
+  }),
+);
+
+/** DOC_ROUTING "Wrong type?": the stored (masked) text read again as the type the user picked. Creates nothing. */
+documentRouter.post(
+  "/:id/reextract",
+  handle(async (req, res) => {
+    if (!docFlag("DOC_ROUTING")) throw new HttpError(404, "NOT_FOUND", "Not found");
+    const body = parseBody(z.object({ kind: z.enum(DOC_KINDS) }), req.body);
+    const document = await prisma.document.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+    if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    const a = await busyAsHttp(analyzeDocument({ text: document.text, fileName: document.fileName, mimeType: "text/plain", docType: document.docType as (typeof DOC_TYPES)[number], language: document.language, tz: req.settings.timezone, kind: body.kind }));
+    const extracted = { deadlines: a.deadlines, schedules: a.schedules, course: a.course, ocrConfidence: document.ocrConfidence ?? a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method, extractorVersion: EXTRACTOR_VERSION, kind: a.kind };
+    await prisma.document.update({ where: { id: document.id }, data: { extracted: extracted as unknown as Prisma.InputJsonValue } });
+    sendSuccess(res, { extracted });
   }),
 );

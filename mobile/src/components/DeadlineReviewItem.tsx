@@ -15,6 +15,10 @@ export type ReviewFlags = {
   rangeStart?: string | null;
   yearInferred?: boolean;
   removedSinceUpload?: boolean;
+  /** DOC_EVIDENCE: false = the AI's source line wasn't found in the document. */
+  verified?: boolean;
+  /** DOC_AGREE: two AI readers found it. */
+  modelsAgree?: boolean;
 };
 
 /** "h:mm AM" (the format the server reads), independent of the phone's locale. */
@@ -62,6 +66,8 @@ export function DeadlineReviewItem({
   if (date && flags.assumedTime) notes.push({ key: "docReview.assumedTime", tone: "warning" });
   if (flags.removedSinceUpload) notes.push({ key: "docReview.removedSinceUpload", tone: "info" });
   if (flags.aiOnly) notes.push({ key: "docReview.aiOnly", tone: "info" });
+  if (flags.verified === false) notes.push({ key: "docReview.unverified", tone: "warning" });
+  if (flags.modelsAgree) notes.push({ key: "docReview.modelsAgree", tone: "info" });
   if (flags.rangeStart) notes.push({ key: "docReview.range", vars: { start: flags.rangeStart }, tone: "info" });
   if (flags.yearInferred) notes.push({ key: "docReview.yearInferred", tone: "info" });
 

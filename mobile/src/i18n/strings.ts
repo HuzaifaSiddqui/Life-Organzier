@@ -21,6 +21,24 @@ const en = {
   "docReview.date": "Date",
   "docReview.time": "Time",
   "docReview.done": "Done",
+  "docReview.unverified": "The AI's source line isn't in the document, so this isn't confirmed. Check it.",
+  "docReview.modelsAgree": "Two AI readers found this. Please still check it.",
+  "docRoute.readAs": "Read as: {kind}",
+  "docRoute.wrongType": "Wrong type? Read it again as:",
+  "docRoute.kind.timetable": "Timetable",
+  "docRoute.kind.schedule": "Schedule, outline or date sheet",
+  "docRoute.kind.notice": "Notice",
+  "docRoute.kind.assignment": "Assignment or exam sheet",
+  "docRoute.kind.other": "Other",
+  "docRoute.otherNote": "This doesn't look like a schedule, so nothing was added automatically.",
+  "docRoute.seeText": "See what was read",
+  "docRoute.hideText": "Hide the text",
+  "docRoute.emptyTitle": "I read this text but found no dates.",
+  "docRoute.emptyHint": "Pick the lines that matter, or add the task yourself.",
+  "docRoute.pickLines": "Pick lines",
+  "docRoute.addManually": "Add manually",
+  "docRoute.pickHelp": "Tap the lines to turn into items. Nothing is created until you confirm.",
+  "docRoute.addPicked": "Review {count} picked lines",
   "common.help": "Help: {title}",
   "common.example": "Example",
   "common.gotIt": "Got it",
@@ -251,7 +269,13 @@ const en = {
 
 export type StringKey = keyof typeof en;
 
-const ur: Record<StringKey, string> = {
+/**
+ * English-only keys until after the FYP evaluation (10 Nov 2026; Urdu is deferred, docs/known-limitations.md): Urdu
+ * shows the English text for these (LocaleProvider falls back to English).
+ */
+type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | "docReview.unverified" | "docReview.modelsAgree">;
+
+const ur: Record<Exclude<StringKey, EnglishOnlyKey>, string> & Partial<Record<EnglishOnlyKey, string>> = {
   "common.retry": "دوبارہ کوشش کریں",
 
   "checkin.started": "شروع کر دیا",
