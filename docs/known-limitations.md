@@ -51,6 +51,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Documents and OCR
 
+- **The AI pass loses a dense chunk's items** (flag `DOC_AI_SPLIT`, off). A chunk with many dates (a date sheet)
+  needs a longer reply than the 500-token / 10-item cap, so the reply is cut mid-JSON and that chunk's AI items are
+  dropped (the rules' items stay). `DOC_AI_SPLIT=on` reads such a chunk in pieces of at most 8 dated lines and halves a
+  piece once if its reply still fails. Gate (29 Oct 2026, Ollama qwen2.5:7b): on the joined English fixtures (dense
+  chunks, AI pass alone) recall 0/67 → 5–8/67, 80–89% precision, but every run hit the 2-minute AI budget, so a long
+  dense sheet is still read only in part; on the document eval recall and precision 82/82 both ways, 0 wrong items
+  reaching auto-create, AI-on p95 per document 29.7 s on vs 29.3–39.3 s off.
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
   directory. Only `eng.traineddata` is committed (`backend/eng.traineddata`, ~5 MB, used when the server is started
   from `backend/`). Every other language offered in the app — including Urdu (`urd`) — is downloaded from the
