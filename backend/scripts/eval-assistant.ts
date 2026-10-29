@@ -18,6 +18,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const baseline = process.argv.includes("--baseline");
 const { classify, parseCtx } = await import("../src/modules/assistant/commands/registry.js");
 const { isPlausibleAnswer } = await import("../src/modules/assistant/commands/pendingAnswer.js");
+const { extractEntities } = await import("../src/modules/assistant/entities.js");
 
 const norm = (v: unknown): unknown =>
   typeof v === "string" ? v.trim().toLowerCase().replace(/\s+/g, " ") : Array.isArray(v) ? v.map(norm) : v;
@@ -52,7 +53,15 @@ function scorePending(file: EvalFile, set: PendingSet): void {
   console.log(failures.length ? `Failures (${failures.length}):\n${failures.join("\n")}` : "No failures.");
 }
 
-function score(file: EvalFile, label: string): void {
+/**
+ * Options for files written outside the registry's arg names (the AI-written held-out set): for intent-level commands
+ * the classifier returns no arguments (the entity extractor reads dates, times and durations afterwards), so `date`,
+ * `time` and `duration` are compared with extractEntities' date.ymd, time and durationMinutes; "none" (no action)
+ * is right when the classifier answers smalltalk or unclear.
+ */
+type ScoreOpts = { entityArgs?: boolean; noneOk?: string[] };
+
+function score(file: EvalFile, label: string, opts: ScoreOpts = {}): void {
   const rows: Row[] = [
     ...(file.messages ?? []).map((m) => ({ id: m.id, lang: m.lang, text: m.text, command: m.intent, alsoOk: m.alsoOk })),
     ...(file.commands ?? []).filter((r) => !r.example),
@@ -67,7 +76,11 @@ function score(file: EvalFile, label: string): void {
   const failures: string[] = [];
   for (const row of rows) {
     const got = classify(row.text, ctx, { baseline });
-    const commandOk = got.command === row.command || (row.alsoOk ?? []).includes(got.command);
+    if (opts.entityArgs && !Object.keys(got.args ?? {}).length) {
+      const e = extractEntities(row.text, ctx.opts);
+      got.args = { ...(e.date?.ymd ? { date: e.date.ymd } : {}), ...(e.time ? { time: e.time } : {}), ...(e.durationMinutes ? { duration: e.durationMinutes } : {}) };
+    }
+    const commandOk = got.command === row.command || (row.alsoOk ?? []).includes(got.command) || (row.command === "none" && (opts.noneOk ?? []).includes(got.command));
     const argProblem = commandOk && got.command === row.command ? argsMatch(row.args, got.args) : null;
     const ok = commandOk && !argProblem;
     for (const [map, key] of [[per, row.command], [perLang, row.lang ?? "?"]] as const) {
@@ -94,4 +107,6 @@ const main = JSON.parse(readFileSync(join(root, "tests/eval/assistant-eval.json"
 score(main, "assistant-eval.json");
 if (main.pending && !baseline) scorePending(main, main.pending);
 score(JSON.parse(readFileSync(join(root, "tests/eval/chat-holdout.json"), "utf8")) as EvalFile, "chat-holdout.json (held out, never tuned on)");
+// AI-written (not real users): reported on its own, never tuned on, never used to choose models.
+score(JSON.parse(readFileSync(join(root, "tests/eval/chat-heldout-ai-written.json"), "utf8")) as EvalFile, "chat-heldout-ai-written.json (AI-written held out, never tuned on)", { entityArgs: true, noneOk: ["smalltalk", "unclear"] });
 process.exit(0);
