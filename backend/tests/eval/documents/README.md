@@ -37,6 +37,19 @@ means the item should be found but left undated for review (e.g. a week number w
 
 ## Your own documents (private)
 
-Put real files (PDF, DOCX, JPG/PNG, TXT) in `private/` with a `private/manifest.json` in the same format, then run
-`npm run eval:documents -- --private`. The folder is gitignored and the report is written to
-`private/results.md`, never to `docs/`.
+Put real files (PDF, DOCX, JPG/PNG, TXT) in `private/`, then:
+
+1. `npm run docs:manifest-template` writes a **blank** `private/manifest.json` listing every file there (nothing is
+   read from the documents or the pipeline; `-- --force` replaces an existing one).
+2. Fill it in yourself: `now` (the date the documents are read as), and per document `docType`, the items that
+   **should** be created (`expectedDeadlines`: title, date, optional time and kind; `expectedSchedules` for
+   timetables) and the dates that **should not** become items (`shouldNotCreate`: date, reason, optional title).
+   The file's `help` block explains each field.
+3. `npm run eval:documents -- --private` (add `--ai` for the model). The report, `private/results.md`, has recall and
+   precision per document and overall, wrong items reaching auto-create, and should-not items that were extracted.
+
+How items are matched: `title` is a word match (every word of 3+ letters must appear in the extracted title, any
+order, case ignored; a 5+ letter word may be one letter off, for OCR slips); `date` is exact (YYYY-MM-DD); `time`, when
+given, is compared as a clock time (4 PM = 16:00); classes need the same set of days and start time. `kind` is
+reported, not scored. Blank template rows are ignored. The folder is git-ignored: files, manifest and results never
+leave this machine and are never committed.
