@@ -51,6 +51,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Documents and OCR
 
+- **Document routing flags (all off): `DOC_FALLBACK_UI`, `DOC_ROUTING`, `DOC_PRIORITY_V2`, `DOC_EVIDENCE`,
+  `DOC_LAYOUT`, `DOC_AGREE`.** Gate so far (29 Oct 2026): with AI off every flag equals the baseline (82/82 recall and
+  precision, 0 wrong items reaching auto-create). With AI on, `DOC_AGREE` **failed** the latency gate (the second,
+  14b model next to 7b made a 16 GB machine swap: 2 h 12 min for the text fixtures against about 15 min) and the other
+  flags' AI-on runs are **not measured yet** (the laptop slept during them). `DOC_PRIORITY_V2` changes 27 of 65 fixture
+  items' priority (mostly far-off items down a level) and has no ground truth to score against. "Wrong type?" re-reads
+  the stored text, so a timetable read by position from a photo or PDF grid loses that layout when re-read. Copy for
+  the new screens is English only until after 10 Nov 2026.
 - **OCR languages.** tesseract.js downloads language data on first use and caches it in the backend's working
   directory. Only `eng.traineddata` is committed (`backend/eng.traineddata`, ~5 MB, used when the server is started
   from `backend/`). Every other language offered in the app — including Urdu (`urd`) — is downloaded from the
