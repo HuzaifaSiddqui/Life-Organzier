@@ -26,6 +26,12 @@ memory extraction, sub-task names, topics), while **dates, clarity scoring, sche
 reminders, patterns and safety are deterministic code**. If Ollama is down, a circuit breaker
 skips it and the assistant keeps working on rules.
 
+**Rule fixes (off by default; `CHAT_FIXES_V2`).** General fixes for classes of confident rule mistakes
+(`assistant/chatFixes.ts`, the repeat and habit checks in `entities.ts`, clause reading in `nlu.ts`, search words in
+`commands/find.ts`, and a lookup layer in `handlers.ts` that resolves "the X" against the user's own tasks and
+routines). Each fix only withdraws an action or hands it to a matching item; what it can't settle becomes "unsure".
+Status: built and unit-tested on new sentences; turned on only after it passes on new rows.
+
 **Cloud fallback (off by default; `docs/rollout.md`).** With `CLOUD_FALLBACK=on` and `LLM_PROVIDERS_CHAT` set, the
 router's model calls go through a hosted chain (`backend/src/ai/chains.ts`, order in `config/provider-order.json`):
 Ollama → Deploy GLM-5.3-flash (tier B, masked text, few-shot: the 5 nearest English bank rows) → Groq gpt-oss-20b

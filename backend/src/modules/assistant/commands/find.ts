@@ -1,4 +1,5 @@
 import { isWhatsapp } from "../channel.js";
+import { chatFixesOn } from "../chatFixes.js";
 import type { Priority } from "@prisma/client";
 import { normalizeSpelled } from "../../../lib/spelled.js";
 import { truncate } from "../../../lib/text.js";
@@ -74,6 +75,9 @@ export function parseFindQuery(text: string, ctx: ParseCtx): FindFilter | null {
   return null;
 }
 
+/** CHAT_FIXES_V2 (F): words that rank or time a question, not what it is about ("my most urgent task right now"). */
+const FILLER = new Set(["most", "least", "right", "now", "latest", "current", "currently", "top", "main", "biggest", "first"]);
+
 function filterFrom(said: string, about: string, ctx: ParseCtx, place?: boolean): FindFilter | null {
   const lower = said.toLowerCase();
   const tag = /#([\p{L}\p{N}_-]{1,40})/u.exec(about)?.[1]?.toLowerCase();
@@ -83,7 +87,7 @@ function filterFrom(said: string, about: string, ctx: ParseCtx, place?: boolean)
     .toLowerCase()
     .split(/[\s,]+/)
     .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
-    .filter((w) => w.length >= 2 && !NOT_A_TERM.has(w));
+    .filter((w) => w.length >= 2 && !NOT_A_TERM.has(w) && !(chatFixesOn() && FILLER.has(w)));
   if (!terms.length && !tag) return null;
   const range = findDateRange(said, ctx);
   const priority: Priority | undefined = /\burgent\b/.test(lower) ? "URGENT" : /\b(?:high priority|important)\b/.test(lower) ? "HIGH" : /\blow priority\b/.test(lower) ? "LOW" : undefined;

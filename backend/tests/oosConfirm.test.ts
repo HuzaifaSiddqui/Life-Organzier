@@ -47,3 +47,28 @@ test("OOS_CONFIRM: on, a bare imperative asks and creates nothing; the button st
     await prisma.user.delete({ where: { id: user.id } });
   }
 });
+
+test("OOS_NOTE: the task flow is unchanged, the reply says plainly what the app can't do; ordinary to-dos get no note", { skip: !dbAvailable && "no database" }, async () => {
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, tier: "PRO" } });
+  const keep = process.env.OOS_NOTE;
+  const send = async (text: string) =>
+    (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text, payload: null, label: null })).message;
+  try {
+    process.env.OOS_NOTE = "on";
+    const call = await send("phone the electrician tomorrow at 11 am");
+    assert.match(call.content, /^I can't place calls myself/);
+    assert.ok((call.actions ?? []).some((a) => a.label === "Undo"), "Undo stays");
+    assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1, "the task is created as before");
+    const milk = await send("buy printer paper tomorrow at 5 pm");
+    assert.doesNotMatch(milk.content, /can't .* myself/, "an ordinary to-do: no note");
+    delete process.env.OOS_NOTE;
+    const off = await send("phone the landlord tomorrow at 10 am");
+    assert.doesNotMatch(off.content, /can't .* myself/, "flag off: unchanged");
+  } finally {
+    if (keep === undefined) delete process.env.OOS_NOTE;
+    else process.env.OOS_NOTE = keep;
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});

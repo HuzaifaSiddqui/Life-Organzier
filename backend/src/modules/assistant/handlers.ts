@@ -55,6 +55,7 @@ import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAU
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
 import { bareImperative } from "./nlu.js";
+import { chatFixesOn, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
@@ -79,15 +80,86 @@ function outOfScopeConfirm(u: Understanding, text: string): Out | null {
   return { content: "I can't do that myself. Add it as a task?", actions: [sayAction("Add as a task", "create_task", `remind me to ${text.trim()}`)], intent: "out_of_scope" };
 }
 
+/**
+ * OOS_NOTE (default off; the lighter alternative to OOS_CONFIRM): the task is still created, but when the request is
+ * an action the app can't carry out itself, the reply says so plainly ("I can't place calls myself, so I've added it as
+ * a task"); the task's Undo button stays. Ordinary to-dos ("buy milk") get no note.
+ */
+const CANT_DO: Array<[RegExp, string]> = [
+  [/^(?:please\s+)?(?:send|text|message|whatsapp)\b/i, "send messages"],
+  [/^(?:please\s+)?email\b/i, "send emails"],
+  [/^(?:please\s+)?(?:call|ring|phone)\b/i, "place calls"],
+  [/^(?:please\s+)?(?:book|reserve)\b/i, "make bookings"],
+  [/^(?:please\s+)?order\b/i, "place orders"],
+  [/^(?:please\s+)?play\b/i, "play media"],
+  [/^(?:please\s+)?translate\b/i, "translate"],
+  [/^(?:please\s+)?(?:turn|switch)\s+(?:on|off)\b/i, "control devices"],
+];
+function cantDoNote(text: string): string | null {
+  if (process.env.OOS_NOTE?.toLowerCase() !== "on" || TASK_CUE.test(text)) return null;
+  const hit = CANT_DO.find(([re]) => re.test(text.trim()));
+  return hit ? `I can't ${hit[1]} myself, so I'll keep it as a task for you.` : null;
+}
+
+/** Words that name an action or a time, not which routine ("took my pills" → "pills"). */
+const ROUTINE_REF_NOISE = new Set(["took", "take", "did", "do", "done", "finish", "finished", "went", "go", "move", "moved", "session", "today", "tonight", "morning", "evening", "afternoon", "routine", "habit"]);
+
+/**
+ * CHAT_FIXES_V2: the user's one active routine this reference names (its words all appear in the routine's title), or
+ * null when none or more than one does. Used only when no task matches, so a task always wins.
+ */
+async function routineNamed(userId: string, ref: string): Promise<{ id: string; title: string } | null> {
+  const words = contentTokens(ref).filter((w) => w.length >= 3 && !ROUTINE_REF_NOISE.has(w));
+  if (!words.length) return null;
+  const routines = await prisma.routine.findMany({ where: { userId, active: true }, select: { id: true, title: true } });
+  const hits = routines.filter((r) => {
+    const title = new Set(contentTokens(r.title));
+    return words.every((w) => title.has(w));
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** No open task matches this reference (not even as a choice). */
+async function noTaskFor(turn: Turn, ref: string, includeCompleted = false): Promise<boolean> {
+  const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { includeCompleted, listed: turn.state.listed });
+  return !r.task && !r.candidates.length;
+}
+
+/** CHAT_FIXES_V2 (C): a change said about an existing task ("the meeting is now at 3pm instead", "make the X 45 minutes long"). */
+const CHANGE_CUE = /\b(?:now|instead|anymore|moved|rescheduled|long)\b/i;
+
 export async function handleIntent(turn: Turn, u: Understanding, text: string): Promise<Out> {
   if (u.intent === "create_task" || u.intent === "create_routine") {
     const ask = outOfScopeConfirm(u, text);
     if (ask) return ask;
   }
+  if (chatFixesOn() && u.intent === "create_task" && !TASK_CUE.test(text) && CHANGE_CUE.test(text) && u.targetRef) {
+    // C: a change to a task the user already has: ask instead of adding a duplicate.
+    const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { listed: turn.state.listed });
+    if (r.task) {
+      focusOn(turn, r.task.id);
+      return {
+        content: `Change "${r.task.title}", or add a new task?`,
+        actions: [commandAction(`Change "${truncate(r.task.title, 24)}"`, "update_task", { text, ref: r.task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
+        intent: "change_or_new",
+      };
+    }
+  }
+  if (chatFixesOn() && (u.intent === "complete_task" || u.intent === "update_task") && u.targetRef && (await noTaskFor(turn, u.targetRef, u.intent === "update_task"))) {
+    // E / h-102: no task by that name, but a routine: done today, or moved once.
+    const routine = await routineNamed(turn.user.id, u.targetRef);
+    if (routine) {
+      if (u.intent === "complete_task") return runCommand(turn, "routine_complete_today", { routineId: routine.id, ref: routine.title }, { text });
+      const parsed = getCommand("routine_reschedule_once")?.parse(text, parseCtx(extractOpts(turn))) ?? {};
+      return runCommand(turn, "routine_reschedule_once", { ...parsed, routineId: routine.id, ref: routine.title }, { text });
+    }
+  }
   switch (u.intent) {
     case "create_task": {
       if (u.mood?.explicit && !u.entities.date && !u.entities.time) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       const out = await proceedWithDraft(turn, startTaskDraft(turn, u, text), turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
+      const note = cantDoNote(text);
+      if (note && (out.intent === "task_created" || out.intent === "clarify")) out.content = `${note}\n${out.content}`;
       if (u.mood?.explicit && out.intent === "task_created") {
         out.content += `\nI also sense you're ${u.mood.mood}. Want a quick 2-minute breathing break before you start?`;
         out.actions = [{ label: "Breathing break", payload: { type: "breathing", minutes: 2 } }, ...(out.actions ?? [])];

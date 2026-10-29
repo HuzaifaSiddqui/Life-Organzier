@@ -1,4 +1,5 @@
 import { Priority, RoutineFrequency, RoutinePriority, TaskType } from "@prisma/client";
+import { chatFixesOn } from "./chatFixes.js";
 import {
   addDaysYmd,
   diffDaysYmd,
@@ -434,13 +435,17 @@ function extractDuration(cur: Cursor): number | null {
 }
 
 function extractFrequency(cur: Cursor, todayYmd: string): { frequency: RoutineFrequency | null; days: number[] | null; dayOfMonth: number | null } {
-  let m = cur.take(/\b(?:every\s*day|everyday|daily|each day|every (?:morning|evening|night|afternoon)|each (?:morning|evening|night))\b/i);
+  // CHAT_FIXES_V2 (A): "monthly report … friday", "weekly quiz on the 12th": an adjective, not a repeat, when the
+  // message also names a specific day or date. "daily standup at 9" (no date) is still a repeat.
+  const adjective = chatFixesOn() && /\b(?:daily|weekly|monthly)\s+(?!on\b|at\b|basis\b|from\b)[a-z]{3,}/i.test(cur.text) && new RegExp(`\\b${WEEKDAY_RE}\\b|\\b(?:today|tomorrow|tonight)\\b|\\b\\d{1,2}(?:st|nd|rd|th)\\b`, "i").test(cur.text);
+  let m = adjective ? null : cur.take(/\b(?:every\s*day|everyday|daily|each day|every (?:morning|evening|night|afternoon)|each (?:morning|evening|night))\b/i);
   if (m) {
     const part = m[0].match(/morning|evening|night|afternoon/i);
     if (part) cur.text = `${cur.text} ${part[0]}`.trim();
     return { frequency: RoutineFrequency.DAILY, days: null, dayOfMonth: null };
   }
-  m = cur.take(/\b(?:every\s+|on\s+)?weekdays\b/i);
+  // CHAT_FIXES_V2 (B): "every weekday" / "each weekday" is Monday to Friday, like "weekdays".
+  m = cur.take(chatFixesOn() ? /\b(?:every\s+|on\s+)?weekdays\b|\b(?:every|each)\s+weekday\b/i : /\b(?:every\s+|on\s+)?weekdays\b/i);
   if (m) return { frequency: RoutineFrequency.CUSTOM, days: [1, 2, 3, 4, 5], dayOfMonth: null };
   m = cur.take(/\b(?:every|on)\s+weekends?\b|(?<!(?:this|next)\s)\bweekends\b/i);
   if (m) return { frequency: RoutineFrequency.CUSTOM, days: [0, 6], dayOfMonth: null };
@@ -461,9 +466,9 @@ function extractFrequency(cur: Cursor, todayYmd: string): { frequency: RoutineFr
     const d = WEEKDAY_NAMES[word];
     if (d !== undefined) return { frequency: RoutineFrequency.WEEKLY, days: [d], dayOfMonth: null };
   }
-  m = cur.take(/\b(?:weekly|every week|once a week)\b/i);
+  m = adjective ? null : cur.take(/\b(?:weekly|every week|once a week)\b/i);
   if (m) return { frequency: RoutineFrequency.WEEKLY, days: [weekdayOfYmd(todayYmd)], dayOfMonth: null };
-  m = cur.take(/\b(?:monthly|every month|once a month)(?:\s+on\s+the\s+(\d{1,2})(?:st|nd|rd|th)?)?\b/i);
+  m = adjective ? null : cur.take(/\b(?:monthly|every month|once a month)(?:\s+on\s+the\s+(\d{1,2})(?:st|nd|rd|th)?)?\b/i);
   if (m) return { frequency: RoutineFrequency.MONTHLY, days: null, dayOfMonth: m[1] ? Number(m[1]) : Number(todayYmd.slice(8, 10)) };
   m = cur.take(/\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\s+of\s+every\s+month\b/i);
   if (m) return { frequency: RoutineFrequency.MONTHLY, days: null, dayOfMonth: Number(m[1]) };
@@ -767,7 +772,9 @@ const DEADLINE_RE = /\b(by|due|deadline|submit|submission|assignment|hand in|tur
 const DURATION_ACTIVITY_RE = /\b(study|studying|revise|revision|practice|read|write|writing|work on|research|prepare|prep|code|coding|learn|review)\b/i;
 
 export function isHabitLike(text: string): boolean {
-  return HABIT_RE.test(text);
+  // CHAT_FIXES_V2 (A): a habit word that only modifies the request ("order a pizza for dinner", "call him after
+  // lunch") doesn't make it a routine; "take my medicine after dinner" still is one ("medicine").
+  return HABIT_RE.test(chatFixesOn() ? text.replace(new RegExp(`\\b(?:for|at|after|before|during|with|over)\\s+(?:the\\s+|my\\s+)?${HABIT_RE.source.slice(2, -2)}\\b`, "gi"), " ") : text);
 }
 
 /** Task type classification (FR-TM-001 §4). */

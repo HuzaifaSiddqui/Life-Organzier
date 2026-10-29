@@ -4,6 +4,7 @@ import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { parseQuery } from "./queries.js";
 import { parseSnooze } from "../whatsapp/snooze.js";
+import { applyChatFixes, chatFixesOn, TASK_CUE } from "./chatFixes.js";
 import { cleanTitle, extractEntities, isHabitLike, parseLocationCommand, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -77,11 +78,6 @@ const CREATE_CUE =
   /\b(?:remind (?:me|us)|let us|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
 const IMPERATIVE_START =
   /^(?:please\s+)?(?:do(?!\s+(?:i|you|we|they|he|she|it|my|your|our|their|u)\b)|call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
-/**
- * Words that say "make this a task" outright. Narrower than CREATE_CUE: action verbs that are also cues there ("book",
- * "schedule") are left out, so "book me a taxi" is a bare imperative and "book flights, remind me Friday" is not.
- */
-const TASK_CUE = /\b(?:remind (?:me|us)|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|set (?:a )?reminder|i will|i'?ll|task)\b/i;
 
 /**
  * OOS_CONFIRM: a request that starts with a verb but has no task cue and no date, time, duration or repeat ("order a
@@ -274,10 +270,30 @@ export const NLU_LLM_OPTIONS = { json: LLM_JSON_SCHEMA, maxTokens: 80, timeoutMs
 export { llmSchema as NLU_LLM_SCHEMA, LLM_INTENTS };
 
 /** Rules only: no LLM, no I/O (the chat command registry and the eval script use it). */
+/** Results that say little about what the user asked for: a clause with a specific intent may replace them. */
+const WEAK_INTENTS = new Set<string>(["create_task", "unclear", "smalltalk", "switch_context", "provide_info"]);
+
+/**
+ * CHAT_FIXES_V2 (G): "finally home, undo that", "on the bus, snooze it for 20 minutes": a status clause in front of the
+ * instruction. When the whole message gives only a weak result, each clause is read too (the last one first) and the
+ * first with a specific intent decides.
+ */
+function clauseIntent(text: string, opts: ExtractOptions, base: { intent: Intent; confidence: number }): { intent: Intent; confidence: number } {
+  if (!WEAK_INTENTS.has(base.intent)) return base;
+  const clauses = text.split(/\s*[,;]\s*|\.\s+|\s+(?:so|but|and then)\s+/i).map((c) => c.trim()).filter((c) => c.split(/\s+/).length >= 2);
+  if (clauses.length < 2) return base;
+  for (const clause of [...clauses].reverse()) {
+    const r = rulesIntent(clause, extractEntities(clause, opts), detectMood(clause));
+    if (!WEAK_INTENTS.has(r.intent)) return r;
+  }
+  return base;
+}
+
 export function rulesUnderstand(text: string, opts: ExtractOptions): Understanding {
   const entities = extractEntities(text, opts);
   const mood = detectMood(text);
-  const rule = rulesIntent(text, entities, mood);
+  const base = rulesIntent(text, entities, mood);
+  const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, clauseIntent(text, opts, base)) : base;
   const contextMatch = text.match(SWITCH_CONTEXT);
   return {
     intent: rule.intent,
@@ -299,7 +315,8 @@ export async function understand(
 ): Promise<Understanding> {
   const entities = extractEntities(text, opts);
   const mood = detectMood(text);
-  const rule = rulesIntent(text, entities, mood);
+  const base = rulesIntent(text, entities, mood);
+  const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, clauseIntent(text, opts, base)) : base;
   let intent = rule.intent;
   let confidence = rule.confidence;
   let source: Understanding["source"] = "rules";

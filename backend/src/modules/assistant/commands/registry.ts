@@ -1,4 +1,5 @@
 import { localYmd } from "../../../lib/time.js";
+import { chatFixesOn } from "../chatFixes.js";
 import type { ExtractOptions } from "../entities.js";
 import { rulesUnderstand } from "../nlu.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
@@ -32,6 +33,20 @@ export function parseCtx(opts: ExtractOptions): ParseCtx {
 
 /** First new (non-wrapped) command whose rules accept the text. */
 export function matchCommand(text: string, ctx: ParseCtx): { command: Command; args: CommandArgs } | null {
+  const whole = matchWhole(text, ctx);
+  if (whole || !chatFixesOn()) return whole;
+  // CHAT_FIXES_V2 (G): "i'm in a meeting, mute everything for an hour": a status clause and an instruction. When the
+  // whole message matches nothing, the clause that is a command decides (the last one first).
+  const clauses = text.split(/\s*[,;]\s*|\.\s+|\s+(?:so|but|and then)\s+/i).map((c) => c.trim()).filter((c) => c.split(/\s+/).length >= 2);
+  if (clauses.length < 2) return null;
+  for (const clause of [...clauses].reverse()) {
+    const hit = matchWhole(clause, ctx);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function matchWhole(text: string, ctx: ParseCtx): { command: Command; args: CommandArgs } | null {
   for (const command of COMMANDS) {
     if (command.wrapped) continue;
     const args = command.parse(text, ctx);
