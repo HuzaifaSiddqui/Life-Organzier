@@ -96,7 +96,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   to the rules, and the AI's correct dates were rejected because the date check could not find them in the text;
   rows under a "Date Sheet" heading were also skipped unless each said "exam". Reported on the phone (a mid-term
   date sheet photo: 0 items). With the flag on, made-up sheets of that shape give every exam
-  (`tests/dateSheet.test.ts`); a badly OCR'd ruled table still gives rough titles and may miss times (`DOC_LAYOUT`).
+  (`tests/dateSheet.test.ts`); a phone screenshot with a black border lost most of its text to OCR (125 characters; 471 with the border cut),
+  and a sheet with no heading at all (only rows of course, date and time range) gave nothing. With the flag on, such a
+  sheet gives one reviewed exam per row; a badly OCR'd ruled table can still give rough titles.
 - **The AI pass loses a dense chunk's items** (flag `DOC_AI_SPLIT`, off). A chunk with many dates (a date sheet)
   needs a longer reply than the 500-token / 10-item cap, so the reply is cut mid-JSON and that chunk's AI items are
   dropped (the rules' items stay). `DOC_AI_SPLIT=on` reads such a chunk in pieces of at most 8 dated lines and halves a

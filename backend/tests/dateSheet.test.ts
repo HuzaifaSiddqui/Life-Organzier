@@ -43,3 +43,27 @@ test("DOC_DATESHEET: rows under a date-sheet heading are exams, without the week
   });
   withFlag(false, () => assert.equal(extractDeadlines(SHEET, now, tz).length, 0, "off: unchanged"));
 });
+
+// Made-up OCR of a headingless sheet: course_class_teacher on one or two lines, then date and time range.
+const HEADINGLESS = [
+  "Class: XX24-ABC-A",
+  "11111 2222 Data Structures and",
+  "Algorithms_XX24-ABC-A_Teacher One (VF) p . 04-Nov-2026 13:00-16:00",
+  "11112 2223 Operating Systems_XX24-ABC-A_Teacher Two",
+  "(CS) 06-Nov-2029 9:00-12:00",
+  "11113 2224 Computer Networks_XX24-ABC-A_Teacher Three(CS) 09-Nov-2026 13:00-1600",
+].join("\n");
+
+test("DOC_DATESHEET: a headingless sheet (date + time range rows) gives reviewed exams with course titles", () => {
+  withFlag(true, () => {
+    const d = extractDeadlines(HEADINGLESS, now, tz);
+    assert.deepEqual(d.map((x) => [x.title, x.date, x.time]), [
+      ["Data Structures and Algorithms", "2026-11-04", "1 PM"],
+      ["Operating Systems", "2026-11-06", "9 AM"], // OCR "2029" among 2026s
+      ["Computer Networks", "2026-11-09", "1 PM"],
+    ]);
+    assert.ok(d.every((x) => x.review && x.confidence < 80), "inferred from layout: reviewed, never auto-created");
+    assert.equal(extractDeadlines("Lecture 04-Nov-2026 13:00-16:00", now, tz).length, 0, "one row is not a sheet");
+  });
+  withFlag(false, () => assert.equal(extractDeadlines(HEADINGLESS, now, tz).length, 0, "off: unchanged"));
+});
