@@ -69,7 +69,9 @@ test("A: no repeat without a real repeat cue", () => {
   assert.notEqual(understood("prepare the weekly newsletter on thursday", true).intent, "create_routine", "an adjective with a date is a one-off");
   assert.equal(understood("daily standup at 9", true).intent, "create_routine", "no date: still a repeat");
   assert.notEqual(understood("buy samosas for lunch", true).intent, "create_routine", "a meal word as a modifier");
-  assert.equal(understood("take my vitamins after breakfast", true).intent, "create_routine", "the habit itself");
+  // Guard 1 (fix/chat-guards): a habit word alone is not a repeat; "every morning" / "daily" is.
+  assert.notEqual(understood("take my vitamins after breakfast", true).intent, "create_routine", "a habit word alone");
+  assert.equal(understood("take my vitamins every morning after breakfast", true).intent, "create_routine", "with a repeat cue");
 });
 
 test("B: every weekday is Monday to Friday", () => {

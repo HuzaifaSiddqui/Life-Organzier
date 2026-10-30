@@ -5,6 +5,7 @@ import { parseCheckinStyle } from "../checkins/style.js";
 import { parseQuery } from "./queries.js";
 import { parseSnooze } from "../whatsapp/snooze.js";
 import { applyChatFixes, chatFixesOn, TASK_CUE } from "./chatFixes.js";
+import { explicitRoutine } from "./guards.js";
 import { cleanTitle, extractEntities, isHabitLike, parseLocationCommand, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -42,6 +43,9 @@ export type Understanding = {
   confidence: number;
   /** Confidence of the rules alone (below 0.75 the rules were unsure). */
   ruleConfidence: number;
+  /** The rules' intent, and (CHAT_FIXES_V2) the intent a rule fix withdrew, if any. */
+  ruleIntent?: string;
+  withdrawnFrom?: string | null;
   source: "rules" | "llm";
   entities: Entities;
   title: string;
@@ -171,7 +175,7 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   }
   if (mood && !e.date && !e.time) return { intent: "log_mood", confidence: mood.confidence * 0.9 };
   if (e.frequency) return { intent: "create_routine", confidence: 0.85 };
-  if (isHabitLike(t) && !e.date && !e.timeExplicit && words <= 6 && !/\b(?:remind me|today|tomorrow)\b/i.test(t)) {
+  if (isHabitLike(t) && (!chatFixesOn() || explicitRoutine(t)) && !e.date && !e.timeExplicit && words <= 6 && !/\b(?:remind me|today|tomorrow)\b/i.test(t)) {
     return { intent: "create_routine", confidence: 0.8 };
   }
   if (PROVIDE_INFO.test(t) && !e.date && !e.timeExplicit && !CREATE_CUE.test(t) && !IMPERATIVE_START.test(t)) return { intent: "provide_info", confidence: 0.8 };
@@ -181,7 +185,7 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
     const strong = Boolean(e.date || e.time || /\b(?:remind me|add|create|todo|task)\b/i.test(t) || IMPERATIVE_START.test(t));
     return { intent: "create_task", confidence: strong ? 0.85 : 0.6 };
   }
-  if (isHabitLike(t) && words <= 5) return { intent: "create_routine", confidence: 0.6 };
+  if (isHabitLike(t) && (!chatFixesOn() || explicitRoutine(t)) && words <= 5) return { intent: "create_routine", confidence: 0.6 };
   if (QUESTION.test(t)) return { intent: "smalltalk", confidence: 0.4 };
   if (words <= 3) return { intent: "create_task", confidence: 0.4 };
   return { intent: "unclear", confidence: 0.2 };
@@ -342,7 +346,8 @@ export async function understand(
   const entities = extractEntities(focus ?? text, opts);
   const mood = detectMood(text);
   const base = rulesIntent(focus ?? text, entities, mood);
-  const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, clauseIntent(text, opts, base)) : base;
+  const pre = chatFixesOn() ? clauseIntent(text, opts, base) : base;
+  const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, pre) : base;
   let intent = rule.intent;
   let confidence = rule.confidence;
   let source: Understanding["source"] = "rules";
@@ -380,6 +385,8 @@ export async function understand(
     intent,
     confidence,
     ruleConfidence: rule.confidence,
+    ruleIntent: rule.intent,
+    withdrawnFrom: "fix" in rule && rule.fix ? pre.intent : null,
     source,
     entities,
     title,

@@ -76,7 +76,7 @@ Class-test per class (correct of n; AI off before → after | chain before → a
 H 5: 1→1 | 1→1 · A 3: 3→3 | 3→3 · B 3: 2→3 | 2→3 · C 4: 0→1 | 1→2 · G 3: 0→0 | 0→0 · I 3: 0→0 | 0→0 · F 2: 2→2 | 2→2 ·
 routine moves 2: 1→2 | 1→2.
 
-### Clear bugs (shown to the owner first; not fixed)
+### Clear bugs (shown to the owner; guarded in fix/chat-guards behind `CHAT_FIXES_V2`, off)
 
 1. **A habit word alone creates a routine** (harmful): "booked the team lunch, tick it off" (n-069) and "play my
    workout playlist" (n-100) create routines. Proposal: no routine without an explicit repeat cue; otherwise a task,
@@ -88,6 +88,15 @@ routine moves 2: 1→2 | 1→2.
 3. **"notifications" goes to a task's reminder mode**: "turn off notifications for 2 hours" (n-032), "mute
    notifications for 90 minutes" (n-087) → task_reminder_mode. Proposal: notification / mute / do-not-disturb words
    reach the settings commands before task commands.
+
+Guards (`assistant/guards.ts`, approved 30 Oct 2026): (1) a routine needs a repeat cue (every, each, daily, weekly,
+weekdays, weekends, plural days) or "routine/habit" with a create verb; (2a) after a rule fix withdrew an intent, the
+model may only choose within that intent's family (tasks and routines are one family); (2b) a negation (not, no,
+can't, cannot, won't, don't, n't, skip, stop) forbids every complete-type command; (2c) undo never comes from the
+model; (2d) a state-changing command the model chose is previewed as one "Did you mean this?" button, never run
+directly; (3) muting notifications with no task named is Do Not Disturb (any clause), and a model's
+task_reminder_mode goes to Do Not Disturb when that parser accepts the text. Tests: `tests/chatGuards.test.ts`
+(tables, plus the reported sentences against a model that always gives the bad answer).
 
 ### Fix weaknesses (proposals, to test on new rows)
 
