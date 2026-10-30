@@ -270,6 +270,25 @@ export const NLU_LLM_OPTIONS = { json: LLM_JSON_SCHEMA, maxTokens: 80, timeoutMs
 export { llmSchema as NLU_LLM_SCHEMA, LLM_INTENTS };
 
 /** Rules only: no LLM, no I/O (the chat command registry and the eval script use it). */
+/** Words that make a sentence a request (a routine, a repeat, a task cue), not background. */
+const REQUEST_CUE = /\b(?:routine|habit|every\s*day|everyday|daily|weekly|every|each|remind me|add|todo|to-do|need to|have to|schedule|book)\b/i;
+/** Sentences that only tell the assistant about the user ("I am a student", "currently I work at…"). */
+const BACKGROUND = /^(?:i\s+am\s+(?:a|an)\b|i'?m\s+(?:a|an)\b|currently\b|i\s+(?:usually|normally)\b|i\s+work\b|my name\b)/i;
+
+/**
+ * CHAT_FIXES_V2: in a message of several sentences ("I am a student… I usually finish at 3 pm. I have a routine to go
+ * to the office at 4 pm every day except Saturday and Sunday"), the sentence that carries the request: its title,
+ * time and days are read from it alone, not from the background around it. Null when there is one sentence or no
+ * clear winner (the whole message is read, as before).
+ */
+export function requestClause(text: string): string | null {
+  const parts = text.split(/(?<=[.!?])\s+|\n+/).map((p) => p.trim().replace(/[,;]\s*$/, "")).filter((p) => p.split(/\s+/).length >= 2);
+  if (parts.length < 2) return null;
+  const score = (p: string) => (REQUEST_CUE.test(p) ? 2 : 0) + (/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(p) ? 1 : 0) - (BACKGROUND.test(p) ? 2 : 0);
+  const ranked = parts.map((p) => ({ p, s: score(p) })).sort((a, b) => b.s - a.s);
+  return ranked[0].s >= 2 && (ranked.length < 2 || ranked[0].s > ranked[1].s) ? ranked[0].p : null;
+}
+
 /** Results that say little about what the user asked for: a clause with a specific intent may replace them. */
 const WEAK_INTENTS = new Set<string>(["create_task", "unclear", "smalltalk", "switch_context", "provide_info"]);
 
@@ -290,9 +309,10 @@ function clauseIntent(text: string, opts: ExtractOptions, base: { intent: Intent
 }
 
 export function rulesUnderstand(text: string, opts: ExtractOptions): Understanding {
-  const entities = extractEntities(text, opts);
+  const focus = chatFixesOn() ? requestClause(text) : null;
+  const entities = extractEntities(focus ?? text, opts);
   const mood = detectMood(text);
-  const base = rulesIntent(text, entities, mood);
+  const base = rulesIntent(focus ?? text, entities, mood);
   const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, clauseIntent(text, opts, base)) : base;
   const contextMatch = text.match(SWITCH_CONTEXT);
   return {
@@ -313,9 +333,10 @@ export async function understand(
   text: string,
   opts: ExtractOptions & { history: ChatMessage[]; pendingHint?: string | null; memoryHint?: string | null; allowLlm: boolean },
 ): Promise<Understanding> {
-  const entities = extractEntities(text, opts);
+  const focus = chatFixesOn() ? requestClause(text) : null;
+  const entities = extractEntities(focus ?? text, opts);
   const mood = detectMood(text);
-  const base = rulesIntent(text, entities, mood);
+  const base = rulesIntent(focus ?? text, entities, mood);
   const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, clauseIntent(text, opts, base)) : base;
   let intent = rule.intent;
   let confidence = rule.confidence;

@@ -438,6 +438,17 @@ function extractFrequency(cur: Cursor, todayYmd: string): { frequency: RoutineFr
   // CHAT_FIXES_V2 (A): "monthly report … friday", "weekly quiz on the 12th": an adjective, not a repeat, when the
   // message also names a specific day or date. "daily standup at 9" (no date) is still a repeat.
   const adjective = chatFixesOn() && /\b(?:daily|weekly|monthly)\s+(?!on\b|at\b|basis\b|from\b)[a-z]{3,}/i.test(cur.text) && new RegExp(`\\b${WEEKDAY_RE}\\b|\\b(?:today|tomorrow|tonight)\\b|\\b\\d{1,2}(?:st|nd|rd|th)\\b`, "i").test(cur.text);
+  // CHAT_FIXES_V2: "every day except Saturday and Sunday", "daily but not on Fridays", "everyday except weekends":
+  // every day minus the days named.
+  if (chatFixesOn()) {
+    const except = cur.take(new RegExp(`\\b(?:every\\s*day|everyday|daily|each day)\\s+(?:except|but not|other than|apart from)\\s+(?:on\\s+)?((?:${WEEKDAY_RE}s?|weekends?)(?:\\s*(?:,|&|and|or|\\/)\\s*(?:${WEEKDAY_RE}s?|weekends?))*)`, "i"));
+    if (except) {
+      const named = except[1].toLowerCase();
+      const off = new Set((named.match(/[a-z]+/g) ?? []).flatMap((w) => (w.startsWith("weekend") ? [0, 6] : [WEEKDAY_NAMES[w.replace(/s$/, "")]])).filter((d): d is number => d !== undefined));
+      const days = [0, 1, 2, 3, 4, 5, 6].filter((d) => !off.has(d));
+      if (off.size && days.length) return { frequency: RoutineFrequency.WEEKLY, days, dayOfMonth: null };
+    }
+  }
   let m = adjective ? null : cur.take(/\b(?:every\s*day|everyday|daily|each day|every (?:morning|evening|night|afternoon)|each (?:morning|evening|night))\b/i);
   if (m) {
     const part = m[0].match(/morning|evening|night|afternoon/i);
@@ -752,6 +763,8 @@ const DANGLING_URDU = /\s+(?:tak|lagenge|lagega|lagegi|lagein\s*ge)\s*$/i;
 export function cleanTitle(residual: string): string {
   let t = residual.replace(/\s+/g, " ").trim();
   for (let i = 0; i < 3; i += 1) t = t.replace(REPLY_WORDS, "").replace(FILLER_PREFIX, "").replace(/^i\s+(?:to\s+)?/i, "").trim();
+  // CHAT_FIXES_V2: "a routine to go to office", "my habit of reading": the framing is not the title.
+  if (chatFixesOn()) t = t.replace(/^(?:i\s+have\s+)?(?:a|my|the)\s+(?:daily\s+|weekly\s+|morning\s+|evening\s+)?(?:routine|habit)\s+(?:to|of)\s+/i, "").trim();
   for (let i = 0; i < 3; i += 1) t = t.replace(/[\s,.;:!?–—-]+$/g, "").replace(DANGLING_CLAUSE, "").replace(DANGLING_URDU, "").trim();
   t = t
     .replace(/\b(?:(?:and|which|that)\s+)?(?:is\s+|it'?s\s+)?(?:due|deadline)\b\s*$/i, "")

@@ -29,7 +29,8 @@ skips it and the assistant keeps working on rules.
 **Rule fixes (off by default; `CHAT_FIXES_V2`).** General fixes for classes of confident rule mistakes
 (`assistant/chatFixes.ts`, the repeat and habit checks in `entities.ts`, clause reading in `nlu.ts`, search words in
 `commands/find.ts`, and a lookup layer in `handlers.ts` that resolves "the X" against the user's own tasks and
-routines). Each fix only withdraws an action or hands it to a matching item; what it can't settle becomes "unsure".
+routines). It also reads only the request sentence of a multi-sentence message, keeps "every day except …" days,
+drops "I have a routine to" from titles and drops an open question after 30 quiet minutes. Each fix only withdraws an action or hands it to a matching item; what it can't settle becomes "unsure".
 Status: built and unit-tested on new sentences; turned on only after it passes on new rows.
 
 **Cloud fallback (off by default; `docs/rollout.md`).** With `CLOUD_FALLBACK=on` and `LLM_PROVIDERS_CHAT` set, the

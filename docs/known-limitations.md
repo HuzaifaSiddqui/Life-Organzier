@@ -19,6 +19,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   set, tested on new sentences (`tests/chatFixes.test.ts`, `tests/chatFixesLookup.test.ts`) and never tuned on the
   held-out rows. With it on: assistant eval 212/215 (m33 fixed, no new miss), pending 230/230, query eval unchanged,
   harmful actions on the held-out out-of-scope rows 0/10 (from 1/10). It turns on only after it passes on new rows.
+  Reported on the phone (fixed only with the flag on): a multi-sentence message about a routine took its title and
+  time from the background sentence and ignored "except Saturday and Sunday" (`tests/chatFixesReported.test.ts`), and
+  a days-old open question ("When should … be done?") captured an unrelated "How are you today?" as its answer.
   Vocabulary misses ("organize my afternoon", "turn off notifications") are not code fixes; they become bank rows.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
