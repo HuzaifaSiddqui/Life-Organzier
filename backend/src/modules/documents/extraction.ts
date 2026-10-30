@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getAi, type AiService } from "../../ai/llm.js";
 import { formatClock } from "../../lib/time.js";
 import { fuzzySimilarity } from "../../lib/text.js";
-import { cleanTitle, extractEntities } from "../assistant/entities.js";
+import { cleanTitle, dateSheetOn, extractEntities } from "../assistant/entities.js";
 import { documentYear, isHeaderRow, joinRecords, normalizeDocumentText, rangeToEnd, readTables, semesterStart, urduActivityHint, urduWeekdayStart, WEEK_RE, weekToDate, withDocumentYear } from "./dateRules.js";
 
 export type ExtractedDeadline = {
@@ -111,6 +111,14 @@ function labelledTime(line: string, now: Date, tz: string): string | null {
 const WEAK_TITLE = /^(?:date|due|due date|deadline|departure|time|last date|on|by|at|-|—)?$/i;
 const TIMETABLE_ROW = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b[:\s|,-]*.*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|to)\s*\d{1,2}/i;
 
+/** A date sheet / exam schedule heading: its dated rows are exams even without "exam" on each row (DOC_DATESHEET). */
+const DATE_SHEET_RE = /\b(?:date\s*sheet|exam(?:ination)?s?\s+(?:schedule|time\s*table|timetable)|(?:mid|final)[-\s]?(?:term)?s?\s+(?:exam(?:ination)?s?\s+)?(?:schedule|date\s*sheet|time\s*table|timetable))\b/i;
+
+/** OCR of a ruled table: borders read as "_" and a cell glued to the next ("Wed_Data04-Nov-S_…"). */
+function unglueDates(text: string): string {
+  return text.replace(/_/g, " ").replace(/([A-Za-z])(\d{1,2}\s*-\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))/gi, "$1 $2").replace(/((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)-(?=[A-Za-z])/gi, "$1 ");
+}
+
 type Candidate = { text: string; source: string; title?: string; activity?: string; fromTable?: boolean };
 
 /**
@@ -119,7 +127,7 @@ type Candidate = { text: string; source: string; title?: string; activity?: stri
  * document's year, semester start and ranges are applied here.
  */
 export function extractDeadlines(text: string, now: Date, tz: string): ExtractedDeadline[] {
-  const prepared = normalizeDocumentText(text);
+  const prepared = dateSheetOn() ? unglueDates(normalizeDocumentText(text)) : normalizeDocumentText(text);
   const lines = prepared.split("\n");
   const year = documentYear(prepared, now, tz);
   const start = semesterStart(prepared, now, tz, year);
@@ -132,6 +140,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     activity: r.examTable ? "exam" : (r.title.match(ACTIVITY_RE)?.[1] ?? "deadline"),
     fromTable: true,
   }));
+  const sheetActivity = dateSheetOn() && DATE_SHEET_RE.test(prepared) ? "exam" : null;
   const hasDate = (l: string) => Boolean(extractEntities(l, { now, tz }).date) || WEEK_RE.test(l);
   const isHead = (l: string) => ACTIVITY_RE.test(l) || EVENT_RE.test(l) || Boolean(urduActivityHint(l));
   const rest = lines.map((l, i) => (tables.used.has(i) ? "" : l));
@@ -147,7 +156,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
   for (const c of candidates) {
     if (!c.fromTable && TIMETABLE_ROW.test(c.text)) continue; // a class, not a deadline
     const hint = urduActivityHint(c.text);
-    const activity = c.activity ?? c.text.match(ACTIVITY_RE)?.[1] ?? hint;
+    const activity = c.activity ?? c.text.match(ACTIVITY_RE)?.[1] ?? hint ?? sheetActivity;
     const event = !activity ? c.text.match(EVENT_RE)?.[1] : undefined;
     if (!activity && !event && !c.fromTable) continue;
     const range = rangeToEnd(c.text);
@@ -177,6 +186,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     if (WEAK_TITLE.test(title.replace(/[^\p{L}\p{N}\s]/gu, "").trim()) || title.length < 3) {
       title = event && heading ? `${event.charAt(0).toUpperCase()}${event.slice(1)}: ${heading}` : activity ? activity.charAt(0).toUpperCase() + activity.slice(1) : (heading ?? "Deadline");
     }
+    if (sheetActivity) title = title.replace(/^(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(?=\S{3})/i, "");
     if (title.length > 80) title = `${title.slice(0, 77).replace(/\s+\S*$/, "")}…`;
 
     let confidence = 60;
@@ -407,7 +417,8 @@ export function dateGrounded(ymd: string, text: string): boolean {
   const numeric = [`${dd}-${mm}`, `${dd}/${mm}`, `${dd}.${mm}`, `${mm}-${dd}`, `${mm}/${dd}`, `${y}-${mm}-${dd}`, `${day}-${m}-`, `${day}/${m}/`, `${m}/${day}/`];
   if (numeric.some((s) => t.includes(s))) return true;
   const mon = MONTHS[m - 1];
-  return new RegExp(`\\b0?${day}(?:st|nd|rd|th)?\\s+${mon}|\\b${mon}[a-z]*\\.?\\s+0?${day}\\b`).test(t);
+  const sep = dateSheetOn() ? "(?:\\s+|\\s*-\\s*)" : "\\s+";
+  return new RegExp(`\\b0?${day}(?:st|nd|rd|th)?${sep}${mon}|\\b${mon}[a-z]*\\.?${sep}0?${day}\\b`).test(t);
 }
 
 /**

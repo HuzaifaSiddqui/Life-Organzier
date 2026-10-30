@@ -134,6 +134,9 @@ function extractUrduClock(cur: Cursor): string | null {
   return null;
 }
 
+/** DOC_DATESHEET (default off): "4-Nov", "04-Nov-2026" parse as dates, and rows under a date-sheet heading are exams. */
+export const dateSheetOn = () => process.env.DOC_DATESHEET?.toLowerCase() === "on";
+
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const MONTH_RE = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
 const NUMBER_WORDS: Record<string, number> = {
@@ -295,7 +298,10 @@ function extractDate(cur: Cursor, todayYmd: string, now: Date, tz: string): { da
     const ymd = resolveYear(todayYmd, mo, da, m[3] ? Number(m[3]) : undefined);
     if (ymd) return { date: mk(ymd, m[0]), time: null };
   }
-  m = cur.take(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_RE}(?:,?\\s+(\\d{4}))?\\b`, "i"));
+  // DOC_DATESHEET: date sheets write "4-Nov" / "04-Nov-2026" (dashes instead of spaces).
+  m = dateSheetOn()
+    ? cur.take(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+(?:of\\s+)?|\\s*-\\s*)${MONTH_RE}(?:(?:,?\\s+|\\s*-\\s*)(\\d{4}))?\\b`, "i"))
+    : cur.take(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_RE}(?:,?\\s+(\\d{4}))?\\b`, "i"));
   if (m) {
     const ymd = resolveYear(todayYmd, monthIndex(m[2]) + 1, Number(m[1]), m[3] ? Number(m[3]) : undefined);
     if (ymd) return { date: mk(ymd, m[0]), time: null };
