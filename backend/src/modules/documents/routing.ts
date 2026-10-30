@@ -145,22 +145,30 @@ function similarity(a: string, b: string): number {
   return 1 - prev[b.length] / Math.max(a.length, b.length);
 }
 
-/** The document line the evidence comes from: exact containment, else the best fuzzy match of a same-length window. */
+/**
+ * The document text the evidence comes from: exact containment, else the best fuzzy match of a same-length window.
+ * A quote can span lines ("Date: 15 Nov / 10 AM" on two OCR lines), so its own line breaks are ignored and it is
+ * compared with each line and with 2 or 3 consecutive non-empty lines joined (the shortest window that holds it).
+ */
 export function evidenceLine(evidence: string, text: string): { line: string; score: number } | null {
   const e = norm(evidence);
   if (e.length < 4) return null;
+  const lines = text.split("\n").map((l) => l.trim()).filter((l) => norm(l));
+  const windows: string[] = [];
+  // Single lines first, then pairs, then triples: the first window that holds the quote is the smallest one.
+  for (let k = 1; k <= 3; k += 1) for (let i = 0; i + k <= lines.length; i += 1) windows.push(lines.slice(i, i + k).join(" "));
   let best: { line: string; score: number } | null = null;
-  for (const raw of text.split("\n")) {
+  for (const raw of windows) {
     const l = norm(raw);
-    if (!l) continue;
-    if (l.includes(e)) return { line: raw.trim(), score: 1 };
+    if (l.includes(e)) return { line: raw, score: 1 };
     const words = l.split(" ");
     const n = e.split(" ").length;
     for (let i = 0; i + Math.max(1, n - 1) <= words.length; i += 1) {
       for (const len of [n - 1, n, n + 1]) {
         if (len < 1 || i + len > words.length) continue;
-        const s = similarity(e, words.slice(i, i + len).join(" "));
-        if (!best || s > best.score) best = { line: raw.trim(), score: s };
+        const sc = similarity(e, words.slice(i, i + len).join(" "));
+        // Ties keep the smaller window (fewer joined lines), which comes first.
+        if (!best || sc > best.score) best = { line: raw, score: sc };
       }
     }
   }
