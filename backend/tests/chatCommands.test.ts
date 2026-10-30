@@ -146,7 +146,7 @@ const taskNamed = async (userId: string, title: string) => prisma.task.findFirst
 
 test("task commands: note, reminder mode, tags and category, each echoed and undoable", { skip }, async () => {
   await withChatUser("FREE", async (say, tap, user) => {
-    await say("Submit the essay by Friday 5 PM");
+    await say("Submit the essay by tomorrow 5 PM");
     const essay = await taskNamed(user.id, "Submit the essay");
 
     assert.equal((await say("add a note to the essay: bring printouts")).message.intent, "task_note_added");
@@ -173,7 +173,7 @@ test("task commands: note, reminder mode, tags and category, each echoed and und
 
 test("task commands: start, reopen, and a new task when the name matches nothing", { skip }, async () => {
   await withChatUser("FREE", async (say, _tap, user) => {
-    await say("Submit the essay by Friday 5 PM");
+    await say("Submit the essay by tomorrow 5 PM");
     assert.equal((await say("start the essay")).message.intent, "task_started");
     assert.equal((await taskNamed(user.id, "Submit the essay")).status, "IN_PROGRESS");
     await say("I finished the essay");
@@ -189,7 +189,7 @@ test("task commands: start, reopen, and a new task when the name matches nothing
 
 test("task commands: add, list and complete subtasks; undo removes the added ones", { skip }, async () => {
   await withChatUser("FREE", async (say, tap, user) => {
-    await say("Finish the project by Friday 5 PM");
+    await say("Finish the project by tomorrow 5 PM");
     const project = await taskNamed(user.id, "Finish the project");
     const added = await say("add subtasks to the project: research, draft and review");
     assert.equal(added.message.intent, "subtasks_added");

@@ -119,7 +119,7 @@ const routineList: Command = {
     return has(t, ASK) || /^(?:my |meri |all )?(?:routines?|روٹینز)$/.test(t) ? {} : null;
   },
   async execute(turn) {
-    const routines = await listRoutines(turn.user.id, turn.tz);
+    const routines = await listRoutines(turn.user.id, turn.tz, undefined, turn.now);
     if (!routines.length) return { content: 'You don\'t have any routines yet. Try "Daily meditation at 6 AM for 10 minutes".', intent: "routine_list" };
     const cap = isWhatsapp(turn.channel) ? WHATSAPP_LIST_CAP : APP_LIST_CAP;
     const lines = routines.slice(0, cap).map((r) => `• ${r.title}: ${scheduleLabel(r)}${r.active ? "" : " (paused)"}${r.priority === RoutinePriority.MANDATORY ? ", mandatory" : ""}`);

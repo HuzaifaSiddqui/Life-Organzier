@@ -482,7 +482,7 @@ test("text end to end: fake API → poller → the one assistant engine → repl
   setAgentManager(m);
   await m.add(row.id);
   const before = fake.sent.length;
-  fake.text(KEY, "Complete math assignment by Friday 3 PM");
+  fake.text(KEY, "Complete math assignment by tomorrow 3 PM"); // "tomorrow" is never in the past (the poller uses the real clock)
   await waitFor(() => fake.sent.length > before, 15000);
   const reply = fake.lastSentText();
   assert.match(reply, /math assignment/i);
@@ -578,12 +578,12 @@ test("voice notes: on by default; no transcriber → please type; the user's swi
   await handleAgentUpdate(row, voice(), io);
   assert.equal(io.replies.at(-1), agentCopy("en").voiceOff);
   await prisma.userSettings.update({ where: { userId: user.id }, data: { waAgentVoice: true } });
-  let next = { text: "Complete math assignment by Friday 3 PM", confidence: 0.9 as number | null };
+  let next = { text: "Complete math assignment by tomorrow 3 PM", confidence: 0.9 as number | null };
   const stt: SttProvider = { name: "fake", dataLocation: "test", transcribe: async () => ({ ...next, language: "en", ms: 5 }) };
   setStt(stt);
   try {
     await handleAgentUpdate(row, voice(), io);
-    assert.match(io.replies.at(-1) ?? "", /^I heard: "Complete math assignment by Friday 3 PM"\n\n/);
+    assert.match(io.replies.at(-1) ?? "", /^I heard: "Complete math assignment by tomorrow 3 PM"\n\n/);
     assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1);
     next = { text: "mmm", confidence: 0.2 };
     await handleAgentUpdate(row, voice(), io);
