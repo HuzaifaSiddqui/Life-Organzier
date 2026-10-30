@@ -103,8 +103,9 @@ function visibleInContext(routine: Pick<Routine, "locationContext">, context: st
   return !context || !routine.locationContext || routine.locationContext === context;
 }
 
-export async function listRoutines(userId: string, tz: string, context?: string | null) {
-  const today = startOfLocalDay(localYmd(new Date(), tz), tz);
+/** `now`: the caller's clock (the chat passes the turn's), so the occurrence window and the rest of the turn agree. */
+export async function listRoutines(userId: string, tz: string, context?: string | null, now = new Date()) {
+  const today = startOfLocalDay(localYmd(now, tz), tz);
   const routines = await prisma.routine.findMany({
     where: { userId },
     include: {
