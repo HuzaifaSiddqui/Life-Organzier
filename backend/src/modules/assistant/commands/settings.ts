@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { sayAction } from "../actions.js";
+import { chatFixesOn } from "../chatFixes.js";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
 import { addDaysYmd, formatClock, localParts, localYmd, parseClock, relativeDayLabel, zonedTimeToUtc } from "../../../lib/time.js";
@@ -11,7 +12,7 @@ import { extractEntities, extractTimeRange } from "../entities.js";
 import { ASK, has, norm } from "./lexicon.js";
 import { commandText, dayLabelFor } from "./copy.js";
 import { recordUndo, undoAction } from "./runtime.js";
-import type { Command } from "./types.js";
+import type { Command, ParseCtx } from "./types.js";
 
 /** Settings changed from chat: the phone reloads its preferences when a reply's intent starts with "settings_". */
 async function save(turn: Turn, data: Prisma.UserSettingsUpdateInput, before: Record<string, unknown>, label: string): Promise<void> {
@@ -85,6 +86,22 @@ const quietHours: Command = {
 
 const MAX_DND_MINUTES = 24 * 60;
 
+const MUTE = /\b(?:mute|silence|turn\s+off|switch\s+off|shut\s+off|pause|stop|disable|block|hold|no\s+more)\b/i;
+const NOTIFY_WORD = /\b(?:notifications?|alerts?|reminders?|pings?)\b/i;
+const NOTHING_NAMED = /\b(?:mute|silence|turn|switch|shut|off|pause|stop|disable|block|hold|no|more|notifications?|alerts?|reminders?|pings?|all|my|the|any|every|everything|please|can|could|you|u|for|me|a|while|now|until|till|right|just|from|of|today|tonight|this|morning|afternoon|evening)\b/gi;
+
+/**
+ * "mute notifications for 2 hours", "turn off all alerts until 5": muting with no task named. Any clause may say it
+ * ("I'm in class, turn off notifications for 2 hours"): a status clause names no task either.
+ */
+function muteEverything(text: string, ctx: ParseCtx): boolean {
+  return text.split(/\s*[,;]\s*|\.\s+/).some((clause) => {
+    if (!MUTE.test(clause) || !NOTIFY_WORD.test(clause)) return false;
+    const rest = extractEntities(clause, ctx.opts).residual.replace(NOTHING_NAMED, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    return rest === "";
+  });
+}
+
 const dnd: Command = {
   name: "settings_dnd",
   category: "settings",
@@ -94,7 +111,14 @@ const dnd: Command = {
   undoable: true,
   parse(text, ctx) {
     const t = norm(text);
-    if (!has(t, DND)) return null;
+    if (!has(t, DND)) {
+      // CHAT_FIXES_V2: "mute notifications for 90 minutes" names no task, so it is Do Not Disturb (on), not a
+      // task's reminder mode; "turn off reminders for the essay" names one and is left to task_reminder_mode.
+      if (!chatFixesOn() || !muteEverything(text, ctx)) return null;
+      const e = extractEntities(text, ctx.opts);
+      if (e.time && e.timeExplicit) return { action: "on", until: e.time };
+      return e.durationMinutes ? { action: "on", minutes: Math.min(e.durationMinutes, MAX_DND_MINUTES) } : { action: "on" };
+    }
     if (has(t, "off|stop|end|disable|cancel|band|khatam|hata|hatao|بند|ختم|ہٹا")) return { action: "off" };
     // "is DND on?" asks; "turn on DND" / "can you turn on DND?" instructs.
     if (!has(t, "turn on|switch on|enable|start|set|put|laga|lagao|aan kar|آن کر|لگا") && (/^(?:is|am|are|kya)\b/.test(t) || /[?؟]\s*$/.test(text) || has(t, "status|still"))) return { action: "status" };

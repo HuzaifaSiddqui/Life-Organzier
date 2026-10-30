@@ -109,7 +109,7 @@ function harmfulChanges(before: Awaited<ReturnType<typeof snapshot>>, after: Awa
   return [...new Set(out)];
 }
 
-const results: Array<{ id: string; group: string; text: string; expected: string; got: string; ok: boolean; harm: string[]; reply: string }> = [];
+const results: Array<{ id: string; group: string; text: string; expected: string; got: string; ok: boolean; offered: boolean; harm: string[]; reply: string }> = [];
 for (const row of file.commands) {
   if (AI === "off") setAi(new AiService([]));
   else setAi(null);
@@ -118,12 +118,14 @@ for (const row of file.commands) {
   try {
     await seedUser(user.id);
     const before = await snapshot(user.id);
-    const out = (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text: row.text, payload: null, label: null })).message as { content: string; intent?: string; command?: string };
+    const out = (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text: row.text, payload: null, label: null })).message as { content: string; intent?: string; command?: string; actions?: Array<{ payload?: { type?: string; command?: string } }> };
     const after = await snapshot(user.id);
     const intent = out.intent ?? "";
-    const got = out.command && out.command !== "multi" ? out.command : NONE.has(intent) ? "none" : (INTENT[intent] ?? intent);
+    // A "Did you mean this?" with one command button (the guards' preview): scored by that command, counted as offered.
+    const offered = intent === "meaning_ask" ? (out.actions ?? []).filter((a) => a.payload?.type === "command").map((a) => a.payload?.command as string) : [];
+    const got = offered.length === 1 ? offered[0] : out.command && out.command !== "multi" ? out.command : NONE.has(intent) ? "none" : (INTENT[intent] ?? intent);
     const ok = got === row.command || (row.alsoOk ?? []).includes(got);
-    results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
+    results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, offered: offered.length === 1, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
   }
@@ -133,7 +135,7 @@ const groups = [...new Set(results.map((r) => r.group))];
 for (const g of groups) {
   const rs = results.filter((r) => r.group === g);
   const none = rs.filter((r) => r.expected === "none");
-  console.log(`${g}: ${rs.filter((r) => r.ok).length}/${rs.length}; harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}`);
+  console.log(`${g}: ${rs.filter((r) => r.ok).length}/${rs.length} (${rs.filter((r) => r.ok && r.offered).length} of them offered for a tap, not run); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}`);
 }
 if (arg("out")) writeFileSync(arg("out") as string, `${JSON.stringify({ file: arg("file"), ai: AI, flags: { CHAT_FIXES_V2: process.env.CHAT_FIXES_V2 ?? "off" }, results }, null, 1)}\n`);
 await prisma.$disconnect();

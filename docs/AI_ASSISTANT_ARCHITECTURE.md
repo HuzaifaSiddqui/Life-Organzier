@@ -26,7 +26,10 @@ memory extraction, sub-task names, topics), while **dates, clarity scoring, sche
 reminders, patterns and safety are deterministic code**. If Ollama is down, a circuit breaker
 skips it and the assistant keeps working on rules.
 
-**Rule fixes (off by default; `CHAT_FIXES_V2`).** General fixes for classes of confident rule mistakes
+**Rule fixes and model guards (off by default; `CHAT_FIXES_V2`).** Guards (`assistant/guards.ts`): a routine needs an
+explicit repeat cue; a model's choice stays in the family a rule fix withdrew from, never completes after a negation,
+never undoes, and a state-changing choice is previewed as a button, not run; muting with no task named is Do Not
+Disturb. General fixes for classes of confident rule mistakes
 (`assistant/chatFixes.ts`, the repeat and habit checks in `entities.ts`, clause reading in `nlu.ts`, search words in
 `commands/find.ts`, and a lookup layer in `handlers.ts` that resolves "the X" against the user's own tasks and
 routines). It also reads only the request sentence of a multi-sentence message, keeps "every day except …" days,
