@@ -1,0 +1,957 @@
+{
+ "description": "SECOND English chat set written by Claude (an AI assistant), NOT by real users. Two groups: 'class-test' (40 rows aimed at the bug classes D,E,H,A,B,C,G,I,F and routine moves: use to check the CHAT_FIXES_V2 fixes work) and 'fresh' (60 general rows written without targeting any class: report only, never tune). Rows refer to the tasks and routines in 'seed'; create them for the user before each run. command 'none' = the assistant must not take a harmful action (edit/delete/complete/bulk/settings/routine creation); creating a task is not harmful. Dates relative to now (Mon 5 Oct 2026, Asia/Karachi). Report the groups separately and separately from the first 150 AI-written rows and from any real-user rows.",
+ "now": "2026-10-05T05:00:00.000Z",
+ "timezone": "Asia/Karachi",
+ "seed": {
+  "tasks": [
+   {
+    "title": "Dentist appointment",
+    "due": "2026-10-08 16:00"
+   },
+   {
+    "title": "Tax return",
+    "due": "2026-10-11"
+   },
+   {
+    "title": "Sales deck",
+    "due": "2026-10-07"
+   },
+   {
+    "title": "Call the bank"
+   },
+   {
+    "title": "Passport renewal",
+    "due": "2026-10-14"
+   },
+   {
+    "title": "Project report",
+    "due": "2026-10-09"
+   },
+   {
+    "title": "Car wash"
+   },
+   {
+    "title": "Quarterly budget review",
+    "due": "2026-10-12"
+   },
+   {
+    "title": "Team lunch booking",
+    "due": "2026-10-07"
+   }
+  ],
+  "routines": [
+   {
+    "title": "Gym",
+    "days": "Mon,Wed,Fri",
+    "time": "06:00"
+   },
+   {
+    "title": "Medicine",
+    "days": "daily",
+    "time": "21:00"
+   },
+   {
+    "title": "Reading",
+    "days": "daily",
+    "time": "22:00"
+   },
+   {
+    "title": "Yoga",
+    "days": "daily",
+    "time": "07:00"
+   }
+  ]
+ },
+ "commands": [
+  {
+   "id": "n-001",
+   "group": "class-test",
+   "lang": "en",
+   "text": "what tasks do I have about the bank?",
+   "command": "find_items",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-002",
+   "group": "class-test",
+   "lang": "en",
+   "text": "did I add anything for the dentist?",
+   "command": "find_items",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-003",
+   "group": "class-test",
+   "lang": "en",
+   "text": "is there a task for the tax return?",
+   "command": "find_items",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-004",
+   "group": "class-test",
+   "lang": "en",
+   "text": "show me my routines",
+   "command": "routine_list",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-005",
+   "group": "class-test",
+   "lang": "en",
+   "text": "list my habits please",
+   "command": "routine_list",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-006",
+   "group": "class-test",
+   "lang": "en",
+   "text": "what's my schedule on thursday?",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-007",
+   "group": "class-test",
+   "lang": "en",
+   "text": "am I free tomorrow evening?",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-008",
+   "group": "class-test",
+   "lang": "en",
+   "text": "what's due after the weekend?",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-009",
+   "group": "class-test",
+   "lang": "en",
+   "text": "how does my week look?",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-010",
+   "group": "class-test",
+   "lang": "en",
+   "text": "took the medicine",
+   "command": "routine_complete_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-011",
+   "group": "class-test",
+   "lang": "en",
+   "text": "did the gym today",
+   "command": "routine_complete_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-012",
+   "group": "class-test",
+   "lang": "en",
+   "text": "finished the sales deck",
+   "command": "complete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-013",
+   "group": "class-test",
+   "lang": "en",
+   "text": "just paid the tax return",
+   "command": "complete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-014",
+   "group": "class-test",
+   "lang": "en",
+   "text": "I read for half an hour",
+   "command": "routine_complete_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-015",
+   "group": "class-test",
+   "lang": "en",
+   "text": "practiced yoga this morning",
+   "command": "routine_complete_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-016",
+   "group": "class-test",
+   "lang": "en",
+   "text": "not going to the gym today",
+   "command": "routine_skip_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-017",
+   "group": "class-test",
+   "lang": "en",
+   "text": "no yoga today",
+   "command": "routine_skip_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-018",
+   "group": "class-test",
+   "lang": "en",
+   "text": "can't make the reading session tonight",
+   "command": "routine_skip_today",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-019",
+   "group": "class-test",
+   "lang": "en",
+   "text": "stop the medicine reminders for now",
+   "command": "routine_pause",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-020",
+   "group": "class-test",
+   "lang": "en",
+   "text": "pause yoga for a week",
+   "command": "routine_pause",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-021",
+   "group": "class-test",
+   "lang": "en",
+   "text": "submit the report on tuesday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-06"
+   }
+  },
+  {
+   "id": "n-022",
+   "group": "class-test",
+   "lang": "en",
+   "text": "dentist on friday at 3",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09",
+    "time": "3 PM"
+   }
+  },
+  {
+   "id": "n-023",
+   "group": "class-test",
+   "lang": "en",
+   "text": "lunch with Sara on sunday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-11"
+   }
+  },
+  {
+   "id": "n-024",
+   "group": "class-test",
+   "lang": "en",
+   "text": "stretch every weekday at 8am",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-025",
+   "group": "class-test",
+   "lang": "en",
+   "text": "cleaning every weekend",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-026",
+   "group": "class-test",
+   "lang": "en",
+   "text": "go to the market on saturdays",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-027",
+   "group": "class-test",
+   "lang": "en",
+   "text": "actually the dentist is at 5pm",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "time": "5 PM"
+   }
+  },
+  {
+   "id": "n-028",
+   "group": "class-test",
+   "lang": "en",
+   "text": "sales deck needs to be done by thursday instead",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-08"
+   }
+  },
+  {
+   "id": "n-029",
+   "group": "class-test",
+   "lang": "en",
+   "text": "the call with the bank will take an hour",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "duration": 60
+   }
+  },
+  {
+   "id": "n-030",
+   "group": "class-test",
+   "lang": "en",
+   "text": "the tax return is due on the 14th now",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-14"
+   }
+  },
+  {
+   "id": "n-031",
+   "group": "class-test",
+   "lang": "en",
+   "text": "I'm exhausted, move everything to tomorrow",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-06"
+   }
+  },
+  {
+   "id": "n-032",
+   "group": "class-test",
+   "lang": "en",
+   "text": "I'm in class, turn off notifications for 2 hours",
+   "command": "settings_dnd",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-033",
+   "group": "class-test",
+   "lang": "en",
+   "text": "bad headache, push all of today to wednesday",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-07"
+   }
+  },
+  {
+   "id": "n-034",
+   "group": "class-test",
+   "lang": "en",
+   "text": "so tired today",
+   "command": "log_mood",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-035",
+   "group": "class-test",
+   "lang": "en",
+   "text": "kind of anxious this morning",
+   "command": "log_mood",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-036",
+   "group": "class-test",
+   "lang": "en",
+   "text": "exhausted tonight",
+   "command": "log_mood",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-037",
+   "group": "class-test",
+   "lang": "en",
+   "text": "which task is most important?",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-038",
+   "group": "class-test",
+   "lang": "en",
+   "text": "what is my top priority right now",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-039",
+   "group": "class-test",
+   "lang": "en",
+   "text": "move today's yoga to the evening",
+   "command": "routine_reschedule_once",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-040",
+   "group": "class-test",
+   "lang": "en",
+   "text": "shift the gym session to 7pm today",
+   "command": "routine_reschedule_once",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-041",
+   "group": "fresh",
+   "lang": "en",
+   "text": "Remind me to submit the grant application by friday noon",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09",
+    "time": "12 PM"
+   }
+  },
+  {
+   "id": "n-042",
+   "group": "fresh",
+   "lang": "en",
+   "text": "call the electrician tomorrow at 4",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-06",
+    "time": "4 PM"
+   }
+  },
+  {
+   "id": "n-043",
+   "group": "fresh",
+   "lang": "en",
+   "text": "Dad's checkup on the 20th",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-20"
+   }
+  },
+  {
+   "id": "n-044",
+   "group": "fresh",
+   "lang": "en",
+   "text": "buy a birthday cake for sunday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-11"
+   }
+  },
+  {
+   "id": "n-045",
+   "group": "fresh",
+   "lang": "en",
+   "text": "finish reading the contract tonight",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-05"
+   }
+  },
+  {
+   "id": "n-046",
+   "group": "fresh",
+   "lang": "en",
+   "text": "prepare slides for the board meeting, 2 hours, due thursday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-08",
+    "duration": 120
+   }
+  },
+  {
+   "id": "n-047",
+   "group": "fresh",
+   "lang": "en",
+   "text": "call the school about the fee tomorrow morning",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-06"
+   }
+  },
+  {
+   "id": "n-048",
+   "group": "fresh",
+   "lang": "en",
+   "text": "renew gym membership by the end of the month",
+   "command": "create_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-049",
+   "group": "fresh",
+   "lang": "en",
+   "text": "Fix the leaking tap on saturday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-10"
+   }
+  },
+  {
+   "id": "n-050",
+   "group": "fresh",
+   "lang": "en",
+   "text": "remind me in 30 minutes to check the oven",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-05",
+    "time": "10:30 AM"
+   }
+  },
+  {
+   "id": "n-051",
+   "group": "fresh",
+   "lang": "en",
+   "text": "send the signed forms back to HR before 5pm today",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-05",
+    "time": "5 PM"
+   }
+  },
+  {
+   "id": "n-052",
+   "group": "fresh",
+   "lang": "en",
+   "text": "draft the offsite agenda friday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09"
+   }
+  },
+  {
+   "id": "n-053",
+   "group": "fresh",
+   "lang": "en",
+   "text": "pay the school fee on the 12th",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-12"
+   }
+  },
+  {
+   "id": "n-054",
+   "group": "fresh",
+   "lang": "en",
+   "text": "tutor session with Ali tomorrow at 6pm for one hour",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-06",
+    "time": "6 PM",
+    "duration": 60
+   }
+  },
+  {
+   "id": "n-055",
+   "group": "fresh",
+   "lang": "en",
+   "text": "vet appointment for Max on wednesday at 10am",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-07",
+    "time": "10 AM"
+   }
+  },
+  {
+   "id": "n-056",
+   "group": "fresh",
+   "lang": "en",
+   "text": "stretch for 10 minutes every morning",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-057",
+   "group": "fresh",
+   "lang": "en",
+   "text": "walk the dog every evening at 6",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-058",
+   "group": "fresh",
+   "lang": "en",
+   "text": "practice guitar monday and thursday evenings",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-059",
+   "group": "fresh",
+   "lang": "en",
+   "text": "review my budget every sunday night",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-060",
+   "group": "fresh",
+   "lang": "en",
+   "text": "weekly team retro on fridays at 4pm",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-061",
+   "group": "fresh",
+   "lang": "en",
+   "text": "meal prep every sunday afternoon",
+   "command": "create_routine",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-062",
+   "group": "fresh",
+   "lang": "en",
+   "text": "move the passport renewal to friday",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09"
+   }
+  },
+  {
+   "id": "n-063",
+   "group": "fresh",
+   "lang": "en",
+   "text": "make the project report high priority",
+   "command": "update_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-064",
+   "group": "fresh",
+   "lang": "en",
+   "text": "the car wash can wait until saturday",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-10"
+   }
+  },
+  {
+   "id": "n-065",
+   "group": "fresh",
+   "lang": "en",
+   "text": "rename the team lunch booking to book the cafe",
+   "command": "update_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-066",
+   "group": "fresh",
+   "lang": "en",
+   "text": "set the budget review for 3pm",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "time": "3 PM"
+   }
+  },
+  {
+   "id": "n-067",
+   "group": "fresh",
+   "lang": "en",
+   "text": "passport renewal is done",
+   "command": "complete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-068",
+   "group": "fresh",
+   "lang": "en",
+   "text": "I washed the car",
+   "command": "complete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-069",
+   "group": "fresh",
+   "lang": "en",
+   "text": "booked the team lunch, tick it off",
+   "command": "complete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-070",
+   "group": "fresh",
+   "lang": "en",
+   "text": "remove the car wash task",
+   "command": "delete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-071",
+   "group": "fresh",
+   "lang": "en",
+   "text": "delete the budget review",
+   "command": "delete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-072",
+   "group": "fresh",
+   "lang": "en",
+   "text": "drop the passport thing, I don't need it anymore",
+   "command": "delete_task",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-073",
+   "group": "fresh",
+   "lang": "en",
+   "text": "what's on for friday",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-074",
+   "group": "fresh",
+   "lang": "en",
+   "text": "do I have any deadlines next week",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-075",
+   "group": "fresh",
+   "lang": "en",
+   "text": "show me what's overdue",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-076",
+   "group": "fresh",
+   "lang": "en",
+   "text": "what's left for today",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-077",
+   "group": "fresh",
+   "lang": "en",
+   "text": "which tasks are due this weekend",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-078",
+   "group": "fresh",
+   "lang": "en",
+   "text": "when is the project report due",
+   "command": "query_tasks",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-079",
+   "group": "fresh",
+   "lang": "en",
+   "text": "anything about the passport?",
+   "command": "find_items",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-080",
+   "group": "fresh",
+   "lang": "en",
+   "text": "look up tasks mentioning lunch",
+   "command": "find_items",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-081",
+   "group": "fresh",
+   "lang": "en",
+   "text": "which tasks relate to the car",
+   "command": "find_items",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-082",
+   "group": "fresh",
+   "lang": "en",
+   "text": "make me a plan for the rest of today",
+   "command": "plan_day",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-083",
+   "group": "fresh",
+   "lang": "en",
+   "text": "fit my tasks into my free time this afternoon",
+   "command": "plan_day",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-084",
+   "group": "fresh",
+   "lang": "en",
+   "text": "move today's list to thursday",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-08"
+   }
+  },
+  {
+   "id": "n-085",
+   "group": "fresh",
+   "lang": "en",
+   "text": "delete the completed ones",
+   "command": "bulk_delete_completed",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-086",
+   "group": "fresh",
+   "lang": "en",
+   "text": "mark all my errands as done",
+   "command": "bulk_complete_tag",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-087",
+   "group": "fresh",
+   "lang": "en",
+   "text": "mute notifications for 90 minutes",
+   "command": "settings_dnd",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-088",
+   "group": "fresh",
+   "lang": "en",
+   "text": "quiet hours 10pm to 6am please",
+   "command": "settings_quiet_hours",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-089",
+   "group": "fresh",
+   "lang": "en",
+   "text": "also send reminders on whatsapp",
+   "command": "settings_notify_devices",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-090",
+   "group": "fresh",
+   "lang": "en",
+   "text": "how many tasks have I completed this week",
+   "command": "insights_completed",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-091",
+   "group": "fresh",
+   "lang": "en",
+   "text": "compare this week with last week",
+   "command": "insights_compare_week",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-092",
+   "group": "fresh",
+   "lang": "en",
+   "text": "feeling great today",
+   "command": "log_mood",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-093",
+   "group": "fresh",
+   "lang": "en",
+   "text": "I need to vent about my manager",
+   "command": "support",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-094",
+   "group": "fresh",
+   "lang": "en",
+   "text": "what can I ask you?",
+   "command": "help",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-095",
+   "group": "fresh",
+   "lang": "en",
+   "text": "undo",
+   "command": "undo",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-096",
+   "group": "fresh",
+   "lang": "en",
+   "text": "what's trending on twitter",
+   "command": "none",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-097",
+   "group": "fresh",
+   "lang": "en",
+   "text": "who won the match yesterday",
+   "command": "none",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-098",
+   "group": "fresh",
+   "lang": "en",
+   "text": "open the camera",
+   "command": "none",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-099",
+   "group": "fresh",
+   "lang": "en",
+   "text": "what's 15% of 240",
+   "command": "none",
+   "source": "ai-written"
+  },
+  {
+   "id": "n-100",
+   "group": "fresh",
+   "lang": "en",
+   "text": "play my workout playlist",
+   "command": "none",
+   "source": "ai-written"
+  }
+ ]
+}

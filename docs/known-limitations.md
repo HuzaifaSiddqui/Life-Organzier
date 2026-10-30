@@ -15,6 +15,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   when the rules are unsure. On the AI-written held-out set (150 English rows, `tests/eval/chat-heldout-ai-written.json`,
   29 Oct 2026) the rules were sure about 132 rows and wrong on 27 of them; 18 rows reached a model. The 27 are listed
   for adjudication (label problem, real bug, capability gap) before any rule changes; fixes are tested on new rows.
+- **`CHAT_FIXES_V2` (off) is not yet measured on new rows.** It was written for the bug classes found on the held-out
+  set, tested on new sentences (`tests/chatFixes.test.ts`, `tests/chatFixesLookup.test.ts`) and never tuned on the
+  held-out rows. With it on: assistant eval 212/215 (m33 fixed, no new miss), pending 230/230, query eval unchanged,
+  harmful actions on the held-out out-of-scope rows 0/10 (from 1/10). It turns on only after it passes on new rows.
+  Reported on the phone (fixed only with the flag on): a multi-sentence message about a routine took its title and
+  time from the background sentence and ignored "except Saturday and Sunday" (`tests/chatFixesReported.test.ts`), and
+  a days-old open question ("When should … be done?") captured an unrelated "How are you today?" as its answer.
+  Vocabulary misses ("organize my afternoon", "turn off notifications") are not code fixes; they become bank rows.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
   for bare imperatives instead; questions like "what's the weather" are not covered by it.

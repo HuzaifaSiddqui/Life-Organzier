@@ -1,4 +1,5 @@
 import { isWhatsapp } from "./channel.js";
+import { chatFixesOn } from "./chatFixes.js";
 import { answerAction, commandAction, sayAction } from "./actions.js";
 import {
   ConversationRole,
@@ -159,6 +160,9 @@ export function dueLabel(task: Task, turn: Turn): string {
 
 /* ======================================================================== entry point */
 
+/** CHAT_FIXES_V2: how long an unanswered open question stays open in the app (the WhatsApp agent uses the same 30 minutes). */
+export const OPEN_QUESTION_TTL_MS = 30 * 60000;
+
 export async function handleAssistantMessage(input: {
   user: User;
   settings: UserSettings;
@@ -195,6 +199,10 @@ export async function handleAssistantMessage(input: {
     placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
     locationReminders: input.locationReminders,
   };
+  // CHAT_FIXES_V2: an open question left unanswered for 30 quiet minutes is dropped (as on WhatsApp), so a later
+  // message ("How are you today?") is never read as its answer. A tapped button still answers its own question.
+  // Real clock against the conversation's database timestamp (both real time).
+  if (chatFixesOn() && turn.state.pending && !input.payload && Date.now() - conversation.updatedAt.getTime() > OPEN_QUESTION_TTL_MS) turn.state.pending = null;
 
   const text = input.text?.trim() ?? "";
   const userContent = text || input.label?.trim() || "";
