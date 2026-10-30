@@ -40,6 +40,16 @@ test("the reported routine: title, time and days come from the sentence with the
   });
 });
 
+test("the second report: no full stops, and 'Except …' on its own line still excludes those days", { skip }, async () => {
+  await withUser(true, async (send, userId) => {
+    await send("I am a student of software engineering and Currently working as SQA engineer in a software house Siznam and co.\nI usually free from the university around 3 pm\nI have a routine to go to office at 4 pm everyday \nExcept Sunday and Saturday");
+    const r = await prisma.routine.findFirstOrThrow({ where: { userId } });
+    assert.equal(r.title, "Go to office");
+    assert.equal(r.dueTime, "4 PM");
+    assert.deepEqual(r.daysOfWeek, [1, 2, 3, 4, 5]);
+  });
+});
+
 test("a new variant: background sentences, then the routine with excluded days", { skip }, async () => {
   await withUser(true, async (send, userId) => {
     await send("I'm a nurse at the city hospital. I normally sleep after 11.\nI have a habit of jogging at 6:30 am every day except weekends.");

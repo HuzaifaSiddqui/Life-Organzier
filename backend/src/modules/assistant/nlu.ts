@@ -282,7 +282,12 @@ const BACKGROUND = /^(?:i\s+am\s+(?:a|an)\b|i'?m\s+(?:a|an)\b|currently\b|i\s+(?
  * clear winner (the whole message is read, as before).
  */
 export function requestClause(text: string): string | null {
-  const parts = text.split(/(?<=[.!?])\s+|\n+/).map((p) => p.trim().replace(/[,;]\s*$/, "")).filter((p) => p.split(/\s+/).length >= 2);
+  const parts = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((p) => p.trim().replace(/[,;]\s*$/, ""))
+    // "…every day\nExcept Sunday" — an exception on its own line belongs to the line before it.
+    .reduce<string[]>((acc, p) => (acc.length && /^(?:except|but not|apart from|other than|excluding|not on)\b/i.test(p) ? [...acc.slice(0, -1), `${acc.at(-1)} ${p}`] : [...acc, p]), [])
+    .filter((p) => p.split(/\s+/).length >= 2);
   if (parts.length < 2) return null;
   const score = (p: string) => (REQUEST_CUE.test(p) ? 2 : 0) + (/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(p) ? 1 : 0) - (BACKGROUND.test(p) ? 2 : 0);
   const ranked = parts.map((p) => ({ p, s: score(p) })).sort((a, b) => b.s - a.s);
