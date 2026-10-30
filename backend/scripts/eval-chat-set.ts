@@ -54,7 +54,7 @@ const INTENT: Record<string, string> = {
   settings_dnd_on: "settings_dnd", settings_dnd_off: "settings_dnd", settings_quiet_hours_set: "settings_quiet_hours", settings_notify_devices_set: "settings_notify_devices",
   bulk_moved: "bulk_move_today", bulk_completed: "bulk_complete_tag", bulk_postponed: "bulk_postpone_nonurgent",
 };
-const NONE = new Set(["smalltalk", "unclear", "unknown", "clarify_intent", "greeting", "thanks", "out_of_scope", "noop", "typo", "chat_fallback", "meaning_ask", "empty"]);
+const NONE = new Set(["chat", "smalltalk", "unclear", "unknown", "clarify_intent", "greeting", "thanks", "out_of_scope", "noop", "typo", "chat_fallback", "meaning_ask", "empty"]);
 
 const clock = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
