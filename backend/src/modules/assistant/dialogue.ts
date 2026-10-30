@@ -1,4 +1,6 @@
 import { isWhatsapp } from "./channel.js";
+import { chatFixesOn } from "./chatFixes.js";
+import { guardModelChoice, type GuardVerdict } from "./guards.js";
 import { answerAction, commandAction, sayAction } from "./actions.js";
 import {
   ConversationRole,
@@ -159,6 +161,9 @@ export function dueLabel(task: Task, turn: Turn): string {
 
 /* ======================================================================== entry point */
 
+/** CHAT_FIXES_V2: how long an unanswered open question stays open in the app (the WhatsApp agent uses the same 30 minutes). */
+export const OPEN_QUESTION_TTL_MS = 30 * 60000;
+
 export async function handleAssistantMessage(input: {
   user: User;
   settings: UserSettings;
@@ -195,6 +200,10 @@ export async function handleAssistantMessage(input: {
     placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
     locationReminders: input.locationReminders,
   };
+  // CHAT_FIXES_V2: an open question left unanswered for 30 quiet minutes is dropped (as on WhatsApp), so a later
+  // message ("How are you today?") is never read as its answer. A tapped button still answers its own question.
+  // Real clock against the conversation's database timestamp (both real time).
+  if (chatFixesOn() && turn.state.pending && !input.payload && Date.now() - conversation.updatedAt.getTime() > OPEN_QUESTION_TTL_MS) turn.state.pending = null;
 
   const text = input.text?.trim() ?? "";
   const userContent = text || input.label?.trim() || "";
@@ -355,7 +364,34 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     const routed = await routeByMeaning(turn, text, ctx, { command: u.intent, confidence: u.ruleConfidence }, u);
     if (routed) return routed;
   }
+  // CHAT_FIXES_V2 guards: an intent the model chose instead of the rules' is checked before it runs.
+  if (chatFixesOn() && u.source === "llm" && u.ruleIntent && u.intent !== u.ruleIntent) {
+    const verdict = guardVerdict(text, u.intent, u.withdrawnFrom ?? null);
+    if (verdict === "forbidden") return handleIntent(turn, { ...u, intent: u.ruleIntent as Understanding["intent"], confidence: u.ruleConfidence }, text);
+    if (verdict === "confirm") return confirmModelChoice(u.intent, text);
+  }
   return handleIntent(turn, u, text);
+}
+
+/** Guard verdict for a model's choice (guards.ts), with the registry's facts; not a command = a reply, runs. */
+function guardVerdict(text: string, choice: string, withdrawnFrom: string | null): GuardVerdict {
+  const facts = (name: string) => {
+    const c = getCommand(name);
+    return c ? { category: c.category, undoable: Boolean(c.undoable) } : { category: "general", undoable: false };
+  };
+  return guardModelChoice(text, choice, facts(choice), withdrawnFrom ? facts(withdrawnFrom) : null);
+}
+
+/**
+ * A state-changing command the model chose: previewed (what it does, on which item) as one button, never run
+ * directly. A tap is the user's own choice and runs it; "No" drops it.
+ */
+function confirmModelChoice(name: string, text: string, args?: CommandArgs): Out {
+  const command = getCommand(name);
+  const ref = typeof args?.ref === "string" && args.ref ? `: ${args.ref}` : "";
+  const label = truncate(`${command?.summary ?? name}${ref}`, 40);
+  const yes = args && command && !command.wrapped ? commandAction(label, name, args, { text, style: "primary" }) : sayAction(label, name, text, "primary");
+  return { content: "Did you mean this?", actions: [yes, { label: "No", payload: { type: "cancel_pending" } }], intent: "meaning_ask" };
 }
 
 /**
@@ -370,7 +406,16 @@ async function routeByMeaning(turn: Turn, text: string, ctx: ParseCtx, rules: { 
       // The flag is off (default): the LLM router as before, only when the rules are unsure; no bank, no arbitration.
       if (!model || rules.confidence >= RULES_UNSURE) return null;
       const routed = await routeWithLlm(text, ctx);
-      return routed ? runRouted(turn, text, routed.command, routed.args, u) : null;
+      if (!routed) return null;
+      if (chatFixesOn()) {
+        // A task's reminder mode needs a named task: "mute notifications" with none is Do Not Disturb.
+        const dnd = routed.command === "task_reminder_mode" ? getCommand("settings_dnd")?.parse(text, ctx) : null;
+        if (dnd) return confirmModelChoice("settings_dnd", text, dnd);
+        const verdict = guardVerdict(text, routed.command, u?.withdrawnFrom ?? null);
+        if (verdict === "forbidden") return null;
+        if (verdict === "confirm") return confirmModelChoice(routed.command, text, routed.args);
+      }
+      return runRouted(turn, text, routed.command, routed.args, u);
     }
     const r = await meaningRoute(text, ctx, rules, { index: await bankIndex(model), model });
     const d = r.decision;

@@ -59,3 +59,57 @@ hints and spelled letters (d98a653, d2d8582), and the Pro invitation shown too o
 No new regex or keyword patches for vocabulary misses. A vocabulary miss becomes a bank row (and a held-out row
 if a teammate wrote it), not a rule. Rules change only for real bugs (wrong data, a crash, safety, a broken
 contract) and for capability gaps (a new command). Crisis detection stays rules-first and is never routed.
+
+## Proposals from the AI-written sets (30 Oct 2026; not code changes)
+
+Measured with `scripts/eval-chat-set.ts` (whole chat, seeded tasks and routines, test database). Sets: the first 150
+(`chat-heldout-ai-written.json`, dev-informed), `chat-set2-ai-en.json` class-test (40, checks the fixes) and fresh (60,
+report only). No real-user rows yet. "Chain" = Ollama first, cloud only if Ollama fails. Fixes = `CHAT_FIXES_V2`.
+
+| Group | AI off: fixes off → on | Chain: fixes off → on | Harmful actions on "none" rows (fixes off → on) |
+|---|---|---|---|
+| Dev 150 | 101 → 107 | 104 → 113 | 1/10 → 0/10 |
+| Class-test 40 | 14 → 20 | 19 → 25 | – |
+| Fresh 60 | 43 → 44 | 49 → 50 | 1/5 → 1/5 |
+
+Class-test per class (correct of n; AI off before → after | chain before → after): D 9: 4→5 | 7→8 · E 6: 1→3 | 2→4 ·
+H 5: 1→1 | 1→1 · A 3: 3→3 | 3→3 · B 3: 2→3 | 2→3 · C 4: 0→1 | 1→2 · G 3: 0→0 | 0→0 · I 3: 0→0 | 0→0 · F 2: 2→2 | 2→2 ·
+routine moves 2: 1→2 | 1→2.
+
+### Clear bugs (shown to the owner; guarded in fix/chat-guards behind `CHAT_FIXES_V2`, off)
+
+1. **A habit word alone creates a routine** (harmful): "booked the team lunch, tick it off" (n-069) and "play my
+   workout playlist" (n-100) create routines. Proposal: no routine without an explicit repeat cue; otherwise a task,
+   or "How often?".
+2. **When a fix makes a message unsure, the model can pick a changing command in the wrong family** (chain):
+   "not going to the gym today" → routine completed (n-016); "can't make the reading session tonight" → undo (n-018).
+   Proposal: an unsure H message may only reach skip / pause commands, an unsure E message only complete commands,
+   else ask.
+3. **"notifications" goes to a task's reminder mode**: "turn off notifications for 2 hours" (n-032), "mute
+   notifications for 90 minutes" (n-087) → task_reminder_mode. Proposal: notification / mute / do-not-disturb words
+   reach the settings commands before task commands.
+
+Guards (`assistant/guards.ts`, approved 30 Oct 2026): (1) a routine needs a repeat cue (every, each, daily, weekly,
+weekdays, weekends, plural days) or "routine/habit" with a create verb; (2a) after a rule fix withdrew an intent, the
+model may only choose within that intent's family (tasks and routines are one family); (2b) a negation (not, no,
+can't, cannot, won't, don't, n't, skip, stop) forbids every complete-type command; (2c) undo never comes from the
+model; (2d) a state-changing command the model chose is previewed as one "Did you mean this?" button, never run
+directly; (3) muting notifications with no task named is Do Not Disturb (any clause), and a model's
+task_reminder_mode goes to Do Not Disturb when that parser accepts the text. Tests: `tests/chatGuards.test.ts`
+(tables, plus the reported sentences against a model that always gives the bad answer).
+
+### Fix weaknesses (proposals, to test on new rows)
+
+- I: feelings with no subject ("so tired today", "kind of anxious this morning", "exhausted tonight") still become
+  tasks: accept a bare feeling word with a time word and no action verb.
+- C: changes without "now / instead" ("actually the dentist is at 5pm", "the call with the bank will take an hour",
+  "the car wash can wait until saturday") still create tasks: add "actually", "will take", "can wait until".
+- G: the status clause leaks into the reference ("I'm exhausted, move everything to tomorrow" → task "exhausted
+  everything"): drop the status clause before resolving; "everything / all of today / today's list" is a bulk move.
+- H: "no yoga today" (no verb) is a skip of that routine.
+- E: "practiced yoga this morning", "did the gym today": report verbs beyond the current list.
+
+### Vocabulary (bank rows, not code)
+
+"how does my week look", "fit my tasks into my free time this afternoon", "move today's list to thursday", "delete the
+completed ones", "mark all my errands as done", "compare this week with last week", "drop the passport thing".

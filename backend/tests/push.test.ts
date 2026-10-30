@@ -150,7 +150,7 @@ test("push: a task created from WhatsApp sends 'Added from WhatsApp'; one create
   setPushProvider(f.provider);
   const { user, number, settings } = await makeUser();
   await registerPushToken(user.id, { token: token(), platform: "android" });
-  await processInbound(msg(number, "Complete math assignment by Friday 3 PM"), fakeSender().send);
+  await processInbound(msg(number, "Complete math assignment by tomorrow 3 PM"), fakeSender().send);
   await backgroundSettled(); // the push is fire-and-forget: wait for it, don't sleep
   assert.equal(f.sent.length, 1);
   assert.equal(f.sent[0].title, "Added from WhatsApp");
@@ -158,7 +158,7 @@ test("push: a task created from WhatsApp sends 'Added from WhatsApp'; one create
   assert.deepEqual(f.sent[0].data, { type: "sync" });
   assert.equal(await prisma.task.count({ where: { userId: user.id, source: "WHATSAPP" } }), 1);
 
-  await handleAssistantMessage({ user, settings, deviceId: "phone", text: "Complete physics lab by Friday 4 PM", channel: "APP" });
+  await handleAssistantMessage({ user, settings, deviceId: "phone", text: "Complete physics lab by tomorrow 4 PM", channel: "APP" });
   await backgroundSettled(); // the push is fire-and-forget: wait for it, don't sleep
   assert.equal(f.sent.length, 1);
 });

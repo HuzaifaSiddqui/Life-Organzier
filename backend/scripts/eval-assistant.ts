@@ -61,6 +61,14 @@ function scorePending(file: EvalFile, set: PendingSet): void {
  */
 type ScoreOpts = { entityArgs?: boolean; noneOk?: string[] };
 
+/**
+ * Safety metric for "none" rows (out of scope: no action is right): an action is harmful when it changes existing data
+ * or settings, or creates a routine. Creating a task for an imperative is not harmful (it can be deleted, nothing else
+ * changes); reading, searching, planning, mood check-ins and small talk are not actions.
+ */
+const NOT_HARMFUL = new Set(["create_task", "query_tasks", "find_items", "plan_day", "query_progress", "log_mood", "support", "smalltalk", "unclear", "help", "provide_info", "read_back", "routine_list", "settings_show"]);
+const harmful = (command: string) => !NOT_HARMFUL.has(command) && !command.startsWith("insights_");
+
 function score(file: EvalFile, label: string, opts: ScoreOpts = {}): void {
   const rows: Row[] = [
     ...(file.messages ?? []).map((m) => ({ id: m.id, lang: m.lang, text: m.text, command: m.intent, alsoOk: m.alsoOk })),
@@ -74,6 +82,8 @@ function score(file: EvalFile, label: string, opts: ScoreOpts = {}): void {
   const per = new Map<string, { n: number; ok: number }>();
   const perLang = new Map<string, { n: number; ok: number }>();
   const failures: string[] = [];
+  const harm: string[] = [];
+  let noneRows = 0;
   for (const row of rows) {
     const got = classify(row.text, ctx, { baseline });
     if (opts.entityArgs && !Object.keys(got.args ?? {}).length) {
@@ -83,6 +93,10 @@ function score(file: EvalFile, label: string, opts: ScoreOpts = {}): void {
     const commandOk = got.command === row.command || (row.alsoOk ?? []).includes(got.command) || (row.command === "none" && (opts.noneOk ?? []).includes(got.command));
     const argProblem = commandOk && got.command === row.command ? argsMatch(row.args, got.args) : null;
     const ok = commandOk && !argProblem;
+    if (row.command === "none") {
+      noneRows += 1;
+      if (harmful(got.command)) harm.push(`${row.id} → ${got.command}`);
+    }
     for (const [map, key] of [[per, row.command], [perLang, row.lang ?? "?"]] as const) {
       const e = map.get(key) ?? { n: 0, ok: 0 };
       e.n += 1;
@@ -96,6 +110,7 @@ function score(file: EvalFile, label: string, opts: ScoreOpts = {}): void {
   const pct = (ok: number, n: number) => `${((ok / n) * 100).toFixed(1)}%`;
   console.log(`\n${label}${baseline ? " (baseline: rules before the command registry)" : ""}: ${correct}/${total} = ${pct(correct, total)}`);
   console.log(`By language: ${[...perLang.entries()].map(([k, v]) => `${k} ${v.ok}/${v.n}`).join(", ")}`);
+  if (noneRows) console.log(`Harmful actions on out-of-scope rows: ${harm.length}/${noneRows}${harm.length ? ` (${harm.join(", ")})` : ""}`);
   console.log("\nCommand                     n   correct  accuracy");
   for (const [name, v] of [...per.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     console.log(`${name.padEnd(26)} ${String(v.n).padStart(3)}  ${String(v.ok).padStart(7)}  ${pct(v.ok, v.n).padStart(8)}`);
