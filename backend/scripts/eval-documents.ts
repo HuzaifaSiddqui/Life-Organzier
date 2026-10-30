@@ -18,7 +18,7 @@ if (!flags.has("--ai")) {
   process.env.GEMINI_API_KEY = "";
 }
 const { analyzeDocument, DEADLINE_AUTO, SCHEDULE_AUTO } = await import("../src/modules/documents/documentProcessing.js");
-const { AiService, setAi } = await import("../src/ai/llm.js");
+const { AiService, recentCalls, setAi } = await import("../src/ai/llm.js");
 const { shutdownOcr } = await import("../src/modules/documents/textExtraction.js");
 const { timeMatches, titleMatches } = await import("./docMatch.js");
 
@@ -254,6 +254,17 @@ function print(title: string, rows: Row[]): void {
   if (failing.length) console.log(`Failures:\n${failing.map((r) => `  ${r.file}\n    ${r.failures.join("\n    ")}`).join("\n")}`);
 }
 print("Rules only (AI off)", rulesRows);
-if (aiRows) print("With the model (AI on)", aiRows);
+if (aiRows) {
+  print("With the model (AI on)", aiRows);
+  const p95 = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.ceil(xs.length * 0.95) - 1)] : 0);
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const ok = recentCalls.filter((c) => c.out >= 0);
+  const tok = ok.map((c) => c.out);
+  const slow = recentCalls.filter((c) => c.ms >= 30000);
+  const failed = recentCalls.length - ok.length;
+  console.log(`  document time p95 ${(p95(aiRows.map((r) => r.ms)) / 1000).toFixed(1)} s, max ${(Math.max(...aiRows.map((r) => r.ms)) / 1000).toFixed(1)} s`);
+  console.log(`  local model calls ${tok.length}; output tokens per call mean ${mean(tok).toFixed(0)}, p95 ${p95(tok)}, max ${tok.length ? Math.max(...tok) : 0}; calls at the 500-token cap ${tok.filter((n) => n >= 500).length}; failed or timed out ${failed}`);
+  console.log(`  call time p95 ${(p95(recentCalls.map((c) => c.ms)) / 1000).toFixed(1)} s; calls ≥ 30 s: ${slow.length} (their output tokens, -1 = failed: ${slow.map((c) => c.out).join(", ") || "none"}); ms per output token mean ${mean(ok.map((c) => c.ms / Math.max(1, c.out))).toFixed(0)}`);
+}
 console.log(`\nReport: ${out}`);
 process.exit(0);

@@ -8,7 +8,7 @@ import { weekdayLabels } from "./gridTimetable.js";
  * Document routing and checks (docs/known-limitations.md → Documents). Every behaviour here is off unless its flag is
  * "on": DOC_FALLBACK_UI, DOC_ROUTING, DOC_PRIORITY_V2, DOC_EVIDENCE, DOC_LAYOUT, DOC_AGREE. Off = the reader as before.
  */
-export type DocFlag = "DOC_FALLBACK_UI" | "DOC_ROUTING" | "DOC_PRIORITY_V2" | "DOC_EVIDENCE" | "DOC_LAYOUT" | "DOC_AGREE";
+export type DocFlag = "DOC_FALLBACK_UI" | "DOC_ROUTING" | "DOC_PRIORITY_V2" | "DOC_EVIDENCE" | "DOC_EVIDENCE_V2" | "DOC_LAYOUT" | "DOC_AGREE";
 export const docFlag = (name: DocFlag): boolean => process.env[name]?.toLowerCase() === "on";
 
 export const DOC_KINDS = ["timetable", "schedule", "notice", "assignment", "other"] as const;
@@ -79,7 +79,7 @@ timetable = weekly classes by day and time; schedule = course outline, semester 
 }
 
 /** Highest confidence that is still never auto-created (just below the gates in documentProcessing.ts). */
-const REVIEW_DEADLINE = 94;
+export const REVIEW_DEADLINE = 94;
 const REVIEW_SCHEDULE = 89;
 const toReview = (d: ExtractedDeadline): ExtractedDeadline => ({ ...d, review: true, confidence: Math.min(d.confidence, REVIEW_DEADLINE) });
 const scheduleToReview = (s: ExtractedSchedule): ExtractedSchedule => ({ ...s, confidence: Math.min(s.confidence, REVIEW_SCHEDULE) });

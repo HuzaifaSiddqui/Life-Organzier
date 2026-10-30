@@ -29,6 +29,13 @@ export type CompletionOptions = {
   images?: Array<{ mimeType: string; data: string }>;
 };
 
+/** Output tokens and duration of recent local model calls (the evaluation scripts report them). */
+export const recentCalls: Array<{ out: number; ms: number }> = [];
+function recordCall(out: number, ms: number): void {
+  recentCalls.push({ out, ms });
+  if (recentCalls.length > 2000) recentCalls.shift(); // ponytail: a bounded list, a metrics store if this is ever monitored
+}
+
 export interface LlmProvider {
   readonly name: string;
   /** Model identifier, for status reporting. */
@@ -90,6 +97,16 @@ export class OllamaProvider implements LlmProvider {
   ) {}
 
   async chat(messages: ChatMessage[], options: CompletionOptions): Promise<string> {
+    const started = Date.now();
+    try {
+      return await this.chatOnce(messages, options, started);
+    } catch (error) {
+      recordCall(-1, Date.now() - started); // failed or timed out: no output count
+      throw error;
+    }
+  }
+
+  private async chatOnce(messages: ChatMessage[], options: CompletionOptions, started: number): Promise<string> {
     const response = await fetchWithTimeout(
       `${this.baseUrl.replace(/\/$/, "")}/api/chat`,
       {
@@ -113,7 +130,8 @@ export class OllamaProvider implements LlmProvider {
       Math.min(options.timeoutMs ?? this.timeoutMs, this.timeoutMs),
     );
     if (!response.ok) throw new ProviderHttpError(response.status, `Ollama returned HTTP ${response.status}`);
-    const body = (await response.json()) as { message?: { content?: string } };
+    const body = (await response.json()) as { message?: { content?: string }; eval_count?: number };
+    if (typeof body.eval_count === "number") recordCall(body.eval_count, Date.now() - started);
     const text = body.message?.content ?? "";
     if (!text.trim()) throw new Error("Ollama returned an empty response");
     return text;

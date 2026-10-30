@@ -8,7 +8,7 @@ import { rememberFact } from "../memory/memoryService.js";
 import { createRoutine } from "../routines/routineService.js";
 import { createTask, serializeTask } from "../tasks/taskService.js";
 import { aiDeadlines, chunkText, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmActionItems, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
-import { AGREE_MAX_CALLS, agreeOnAiItems, classifyDocument, docFlag, documentPriority, kindByRules, routeItems, verifyEvidence, type DocKind, type KindResult } from "./routing.js";
+import { AGREE_MAX_CALLS, agreeOnAiItems, REVIEW_DEADLINE, classifyDocument, docFlag, documentPriority, kindByRules, routeItems, verifyEvidence, type DocKind, type KindResult } from "./routing.js";
 import { gridSchedulesFromImage, gridSchedulesFromPdf, hasClockGrid, layoutRows } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
 
@@ -162,7 +162,11 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
     const aiOn = getAi().enabled && getAi().available;
     const pass = aiOn && left() >= MIN_AI_MS ? await aiDeadlines(text, todayYmd, tz, { budgetMs: left() }) : { items: [], cutShort: aiOn };
     timedOut = pass.cutShort;
-    if (docFlag("DOC_EVIDENCE")) {
+    if (docFlag("DOC_EVIDENCE_V2")) {
+      // The cited line was looked up and gives the date: verified; otherwise review only, no agreement bonus.
+      const checked = pass.items.map((i) => (i.lineVerified ? i : { ...i, review: true, confidence: Math.min(i.confidence, REVIEW_DEADLINE) }));
+      deadlines = mergeDeadlines(mergeDeadlines(deadlines, checked.filter((i) => i.lineVerified)), checked.filter((i) => !i.lineVerified), { agree: false });
+    } else if (docFlag("DOC_EVIDENCE")) {
       // Only items whose source line is in the text (and gives their date) may agree with the rules.
       const checked = pass.items.map((i) => verifyEvidence(i, text));
       deadlines = mergeDeadlines(mergeDeadlines(deadlines, checked.filter((i) => i.verified)), checked.filter((i) => !i.verified), { agree: false });
