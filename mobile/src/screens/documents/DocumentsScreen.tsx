@@ -74,7 +74,7 @@ function toEditable(d: ExtractedDeadline): EditableDeadline {
     existing: Boolean(d.existing),
     // DOC_EVIDENCE: the document line it came from, when the server checked it.
     source: d.evidence ?? d.source,
-    flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, removedSinceUpload: d.removedSinceUpload, verified: d.verified, modelsAgree: d.modelsAgree },
+    flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, yearCorrected: d.yearCorrected, removedSinceUpload: d.removedSinceUpload, verified: d.verified, modelsAgree: d.modelsAgree },
   };
 }
 
