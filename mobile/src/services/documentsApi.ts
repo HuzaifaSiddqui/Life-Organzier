@@ -20,6 +20,8 @@ export type ExtractedDeadline = {
   needsSemesterStart?: boolean;
   rangeStart?: string | null;
   yearInferred?: boolean;
+  /** DOC_DATESHEET: an OCR slip in the year was corrected (always reviewed). */
+  yearCorrected?: { from: number; to: number };
   aiOnly?: boolean;
   aiAgrees?: boolean;
   /** Added from this file before, then deleted: offered again, unticked. */

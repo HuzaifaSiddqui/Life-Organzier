@@ -15,6 +15,7 @@ const en = {
   "docReview.aiOnly": "Found by AI, not by the rules. Please check it.",
   "docReview.removedSinceUpload": "You added this from this file before and then deleted it. Tick it to add it again.",
   "docReview.range": "Runs from {start}; the deadline is the last day.",
+  "docReview.yearCorrected": "Year corrected from {from} to {to}. Please check it.",
   "docReview.yearInferred": "The year comes from the document (its term or other dates).",
   "docReview.pickDate": "Pick date",
   "docReview.pickTime": "Pick time",
@@ -273,7 +274,7 @@ export type StringKey = keyof typeof en;
  * English-only keys until after the FYP evaluation (10 Nov 2026; Urdu is deferred, docs/known-limitations.md): Urdu
  * shows the English text for these (LocaleProvider falls back to English).
  */
-type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | "docReview.unverified" | "docReview.modelsAgree">;
+type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | "docReview.unverified" | "docReview.modelsAgree" | "docReview.yearCorrected">;
 
 const ur: Record<Exclude<StringKey, EnglishOnlyKey>, string> & Partial<Record<EnglishOnlyKey, string>> = {
   "common.retry": "دوبارہ کوشش کریں",

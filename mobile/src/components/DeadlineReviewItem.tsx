@@ -14,6 +14,8 @@ export type ReviewFlags = {
   aiOnly?: boolean;
   rangeStart?: string | null;
   yearInferred?: boolean;
+  /** DOC_DATESHEET: the year was an OCR slip, corrected to the sheet's year. */
+  yearCorrected?: { from: number; to: number };
   removedSinceUpload?: boolean;
   /** DOC_EVIDENCE: false = the AI's source line wasn't found in the document. */
   verified?: boolean;
@@ -70,6 +72,7 @@ export function DeadlineReviewItem({
   if (flags.modelsAgree) notes.push({ key: "docReview.modelsAgree", tone: "info" });
   if (flags.rangeStart) notes.push({ key: "docReview.range", vars: { start: flags.rangeStart }, tone: "info" });
   if (flags.yearInferred) notes.push({ key: "docReview.yearInferred", tone: "info" });
+  if (flags.yearCorrected) notes.push({ key: "docReview.yearCorrected", vars: { from: String(flags.yearCorrected.from), to: String(flags.yearCorrected.to) }, tone: "warning" });
 
   const picker = picking ? (
     <DateTimePicker value={value} mode={picking} display={Platform.OS === "ios" ? (picking === "date" ? "inline" : "spinner") : "default"} onValueChange={onPick} onDismiss={() => setPicking(null)} />

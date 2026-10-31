@@ -21,6 +21,8 @@ export type ExtractedDeadline = {
   rangeStart?: string | null;
   /** The year came from the document ("Fall 2026", its other dates), not from the date itself. */
   yearInferred?: boolean;
+  /** DOC_DATESHEET: an OCR slip in the year was corrected to the sheet's year (always reviewed, shown in the row). */
+  yearCorrected?: { from: number; to: number };
   /** Always confirmed by the user, even when the model agrees (tickets, bills, dates from week numbers). */
   review?: boolean;
   /** The AI pass found the same item (same date, similar title). */
@@ -127,7 +129,7 @@ const SHEET_RANGE = /\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:?\d{2}\b/;
  * time range becomes "course date time". The course is the text before the first "_", with the line above joined
  * when the name wrapped, and leading paper / room codes dropped.
  */
-function sheetRows(text: string): { text: string; rows: number } {
+function sheetRows(text: string): { text: string; rows: number; corrections: Array<{ text: string; from: number; to: number }> } {
   const out: string[] = [];
   let rows = 0;
   for (const line of text.split("\n")) {
@@ -150,8 +152,16 @@ function sheetRows(text: string): { text: string; rows: number } {
   // An OCR slip in one row's year ("2029" among "2026"s): use the sheet's year when it is more than a year off.
   const years = out.flatMap((l) => l.match(SHEET_DATE)?.[0].match(/\d{4}$/) ?? []).map(Number);
   const common = years.sort((a, b) => years.filter((y) => y === b).length - years.filter((y) => y === a).length)[0];
-  const fixed = out.map((l) => l.replace(SHEET_DATE, (d) => (rows >= 3 && Math.abs(Number(d.slice(-4)) - common) > 1 ? `${d.slice(0, -4)}${common}` : d)));
-  return { text: fixed.join("\n"), rows };
+  const corrections: Array<{ text: string; from: number; to: number }> = [];
+  const fixed = out.map((l) =>
+    l.replace(SHEET_DATE, (d) => {
+      if (rows < 3 || Math.abs(Number(d.slice(-4)) - common) <= 1) return d;
+      const to = `${d.slice(0, -4)}${common}`;
+      corrections.push({ text: to, from: Number(d.slice(-4)), to: common });
+      return to;
+    }),
+  );
+  return { text: fixed.join("\n"), rows, corrections };
 }
 
 type Candidate = { text: string; source: string; title?: string; activity?: string; fromTable?: boolean };
@@ -241,6 +251,8 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     if (week && date) confidence = Math.min(confidence, 85); // computed from the semester start: confirm first
     if (event) confidence = Math.min(confidence, 90); // tickets, bills, notices: always reviewed
     if (sheetByShape && !c.text.match(ACTIVITY_RE)) confidence = Math.min(confidence, 75); // exam inferred from layout only
+    const corrected = sheet?.corrections.find((x) => c.source.includes(x.text));
+    if (corrected) confidence = Math.min(confidence, 75); // a guessed year: the user confirms it
     if (vague) confidence = Math.min(confidence, needsSemesterStart ? 40 : 45);
     confidence = Math.max(5, Math.min(99, confidence));
 
@@ -259,6 +271,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
       ...(needsSemesterStart ? { needsSemesterStart: true } : {}),
       ...(range.start ? { rangeStart: range.start } : {}),
       ...(yearInferred ? { yearInferred: true } : {}),
+      ...(corrected ? { yearCorrected: { from: corrected.from, to: corrected.to }, review: true } : {}),
       ...(event || (week && date) || (sheetByShape && !c.text.match(ACTIVITY_RE)) ? { review: true } : {}),
     });
   }
