@@ -8,7 +8,7 @@ described in [rollout.md](rollout.md), and the rollback layers in [rollback.md](
 
 ```dotenv
 # Chat
-CHAT_FIXES_V2=on        # rule fixes (#31); also enables the model guards once #35 is merged
+CHAT_FIXES_V2=on        # rule fixes (#31) and the model guards (#35)
 OOS_NOTE=on             # "I can't call / send / book that myself, so I'll keep it as a task for you."
 OOS_CONFIRM=off         # the stricter alternative to OOS_NOTE; keep off
 
@@ -22,19 +22,21 @@ LLM_PROVIDERS_VISION=    # empty: images never leave this machine
 # Documents
 DOC_ROUTING=on          # passed its gate: 3 clean runs, recall 153–154/154, 0 wrong items, p95 25.8–33.4 s
 DOC_AI_SPLIT=on         # dense chunks (date sheets) read in pieces so the AI reply isn't cut off
-DOC_EVIDENCE=off        # failed its gate (latency); stays off
-DOC_EVIDENCE_V2=off     # gate running (feat/doc-evidence-v2); stays off unless it passes with 3 valid runs
+DOC_EVIDENCE=off        # stays off: crashed the eval with "OCR is busy" in 4 of 5 runs (known-limitations.md)
+DOC_DATESHEET=off       # stays off: #34 is not merged; see below
 
 # Everything else stays at its default (off / empty)
 ```
 
 **What the flags depend on:**
 
-- `CHAT_FIXES_V2=on` turns on the rule fixes merged in #31. The model guards (no routine without a repeat cue, model
-  choices checked and previewed, "mute notifications" → Do Not Disturb) only exist once #35 is merged. Without #35 the
-  demo runs the fixes without the guards.
+- `CHAT_FIXES_V2=on` turns on the rule fixes (#31) and the model guards (#35, merged): no routine without a repeat cue;
+  a model's choice stays in the family a rule fix withdrew from, never completes after a negation and never undoes; a
+  state-changing choice by the model is shown as a "Did you mean this?" button instead of running; "mute
+  notifications" with no task named is Do Not Disturb.
 - `DOC_DATESHEET` (dash dates such as "4-Nov-2026", date sheets without a heading, screenshot borders) is in #34, which
-  is not merged. It is not part of this configuration unless #34 is merged and approved.
+  is not merged. It stays out of the demo until the rules-only document eval is rerun on a quiet machine and the
+  private documents are scored. The `DOC_EVIDENCE_V2` work (`feat/doc-evidence-v2`) is not on main and is not used.
 
 **Privacy (CLOUD_FALLBACK=on):** if Ollama fails, the chat message goes to Deploy (tier B) or Groq (tier A). The message
 is masked but not anonymised ([rollout.md → privacy trade-off](rollout.md#cloud-fallback-the-privacy-trade-off)). Use
@@ -68,7 +70,7 @@ migration or loses data.
 
 | Flag | Demo | Revert to | What changes back |
 |---|---|---|---|
-| `CHAT_FIXES_V2` | `on` | `off` | Rule decisions as before #31 (no fixes, no guards) |
+| `CHAT_FIXES_V2` | `on` | `off` | Rule decisions as before #31; the model's choices run without the guards |
 | `OOS_NOTE` | `on` | `off` | Out-of-scope requests become tasks with no note |
 | `CLOUD_FALLBACK` | `on` | `off` | Every model call is local only; the `LLM_PROVIDERS_*` values are ignored |
 | `LLM_PROVIDERS_CHAT` | `ollama,deploy,groq` | empty | No hosted chain (also implied by `CLOUD_FALLBACK=off`) |
