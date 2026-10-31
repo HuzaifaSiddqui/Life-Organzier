@@ -6,7 +6,7 @@
  * LLM_PROVIDERS_CHAT=ollama,deploy,groq, so the cloud is only used when Ollama fails). Flags such as CHAT_FIXES_V2 come
  * from the environment. Uses TEST_DATABASE_URL only (the name must contain "test"); every test user is deleted.
  *
- * Scored by what ran: the command the chat reports, else its reply intent mapped to a command ("none" = no action).
+ * Scored by what ran: the command the reply reports ("none" = no command handled it, a reply only).
  * Harmful action (on rows labelled "none"): an existing task, routine, occurrence or setting changed, or a routine
  * created; a new task is not harmful. Judged from the database before and after the message.
  */
@@ -29,7 +29,7 @@ if (AI === "off") Object.assign(process.env, { AI_ENABLED: "false", GEMINI_API_K
 else Object.assign(process.env, { AI_ENABLED: "true", CLOUD_FALLBACK: "on", LLM_PROVIDERS_CHAT: "ollama,deploy,groq" });
 
 const { prisma } = await import("../src/config/db.js");
-await import("../src/modules/assistant/commands/registry.js");
+const { getCommand } = await import("../src/modules/assistant/commands/registry.js");
 const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
 const { createRoutine } = await import("../src/modules/routines/routineService.js");
 const { zonedTimeToUtc } = await import("../src/lib/time.js");
@@ -41,20 +41,6 @@ const file = JSON.parse(readFileSync(arg("file") as string, "utf8")) as { now: s
 const seed: Seed = arg("seed-from") ? (JSON.parse(readFileSync(arg("seed-from") as string, "utf8")) as { seed: Seed }).seed : (file.seed ?? {});
 const NOW = new Date(file.now);
 const TZ = file.timezone;
-
-/** Reply intents that are not a registry command, mapped to the command they carried out. */
-const INTENT: Record<string, string> = {
-  task_created: "create_task", clarify: "create_task", past_date: "create_task", no_slot: "create_task", capacity: "create_task", conflict: "create_task", mandatory_confirm: "create_task", prereq: "create_task",
-  routine_created: "create_routine", routine_time_set: "create_routine", interval_change_routine_screen: "create_routine",
-  task_completed: "complete_task", confirm_delete: "delete_task", task_deleted: "delete_task",
-  task_updated: "update_task", update_ask: "update_task", change_or_new: "update_task", postponed: "update_task",
-  query_urgent: "query_tasks", query_task: "query_tasks", query_classes: "query_tasks", overdue_now: "query_tasks",
-  overdue_plan: "plan_day", mood_ask: "log_mood", mood_confirm: "log_mood", mood_logged: "log_mood", breathing: "log_mood",
-  undone: "undo", undo_none: "undo", routine_rescheduled: "routine_reschedule_once", routine_updated: "routine_update",
-  settings_dnd_on: "settings_dnd", settings_dnd_off: "settings_dnd", settings_quiet_hours_set: "settings_quiet_hours", settings_notify_devices_set: "settings_notify_devices",
-  bulk_moved: "bulk_move_today", bulk_completed: "bulk_complete_tag", bulk_postponed: "bulk_postpone_nonurgent",
-};
-const NONE = new Set(["chat", "smalltalk", "unclear", "unknown", "clarify_intent", "greeting", "thanks", "out_of_scope", "noop", "typo", "chat_fallback", "meaning_ask", "empty"]);
 
 const clock = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -109,7 +95,7 @@ function harmfulChanges(before: Awaited<ReturnType<typeof snapshot>>, after: Awa
   return [...new Set(out)];
 }
 
-const results: Array<{ id: string; group: string; text: string; expected: string; got: string; ok: boolean; offered: boolean; harm: string[]; reply: string }> = [];
+const results: Array<{ id: string; group: string; text: string; expected: string; got: string; ok: boolean; offered: boolean; intent: string; harm: string[]; reply: string }> = [];
 for (const row of file.commands) {
   if (AI === "off") setAi(new AiService([]));
   else setAi(null);
@@ -123,9 +109,12 @@ for (const row of file.commands) {
     const intent = out.intent ?? "";
     // A "Did you mean this?" with one command button (the guards' preview): scored by that command, counted as offered.
     const offered = intent === "meaning_ask" ? (out.actions ?? []).filter((a) => a.payload?.type === "command").map((a) => a.payload?.command as string) : [];
-    const got = offered.length === 1 ? offered[0] : out.command && out.command !== "multi" ? out.command : NONE.has(intent) ? "none" : (INTENT[intent] ?? intent);
-    const ok = got === row.command || (row.alsoOk ?? []).includes(got);
-    results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, offered: offered.length === 1, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
+    // Every reply says which command handled it (handlers.ts → handleIntent); none = a reply only (chat, help to ask…).
+    const got = offered.length === 1 ? offered[0] : (out.command ?? "none");
+    // A row labelled with a reply, not a command ("support"): the reply's intent is compared instead.
+    const label = (c: string) => (c === "none" || c === "multi" || getCommand(c) ? got === c : intent === c);
+    const ok = label(row.command) || (row.alsoOk ?? []).some(label);
+    results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, offered: offered.length === 1, intent, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
   }
