@@ -87,8 +87,8 @@ Do this 15 minutes before the demo, on the laptop you will use, plugged in, with
       takes up to about 2 minutes).
 - [ ] **Memory:** the 7B model needs about 5 GB of free RAM. Close heavy apps: a second editor, browser tabs with
       video, the Antigravity app. Check Activity Monitor → Memory: memory pressure should be green. In the
-      evaluation runs, another app using a full CPU core made document timings much worse and twice made OCR give up
-      ("OCR is busy").
+      evaluation runs, other busy apps made document timings much worse. Separately, OCR sometimes gave up
+      with "OCR is busy"; the cause is unexplained (known-limitations.md).
 - [ ] **Backend up:** `curl -s localhost:5050/health` returns `"ok":true`, and `ai.available` is `true`.
 - [ ] **AI health route:** `curl -s localhost:5050/health/ai` shows `aiEnabled: true`; the `chat` job is `configured: true`
       with chain `ollama, deploy, groq`; the `docs` and `vision` jobs are `configured: false`; each provider is `up` (none
