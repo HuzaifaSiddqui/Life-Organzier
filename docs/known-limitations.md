@@ -100,6 +100,11 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   with no ground truth to score against. "Wrong type?" re-reads the stored text, so a timetable read by position from
   a photo or PDF grid loses that layout when re-read. Copy for the new screens is English only until after
   10 Nov 2026.
+- **`DOC_EVIDENCE` crashes the document eval with "OCR is busy"; cause unexplained** (flag stays off). In the
+  30–31 Oct 2026 repeat runs (AI on, Ollama qwen2.5:7b), 4 of 5 evidence runs, v1 and v2 (`feat/doc-evidence-v2`,
+  numbered lines with code lookup), stopped with "OCR is busy": an OCR job waited past its document's time budget in
+  the queue. All 3 baseline runs over the same hours completed. The one valid v2 run read 154/154 (p95 per
+  document 56.1 s, against 37.6–48.0 s for the baseline). Not investigated; neither flag is turned on.
 - **The AI pass loses a dense chunk's items** (flag `DOC_AI_SPLIT`, off). A chunk with many dates (a date sheet)
   needs a longer reply than the 500-token / 10-item cap, so the reply is cut mid-JSON and that chunk's AI items are
   dropped (the rules' items stay). `DOC_AI_SPLIT=on` reads such a chunk in pieces of at most 8 dated lines and halves a
