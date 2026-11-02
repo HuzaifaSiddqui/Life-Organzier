@@ -164,3 +164,55 @@ test("commands behind the flag can't be reached while it is off: not by name (ro
   assert.ok(!activeCommands().some((c) => c.name.endsWith("_group")));
   withFlag(() => assert.ok(getCommand("bulk_move_group")));
 });
+
+test("group bulk commands: nothing changes before confirmation, one undo restores everything, an expired confirmation does nothing", { skip }, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { prisma } = await import("../src/config/db.js");
+  const { AiService, setAi } = await import("../src/ai/llm.js");
+  const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
+  const { zonedTimeToUtc } = await import("../src/lib/time.js");
+  const { CONFIRM_TTL_MS } = await import("../src/modules/assistant/commands/runtime.js");
+  const { NOW, TZ } = await import("./fixtures.js");
+  setAi(new AiService([]));
+  const keep = process.env.CHAT_FIXES_V2;
+  process.env.CHAT_FIXES_V2 = "on";
+  for (const [ask, kind] of [["push all my errands to friday", "move"], ["delete all my errands", "delete"]] as const) {
+    const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+    await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, tier: "PRO" } });
+    // As the app stores a timed task: dueDate (the day), dueTime and dueAt.
+    const due = (ymd: string) => ({ dueDate: zonedTimeToUtc(ymd, 0, 0, TZ), dueTime: "10 AM", dueAt: zonedTimeToUtc(ymd, 10, 0, TZ) });
+    await prisma.task.create({ data: { userId: user.id, title: "Grocery run", priority: "MEDIUM", source: "CHAT", tags: ["errands"], ...due("2026-10-06") } });
+    await prisma.task.create({ data: { userId: user.id, title: "Post the parcel", priority: "MEDIUM", source: "CHAT", tags: ["errands"], ...due("2026-10-07") } });
+    await prisma.task.create({ data: { userId: user.id, title: "Physics lab report", priority: "MEDIUM", source: "CHAT", ...due("2026-10-08") } });
+    // The task as the user sees it (sync counters version / lastModifiedAt move with every change, an undo included).
+    const state = async () => JSON.stringify((await prisma.task.findMany({ where: { userId: user.id }, orderBy: { title: "asc" } })).map(({ updatedAt: _u, version: _v, lastModifiedAt: _m, ...t }) => t));
+    const send = async (input: { text?: string; payload?: unknown }, at = NOW) =>
+      (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: at, text: input.text ?? null, payload: (input.payload as never) ?? null, label: null })).message as { content: string; intent?: string };
+    try {
+      const original = await state();
+      // 1. The preview changes nothing.
+      const preview = await send({ text: ask });
+      assert.match(preview.content, /2 tasks in "errands"/, `${kind}: preview`);
+      assert.equal(await state(), original, `${kind}: nothing changes before confirmation`);
+      // 2. An expired confirmation does nothing.
+      const late = await send({ payload: { type: "confirm_pending" } }, new Date(NOW.getTime() + CONFIRM_TTL_MS + 60000));
+      assert.equal(late.intent, "confirm_expired", `${kind}: expired`);
+      assert.equal(await state(), original, `${kind}: an expired confirmation does nothing`);
+      // 3. Confirmed, it changes exactly the group; one undo restores everything.
+      await send({ text: ask });
+      const done = await send({ payload: { type: "confirm_pending" } });
+      assert.match(done.intent ?? "", kind === "move" ? /bulk_moved/ : /bulk_deleted/);
+      const changed = await prisma.task.findMany({ where: { userId: user.id } });
+      const errands = changed.filter((t) => t.title !== "Physics lab report");
+      if (kind === "move") assert.ok(errands.every((t) => t.dueAt?.toISOString().startsWith("2026-10-09")), "both errands on Friday");
+      else assert.ok(errands.every((t) => t.status === "DELETED" || t.deletedAt), "both errands deleted");
+      assert.equal(changed.find((t) => t.title === "Physics lab report")?.dueAt?.toISOString(), zonedTimeToUtc("2026-10-08", 10, 0, TZ).toISOString(), "the other task untouched");
+      await send({ text: "undo" });
+      assert.equal(await state(), original, `${kind}: one undo restores everything`);
+    } finally {
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  }
+  if (keep === undefined) delete process.env.CHAT_FIXES_V2;
+  else process.env.CHAT_FIXES_V2 = keep;
+});

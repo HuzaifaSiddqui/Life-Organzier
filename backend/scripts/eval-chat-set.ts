@@ -33,12 +33,26 @@ const { prisma } = await import("../src/config/db.js");
 const { getCommand } = await import("../src/modules/assistant/commands/registry.js");
 const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
 const { createRoutine, generateRoutineOccurrences } = await import("../src/modules/routines/routineService.js");
-const { zonedTimeToUtc } = await import("../src/lib/time.js");
+const { localYmd, parseClock, zonedTimeToUtc } = await import("../src/lib/time.js");
 const { AiService, setAi } = await import("../src/ai/llm.js");
 
-/** expectContains: words the reply (text or cards) must contain for the row to count end to end (query rows). */
-type Row = { id: string; group?: string; text: string; command: string; alsoOk?: string[]; expectContains?: string[] };
-type Seed = { tasks?: Array<{ title: string; due?: string }>; routines?: Array<{ title: string; days: string; time?: string }> };
+type Row = { id: string; group?: string; text: string; command: string; alsoOk?: string[] };
+type Seed = { tasks?: Array<{ title: string; due?: string; tags?: string[]; status?: string }>; routines?: Array<{ title: string; days: string; time?: string }> };
+
+/**
+ * End-to-end checks (--checks <file>, rows by id). mustInclude / mustNotInclude: titles in the reply text or its task
+ * cards. db: the state after the turn; every change it doesn't name fails the row ("none" = nothing may change).
+ * clarifyOk: "Which days do you mean?" also passes (clarifyOnly: only that); today's list never does. emptyList: the
+ * answer lists nothing. listTitle: the list answered. notIntent: reply intents that fail the row.
+ */
+type DbCheck =
+  | { op: "none" }
+  | { op: "created"; title?: string; dueYmd?: string; dueTime?: string }
+  | { op: "completed"; title: string }
+  | { op: "updated"; title: string; dueYmd?: string }
+  | { op: "routine"; days?: "daily" | number[]; hourFrom?: number; hourTo?: number };
+type Check = { id: string; mustInclude?: string[]; mustNotInclude?: string[]; db?: DbCheck[]; clarifyOk?: boolean; clarifyOnly?: boolean; emptyList?: boolean; listTitle?: string; notIntent?: string[] };
+const checks = new Map((arg("checks") ? (JSON.parse(readFileSync(arg("checks") as string, "utf8")) as { rows: Check[] }).rows : []).map((c) => [c.id, c]));
 const file = JSON.parse(readFileSync(arg("file") as string, "utf8")) as { now: string; timezone: string; seed?: Seed; commands: Row[] };
 const seed: Seed = arg("seed-from") ? (JSON.parse(readFileSync(arg("seed-from") as string, "utf8")) as { seed: Seed }).seed : (file.seed ?? {});
 const NOW = new Date(file.now);
@@ -54,7 +68,8 @@ async function seedUser(userId: string) {
   for (const t of seed.tasks ?? []) {
     const [ymd, hm] = (t.due ?? "").split(" ");
     const due = ymd ? { dueDate: zonedTimeToUtc(ymd, 0, 0, TZ), dueAt: hm ? zonedTimeToUtc(ymd, Number(hm.split(":")[0]), Number(hm.split(":")[1]), TZ) : zonedTimeToUtc(ymd, 23, 59, TZ), dueTime: hm ? clock(hm) : null } : {};
-    await prisma.task.create({ data: { userId, title: t.title, priority: "MEDIUM", source: "CHAT", ...due } });
+    const done = /complete/i.test(t.status ?? "") ? { status: "COMPLETED" as const, completedAt: new Date(NOW.getTime() - 86400000) } : {};
+    await prisma.task.create({ data: { userId, title: t.title, priority: "MEDIUM", source: "CHAT", ...due, ...(t.tags ? { tags: t.tags } : {}), ...done } });
   }
   for (const r of seed.routines ?? []) {
     const daily = /daily/i.test(r.days);
@@ -71,6 +86,84 @@ async function seedUser(userId: string) {
 
 /** The right command ran but the outcome is not what was asked: nothing found, a "which one?", not scheduled. */
 const WRONG_OUTCOME = new Set(["not_found", "choose_task", "routine_not_today"]);
+
+type Snap = Awaited<ReturnType<typeof snapshot>>;
+type TaskRow = { id: string; title: string; status: string; dueAt: Date | string | null; dueTime: string | null };
+type RoutineRow = { id: string; title: string; frequency: string; daysOfWeek: number[] | null; dueTime: string | null };
+
+/** What failed for this row's checks (empty = passed). */
+function checkRow(c: Check | undefined, out: { content: string; cards?: unknown[] }, intent: string, before: Snap, after: Snap): string[] {
+  if (!c) return [];
+  const fail: string[] = [];
+  const shown = `${out.content}\n${JSON.stringify(out.cards ?? [])}`.toLowerCase();
+  const lists = (out.cards ?? []).filter((x): x is { type: string; title?: string; tasks?: unknown[] } => (x as { type?: string }).type === "task_list");
+  const clarifying = intent === "query_range_ask";
+  if (c.clarifyOk && lists.some((l) => l.title === "Today")) fail.push("answered with today's list");
+  if (c.clarifyOnly && !clarifying) fail.push("no clarifying question");
+  if (!(c.clarifyOk && clarifying)) {
+    for (const t of c.mustInclude ?? []) if (!shown.includes(t.toLowerCase())) fail.push(`missing "${t}"`);
+    if (c.emptyList && lists.some((l) => (l.tasks ?? []).length)) fail.push("listed tasks, expected none");
+    if (c.listTitle && !lists.some((l) => l.title === c.listTitle)) fail.push(`no "${c.listTitle}" list`);
+  }
+  for (const t of c.mustNotInclude ?? []) if (shown.includes(t.toLowerCase())) fail.push(`shows "${t}"`);
+  if (c.notIntent?.includes(intent)) fail.push(`reply was ${intent}`);
+  if (c.db) fail.push(...checkDb(c.db, before, after));
+  return fail;
+}
+
+const ymdOf = (d: Date | string | null) => (d ? localYmd(new Date(d), TZ) : null);
+const hourOf = (clock: string | null) => (clock ? (parseClock(clock)?.h ?? null) : null);
+
+/** Every change in the database must be one the row names; anything else fails it. */
+function checkDb(db: DbCheck[], before: Snap, after: Snap): string[] {
+  const fail: string[] = [];
+  const bt = new Map((before.tasks as unknown as TaskRow[]).map((t) => [t.id, t]));
+  const at = after.tasks as unknown as TaskRow[];
+  const created = at.filter((t) => !bt.has(t.id));
+  const changed = at.filter((t) => bt.has(t.id) && JSON.stringify(t) !== JSON.stringify(bt.get(t.id)));
+  const gone = [...bt.values()].filter((t) => !at.some((x) => x.id === t.id));
+  const br = new Set(before.routines.map((r) => r.id));
+  const newRoutines = (after.routines as unknown as RoutineRow[]).filter((r) => !br.has(r.id));
+  const changedRoutines = after.routines.filter((r) => br.has(r.id) && JSON.stringify(r) !== JSON.stringify(before.routines.find((x) => x.id === r.id)));
+  const used = new Set<string>();
+  const has = (title: string, want?: string) => !want || title.toLowerCase().includes(want.toLowerCase());
+  for (const d of db) {
+    if (d.op === "none") continue;
+    if (d.op === "created") {
+      const m = created.find((t) => !used.has(t.id) && has(t.title, d.title) && (!d.dueYmd || ymdOf(t.dueAt) === d.dueYmd) && (!d.dueTime || t.dueTime === d.dueTime));
+      if (m) used.add(m.id);
+      else fail.push(`no new task${d.title ? ` "${d.title}"` : ""}${d.dueYmd ? ` due ${d.dueYmd}` : ""}${d.dueTime ? ` ${d.dueTime}` : ""} (created: ${created.map((t) => `${t.title} ${ymdOf(t.dueAt)} ${t.dueTime ?? ""}`).join("; ") || "none"})`);
+    } else if (d.op === "completed") {
+      const m = changed.find((t) => !used.has(t.id) && has(t.title, d.title) && t.status === "COMPLETED");
+      if (m) used.add(m.id);
+      else fail.push(`"${d.title}" not completed`);
+    } else if (d.op === "updated") {
+      const m = changed.find((t) => !used.has(t.id) && has(t.title, d.title) && (!d.dueYmd || ymdOf(t.dueAt) === d.dueYmd));
+      if (m) used.add(m.id);
+      else fail.push(`"${d.title}" not moved${d.dueYmd ? ` to ${d.dueYmd}` : ""}`);
+    } else if (d.op === "routine") {
+      const m = newRoutines.find((r) => {
+        if (used.has(r.id)) return false;
+        const days = r.frequency === "DAILY" || (r.daysOfWeek ?? []).length === 7 ? "daily" : JSON.stringify([...(r.daysOfWeek ?? [])].sort());
+        const okDays = !d.days || (d.days === "daily" ? days === "daily" : days === JSON.stringify([...d.days].sort()));
+        const h = hourOf(r.dueTime);
+        return okDays && (d.hourFrom === undefined || (h !== null && h >= d.hourFrom && h <= (d.hourTo ?? d.hourFrom)));
+      });
+      if (m) used.add(m.id);
+      else fail.push(`no routine${d.days ? ` on ${JSON.stringify(d.days)}` : ""}${d.hourFrom !== undefined ? ` at ${d.hourFrom}-${d.hourTo ?? d.hourFrom}h` : ""} (new: ${newRoutines.map((r) => `${r.title} ${r.frequency} ${JSON.stringify(r.daysOfWeek)} ${r.dueTime}`).join("; ") || "none"})`);
+    }
+  }
+  const unexpected = [
+    ...created.filter((t) => !used.has(t.id)).map((t) => `task created "${t.title}"`),
+    ...changed.filter((t) => !used.has(t.id)).map((t) => `task changed "${t.title}"`),
+    ...gone.map((t) => `task deleted "${t.title}"`),
+    ...newRoutines.filter((r) => !used.has(r.id)).map((r) => `routine created "${r.title}"`),
+    ...changedRoutines.map((r) => `routine changed "${r.title}"`),
+    ...(JSON.stringify(before.occ) !== JSON.stringify(after.occ) ? ["routine occurrence changed"] : []),
+    ...(JSON.stringify(before.settings) !== JSON.stringify(after.settings) ? ["settings changed"] : []),
+  ];
+  return [...fail, ...unexpected.map((u) => `unexpected: ${u}`)];
+}
 
 async function snapshot(userId: string) {
   const strip = <T extends Record<string, unknown>>(rows: T[]) => rows.map(({ updatedAt: _u, ...rest }) => rest);
@@ -125,10 +218,12 @@ for (const row of file.commands) {
     // A row labelled with a reply, not a command ("support"): the reply's intent is compared instead.
     const label = (c: string) => (c === "none" || c === "multi" || getCommand(c) ? got === c : intent === c);
     const ok = label(row.command) || (row.alsoOk ?? []).some(label);
-    const shown = `${out.content}\n${JSON.stringify(out.cards ?? [])}`.toLowerCase();
-    const missing = (row.expectContains ?? []).filter((w) => !shown.includes(w.toLowerCase()));
+    const failed = checkRow(checks.get(row.id), out, intent, before, after);
     // End to end: the right command, an outcome (not "not found" / "which one?" / "not scheduled"), and the expected answer.
-    const e2e = ok && !offered.length && !WRONG_OUTCOME.has(intent) && missing.length === 0;
+    // A clarifying question is accepted only where the row allows it (then routing is not required to be a list).
+    const clarified = intent === "query_range_ask" && Boolean(checks.get(row.id)?.clarifyOk);
+    const e2e = (ok || clarified) && !offered.length && !WRONG_OUTCOME.has(intent) && failed.length === 0;
+    const missing = failed;
     results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, e2e, missing, offered: offered.length === 1, intent, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
@@ -141,7 +236,7 @@ for (const g of groups) {
   const none = rs.filter((r) => r.expected === "none");
   const outcome = rs.filter((r) => r.ok && WRONG_OUTCOME.has(r.intent)).length;
   const checked = rs.filter((r) => r.ok && r.missing.length).length;
-  console.log(`${g}: routing accuracy ${rs.filter((r) => r.ok).length}/${rs.length}; end to end ${rs.filter((r) => r.e2e).length}/${rs.length} (right command, wrong outcome ${outcome}; answer missing expected items ${checked}; offered for a tap ${rs.filter((r) => r.ok && r.offered).length}); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}; wrong changes on any row: ${rs.filter((r) => r.harm.length && !r.ok).length}/${rs.length}`);
+  console.log(`${g}: routing accuracy ${rs.filter((r) => r.ok).length}/${rs.length}; end to end ${rs.filter((r) => r.e2e).length}/${rs.length} (right command, wrong outcome ${outcome}; checks failed ${checked}; offered for a tap ${rs.filter((r) => r.ok && r.offered).length}); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}; wrong changes on any row: ${rs.filter((r) => r.harm.length && !r.ok).length}/${rs.length}`);
 }
 if (arg("out")) writeFileSync(arg("out") as string, `${JSON.stringify({ file: arg("file"), ai: AI, flags: { CHAT_FIXES_V2: process.env.CHAT_FIXES_V2 ?? "off" }, results }, null, 1)}\n`);
 await prisma.$disconnect();

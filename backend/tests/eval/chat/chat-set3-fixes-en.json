@@ -1,0 +1,563 @@
+{
+ "description": "THIRD English set (AI-written, not real users) to verify the CHAT_FIXES_V2 round: ranges, feelings, delete-never-completes, bulk, possessives, ordinal dates, reference matching, time-of-day. Use ONLY to check these fixes; do not tune on it afterwards. The seed extends the earlier one (Call mom, two tagged errands, two completed tasks). Where a row's 'expect' says clarifying question, either a correct answer or a clarifying question passes; today's list never does. Dates relative to now Mon 2026-10-05 10:00 Asia/Karachi. Rename bulk_tag_* to the registry's real names. (Commands renamed to the registry: bulk_tag_move -> bulk_move_group, bulk_tag_delete -> bulk_delete_group.)",
+ "now": "2026-10-05T05:00:00.000Z",
+ "timezone": "Asia/Karachi",
+ "seed": {
+  "tasks": [
+   {
+    "title": "Dentist appointment",
+    "due": "2026-10-08 16:00"
+   },
+   {
+    "title": "Tax return",
+    "due": "2026-10-11"
+   },
+   {
+    "title": "Sales deck",
+    "due": "2026-10-07"
+   },
+   {
+    "title": "Call the bank"
+   },
+   {
+    "title": "Passport renewal",
+    "due": "2026-10-14"
+   },
+   {
+    "title": "Project report",
+    "due": "2026-10-09"
+   },
+   {
+    "title": "Car wash"
+   },
+   {
+    "title": "Quarterly budget review",
+    "due": "2026-10-12"
+   },
+   {
+    "title": "Team lunch booking",
+    "due": "2026-10-07"
+   },
+   {
+    "title": "Call mom"
+   },
+   {
+    "title": "Errand: pick up parcel",
+    "tags": [
+     "errands"
+    ],
+    "due": "2026-10-06"
+   },
+   {
+    "title": "Errand: buy stamps",
+    "tags": [
+     "errands"
+    ]
+   },
+   {
+    "title": "Old report",
+    "status": "completed"
+   },
+   {
+    "title": "Old email",
+    "status": "completed"
+   }
+  ],
+  "routines": [
+   {
+    "title": "Gym",
+    "days": "Mon,Wed,Fri",
+    "time": "06:00"
+   },
+   {
+    "title": "Medicine",
+    "days": "daily",
+    "time": "21:00"
+   },
+   {
+    "title": "Reading",
+    "days": "daily",
+    "time": "22:00"
+   },
+   {
+    "title": "Yoga",
+    "days": "daily",
+    "time": "07:00"
+   }
+  ]
+ },
+ "commands": [
+  {
+   "id": "f-001",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what do I have next weekend",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "nothing due (seed has nothing on 17-18 Oct); must not list today's tasks"
+  },
+  {
+   "id": "f-002",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "anything due this month",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "lists Tax return, Passport renewal, Quarterly budget review among others"
+  },
+  {
+   "id": "f-003",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what's due before friday",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "Sales deck, Team lunch booking, Dentist appointment; not Project report"
+  },
+  {
+   "id": "f-004",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "tasks due by wednesday",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "Sales deck, Team lunch booking; not Dentist appointment"
+  },
+  {
+   "id": "f-005",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what do I have next month",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "nothing due in November"
+  },
+  {
+   "id": "f-006",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "anything on the 14th?",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "Passport renewal"
+  },
+  {
+   "id": "f-007",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what's due on the 12th",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "Quarterly budget review"
+  },
+  {
+   "id": "f-008",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what's on for wednesday",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "Sales deck, Team lunch booking"
+  },
+  {
+   "id": "f-009",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "do I have anything due in the next 3 days",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "either Sales deck, Team lunch booking, Dentist appointment, or a clarifying question; never today's list"
+  },
+  {
+   "id": "f-010",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what's happening around the end of the month",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "a clarifying question ('Which days do you mean?') or a correct list; never today's list"
+  },
+  {
+   "id": "f-011",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "tasks for the long weekend",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "a clarifying question; never today's list"
+  },
+  {
+   "id": "f-012",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "so worn out tonight",
+   "command": "log_mood",
+   "source": "ai-written",
+   "expect": "mood logged/confirmed; no task created"
+  },
+  {
+   "id": "f-013",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "a bit nervous today",
+   "command": "log_mood",
+   "source": "ai-written",
+   "expect": "mood logged/confirmed; no task created"
+  },
+  {
+   "id": "f-014",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "feeling low this evening",
+   "command": "log_mood",
+   "source": "ai-written",
+   "expect": "mood logged/confirmed; no task created"
+  },
+  {
+   "id": "f-015",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "really stressed this morning",
+   "command": "log_mood",
+   "source": "ai-written",
+   "expect": "mood logged/confirmed; no task created"
+  },
+  {
+   "id": "f-016",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "I'm so happy today",
+   "command": "log_mood",
+   "source": "ai-written",
+   "expect": "mood logged/confirmed; no task created"
+  },
+  {
+   "id": "f-017",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "call mom, feeling low today",
+   "command": "create_task",
+   "source": "ai-written",
+   "expect": "a task 'Call mom'; no mood-only reply"
+  },
+  {
+   "id": "f-018",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "tired of waiting, remind me to call the bank tomorrow",
+   "command": "create_task",
+   "source": "ai-written",
+   "expect": "a task (or update of 'Call the bank'); not a mood log"
+  },
+  {
+   "id": "f-019",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "clear out the finished tasks",
+   "command": "bulk_delete_completed",
+   "source": "ai-written",
+   "expect": "preview + confirm; never completes anything"
+  },
+  {
+   "id": "f-020",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "remove everything I've already done",
+   "command": "bulk_delete_completed",
+   "source": "ai-written",
+   "expect": "preview + confirm; never completes anything"
+  },
+  {
+   "id": "f-021",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "get rid of completed items",
+   "command": "bulk_delete_completed",
+   "source": "ai-written",
+   "expect": "preview + confirm; never completes anything"
+  },
+  {
+   "id": "f-022",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "throw away the finished stuff",
+   "command": "bulk_delete_completed",
+   "source": "ai-written",
+   "expect": "preview + confirm; never completes anything"
+  },
+  {
+   "id": "f-023",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "delete the car wash task",
+   "command": "delete_task",
+   "source": "ai-written",
+   "expect": "confirm delete 'Car wash'; nothing completed"
+  },
+  {
+   "id": "f-024",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "move all of today's tasks to friday",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-09"
+   },
+   "expect": "nothing due today to move, or a preview; never 'task not found' for 'all'"
+  },
+  {
+   "id": "f-025",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "postpone everything from today to next monday",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-12"
+   }
+  },
+  {
+   "id": "f-026",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "push everything due today to thursday",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-08"
+   }
+  },
+  {
+   "id": "f-027",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "shift all my errands to saturday",
+   "command": "bulk_move_group",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-10"
+   },
+   "expect": "preview + one confirmation + undo; nothing moves before confirm (rename command to the registry's name)"
+  },
+  {
+   "id": "f-028",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "delete all my errands tasks",
+   "command": "bulk_delete_group",
+   "source": "ai-written",
+   "expect": "preview + one confirmation + undo; nothing deleted before confirm (rename command to the registry's name)"
+  },
+  {
+   "id": "f-029",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "move today's tasks to wednesday",
+   "command": "bulk_move_today",
+   "source": "ai-written",
+   "args": {
+    "toYmd": "2026-10-07"
+   }
+  },
+  {
+   "id": "f-030",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "what are tomorrow's tasks?",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "nothing due tomorrow; must not search for 's tasks'"
+  },
+  {
+   "id": "f-031",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "show me this week's tasks",
+   "command": "query_tasks",
+   "source": "ai-written",
+   "expect": "this week's dated tasks"
+  },
+  {
+   "id": "f-032",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "submit the invoice on the 9th",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09"
+   }
+  },
+  {
+   "id": "f-033",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "dentist follow-up on the 3rd",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-11-03"
+   }
+  },
+  {
+   "id": "f-034",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "pay rent on the 1st",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-11-01"
+   }
+  },
+  {
+   "id": "f-035",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "team dinner on the 24th",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-24"
+   }
+  },
+  {
+   "id": "f-036",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "meeting with Sam on the 5th at 3pm",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-05",
+    "time": "3 PM"
+   }
+  },
+  {
+   "id": "f-037",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "move the passport to friday",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09"
+   },
+   "expect": "updates 'Passport renewal'"
+  },
+  {
+   "id": "f-038",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "the tax return needs to be done by the 13th",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-13"
+   },
+   "expect": "updates 'Tax return'"
+  },
+  {
+   "id": "f-039",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "call plumber tomorrow at 2",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-06",
+    "time": "2 PM"
+   },
+   "expect": "a NEW task; must not match 'Call the bank'"
+  },
+  {
+   "id": "f-040",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "pay the electricity bill friday",
+   "command": "create_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-09"
+   },
+   "expect": "a NEW task; must not match 'Call the bank'"
+  },
+  {
+   "id": "f-041",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "finished the budget review",
+   "command": "complete_task",
+   "source": "ai-written",
+   "expect": "completes 'Quarterly budget review'"
+  },
+  {
+   "id": "f-042",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "the lunch booking is done",
+   "command": "complete_task",
+   "source": "ai-written",
+   "expect": "completes 'Team lunch booking'"
+  },
+  {
+   "id": "f-043",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "reschedule the project report to saturday",
+   "command": "update_task",
+   "source": "ai-written",
+   "args": {
+    "date": "2026-10-10"
+   },
+   "expect": "updates 'Project report'"
+  },
+  {
+   "id": "f-044",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "read every night",
+   "command": "create_routine",
+   "source": "ai-written",
+   "expect": "routine at a night time (about 9 PM), daily"
+  },
+  {
+   "id": "f-045",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "journal every morning",
+   "command": "create_routine",
+   "source": "ai-written",
+   "expect": "routine at a morning time, daily"
+  },
+  {
+   "id": "f-046",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "evening walk on saturdays and sundays",
+   "command": "create_routine",
+   "source": "ai-written",
+   "expect": "Sat+Sun routine at an evening time"
+  },
+  {
+   "id": "f-047",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "morning run on weekdays at 6",
+   "command": "create_routine",
+   "source": "ai-written",
+   "expect": "Mon-Fri routine at 6 AM"
+  },
+  {
+   "id": "f-048",
+   "group": "fix-test2",
+   "lang": "en",
+   "text": "yoga practice every weekday evening",
+   "command": "create_routine",
+   "source": "ai-written",
+   "expect": "Mon-Fri at an evening time",
+   "knownGap": "known gap: weekday + evening together may give the evening time but not Mon-Fri"
+  }
+ ]
+}
