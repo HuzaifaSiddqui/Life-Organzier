@@ -1,5 +1,6 @@
 /**
- * Chat set evaluation through the whole chat (handleAssistantMessage), with the set's seed (tasks and routines)
+ * Routing accuracy (npm run eval:routing; the one definition used for reported chat numbers): chat sets through the
+ * whole chat (handleAssistantMessage), with the set's seed (tasks and routines)
  * created for a fresh test user before every row:
  *   npx tsx scripts/eval-chat-set.ts --file tests/eval/chat-set2-ai-en.json [--seed-from <file>] [--ai off|chain] [--out results.json]
  * --ai off: rules only (AI_ENABLED=false). --ai chain: the configured chat chain (Ollama first; CLOUD_FALLBACK=on with
@@ -124,7 +125,8 @@ const groups = [...new Set(results.map((r) => r.group))];
 for (const g of groups) {
   const rs = results.filter((r) => r.group === g);
   const none = rs.filter((r) => r.expected === "none");
-  console.log(`${g}: ${rs.filter((r) => r.ok).length}/${rs.length} (${rs.filter((r) => r.ok && r.offered).length} of them offered for a tap, not run); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}`);
+  const unresolved = rs.filter((r) => r.ok && (r.intent === "not_found" || r.intent === "choose_task")).length;
+  console.log(`${g}: routing accuracy ${rs.filter((r) => r.ok).length}/${rs.length} (${unresolved} right command but not found / which one; ${rs.filter((r) => r.ok && r.offered).length} offered for a tap, not run); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}; wrong changes on any row: ${rs.filter((r) => r.harm.length && !r.ok).length}/${rs.length}`);
 }
 if (arg("out")) writeFileSync(arg("out") as string, `${JSON.stringify({ file: arg("file"), ai: AI, flags: { CHAT_FIXES_V2: process.env.CHAT_FIXES_V2 ?? "off" }, results }, null, 1)}\n`);
 await prisma.$disconnect();
