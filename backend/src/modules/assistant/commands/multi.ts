@@ -94,5 +94,6 @@ export async function runMulti(turn: Turn, parts: Part[]): Promise<Out> {
     cards: cards.slice(0, 4),
     actions: question ? question.actions : [...taskUndos.map((a, i) => ({ ...a, label: taskUndos.length > 1 ? `Undo ${i + 1}` : "Undo" })), ...commandUndo],
     intent: question ? `multi_${question.intent ?? "ask"}` : "multi",
+    command: "multi", // several commands ran in one message (each part reports its own inside)
   };
 }

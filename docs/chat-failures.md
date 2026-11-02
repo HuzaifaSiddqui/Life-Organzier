@@ -76,6 +76,17 @@ Class-test per class (correct of n; AI off before → after | chain before → a
 H 5: 1→1 | 1→1 · A 3: 3→3 | 3→3 · B 3: 2→3 | 2→3 · C 4: 0→1 | 1→2 · G 3: 0→0 | 0→0 · I 3: 0→0 | 0→0 · F 2: 2→2 | 2→2 ·
 routine moves 2: 1→2 | 1→2.
 
+**Rescored 31 Oct 2026 (`fix/reply-command`).** Every reply now reports the command that handled it, and the harness
+scores from that field (the hand-kept intent → command list is gone). The old list missed 13 reply intents (`not_found`,
+`choose_task`, `support`, `progress_updated`, `context_switched`, `checkin_style_set`, `checkins_on`/`off`,
+`checkin_style_ask`, `provide_info`, `multi_command_choice`, `snooze_unsupported`, `task_split`), so some correct rows
+were counted wrong. With fixes and guards (`CHAT_FIXES_V2=on`, main after #35): AI off (exact rerun) dev 118/150, class-test
+21/40, fresh 47/60; chain (saved results rescored; a range where the reply was "not found" / "which one?", whose command
+the old results did not record) dev 117–127, class-test 26–28, fresh 51–54. Fixes off: AI off 111, 14, 44; chain
+106–121, 19–22, 49–52. Harmful actions on "none" rows are unchanged: 1/10 and 1/5 with fixes off, 0 with fixes on.
+"Accuracy" is routing: a reply that picked the right command but did not find the item ("unresolved": 11 dev rows,
+1 fresh row with AI off) counts as right; the count is reported next to it.
+
 ### Clear bugs (shown to the owner; guarded in fix/chat-guards behind `CHAT_FIXES_V2`, off)
 
 1. **A habit word alone creates a routine** (harmful): "booked the team lunch, tick it off" (n-069) and "play my

@@ -321,9 +321,9 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
   if (interval) {
     turn.state.pending = null;
     if (CHANGE_INTERVAL.test(text.trim())) {
-      return { content: USE_ROUTINE_SCREEN, actions: [{ label: "Open routines", payload: { type: "navigate", screen: "Routines" } }], intent: "interval_change_routine_screen" };
+      return { content: USE_ROUTINE_SCREEN, actions: [{ label: "Open routines", payload: { type: "navigate", screen: "Routines" } }], intent: "interval_change_routine_screen", command: "routine_update" };
     }
-    return startIntervalRoutine(turn, text, interval);
+    return { ...(await startIntervalRoutine(turn, text, interval)), command: "create_routine" };
   }
 
   const ctx = parseCtx(extractOpts(turn));
@@ -1343,6 +1343,7 @@ export function askMoodConfirm(turn: Turn, mood: Mood, confidence: number, text:
     content: question,
     actions: [answerAction("Yes", "mood_confirm", "yes", "primary"), ...others.map((m) => ({ label: `I'm ${m}`, payload: { type: "log_mood", mood: m } as ActionPayload }))],
     intent: "mood_confirm",
+    command: "log_mood",
     mood,
   };
 }

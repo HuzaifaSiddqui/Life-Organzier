@@ -128,7 +128,16 @@ async function noTaskFor(turn: Turn, ref: string, includeCompleted = false): Pro
 /** CHAT_FIXES_V2 (C): a change said about an existing task ("the meeting is now at 3pm instead", "make the X 45 minutes long"). */
 const CHANGE_CUE = /\b(?:now|instead|anymore|moved|rescheduled|long)\b/i;
 
+/**
+ * Every reply says which command handled it (internal: stored with the message, never shown). A hand-off inside a
+ * handler sets its own command; otherwise it is the intent dispatched here, when that is a registry command.
+ */
 export async function handleIntent(turn: Turn, u: Understanding, text: string): Promise<Out> {
+  const out = await dispatchIntent(turn, u, text);
+  return out.command || !getCommand(u.intent) ? out : { ...out, command: u.intent };
+}
+
+async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promise<Out> {
   if (u.intent === "create_task" || u.intent === "create_routine") {
     const ask = outOfScopeConfirm(u, text);
     if (ask) return ask;
@@ -142,6 +151,7 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
         content: `Change "${r.task.title}", or add a new task?`,
         actions: [commandAction(`Change "${truncate(r.task.title, 24)}"`, "update_task", { text, ref: r.task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
         intent: "change_or_new",
+        command: "update_task", // C: the question is about changing that task
       };
     }
   }
