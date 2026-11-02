@@ -32,11 +32,12 @@ else Object.assign(process.env, { AI_ENABLED: "true", CLOUD_FALLBACK: "on", LLM_
 const { prisma } = await import("../src/config/db.js");
 const { getCommand } = await import("../src/modules/assistant/commands/registry.js");
 const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
-const { createRoutine } = await import("../src/modules/routines/routineService.js");
+const { createRoutine, generateRoutineOccurrences } = await import("../src/modules/routines/routineService.js");
 const { zonedTimeToUtc } = await import("../src/lib/time.js");
 const { AiService, setAi } = await import("../src/ai/llm.js");
 
-type Row = { id: string; group?: string; text: string; command: string; alsoOk?: string[] };
+/** expectContains: words the reply (text or cards) must contain for the row to count end to end (query rows). */
+type Row = { id: string; group?: string; text: string; command: string; alsoOk?: string[]; expectContains?: string[] };
 type Seed = { tasks?: Array<{ title: string; due?: string }>; routines?: Array<{ title: string; days: string; time?: string }> };
 const file = JSON.parse(readFileSync(arg("file") as string, "utf8")) as { now: string; timezone: string; seed?: Seed; commands: Row[] };
 const seed: Seed = arg("seed-from") ? (JSON.parse(readFileSync(arg("seed-from") as string, "utf8")) as { seed: Seed }).seed : (file.seed ?? {});
@@ -60,7 +61,16 @@ async function seedUser(userId: string) {
     const days = daily ? [] : r.days.split(/[,\s]+/).map((d) => DAY[d.slice(0, 3).toLowerCase()]).filter((d) => d !== undefined);
     await createRoutine(userId, TZ, { title: r.title, frequency: daily ? "DAILY" : "WEEKLY", daysOfWeek: days, dueTime: r.time ? clock(r.time) : null }, NOW);
   }
+  // The scheduler's occurrences for the eval week, as the server would have generated them (routine rows run end to end).
+  // createRoutine stamps the real clock; the set's routines existed before its "now", so back-date them first.
+  if (seed.routines?.length) {
+    await prisma.routine.updateMany({ where: { userId }, data: { createdAt: new Date(NOW.getTime() - 30 * 86400000) } });
+    await generateRoutineOccurrences(userId, TZ, undefined, NOW);
+  }
 }
+
+/** The right command ran but the outcome is not what was asked: nothing found, a "which one?", not scheduled. */
+const WRONG_OUTCOME = new Set(["not_found", "choose_task", "routine_not_today"]);
 
 async function snapshot(userId: string) {
   const strip = <T extends Record<string, unknown>>(rows: T[]) => rows.map(({ updatedAt: _u, ...rest }) => rest);
@@ -96,7 +106,7 @@ function harmfulChanges(before: Awaited<ReturnType<typeof snapshot>>, after: Awa
   return [...new Set(out)];
 }
 
-const results: Array<{ id: string; group: string; text: string; expected: string; got: string; ok: boolean; offered: boolean; intent: string; harm: string[]; reply: string }> = [];
+const results: Array<{ id: string; group: string; text: string; expected: string; got: string; ok: boolean; e2e: boolean; missing: string[]; offered: boolean; intent: string; harm: string[]; reply: string }> = [];
 for (const row of file.commands) {
   if (AI === "off") setAi(new AiService([]));
   else setAi(null);
@@ -105,7 +115,7 @@ for (const row of file.commands) {
   try {
     await seedUser(user.id);
     const before = await snapshot(user.id);
-    const out = (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text: row.text, payload: null, label: null })).message as { content: string; intent?: string; command?: string; actions?: Array<{ payload?: { type?: string; command?: string } }> };
+    const out = (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text: row.text, payload: null, label: null })).message as { content: string; intent?: string; command?: string; cards?: unknown[]; actions?: Array<{ payload?: { type?: string; command?: string } }> };
     const after = await snapshot(user.id);
     const intent = out.intent ?? "";
     // A "Did you mean this?" with one command button (the guards' preview): scored by that command, counted as offered.
@@ -115,7 +125,11 @@ for (const row of file.commands) {
     // A row labelled with a reply, not a command ("support"): the reply's intent is compared instead.
     const label = (c: string) => (c === "none" || c === "multi" || getCommand(c) ? got === c : intent === c);
     const ok = label(row.command) || (row.alsoOk ?? []).some(label);
-    results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, offered: offered.length === 1, intent, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
+    const shown = `${out.content}\n${JSON.stringify(out.cards ?? [])}`.toLowerCase();
+    const missing = (row.expectContains ?? []).filter((w) => !shown.includes(w.toLowerCase()));
+    // End to end: the right command, an outcome (not "not found" / "which one?" / "not scheduled"), and the expected answer.
+    const e2e = ok && !offered.length && !WRONG_OUTCOME.has(intent) && missing.length === 0;
+    results.push({ id: row.id, group: row.group ?? "dev", text: row.text, expected: row.command, got, ok, e2e, missing, offered: offered.length === 1, intent, harm: harmfulChanges(before, after), reply: out.content.slice(0, 140) });
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
   }
@@ -125,8 +139,9 @@ const groups = [...new Set(results.map((r) => r.group))];
 for (const g of groups) {
   const rs = results.filter((r) => r.group === g);
   const none = rs.filter((r) => r.expected === "none");
-  const unresolved = rs.filter((r) => r.ok && (r.intent === "not_found" || r.intent === "choose_task")).length;
-  console.log(`${g}: routing accuracy ${rs.filter((r) => r.ok).length}/${rs.length} (${unresolved} right command but not found / which one; ${rs.filter((r) => r.ok && r.offered).length} offered for a tap, not run); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}; wrong changes on any row: ${rs.filter((r) => r.harm.length && !r.ok).length}/${rs.length}`);
+  const outcome = rs.filter((r) => r.ok && WRONG_OUTCOME.has(r.intent)).length;
+  const checked = rs.filter((r) => r.ok && r.missing.length).length;
+  console.log(`${g}: routing accuracy ${rs.filter((r) => r.ok).length}/${rs.length}; end to end ${rs.filter((r) => r.e2e).length}/${rs.length} (right command, wrong outcome ${outcome}; answer missing expected items ${checked}; offered for a tap ${rs.filter((r) => r.ok && r.offered).length}); harmful actions on "none" rows: ${none.filter((r) => r.harm.length).length}/${none.length}${none.some((r) => r.harm.length) ? ` (${none.filter((r) => r.harm.length).map((r) => `${r.id}: ${r.harm.join(", ")}`).join("; ")})` : ""}; wrong changes on any row: ${rs.filter((r) => r.harm.length && !r.ok).length}/${rs.length}`);
 }
 if (arg("out")) writeFileSync(arg("out") as string, `${JSON.stringify({ file: arg("file"), ai: AI, flags: { CHAT_FIXES_V2: process.env.CHAT_FIXES_V2 ?? "off" }, results }, null, 1)}\n`);
 await prisma.$disconnect();
