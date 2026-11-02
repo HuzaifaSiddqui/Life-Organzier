@@ -5,6 +5,7 @@ import { contentTokens, editDistance, formatDuration, fuzzySimilarity } from "..
 import type { CreateTaskInput } from "../tasks/taskService.js";
 import { classifyTaskType, cleanTitle, extractEntities, isVagueTitle, needsDurationByNature, suggestTags, type Entities, type ExtractOptions } from "./entities.js";
 import type { TaskDraft, TaskSlot } from "./types.js";
+import { chatFixesOn } from "./chatFixes.js";
 
 export const AUTO_CREATE_CLARITY = 95;
 export const VERY_LOW_CLARITY = 20;
@@ -241,6 +242,27 @@ const PRONOUN = /^(?:it|this|that|this one|that one|the task|the last one|last o
 export type Resolution = { task: Task | null; candidates: Task[]; viaFocus: boolean };
 
 /** Resolves "it" / "the math assignment" / typos to a concrete task using dialogue focus + fuzzy matching. */
+/**
+ * CHAT_FIXES_V2: every content word of the reference is a word of the title ("the dentist" → "Dentist appointment").
+ * 0 when one is missing; otherwise 0.6, plus up to 0.3 for how much of the title it covers (shorter titles first).
+ */
+export function wordMatch(ref: string, title: string): number {
+  const r = contentTokens(ref).filter((w) => !GENERIC.has(w));
+  const t = contentTokens(title).filter((w) => !GENERIC.has(w));
+  if (!r.length || !t.length) return 0;
+  const same = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+  // Every word of the reference is in the title ("the dentist" → "Dentist appointment").
+  if (r.every((w) => t.some((x) => same(w, x)))) return 0.6 + 0.3 * Math.min(1, r.length / t.length);
+  // Or the message carries more words ("actually the dentist is at 5"): the title's distinctive words found in it.
+  const hits = t.filter((x) => r.some((w) => same(w, x))).length;
+  return hits ? 0.45 + 0.35 * (hits / t.length) : 0;
+}
+
+/** Words too common to identify a task by ("call", "pay", "today"): matching on them alone would pick the wrong one. */
+const GENERIC = new Set(
+  ["call", "pay", "buy", "get", "go", "do", "make", "send", "book", "finish", "submit", "start", "meet", "move", "change", "update", "check", "take", "bring", "write", "read", "clean", "fix", "task", "thing", "stuff", "today", "tomorrow", "actual", "actually", "now", "instead", "please", "need", "want", "will", "still"].map((w) => contentTokens(w)[0] ?? w),
+);
+
 export async function resolveTaskRef(
   userId: string,
   ref: string,
@@ -269,7 +291,7 @@ export async function resolveTaskRef(
     return { task: null, candidates: tasks.slice(0, 3), viaFocus: false };
   }
   const scored = tasks
-    .map((t) => ({ t, s: fuzzySimilarity(cleaned, t.title) + (focus.includes(t.id) ? 0.08 : 0) }))
+    .map((t) => ({ t, s: Math.max(fuzzySimilarity(cleaned, t.title), chatFixesOn() ? wordMatch(cleaned, t.title) : 0) + (focus.includes(t.id) ? 0.08 : 0) }))
     .filter((x) => x.s >= 0.34)
     .sort((a, b) => b.s - a.s);
   if (!scored.length) return { task: null, candidates: [], viaFocus: false };

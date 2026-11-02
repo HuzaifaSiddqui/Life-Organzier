@@ -14,7 +14,8 @@ import { normalize } from "../assistant/queries.js";
 export const findFilterSchema = z.object({
   terms: z.array(z.string().trim().min(1).max(60)).min(1).max(6),
   status: z.enum(["active", "completed", "all"]).optional(),
-  dateRange: z.enum(["today", "tomorrow", "week", "overdue"]).optional(),
+  // A named range, or days from / to inclusive (CHAT_FIXES_V2: next week, this weekend, the 12th…).
+  dateRange: z.union([z.enum(["today", "tomorrow", "week", "overdue"]), z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })]).optional(),
   priority: z.nativeEnum(Priority).optional(),
   tag: z.string().trim().min(1).max(40).optional(),
   place: z.string().trim().min(1).max(80).optional(),
@@ -169,6 +170,7 @@ export async function findItems(userId: string, filter: FindFilter, opts: { tz: 
 
 function dueBounds(range: FindFilter["dateRange"], o: { tz: string; now: Date; todayYmd: string }): { gte?: Date; lt: Date } | null {
   const day = (ymd: string) => startOfLocalDay(ymd, o.tz);
+  if (range && typeof range === "object") return { gte: day(range.from), lt: day(addDaysYmd(range.to, 1)) };
   switch (range) {
     case "today":
       return { gte: day(o.todayYmd), lt: day(addDaysYmd(o.todayYmd, 1)) };

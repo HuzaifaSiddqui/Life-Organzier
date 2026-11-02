@@ -1,3 +1,5 @@
+import { DELETE_VERB } from "./chatFixes.js";
+
 /**
  * CHAT_FIXES_V2 guards on what a model may decide (default off with the flag). The model is only asked when the rules
  * are unsure; these invariants hold whatever it answers. Pure: the caller passes the command's registry facts.
@@ -44,7 +46,7 @@ export type GuardVerdict = "run" | "confirm" | "forbidden";
  */
 export function guardModelChoice(text: string, choice: string, facts: RegistryFacts, withdrawnFrom: RegistryFacts | null): GuardVerdict {
   if (choice === "undo") return "forbidden"; // 2c
-  if (/(?:^|_)complete/.test(choice) && NEGATION.test(text)) return "forbidden"; // 2b
+  if (/(?:^|_)complete(?:_|$)/.test(choice) && (NEGATION.test(text) || DELETE_VERB.test(text))) return "forbidden"; // 2b; a delete verb never completes
   if (withdrawnFrom && family(facts.category) !== family(withdrawnFrom.category)) return "forbidden"; // 2a
   if (choice === "create_routine" && !explicitRoutine(text)) return "confirm"; // 1, when the model proposes one
   return changesState(choice, facts) ? "confirm" : "run"; // 2d

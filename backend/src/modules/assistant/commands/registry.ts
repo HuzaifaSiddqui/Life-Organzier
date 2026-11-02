@@ -23,8 +23,16 @@ export const COMMANDS: Command[] = [...bulkCommands, ...settingsCommands, ...ins
 /** COMMANDS plus internal ones (commands/documents.ts) that only a button starts: never matched, listed or routed. */
 const byName = new Map([...COMMANDS, ...internalCommands].map((c) => [c.name, c]));
 
+const isActive = (c: Command) => !c.enabled || c.enabled();
+
+/** The commands available now (a command behind an off flag is left out everywhere). */
+export function activeCommands(): Command[] {
+  return COMMANDS.filter(isActive);
+}
+
 export function getCommand(name: string): Command | undefined {
-  return byName.get(name);
+  const c = byName.get(name);
+  return c && isActive(c) ? c : undefined;
 }
 
 export function parseCtx(opts: ExtractOptions): ParseCtx {
@@ -47,7 +55,7 @@ export function matchCommand(text: string, ctx: ParseCtx): { command: Command; a
 }
 
 function matchWhole(text: string, ctx: ParseCtx): { command: Command; args: CommandArgs } | null {
-  for (const command of COMMANDS) {
+  for (const command of activeCommands()) {
     if (command.wrapped) continue;
     const args = command.parse(text, ctx);
     if (args) return { command, args };

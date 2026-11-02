@@ -23,6 +23,8 @@ export type Command = {
   category: CommandCategory;
   /** One line for help, suggestions and the LLM router. */
   summary: string;
+  /** Absent: always available. Otherwise off until it returns true (a flag): hidden from help, rules, the router and buttons. */
+  enabled?: () => boolean;
   /** Things the user can say; the first is shown in help. */
   examples: string[];
   /** Argument schema; the LLM router's output is validated against it. Dates and times are never taken from the model. */

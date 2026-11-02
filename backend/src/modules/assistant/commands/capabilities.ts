@@ -13,7 +13,7 @@ import { sayAction } from "../actions.js";
 import type { Out, Turn } from "../dialogue.js";
 import type { QuickAction } from "../types.js";
 import { norm } from "./lexicon.js";
-import { COMMANDS } from "./registry.js";
+import { activeCommands } from "./registry.js";
 import type { Command, CommandCategory } from "./types.js";
 
 /** Help and "here's what I can do" are built from the registry, so they always list real capabilities. */
@@ -26,7 +26,7 @@ const SECTIONS: Array<{ category: CommandCategory; title: string; commands: stri
   { category: "bulk", title: "Many at once", commands: ["bulk_move_today", "bulk_postpone_nonurgent"] },
 ];
 
-const byName = (name: string) => COMMANDS.find((c) => c.name === name);
+const byName = (name: string) => activeCommands().find((c) => c.name === name);
 
 export function helpReply(turn: Turn): Out {
   const lines = SECTIONS.map((s) => {
@@ -55,7 +55,7 @@ function words(text: string): Set<string> {
  */
 export function capabilityReply(turn: Turn, text: string, lead = "I'm not sure what you'd like me to do. Here are some things I can do:"): Out {
   const said = words(text);
-  const scored = COMMANDS.map((c) => {
+  const scored = activeCommands().map((c) => {
     const vocab = words(`${c.summary} ${c.examples.join(" ")} ${c.name.replace(/_/g, " ")}`);
     let score = 0;
     for (const w of said) if (vocab.has(w)) score += 1;

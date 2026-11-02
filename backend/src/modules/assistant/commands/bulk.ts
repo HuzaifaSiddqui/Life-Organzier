@@ -1,8 +1,9 @@
 import { isWhatsapp } from "../channel.js";
+import { chatFixesOn } from "../chatFixes.js";
 import { Priority, TaskStatus, TaskType, type Task } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
-import { addDaysYmd, diffDaysYmd, dueDateFromYmd, relativeDayLabel, startOfLocalDay } from "../../../lib/time.js";
+import { addDaysYmd, diffDaysYmd, dueDateFromYmd, localYmd, relativeDayLabel, startOfLocalDay } from "../../../lib/time.js";
 import { plural } from "../../../lib/text.js";
 import { logEvent } from "../../events/eventService.js";
 import { getTaskForUser, listActiveTasks, serializeTask, softDeleteTask, updateTask } from "../../tasks/taskService.js";
@@ -88,7 +89,9 @@ const moveToday: Command = {
   parse(text, ctx) {
     const t = norm(text);
     const clear = /^(?:please )?(?:clear|free up|empty|cancel) (?:my |the )?(?:day|today|whole day|schedule today|plans today)$/.test(t);
-    if (!clear && (addBeforeMove(t) || !(has(t, MOVE) && has(t, ALL) && has(t, TODAY) && has(t, `${TASK_WORD}|everything|sab|سب|سارے`)))) return null;
+    // CHAT_FIXES_V2: "move everything to tomorrow" means today's tasks even without the word "today".
+    const everything = chatFixesOn() && has(t, MOVE) && /\b(?:everything|all of it|all of today|all my tasks|all tasks|all my stuff)\b/.test(t) && !groupIn(text);
+    if (!clear && !everything && (addBeforeMove(t) || !(has(t, MOVE) && has(t, ALL) && has(t, TODAY) && has(t, `${TASK_WORD}|everything|sab|سب|سارے`)))) return null;
     if (has(t, "non urgent|nonurgent|not urgent|less important|ghair zaroori|غیر ضروری")) return null;
     const target = extractTargetDay(text.replace(TODAY_SOURCE, " "), ctx.opts);
     const toYmd = target && target > ctx.todayYmd ? target : addDaysYmd(ctx.todayYmd, 1);
@@ -161,7 +164,8 @@ const deleteCompleted: Command = {
     const t = norm(text);
     if (!has(t, "delete|remove|clear|clean up|get rid of|hata do|hatao|saaf|ڈیلیٹ|ہٹا دو|صاف")) return null;
     if (!has(t, "completed|done|finished|mukammal|مکمل")) return null;
-    return has(t, ALL) || has(t, "tasks|kaam|کام") ? {} : null;
+    // CHAT_FIXES_V2: "the completed ones", "the finished stuff" name the same group.
+    return has(t, ALL) || has(t, "tasks|kaam|کام") || (chatFixesOn() && has(t, "ones|stuff|items|things")) ? {} : null;
   },
   async prepare(turn) {
     const done = await prisma.task.findMany({ where: { userId: turn.user.id, status: TaskStatus.COMPLETED }, orderBy: { completedAt: "asc" }, take: 200 });
@@ -235,5 +239,94 @@ const postponeNonUrgent: Command = {
   },
 };
 
-export const bulkCommands: Command[] = [postponeNonUrgent, moveToday, completeTag, deleteCompleted, deleteOpen];
+/* ------------------------------------------------------------------ CHAT_FIXES_V2: a group of tasks by tag or category */
+
+const NOT_A_GROUP = new Set(["tasks", "task", "todos", "today", "todays", "everything", "it", "them", "of", "completed", "done", "finished", "open", "pending", "remaining", "the", "my", "stuff", "things", "items"]);
+
+/** "all my errands", "every uni task": a word naming a group (a tag or a category), never "all my tasks". */
+export function groupIn(text: string): string | null {
+  const m = /\b(?:all|every|each)\s+(?:of\s+)?(?:my\s+|the\s+)?([a-z][a-z-]{2,30})(?:\s+(?:tasks?|todos?))?\b/i.exec(text);
+  const word = m?.[1]?.toLowerCase();
+  return word && !NOT_A_GROUP.has(word) ? word : null;
+}
+
+/** Open tasks tagged with the group or filed under it (singular or plural). */
+async function groupTasks(turn: Turn, group: string): Promise<Task[]> {
+  const forms = new Set([group, group.replace(/s$/, "")]);
+  return (await listActiveTasks(turn.user.id)).filter(
+    (t) => (Array.isArray(t.tags) && (t.tags as string[]).some((g) => forms.has(String(g).toLowerCase()))) || (t.category && forms.has(t.category.toLowerCase())),
+  );
+}
+
+const moveGroup: Command = {
+  name: "bulk_move_group",
+  category: "bulk",
+  enabled: chatFixesOn,
+  summary: "Move every open task in a group (tag or category) to another day (preview, one confirmation, undo)",
+  examples: ["Push all my errands to Friday"],
+  schema: z.object({ group: z.string().min(1).max(30), toYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), taskIds: z.array(z.string()).optional() }).passthrough(),
+  undoable: true,
+  parse(text, ctx) {
+    if (!chatFixesOn()) return null;
+    const t = norm(text);
+    const group = groupIn(text);
+    if (!group || !has(t, MOVE)) return null;
+    const target = extractTargetDay(text, ctx.opts);
+    return target && target > ctx.todayYmd ? { group, toYmd: target } : null;
+  },
+  async prepare(turn, args) {
+    const group = String(args.group);
+    const tasks = await groupTasks(turn, group);
+    if (!tasks.length) return nothing(`No open tasks are tagged or filed under "${group}".`, "bulk_nothing");
+    const list = tasks.slice(0, BULK_CAP);
+    const toYmd = String(args.toYmd);
+    const p = preview(turn, `Move ${plural(list.length, "task")} in "${group}" to ${day(turn, toYmd)}?`, list, tasks.length);
+    return "args" in p ? { ...p, args: { ...p.args, group, toYmd } } : p;
+  },
+  async execute(turn, args) {
+    const tasks = await tasksByIds(turn, args);
+    const toYmd = String(args.toYmd);
+    // Each task keeps its time of day and lands on the target day.
+    const moved: Task[] = [];
+    for (const t of tasks) moved.push(...(await shiftTasks(turn, [t], diffDaysYmd(t.dueAt ? localYmdOf(turn, t.dueAt) : turn.todayYmd, toYmd), "bulk_move_group")));
+    recordUndo(turn, { kind: "tasks", op: "edit", taskIds: moved.map((t) => t.id), before: snapshots(tasks), label: `${plural(moved.length, "task")} moved` });
+    return { content: `Moved ${plural(moved.length, "task")} to ${day(turn, toYmd)}.`, cards: [{ type: "task_list", title: tx(turn).cardMoved, tasks: moved.map((t) => serializeTask(t, turn.now)) }], actions: [undoAction(turn.settings.language)], intent: "bulk_moved" };
+  },
+};
+
+const deleteGroup: Command = {
+  name: "bulk_delete_group",
+  category: "bulk",
+  enabled: chatFixesOn,
+  summary: "Delete every open task in a group (tag or category) (preview, one confirmation, undo 24 hours)",
+  examples: ["Delete all my errands"],
+  schema: z.object({ group: z.string().min(1).max(30), taskIds: z.array(z.string()).optional() }).passthrough(),
+  undoable: true,
+  parse(text) {
+    if (!chatFixesOn()) return null;
+    const t = norm(text);
+    const group = groupIn(text);
+    if (!group || !has(t, "delete|remove|clear|get rid of|erase|cancel") || has(t, "completed|done|finished")) return null;
+    return { group };
+  },
+  async prepare(turn, args) {
+    const group = String(args.group);
+    const tasks = await groupTasks(turn, group);
+    if (!tasks.length) return nothing(`No open tasks are tagged or filed under "${group}".`, "bulk_nothing");
+    const list = tasks.slice(0, BULK_CAP);
+    const p = preview(turn, `Delete ${plural(list.length, "task")} in "${group}"? You can undo this for 24 hours.`, list, tasks.length);
+    return "args" in p ? { ...p, args: { ...p.args, group } } : p;
+  },
+  async execute(turn, args) {
+    const tasks = await tasksByIds(turn, args);
+    const deleted: string[] = [];
+    for (const t of tasks) if (await softDeleteTask(turn.task, t.id)) deleted.push(t.id);
+    recordUndo(turn, { kind: "tasks", op: "delete", taskIds: deleted, label: `${plural(deleted.length, "task")} deleted` });
+    return { content: `Deleted ${plural(deleted.length, "task")} in "${String(args.group)}". You can undo this for 24 hours.`, actions: [undoAction(turn.settings.language)], intent: "bulk_deleted" };
+  },
+};
+
+const localYmdOf = (turn: Turn, d: Date) => localYmd(d, turn.tz);
+
+export const bulkCommands: Command[] = [postponeNonUrgent, moveToday, completeTag, deleteCompleted, deleteOpen, moveGroup, deleteGroup];
 

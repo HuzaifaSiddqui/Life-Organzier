@@ -47,7 +47,7 @@ import {
   acceptOffer,
   handleText,
 } from "./dialogue.js";
-import { findReply, parseFindQuery } from "./commands/find.js";
+import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
 import { resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
@@ -635,6 +635,29 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   const all = await listActiveTasks(turn.user.id);
   const context = turn.settings.currentContext;
   const visible = all.filter((t) => !context || !t.locationContext || t.locationContext === context);
+  // CHAT_FIXES_V2: the days asked about decide the list (next week, this weekend, Thursday, the 12th…); a span that
+  // can't be read is asked about, never answered with today's list.
+  if (chatFixesOn() && q?.kind !== "overdue" && !/\b(?:overdue|late|missed)\b/i.test(text)) {
+    const r = resolveRange(text, parseCtx(extractOpts(turn)));
+    if (r === "unknown") {
+      return {
+        content: "Which days do you mean?",
+        actions: [
+          sayAction("Today", "query_tasks", "what's due today"),
+          sayAction("Tomorrow", "query_tasks", "what's due tomorrow"),
+          sayAction("This week", "query_tasks", "what's due this week"),
+          sayAction("Next week", "query_tasks", "what's due next week"),
+        ],
+        intent: "query_range_ask",
+      };
+    }
+    if (r && !(r.from === turn.todayYmd && r.to === turn.todayYmd)) {
+      const from = startOfLocalDay(r.from, turn.tz);
+      const to = startOfLocalDay(addDaysYmd(r.to, 1), turn.tz);
+      const list = visible.filter((t) => t.dueAt && t.dueAt >= from && t.dueAt < to).sort((a, b) => (a.dueAt?.getTime() ?? 0) - (b.dueAt?.getTime() ?? 0));
+      return taskListReply(turn, r.label.charAt(0).toUpperCase() + r.label.slice(1), list, "");
+    }
+  }
   const range = q?.kind === "overdue" ? "overdue" : q?.kind === "due" ? q.range : null;
   let title = "Today";
   let list: Task[];

@@ -1,4 +1,4 @@
-import type { MoodDetection } from "../mood/moodService.js";
+import { detectMood, type MoodDetection } from "../mood/moodService.js";
 import type { Entities } from "./entities.js";
 
 /**
@@ -32,6 +32,22 @@ const NEGATE = /^(?:(?:i'?m|i am|we'?re|i|we)\s+)?(?:(?:not|never)\s+(?:doing|go
 /** A first-person state ("I'm exhausted", "feeling low"), with no action verb after it. */
 const STATE = /^(?:(?:i'?m|i am|i feel|i'?ve been|been|feeling)\s+)(?:so\s+|really\s+|very\s+|kind of\s+|a bit\s+|super\s+)?[a-z]+/i;
 
+/** Softeners around a feeling ("so", "kinda", "a bit", "honestly"): not content. */
+const SOFTENER = /\b(?:so|really|pretty|super|very|quite|too|kinda|kind of|sort of|a bit|bit|a little|little|honestly|totally|extremely|just|feeling|feel|i'?m|i am|i|been|am|now|right)\b/gi;
+
+/**
+ * I (third round): the message, once its time words (the entities' residual) and softeners are gone, is only a
+ * feeling of one or two words ("so worn out tonight", "a bit nervous today"). An action ("call mom, feeling low")
+ * leaves more words and stays a task.
+ */
+export function feelingOnly(residual: string): boolean {
+  const rest = residual.replace(SOFTENER, " ").replace(/[^\p{L}\s'-]+/gu, " ").replace(/\s+/g, " ").trim();
+  return rest !== "" && rest.split(" ").length <= 2 && detectMood(rest) !== null;
+}
+
+/** Delete, remove, clear, get rid of, erase, drop: never a completion. */
+export const DELETE_VERB = /\b(?:delete|remove|clear|get rid of|erase|drop|scrap|cancel)\b/i;
+
 /** A clock time written out ("at 10 am", "5:30", "noon"); "tonight" alone is not one. */
 const CLOCK = /\b(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}|noon|midnight)\b/i;
 
@@ -39,8 +55,10 @@ type Decision = { intent: string; confidence: number };
 const CREATES = new Set(["create_task", "create_routine"]);
 
 /** The rules' decision, with the CHAT_FIXES_V2 classes applied (call only when the flag is on). */
-export function applyChatFixes<T extends Decision>(text: string, _e: Pick<Entities, "timeExplicit">, mood: MoodDetection | null, rule: T): T & { fix?: "D" | "E" | "H" | "I" } {
+export function applyChatFixes<T extends Decision>(text: string, e: Pick<Entities, "timeExplicit" | "residual">, mood: MoodDetection | null, rule: T): T & { fix?: "D" | "E" | "H" | "I" | "J" } {
   const t = text.trim();
+  // J: a delete / remove / clear verb never completes ("get rid of the finished ones" deletes them).
+  if (DELETE_VERB.test(t) && rule.intent === "complete_task") return { ...rule, intent: "delete_task", fix: "J" };
   // "not going to …" says what won't happen; it is not the task cue "going to".
   const cue = TASK_CUE.test(t.replace(/\b(?:not|never)\s+going to\b/gi, " "));
   if (cue) return rule;
@@ -52,6 +70,6 @@ export function applyChatFixes<T extends Decision>(text: string, _e: Pick<Entiti
   // H: not doing / skipping / stopping something is about an existing item: unsure, the rules do nothing.
   if (NEGATE.test(t)) return { ...rule, intent: "unclear", confidence: 0.5, fix: "H" };
   // I: a feeling is a mood report, even with "today"; an explicit time ("… at 5") keeps it a task.
-  if (rule.intent === "create_task" && mood && STATE.test(t) && !CLOCK.test(t)) return { ...rule, intent: "log_mood", confidence: Math.max(0.75, mood.confidence), fix: "I" };
+  if (rule.intent === "create_task" && mood && (STATE.test(t) || feelingOnly(e.residual)) && !CLOCK.test(t)) return { ...rule, intent: "log_mood", confidence: Math.max(0.75, mood.confidence), fix: "I" };
   return rule;
 }
