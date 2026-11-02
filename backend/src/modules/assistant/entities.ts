@@ -375,7 +375,8 @@ function formatFromWord(word: string): string | null {
   return c ? formatClock(c.h, c.m) : null;
 }
 
-function extractTime(cur: Cursor): { time: string | null; explicit: boolean; rangeMinutes: number | null } {
+/** `partOfDay`: CHAT_FIXES_V2, the AM/PM a part-of-day word anywhere in the message gives a bare hour ("morning run at 6"). */
+function extractTime(cur: Cursor, partOfDay: "am" | "pm" | null = null): { time: string | null; explicit: boolean; rangeMinutes: number | null } {
   const urdu = extractUrduClock(cur);
   if (urdu) return { time: urdu, explicit: true, rangeMinutes: null };
   // Ranges: "10-11:30 AM", "2:30 - 4:00 PM", "from 9 to 11 am"
@@ -404,8 +405,8 @@ function extractTime(cur: Cursor): { time: string | null; explicit: boolean; ran
   if (m) {
     const h = Number(m[1]);
     if (h >= 1 && h <= 12) {
-      // Bare hours: 1–7 → PM, 8–11 → AM, 12 → noon.
-      const c = parseClock(`${h} ${h >= 8 && h <= 11 ? "am" : "pm"}`);
+      // Bare hours: 1–7 → PM, 8–11 → AM, 12 → noon; a part of the day said anywhere decides first.
+      const c = parseClock(`${h} ${h === 12 ? "pm" : (partOfDay ?? (h >= 8 && h <= 11 ? "am" : "pm"))}`);
       if (c) return { time: formatClock(c.h, c.m), explicit: true, rangeMinutes: null };
     }
     if (h >= 13 && h <= 23) return { time: formatClock(h, 0), explicit: true, rangeMinutes: null };
@@ -532,7 +533,8 @@ export function extractEntities(text: string, opts: ExtractOptions): Entities {
 
   const frequency = extractFrequency(cur, todayYmd);
   const dateResult = extractDate(cur, todayYmd, opts.now, opts.tz);
-  const timeResult = extractTime(cur);
+  const partOfDay = !chatFixesOn() ? null : /\bmornings?\b/i.test(said) ? "am" : /\b(?:afternoons?|evenings?|nights?|tonight)\b/i.test(said) ? "pm" : null;
+  const timeResult = extractTime(cur, partOfDay);
   let duration = extractDuration(cur);
   if (!duration && timeResult.rangeMinutes) duration = timeResult.rangeMinutes;
   const time = timeResult.time ?? dateResult.time;

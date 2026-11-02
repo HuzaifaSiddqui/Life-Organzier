@@ -21,7 +21,8 @@ export const chatFixesOn = () => process.env.CHAT_FIXES_V2?.toLowerCase() === "o
 export const TASK_CUE = /\b(?:remind (?:me|us)|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|set (?:a )?reminder|i will|i'?ll|task)\b/i;
 
 /** A question (not a polite request: "can you move it…" asks for an action and is left to the rules). */
-const QUESTION = /\?\s*$|^(?:what|when|where|why|how|who|which|whose|am|is|are|was|were|do|does|did|have|has|had)\b/i;
+// "do" opens a question only before a subject ("do I have…"); "do the dishes" is an instruction.
+const QUESTION = /\?\s*$|^(?:what|when|where|why|how|who|which|whose|am|is|are|was|were|does|did|have|has|had)\b|^do\s+(?:i|we|you|they)\b/i;
 const POLITE_REQUEST = /^(?:please\s+)?(?:can|could|would|will)\s+(?:you|u)\b/i;
 const SHOW = /^(?:(?:please|can you|could you)\s+)?(?:show|list|display|view|see|give me|tell me|let me see)\b/i;
 /** A report of something already done, at the start of the message. */
@@ -45,8 +46,11 @@ export function feelingOnly(residual: string): boolean {
   return rest !== "" && rest.split(" ").length <= 2 && detectMood(rest) !== null;
 }
 
-/** Delete, remove, clear, get rid of, erase, drop: never a completion. */
-export const DELETE_VERB = /\b(?:delete|remove|clear|get rid of|erase|drop|scrap|cancel)\b/i;
+/** More ways to say delete (CHAT_FIXES_V2), shared by the rules and the bulk commands. Not "bin" or "toss": often a task. */
+export const MORE_DELETE = "throw away|throw out|trash|ditch|chuck out|chuck away";
+
+/** Delete, remove, clear, get rid of, erase, drop, throw away…: never a completion. */
+export const DELETE_VERB = new RegExp(`\\b(?:delete|remove|clear|get rid of|erase|drop|scrap|cancel|${MORE_DELETE})\\b`, "i");
 
 /** A clock time written out ("at 10 am", "5:30", "noon"); "tonight" alone is not one. */
 const CLOCK = /\b(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2}|noon|midnight)\b/i;

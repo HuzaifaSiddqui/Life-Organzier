@@ -103,6 +103,8 @@ test("references match title words: 'the dentist' and a longer message find 'Den
   assert.ok(wordMatch("actually dentist is 5pm", "Dentist appointment") >= 0.5);
   assert.equal(wordMatch("call plumber", "Call mom"), 0, "a shared generic verb is not a match");
   assert.equal(wordMatch("the dentist", "Buy toothpaste"), 0);
+  assert.equal(wordMatch("renew gym membership by the end of the month", "Passport renewal"), 0, "one shared stem is not the task");
+  assert.ok(wordMatch("reschedule my dentist thing to 5pm", "Dentist appointment") >= 0.5, "edit verbs and times don't count against it");
 });
 
 test("'evenings', 'in the mornings', 'nights' give that part of the day's time", () => {
@@ -215,4 +217,75 @@ test("group bulk commands: nothing changes before confirmation, one undo restore
   }
   if (keep === undefined) delete process.env.CHAT_FIXES_V2;
   else process.env.CHAT_FIXES_V2 = keep;
+});
+
+test("regressions: today's to-dos still reach the bulk move; a part of the day sets AM/PM even in the title", async () => {
+  const { matchCommand } = await import("../src/modules/assistant/commands/registry.js");
+  withFlag(() => {
+    const ctx = parseCtx(opts);
+    assert.equal(matchCommand("shift today's to-dos to the 9th", ctx)?.command.name, "bulk_move_today");
+    assert.equal(matchCommand("push today's stuff to thursday", ctx)?.command.name, "bulk_move_today");
+    assert.equal(extractEntities("morning swim on tuesdays at 7", opts).time, "7 AM");
+    assert.equal(extractEntities("breakfast with dad at 8", opts).time, "8 AM", "an 8-11 bare hour stays AM");
+    assert.equal(extractEntities("evening prayer at 7", opts).time, "7 PM");
+    assert.equal(extractEntities("call the bank at 4", opts).time, "4 PM", "no part of the day: the usual guess");
+  });
+});
+
+test("range routing at intent detection: questions about a day or span are task questions; next N days; unreadable spans", async () => {
+  const { rulesUnderstand } = await import("../src/modules/assistant/nlu.js");
+  withFlag(() => {
+    for (const t of ["what have I got on saturday", "anything planned for the 20th?", "plans for next weekend", "do we have anything in the next 5 days", "deadlines this month", "what's on around the holidays"]) {
+      assert.equal(rulesUnderstand(t, opts).intent, "query_tasks", t);
+    }
+    for (const t of ["do the dishes on saturday", "submit the essay next week", "remind me on friday to pay rent"]) assert.equal(rulesUnderstand(t, opts).intent, "create_task", t);
+    const r = resolveRange("do we have anything in the next 5 days", parseCtx(opts));
+    assert.deepEqual(r && r !== "unknown" ? [r.from, r.to] : r, ["2026-10-05", "2026-10-10"]);
+    assert.equal(resolveRange("what's on around the holidays", parseCtx(opts)), "unknown");
+  });
+});
+
+test("smaller gaps: more delete verbs, an explicit request beats a feeling, 'by <day>' is a due date", async () => {
+  const { rulesUnderstand } = await import("../src/modules/assistant/nlu.js");
+  const { matchCommand } = await import("../src/modules/assistant/commands/registry.js");
+  withFlag(() => {
+    assert.equal(matchCommand("trash the completed stuff", parseCtx(opts))?.command.name, "bulk_delete_completed");
+    assert.equal(rulesUnderstand("ditch the old dentist task", opts).intent, "delete_task");
+    assert.equal(rulesUnderstand("clear the gutters tomorrow", opts).intent, "create_task", "'clear' is not a delete verb for the rules");
+    assert.equal(rulesUnderstand("stressed out, remind me to call the dentist tomorrow", opts).intent, "create_task");
+    assert.equal(rulesUnderstand("anxious again, add buy milk to my list", opts).intent, "create_task");
+    assert.equal(rulesUnderstand("feeling sad today", opts).intent, "log_mood", "a feeling alone is still a mood");
+    assert.equal(extractEntities("lab report needs submitting by the 20th", opts).date?.ymd, "2026-10-20");
+    assert.equal(extractEntities("the history essay has to be in by thursday", opts).date?.ymd, "2026-10-08");
+  });
+});
+
+test("whole chat: 'by <day>' updates a task whose title matches, and creates one when none does", { skip }, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { prisma } = await import("../src/config/db.js");
+  const { AiService, setAi } = await import("../src/ai/llm.js");
+  const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
+  const { zonedTimeToUtc, localYmd } = await import("../src/lib/time.js");
+  const { NOW, TZ } = await import("./fixtures.js");
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, tier: "PRO" } });
+  const essay = await prisma.task.create({ data: { userId: user.id, title: "History essay", priority: "MEDIUM", source: "CHAT", dueDate: zonedTimeToUtc("2026-10-15", 0, 0, TZ), dueAt: zonedTimeToUtc("2026-10-15", 23, 59, TZ) } });
+  const keep = process.env.CHAT_FIXES_V2;
+  process.env.CHAT_FIXES_V2 = "on";
+  const say = async (text: string) => (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text, payload: null, label: null })).message as { content: string; command?: string };
+  try {
+    const out = await say("the history essay has to be in by thursday");
+    assert.equal(out.command, "update_task", out.content);
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: essay.id } });
+    assert.equal(after.dueAt ? localYmd(after.dueAt, TZ) : null, "2026-10-08", "moved to Thursday");
+    assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1, "no new task");
+    const fresh = await say("the grant form must be sent by the 18th");
+    assert.equal(fresh.command, "create_task", "no matching title: the create path (a deadline may ask its time)");
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: essay.id } })).dueAt?.toISOString(), after.dueAt?.toISOString(), "the essay is not touched");
+  } finally {
+    if (keep === undefined) delete process.env.CHAT_FIXES_V2;
+    else process.env.CHAT_FIXES_V2 = keep;
+    await prisma.user.delete({ where: { id: user.id } });
+  }
 });

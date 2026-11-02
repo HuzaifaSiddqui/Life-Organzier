@@ -1,5 +1,5 @@
 import { isWhatsapp } from "../channel.js";
-import { chatFixesOn } from "../chatFixes.js";
+import { chatFixesOn, MORE_DELETE } from "../chatFixes.js";
 import { Priority, TaskStatus, TaskType, type Task } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../../config/db.js";
@@ -90,7 +90,7 @@ const moveToday: Command = {
     const t = norm(text);
     const clear = /^(?:please )?(?:clear|free up|empty|cancel) (?:my |the )?(?:day|today|whole day|schedule today|plans today)$/.test(t);
     // CHAT_FIXES_V2: "move everything to tomorrow" means today's tasks even without the word "today".
-    const everything = chatFixesOn() && has(t, MOVE) && /\b(?:everything|all of it|all of today|all my tasks|all tasks|all my stuff)\b/.test(t) && !groupIn(text);
+    const everything = chatFixesOn() && has(t, MOVE) && /\b(?:everything|all of it|all of today|all my tasks|all tasks|all my stuff|today'?s? (?:tasks?|todos?|to dos?|stuff|work|list|plans?|schedule))\b/.test(t) && !groupIn(text);
     if (!clear && !everything && (addBeforeMove(t) || !(has(t, MOVE) && has(t, ALL) && has(t, TODAY) && has(t, `${TASK_WORD}|everything|sab|سب|سارے`)))) return null;
     if (has(t, "non urgent|nonurgent|not urgent|less important|ghair zaroori|غیر ضروری")) return null;
     const target = extractTargetDay(text.replace(TODAY_SOURCE, " "), ctx.opts);
@@ -162,7 +162,7 @@ const deleteCompleted: Command = {
   undoable: true,
   parse(text) {
     const t = norm(text);
-    if (!has(t, "delete|remove|clear|clean up|get rid of|hata do|hatao|saaf|ڈیلیٹ|ہٹا دو|صاف")) return null;
+    if (!has(t, `delete|remove|clear|clean up|get rid of|hata do|hatao|saaf|ڈیلیٹ|ہٹا دو|صاف${chatFixesOn() ? `|${MORE_DELETE}` : ""}`)) return null;
     if (!has(t, "completed|done|finished|mukammal|مکمل")) return null;
     // CHAT_FIXES_V2: "the completed ones", "the finished stuff" name the same group.
     return has(t, ALL) || has(t, "tasks|kaam|کام") || (chatFixesOn() && has(t, "ones|stuff|items|things")) ? {} : null;
@@ -306,7 +306,7 @@ const deleteGroup: Command = {
     if (!chatFixesOn()) return null;
     const t = norm(text);
     const group = groupIn(text);
-    if (!group || !has(t, "delete|remove|clear|get rid of|erase|cancel") || has(t, "completed|done|finished")) return null;
+    if (!group || !has(t, `delete|remove|clear|get rid of|erase|cancel|${MORE_DELETE}`) || has(t, "completed|done|finished")) return null;
     return { group };
   },
   async prepare(turn, args) {

@@ -3,11 +3,14 @@ import { chatFixesOn } from "../chatFixes.js";
 import type { Priority } from "@prisma/client";
 import { normalizeSpelled } from "../../../lib/spelled.js";
 import { truncate } from "../../../lib/text.js";
-import { addDaysYmd, weekdayOfYmd } from "../../../lib/time.js";
+import { addDaysYmd } from "../../../lib/time.js";
 import { serializeTask } from "../../tasks/taskService.js";
 import { FIND_LIMIT, findFilterSchema, findItems, type FindFilter, type Found } from "../../search/searchService.js";
 import { dueLabel, focusOn, type Out, type Turn } from "../dialogue.js";
 import { extractEntities } from "../entities.js";
+import { resolveRange } from "../ranges.js";
+
+export { resolveRange, type DayRange } from "../ranges.js";
 import type { Card } from "../types.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 
@@ -53,47 +56,6 @@ const NOT_A_TERM = new Set(
 );
 
 /** "overdue", "this week", or the day entities.ts reads ("today", "kal") when it is today or tomorrow. */
-/** Days asked about, inclusive (CHAT_FIXES_V2). */
-export type DayRange = { from: string; to: string; label: string };
-
-/** A word that asks about a span of time; when none of the rules below reads it, the user is asked which days. */
-const RANGE_WORD = /\b(?:week|weekend|month|soon|later|upcoming|coming|next few|few days|before|after|until|till|between|from|by)\b/i;
-
-/**
- * The days a question asks about: next week, this/next weekend, after the weekend, this/next month, by / until /
- * before a day, or one day (weekday names, "the 12th", dates, today / tomorrow). "unknown" = it names a span this
- * can't read (ask, never answer with today); null = no time in the question.
- */
-export function resolveRange(text: string, ctx: ParseCtx): DayRange | "unknown" | null {
-  const t = text.toLowerCase();
-  const today = ctx.todayYmd;
-  const dow = weekdayOfYmd(today); // 0 = Sunday
-  const plus = (n: number) => addDaysYmd(today, n);
-  const thisSat = dow === 0 ? plus(-1) : plus(6 - dow);
-  const nextMon = plus(dow === 0 ? 1 : 8 - dow);
-  if (/\bnext week\b/.test(t)) return { from: nextMon, to: addDaysYmd(nextMon, 6), label: "Next week" };
-  if (/\bnext weekend\b/.test(t)) return { from: addDaysYmd(thisSat, 7), to: addDaysYmd(thisSat, 8), label: "Next weekend" };
-  if (/\bafter the weekend\b|\bafter weekend\b/.test(t)) return { from: nextMon, to: addDaysYmd(nextMon, 6), label: "After the weekend" };
-  if (/\b(?:this |the )?weekend\b/.test(t)) return { from: dow === 0 ? today : thisSat, to: dow === 0 ? today : addDaysYmd(thisSat, 1), label: "This weekend" };
-  if (/\b(?:this week|is hafte|is haftay)\b/.test(t)) return { from: today, to: plus(6), label: "This week" };
-  const [y, mo] = today.split("-").map(Number);
-  const lastOf = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).toISOString().slice(0, 10);
-  if (/\bthis month\b/.test(t)) return { from: today, to: lastOf(y, mo), label: "This month" };
-  if (/\bnext month\b/.test(t)) {
-    const ny = mo === 12 ? y + 1 : y;
-    const nm = mo === 12 ? 1 : mo + 1;
-    return { from: `${ny}-${String(nm).padStart(2, "0")}-01`, to: lastOf(ny, nm), label: "Next month" };
-  }
-  const e = extractEntities(text, ctx.opts);
-  const ymd = e.date && !e.date.fuzzy ? e.date.ymd : null;
-  if (ymd && /\b(?:by|until|till|before)\b/.test(t)) {
-    const to = /\bbefore\b/.test(t) ? addDaysYmd(ymd, -1) : ymd;
-    return to >= today ? { from: today, to, label: `Until ${ymd === to ? e.date!.text : `before ${e.date!.text}`}` } : "unknown";
-  }
-  if (ymd) return { from: ymd, to: ymd, label: ymd === today ? "Today" : ymd === plus(1) ? "Tomorrow" : e.date!.text.replace(/^on\s+/i, "") };
-  return RANGE_WORD.test(t) ? "unknown" : null;
-}
-
 export function findDateRange(text: string, ctx: ParseCtx): FindFilter["dateRange"] {
   if (chatFixesOn()) {
     const r = resolveRange(text, ctx);

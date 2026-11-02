@@ -247,20 +247,25 @@ export type Resolution = { task: Task | null; candidates: Task[]; viaFocus: bool
  * 0 when one is missing; otherwise 0.6, plus up to 0.3 for how much of the title it covers (shorter titles first).
  */
 export function wordMatch(ref: string, title: string): number {
-  const r = contentTokens(ref).filter((w) => !GENERIC.has(w));
-  const t = contentTokens(title).filter((w) => !GENERIC.has(w));
+  // Times and numbers ("5pm", "13th") don't name a task either.
+  const named = (w: string) => !GENERIC.has(w) && !/\d/.test(w);
+  const r = contentTokens(ref).filter(named);
+  const t = contentTokens(title).filter(named);
   if (!r.length || !t.length) return 0;
   const same = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
   // Every word of the reference is in the title ("the dentist" → "Dentist appointment").
   if (r.every((w) => t.some((x) => same(w, x)))) return 0.6 + 0.3 * Math.min(1, r.length / t.length);
   // Or the message carries more words ("actually the dentist is at 5"): the title's distinctive words found in it.
+  // Both ways: the title's words found in the message, and at least half the message's distinctive words in the title
+  // ("renew gym membership" is not "Passport renewal": only "renew" is shared).
   const hits = t.filter((x) => r.some((w) => same(w, x))).length;
-  return hits ? 0.45 + 0.35 * (hits / t.length) : 0;
+  const covered = r.filter((w) => t.some((x) => same(w, x))).length;
+  return hits && covered * 2 >= r.length ? 0.45 + 0.35 * (hits / t.length) : 0;
 }
 
 /** Words too common to identify a task by ("call", "pay", "today"): matching on them alone would pick the wrong one. */
 const GENERIC = new Set(
-  ["call", "pay", "buy", "get", "go", "do", "make", "send", "book", "finish", "submit", "start", "meet", "move", "change", "update", "check", "take", "bring", "write", "read", "clean", "fix", "task", "thing", "stuff", "today", "tomorrow", "actual", "actually", "now", "instead", "please", "need", "want", "will", "still"].map((w) => contentTokens(w)[0] ?? w),
+  ["call", "pay", "buy", "get", "go", "do", "make", "send", "book", "finish", "submit", "start", "meet", "move", "change", "update", "check", "take", "bring", "write", "read", "clean", "fix", "task", "thing", "stuff", "today", "tomorrow", "actual", "actually", "now", "instead", "please", "need", "want", "will", "still", "reschedule", "push", "shift", "postpone", "delay", "cancel", "delete", "remove", "mark", "done", "complete", "due", "by"].map((w) => contentTokens(w)[0] ?? w),
 );
 
 export async function resolveTaskRef(

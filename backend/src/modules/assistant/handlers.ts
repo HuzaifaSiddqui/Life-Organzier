@@ -132,6 +132,11 @@ const CHANGE_CUE = /\b(?:now|instead|anymore|moved|rescheduled|long)\b/i;
  * Every reply says which command handled it (internal: stored with the message, never shown). A hand-off inside a
  * handler sets its own command; otherwise it is the intent dispatched here, when that is a registry command.
  */
+/** "by <day>" / "by the <date>": a due date (CHAT_FIXES_V2). */
+const BY_DUE = /\bby\s+(?:the\s+)?(?:\d{1,2}(?:st|nd|rd|th)?\b|mon|tue|wed|thu|fri|sat|sun|tomorrow|tonight|next|this|end)/i;
+/** Asking for a new task outright; "must" / "has to" state a deadline and don't. */
+const EXPLICIT_CREATE = /\b(?:remind me|add|create|new task|make a task)\b/i;
+
 export async function handleIntent(turn: Turn, u: Understanding, text: string): Promise<Out> {
   const out = await dispatchIntent(turn, u, text);
   return out.command || !getCommand(u.intent) ? out : { ...out, command: u.intent };
@@ -141,6 +146,11 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   if (u.intent === "create_task" || u.intent === "create_routine") {
     const ask = outOfScopeConfirm(u, text);
     if (ask) return ask;
+  }
+  if (chatFixesOn() && u.intent === "create_task" && u.entities.date && BY_DUE.test(text) && !EXPLICIT_CREATE.test(text) && u.targetRef) {
+    // "the tax return needs to be done by the 13th": a due date for a task the user already has, when its title matches.
+    const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { listed: turn.state.listed });
+    if (r.task) return { ...(await updateIntent(turn, { ...u, intent: "update_task", targetRef: r.task.title }, text)), command: "update_task" };
   }
   if (chatFixesOn() && u.intent === "create_task" && !TASK_CUE.test(text) && CHANGE_CUE.test(text) && u.targetRef) {
     // C: a change to a task the user already has: ask instead of adding a duplicate.
@@ -166,7 +176,7 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   }
   switch (u.intent) {
     case "create_task": {
-      if (u.mood?.explicit && !u.entities.date && !u.entities.time) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
+      if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && TASK_CUE.test(text))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       const out = await proceedWithDraft(turn, startTaskDraft(turn, u, text), turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
       const note = cantDoNote(text);
       if (note && (out.intent === "task_created" || out.intent === "clarify")) out.content = `${note}\n${out.content}`;
