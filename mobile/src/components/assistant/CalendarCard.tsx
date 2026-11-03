@@ -19,7 +19,7 @@ const clock = (ms: number) => formatTime(new Date(ms).toISOString());
  * Agenda: every calendar on the phone, ours included. Free: gaps of 30 min or more between 8 AM and 10 PM. Add: syncs now.
  * Off: offers to turn calendar sync on (permission dialog).
  */
-export function CalendarCard({ card }: { card: CalendarCardData }) {
+export function CalendarCard({ card, onAction }: { card: CalendarCardData; onAction: (payload: ActionPayload, label: string) => void }) {
   const { colors, spacing } = useTheme();
   const { t } = useLocale();
   const [active, setActive] = useState<boolean | null>(null);
@@ -50,6 +50,10 @@ export function CalendarCard({ card }: { card: CalendarCardData }) {
   };
 
   if (active === null) return null;
+  // "add X to my calendar" found no task, so X was added: Keep / Undo (it syncs like any other task when kept).
+  if (card.kind === "new" && card.taskId) {
+    return <KeepUndo text={t("calendar.newKeep")} kept={t(active ? "calendar.added" : "calendar.kept")} taskId={card.taskId} onAction={onAction} />;
+  }
   if (!active) {
     return (
       <Card style={{ gap: spacing.sm }}>
@@ -128,18 +132,23 @@ export function CalendarCard({ card }: { card: CalendarCardData }) {
 
 /** After chat added a task that overlaps an event on the phone's other calendars: Keep, or Undo (removes the task). */
 export function CalendarClashCard({ card, onAction }: { card: ClashCardData; onAction: (payload: ActionPayload, label: string) => void }) {
-  const { spacing } = useTheme();
   const { t } = useLocale();
-  const [answer, setAnswer] = useState<"kept" | "undone" | null>(null);
   const text = card.more
     ? t("calendar.clashChatMore", { title: card.title, count: String(card.more), time: card.time })
     : t("calendar.clashChat", { title: card.title, time: card.time });
+  return <KeepUndo tone="warning" text={text} kept={t("calendar.kept")} taskId={card.taskId} onAction={onAction} />;
+}
+
+function KeepUndo({ text, kept, taskId, onAction, tone }: { text: string; kept: string; taskId: string; onAction: (payload: ActionPayload, label: string) => void; tone?: "warning" }) {
+  const { spacing } = useTheme();
+  const { t } = useLocale();
+  const [answer, setAnswer] = useState<"kept" | "undone" | null>(null);
   return (
-    <Card tone="warning" style={{ gap: spacing.sm }}>
+    <Card tone={tone} style={{ gap: spacing.sm }}>
       <Text variant="body">{text}</Text>
       {answer === "kept" ? (
         <Text variant="caption" color="secondary">
-          {t("calendar.kept")}
+          {kept}
         </Text>
       ) : answer === null ? (
         <View style={[styles.row, { gap: spacing.sm }]}>
@@ -150,7 +159,7 @@ export function CalendarClashCard({ card, onAction }: { card: ClashCardData; onA
             size="sm"
             onPress={() => {
               setAnswer("undone");
-              onAction({ type: "undo_task", taskId: card.taskId }, t("calendar.undo"));
+              onAction({ type: "undo_task", taskId }, t("calendar.undo"));
             }}
           />
         </View>

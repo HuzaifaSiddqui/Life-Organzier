@@ -59,6 +59,22 @@ export function parseCalendarFree(text: string, ctx: ParseCtx): CommandArgs | nu
   return asks ? { date: dayOf(text, ctx) } : null;
 }
 
+/**
+ * Nothing matched: the message is a new task. A clear one is created (it then syncs like any other) and the phone
+ * shows Keep / Undo; anything else (a question back, a draft) is the normal creation reply.
+ */
+async function newTask(turn: Turn, text: string): Promise<Out> {
+  const out = await runCommand(turn, "create_task", { text });
+  const card = out.cards?.find((c) => c.type === "task");
+  if (out.intent !== "task_created" || card?.type !== "task") return out;
+  return {
+    ...out,
+    content: `No task matched, so I added it.\n${out.content}`,
+    cards: [...(out.cards ?? []), { type: "calendar", kind: "new", date: turn.todayYmd, taskId: card.task.id, title: card.task.title }],
+    actions: (out.actions ?? []).filter((a) => a.payload.type !== "undo_task"),
+  };
+}
+
 const calendarAdd: Command = {
   name: "calendar_add",
   category: "tasks",
@@ -76,7 +92,7 @@ const calendarAdd: Command = {
     if (r.task) return { args: { ...args, taskId: r.task.id } };
     if (r.candidates.length && ref) return { out: askChoice(turn, "calendar_add", args, "taskId", r.candidates.map((t) => ({ id: t.id, label: t.title })), "Which task do you mean?") };
     // "add dentist appointment on Friday to my calendar" with no such task: it's a new task (which then syncs).
-    if (ref) return { out: await runCommand(turn, "create_task", { text: String(args.text || ref) }) };
+    if (ref) return { out: await newTask(turn, String(args.text || ref)) };
     return { out: { content: "Which task should go in your calendar?", intent: "not_found" } };
   },
   async execute(turn, args) {

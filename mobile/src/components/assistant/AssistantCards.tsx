@@ -205,7 +205,7 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
           case "location_setup":
             return <LocationSetupCard key={i} taskId={card.taskId} place={card.place} saved={card.saved} />;
           case "calendar":
-            return <CalendarCard key={i} card={card} />;
+            return <CalendarCard key={i} card={card} onAction={onAction} />;
           case "calendar_clash":
             return <CalendarClashCard key={i} card={card} onAction={onAction} />;
           default:

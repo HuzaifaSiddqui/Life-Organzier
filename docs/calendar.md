@@ -11,8 +11,8 @@ and Samsung calendars that already sync to the phone are read where they are.
 |---|---|
 | Write (one way) | The app keeps a separate **"Life Organizer"** calendar on the phone and writes every dated task and every routine occurrence of the next 14 days into it. No other calendar is ever written to. |
 | Read (busy time) | The phone's other calendars are read **on the phone only**: the clash warning, "what's on my calendar tomorrow" and "when am I free tomorrow". Event titles and times never go to the backend or any model. |
-| Settings | Switch "Add tasks and routines to my calendar" (asks for calendar access the first time) and "Remove all Life Organizer events" (count shown, confirm, then Undo). |
-| Chat (app and voice) | "add this to my calendar", "what's on my calendar tomorrow", "when am I free tomorrow". On WhatsApp these answer "ask me in the app" (WhatsApp can't see the phone). |
+| Settings | Switch "Add tasks and routines to my calendar" (asks for calendar access the first time), the note "Turning this off keeps the events already added until you use Remove all", and "Remove all Life Organizer events" (count shown, confirm, then Undo). |
+| Chat (app and voice) | "add this to my calendar", "what's on my calendar tomorrow", "when am I free tomorrow". "Am I free …" / "when am I free …" use the calendar only when the flag **and** the user's switch are on (the app sends its switch state with each message); otherwise they get the usual task-list answer plus "To include your phone calendar, turn on Phone calendar in Settings." "Add X to my calendar" with no task called X creates X as a new task, with Keep / Undo. On WhatsApp the agenda and "add" answer "ask me in the app" (WhatsApp can't see the phone); "am I free" gets the task-list answer. |
 
 ## Events
 
@@ -49,9 +49,16 @@ all-day events and events marked "free" never clash). Free time: gaps of 30 minu
 - Chat: a clear task is created at once by the server, so the phone checks after the reply and adds
   "You have X at 3 PM. Keep it?" with Keep / Undo (Undo removes the task the same way the reply's Undo does).
 
-**Remove all.** Shows how many events will go, asks, then deletes the Life Organizer calendar (only ours) and turns
-syncing off. Undo turns syncing on again, which re-creates the current tasks and the next 14 days of routines; past
-routine events don't come back (the dialog says so). Turning the switch off only stops updates; the events stay.
+**Which calendar.** The phone stores the id of its calendar and whether this app created it. When that id is gone
+(e.g. a reinstall cleared the app's storage), a calendar titled "Life Organizer" is adopted instead, and because the
+event map is empty its events are deleted first and then rebuilt, so nothing is duplicated. Without a title match a
+new calendar is created (and marked as created by the app).
+
+**Remove all.** Shows how many events will go, asks, then acts on the **stored** calendar only (never a title match):
+a calendar this app created is deleted with all its events; an adopted one keeps the calendar and loses only the events
+in the map. Syncing is turned off. Undo turns syncing on again, which re-creates the current tasks and the next 14 days
+of routines; past routine events don't come back (the dialog says so). Turning the switch off only stops updates; the
+events stay (the note beside the switch says so).
 
 ## Privacy
 
@@ -93,10 +100,13 @@ the audit build order) is an Expo SDK 57 module too and can go into the same dev
    Lecture at 3:00 PM" → Change time / Add anyway both behave. Same in chat ("submit report Friday 3:30 pm") → "Keep it?"
    card → Undo removes the task (and its event).
 8. Chat: "what's on my calendar tomorrow" lists events from all calendars; "when am I free tomorrow" lists gaps; "add
-   this to my calendar" after creating a task → "In your calendar". With the switch off, the cards offer "Turn on
-   calendar".
+   this to my calendar" after creating a task → "In your calendar"; "add dentist on Friday 4 pm to my calendar" (no such
+   task) → task created with Keep / Undo. With the switch off: "am I free tomorrow evening?" gives the task list plus
+   the Settings line, and the agenda card offers "Turn on calendar".
 9. Settings → Remove all → the dialog shows the count → Remove → the Life Organizer calendar is gone, other calendars
    untouched → Undo → events back.
+9a. Reinstall (or clear app data) with the Life Organizer calendar still on the phone → turn the switch on → its old
+   events are replaced, not doubled; Remove all then removes the events but leaves that (adopted) calendar.
 10. Deny the permission (fresh install, or revoke in system settings) → switch stays off with the note; the rest of the
    app works.
 11. Airplane mode: edit a dated task → its event updates; routines unchanged until online.

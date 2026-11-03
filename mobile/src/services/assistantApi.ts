@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "./api";
 import { syncNow } from "./syncEngine";
 import { scheduleReminderSync } from "./reminders";
 import { locationRemindersReady } from "./locationReminders";
+import { calendarSyncActive } from "./calendar";
 
 const CONVERSATION_KEY = "life-organizer:conversation:v2";
 
@@ -80,6 +81,8 @@ export async function sendToAssistant(input: {
       channel: input.voice ? "VOICE" : "APP",
       // The server can't see the phone's toggle: it decides whether a task with a place offers "Turn on".
       locationReminders: await locationRemindersReady(),
+      // CALENDAR_SYNC: "am I free …" reads the phone's calendar only when this switch is on.
+      calendar: await calendarSyncActive(),
     },
     { timeout: 120000 },
   );

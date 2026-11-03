@@ -60,6 +60,32 @@ test("flag off changes nothing: calendar commands are hidden and the same messag
   assert.deepEqual(on, ["calendar_add", "calendar_agenda", "calendar_free"]);
 });
 
+test("'am I free …' with the calendar switch off: the old task-list answer plus one line about Settings", { skip }, async () => {
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ } });
+  const say = async (text: string, calendarOn?: boolean, channel: Channel = "APP") =>
+    handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, text, channel, now: NOW, calendarOn });
+  const LINE = "To include your phone calendar, turn on Phone calendar in Settings.";
+  try {
+    for (const text of ["am I free tomorrow evening?", "When am I free tomorrow?"]) {
+      const before = await withFlag(undefined, () => say(text));
+      const off = await withFlag("on", () => say(text, false));
+      assert.equal(off.message.intent, before.message.intent, text);
+      assert.equal(off.message.content, `${before.message.content}\n${LINE}`);
+      assert.ok(!off.message.cards?.some((c) => c.type === "calendar"));
+      const unknown = await withFlag("on", () => say(text)); // older app: switch state not sent
+      assert.equal(unknown.message.intent, before.message.intent);
+      const wa = await withFlag("on", () => say(text, undefined, "WHATSAPP_AGENT"));
+      assert.ok(!wa.message.content.includes(LINE), "no Settings line on WhatsApp");
+      const on = await withFlag("on", () => say(text, true));
+      assert.deepEqual(on.message.cards, [{ type: "calendar", kind: "free", date: "2026-11-05" }]);
+    }
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
 test("feed: occurrences in the 14-day window from today, untimed ones all-day, every context included", { skip }, async () => {
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
   await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, currentContext: "At Home" } });
@@ -87,8 +113,8 @@ test("chat (flag on): agenda and free replies carry a card and no calendar data;
   setAi(new AiService([]));
   const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
   await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ } });
-  const say = async (text: string, channel: Channel = "APP") =>
-    handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, text, channel, now: NOW });
+  const say = async (text: string, channel: Channel = "APP", calendarOn = true) =>
+    handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, text, channel, now: NOW, calendarOn });
   try {
     await withFlag("on", async () => {
       const agenda = await say("What's on my calendar tomorrow?");
@@ -105,10 +131,13 @@ test("chat (flag on): agenda and free replies carry a card and no calendar data;
       const task = await prisma.task.findFirstOrThrow({ where: { userId: user.id } });
       assert.equal(card.taskId, task.id);
 
-      // Nothing by that name: it's a new task (which then goes to the calendar like any other).
+      // Nothing by that name: it's a new task (which then goes to the calendar like any other), with Keep / Undo.
       const fresh = await say("Add dentist appointment on Friday at 4 PM to my calendar");
       assert.equal(fresh.message.intent, "task_created");
-      assert.ok(await prisma.task.findFirst({ where: { userId: user.id, title: { contains: "entist" } } }));
+      const dentist = await prisma.task.findFirstOrThrow({ where: { userId: user.id, title: { contains: "entist" } } });
+      assert.ok(fresh.message.content.startsWith("No task matched, so I added it."));
+      assert.deepEqual(fresh.message.cards?.at(-1), { type: "calendar", kind: "new", date: "2026-11-04", taskId: dentist.id, title: dentist.title });
+      assert.ok(!fresh.message.actions?.some((a) => a.payload.type === "undo_task"), "the card has the Undo");
 
       const wa = await say("What's on my calendar tomorrow?", "WHATSAPP_AGENT");
       assert.equal(wa.message.intent, "calendar_phone_only");

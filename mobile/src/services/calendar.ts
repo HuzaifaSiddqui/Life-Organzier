@@ -32,7 +32,8 @@ const CALENDAR_TITLE = "Life Organizer";
 const FEATURE_KEY = "life-organizer:calendar-feature";
 const stateKey = () => `life-organizer:calendar:v1:${auth.currentUser?.uid ?? "guest"}`;
 
-type State = { on: boolean; calendarId: string | null; map: EventMap };
+/** `owned`: this app created `calendarId` (only then may Remove all delete the calendar itself). */
+type State = { on: boolean; calendarId: string | null; owned: boolean; map: EventMap };
 type ExpoCalendarModule = typeof import("expo-calendar");
 
 let featureCache: boolean | null = null;
@@ -44,9 +45,9 @@ async function readState(): Promise<State> {
   try {
     const raw = await AsyncStorage.getItem(stateKey());
     const s = raw ? (JSON.parse(raw) as Partial<State>) : {};
-    return { on: Boolean(s.on), calendarId: s.calendarId ?? null, map: s.map && typeof s.map === "object" ? s.map : {} };
+    return { on: Boolean(s.on), calendarId: s.calendarId ?? null, owned: s.owned === true, map: s.map && typeof s.map === "object" ? s.map : {} };
   } catch {
-    return { on: false, calendarId: null, map: {} };
+    return { on: false, calendarId: null, owned: false, map: {} };
   }
 }
 
@@ -79,18 +80,39 @@ export async function calendarFeatureOn(refresh = false): Promise<boolean> {
   return featureCache;
 }
 
-/** The feature is on and this phone's switch is on. */
+/** The feature is on, this phone's switch is on and calendar access is still granted. */
 export async function calendarSyncActive(): Promise<boolean> {
   const s = await readState();
-  return s.on && (await calendarFeatureOn());
+  if (!s.on || !(await calendarFeatureOn())) return false;
+  const Cal = await loadModule();
+  return Boolean(Cal && (await Cal.getCalendarPermissions().catch(() => ({ granted: false }))).granted);
 }
 
-async function ourCalendar(Cal: ExpoCalendarModule, s: State) {
+type ExpoCalendar = Awaited<ReturnType<ExpoCalendarModule["getCalendars"]>>[number];
+
+/** Deletes every event in one of our calendars (three years either side of today). */
+async function clearEvents(cal: ExpoCalendar): Promise<void> {
+  const year = 365 * 86400000;
+  for (const e of await cal.listEvents(new Date(Date.now() - 3 * year), new Date(Date.now() + 3 * year))) await e.delete().catch(() => undefined);
+}
+
+/**
+ * Our calendar and the state that goes with it. The stored id first. When it's gone, a calendar titled "Life
+ * Organizer" is adopted (e.g. after a reinstall lost the map) with an empty map, so its events are deleted first:
+ * they can't be matched without the map, and rebuilding next to them would duplicate everything. Otherwise a calendar
+ * is created. (A stored calendar keeps its past, forgotten routine events.)
+ */
+async function resolveCalendar(Cal: ExpoCalendarModule, s: State): Promise<{ cal: ExpoCalendar; state: State }> {
   const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
-  const found = calendars.find((c) => c.id === s.calendarId) ?? calendars.find((c) => c.title === CALENDAR_TITLE && c.allowsModifications);
-  if (found) return found;
+  const stored = s.calendarId ? calendars.find((c) => c.id === s.calendarId) : undefined;
+  const adopted = stored ? undefined : calendars.find((c) => c.title === CALENDAR_TITLE && c.allowsModifications);
+  if (stored) return { cal: stored, state: s };
+  if (adopted) {
+    await clearEvents(adopted);
+    return { cal: adopted, state: { ...s, calendarId: adopted.id, owned: false, map: {} } };
+  }
   const source = Platform.OS === "ios" ? Cal.getDefaultCalendarSync().source : { isLocalAccount: true, name: CALENDAR_TITLE, type: "LOCAL" };
-  return Cal.createCalendar({
+  const cal = await Cal.createCalendar({
     title: CALENDAR_TITLE,
     name: "life-organizer",
     color: palettes.light.accent,
@@ -100,6 +122,7 @@ async function ourCalendar(Cal: ExpoCalendarModule, s: State) {
     ownerAccount: "personal",
     accessLevel: Cal.CalendarAccessLevel.OWNER,
   });
+  return { cal, state: { ...s, calendarId: cal.id, owned: true, map: {} } };
 }
 
 export type EnableResult = "on" | "denied" | "unavailable";
@@ -111,9 +134,8 @@ export async function enableCalendarSync(): Promise<EnableResult> {
   try {
     const perm = await Cal.requestCalendarPermissions();
     if (!perm.granted) return "denied";
-    const s = await readState();
-    const cal = await ourCalendar(Cal, s);
-    await writeState({ ...s, on: true, calendarId: cal.id });
+    const { state } = await resolveCalendar(Cal, await readState());
+    await writeState({ ...state, on: true });
   } catch (error) {
     console.warn("Calendar could not be set up", error);
     return "unavailable";
@@ -133,21 +155,23 @@ export async function ourEventCount(): Promise<number> {
 }
 
 /**
- * "Remove all Life Organizer events": deletes our calendar (only ours: every event in it is one we made) and turns
- * the switch off. Undo = turn it on again, which re-creates the current tasks and routine occurrences.
+ * "Remove all Life Organizer events": only the stored calendar is touched. One this app created is deleted with all its
+ * events; an adopted one (found by title, maybe not ours) keeps the calendar and loses only the events in the map.
+ * The switch goes off. Undo = turn it on again, which re-creates the current tasks and routine occurrences.
  */
 export async function removeAllCalendarEvents(): Promise<boolean> {
   const Cal = await loadModule();
   const s = await readState();
   if (!Cal) return false;
   try {
-    const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
-    for (const c of calendars.filter((c) => c.id === s.calendarId || (c.title === CALENDAR_TITLE && c.allowsModifications))) await c.delete();
+    const cal = s.calendarId ? (await Cal.getCalendars(Cal.EntityTypes.EVENT)).find((c) => c.id === s.calendarId) : undefined;
+    if (cal && s.owned) await cal.delete();
+    else if (cal) for (const { eventId } of Object.values(s.map)) await Cal.ExpoCalendarEvent.get(eventId).then((e) => e.delete()).catch(() => undefined);
   } catch (error) {
-    console.warn("Could not remove the Life Organizer calendar", error);
+    console.warn("Could not remove the Life Organizer events", error);
     return false;
   }
-  await writeState({ on: false, calendarId: null, map: {} });
+  await writeState({ on: false, calendarId: null, owned: false, map: {} });
   return true;
 }
 
@@ -166,13 +190,12 @@ async function runSync(): Promise<void> {
     } catch {
       feed = null; // offline: tasks still sync, routine events stay as they are
     }
-    const cal = await ourCalendar(Cal, s);
-    const desired = desiredEvents(await readTasks(), feed);
-    const ops = planOps(desired, cal.id === s.calendarId ? s.map : {}, feed);
-    if (!ops.length && cal.id === s.calendarId) return;
+    const { cal, state } = await resolveCalendar(Cal, s);
+    const ops = planOps(desiredEvents(await readTasks(), feed), state.map, feed);
+    if (!ops.length && state === s) return;
     const port = expoPort(cal, (id) => Cal.ExpoCalendarEvent.get(id), { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, allDayUtc: Platform.OS === "android" });
-    const { map } = await applyOps(port, ops, cal.id === s.calendarId ? s.map : {});
-    await writeState({ on: true, calendarId: cal.id, map });
+    const { map } = await applyOps(port, ops, state.map);
+    await writeState({ ...state, on: true, map });
   } catch (error) {
     console.warn("Calendar sync failed", error);
   }

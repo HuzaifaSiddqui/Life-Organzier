@@ -214,7 +214,7 @@ export type AssistantCard =
   | { type: "progress"; task: Task }
   | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean }
   /** CALENDAR_SYNC: filled in on the phone from its own calendars. */
-  | { type: "calendar"; kind: "agenda" | "free" | "add"; date: string; taskId?: string; title?: string }
+  | { type: "calendar"; kind: "agenda" | "free" | "add" | "new"; date: string; taskId?: string; title?: string }
   /** Added on the phone (never sent by the server): a chat-created task overlaps an event on another calendar. */
   | { type: "calendar_clash"; taskId: string; title: string; time: string; more: number };
 

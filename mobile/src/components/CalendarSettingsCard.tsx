@@ -93,6 +93,9 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
           }
         />
         <View style={[styles.below, { gap: spacing.sm }]}>
+          <Text variant="caption" color="secondary">
+            {t("calendar.offNote")}
+          </Text>
           {problem ? (
             <Text variant="caption" color="danger">
               {t(problem === "denied" ? "calendar.denied" : "calendar.unavailable")}
