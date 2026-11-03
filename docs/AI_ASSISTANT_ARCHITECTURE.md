@@ -205,6 +205,24 @@ existed before are wrapped (`wrapped.ts`), not rewritten: the main pipeline stil
   model (0.1 ms hashed); messages that call the model (7 of 259): median 4.2 s, as before. Held-out:
   `chat-holdout.json` has no scored rows yet, so there is no unbiased number.
 
+## How chat is measured
+
+Two measurements, for two jobs:
+
+| | **Routing accuracy** (`npm run eval:routing`) | **Regression check** (`npm run eval:assistant`) |
+|---|---|---|
+| Used for | Every chat number in reports, PRs and the FYP evaluation | Gate: must not drop on any change |
+| What runs | The whole chat (`handleAssistantMessage`): pending questions, guards, the model (AI off, or the chain), handlers, database | `classify()` only: the rules' command and arguments, no model, no database, no handler |
+| Data | Each row on a fresh test user seeded with the set's tasks and routines | No user, no tasks |
+| Scored by | The command the reply reports it was handled by (`Out.command`); a row labelled with a reply (`support`) by the reply's intent | Command and every expected argument |
+| Also reports | Harmful actions on "none" rows, wrong changes on any row, rows that picked the right command but did not find the item ("not found" / "which one?"), rows offered as a button | Pending-answer matrix |
+
+They differ because they test different layers. `eval:assistant` checks that the rules still classify the tuned rows
+(fast, deterministic, the same every run); it never sees the model, the guards, a missing task or a question asked
+back, so a row can pass there and still do the wrong thing in the chat, or fail there and be rescued by the model.
+Routing accuracy is what a user gets. "Routing" because it counts the command chosen: a right command that found no
+matching item counts as right and is reported next to the score.
+
 ## FR coverage
 
 | Area | Status |

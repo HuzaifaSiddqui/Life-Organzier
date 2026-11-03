@@ -57,8 +57,10 @@ still reaches the provider. Off by default for that reason; the gate decides whe
 
 A flag may be turned on only if **all** hold versus the saved baseline, with AI on and with AI off:
 
-- chat eval (`npm run eval:assistant`), pending matrix and query eval (`npm run eval:queries`) not lower, and zero
+- regression check (`npm run eval:assistant`), pending matrix and query eval (`npm run eval:queries`) not lower, and zero
   new wrong actions;
+- routing accuracy (`npm run eval:routing`, the number reported for chat) not lower on any group, and harmful actions
+  on "none" rows not higher;
 - document recall and precision (`npm run eval:documents`) not lower, and wrong items reaching auto-create = 0;
 - the private-document eval and the held-out chat sets (when they have rows) not lower;
 - p95 latency not worse than the baseline by more than 2 s.
