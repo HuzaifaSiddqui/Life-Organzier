@@ -4,8 +4,9 @@ import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { parseQuery } from "./queries.js";
 import { parseSnooze } from "../whatsapp/snooze.js";
-import { applyChatFixes, chatFixesOn, TASK_CUE } from "./chatFixes.js";
+import { applyChatFixes, chatFixesOn, MORE_DELETE, TASK_CUE } from "./chatFixes.js";
 import { explicitRoutine } from "./guards.js";
+import { NEXT_N_DAYS, RANGE_WORD, UNREADABLE_SPAN } from "./ranges.js";
 import { cleanTitle, extractEntities, isHabitLike, parseLocationCommand, type Entities, type ExtractOptions } from "./entities.js";
 
 export const INTENTS = [
@@ -69,7 +70,10 @@ const QUERY =
 const QUERY_PROGRESS = /\bhow (?:much|far)(?: of)?\b[^?]*\b(?:done|complete|completed|finished|progress)\b|\b(?:progress|status) (?:on|of|for)\b/i;
 const COMPLETE =
   /\b(?:i\s+)?(?:just\s+|already\s+)?(?:completed|finished|did|submitted|have done|'ve done|ve done|got done|wrapped up)\b|\bmark(?:ed)?\b[^.]*\b(?:as\s+)?(?:done|complete|completed|finished)\b|\b(?:is|are)\s+(?:done|finished|complete|completed)\b|\bdone with\b|\b(?:tick|check) off\b/i;
-const DELETE = /\b(?:delete|remove|cancel|drop|get rid of|erase|discard|scrap)\b/i;
+const DELETE_BASE = /\b(?:delete|remove|cancel|drop|get rid of|erase|discard|scrap)\b/i;
+// CHAT_FIXES_V2 adds "throw away", "trash", "ditch"… (not "clear": "clear the gutters" is a task).
+const MORE_DELETE_RE = new RegExp(`\\b(?:${MORE_DELETE})\\b`, "i");
+const DELETE = { test: (t: string) => DELETE_BASE.test(t) || (chatFixesOn() && MORE_DELETE_RE.test(t)) };
 const SPLIT = /\b(?:split|divide|break(?:\s+(?:up|down))?|chunk)\b/i;
 const UPDATE_VERB = /\b(?:move|reschedule|postpone|push(?![\s-]*ups?\b)(?:\s+back)?|shift|delay|change|rename|update|edit|bring forward|prepone)\b/i;
 const MAKE_IT = /\b(?:make|set|mark)\s+(?:it|this|that|the\s+\w+(?:\s+\w+)?|\w+)\s+(?:as\s+)?(?:urgent|high|low|medium|important|a priority|priority|high priority|low priority|due|for|to|at|on)\b/i;
@@ -80,7 +84,7 @@ const PROVIDE_INFO =
   /\b(?:i (?:really )?(?:prefer|like|love|enjoy|hate|dislike|usually|always|normally|work best|study best|tend to)|my (?:goal|name|job|major|university|degree)|call me|helps me|calms me|i(?:'m| am) (?:a|an) (?:\w+ )?(?:student|teacher|developer|engineer|doctor|parent))\b/i;
 const CREATE_CUE =
   /\b(?:remind (?:me|us)|let us|add|create|new task|todo|to-do|need to|have to|must|should|got to|gotta|gonna|going to|want to|plan to|don'?t forget|remember to|schedule|book|set (?:a )?reminder|i will|i'?ll)\b/i;
-const IMPERATIVE_START =
+export const IMPERATIVE_START =
   /^(?:please\s+)?(?:do(?!\s+(?:i|you|we|they|he|she|it|my|your|our|their|u)\b)|call|buy|finish|submit|pay|email|study|complete|write|prepare|read|clean|send|book|fix|review|visit|meet|cook|wash|bring|pick up|drop off|practice|revise|attend|go to|take|check|order|apply|register|renew|return|print|upload|file|update my|learn|watch|plan|organize|research|draft|design|code|build|deploy|test|reply|contact|follow up)\b/i;
 
 /**
@@ -103,6 +107,13 @@ function addBeforeEdit(t: string): boolean {
   const edit = UPDATE_VERB.exec(t);
   return Boolean(add && (!edit || add.index < edit.index));
 }
+/** CHAT_FIXES_V2: "change time" names no task: it is the one in focus (the one just added). */
+export const CHANGE_TIME = /^(?:please\s+)?(?:change|set|update|edit|fix)\s+(?:the\s+|its\s+|that\s+)?(?:due\s+)?time\b/i;
+const changeTimeOfFocus = (text: string) => (chatFixesOn() && CHANGE_TIME.test(text.trim()) ? "it" : null);
+
+/** Asking (CHAT_FIXES_V2): a "?", a question or list opener, "do I have", or a noun phrase about tasks for some days. */
+const ASKS_ABOUT =
+  /\?\s*$|^(?:what(?:'s|s| is| are| do| have)?|which|anything|any|is there|are there|show|list|tell me|do (?:i|we) have|have (?:i|we) got|got anything)\b|^(?:my\s+|the\s+)?(?:tasks?|to-?dos?|things|plans?|deadlines?|schedule|agenda)\s+(?:for|due|on|by|this|next|before|after)\b/i;
 const QUESTION =/\?\s*$|^(?:what|when|where|why|how|who|which|can|could|should|would|is|are|do|does|did)\b/i;
 
 function splitParts(text: string): string[] {
@@ -159,11 +170,20 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (parseQuery(t)) return { intent: "query_tasks", confidence: 0.9 };
   if (PLAN.test(t)) return { intent: "plan_day", confidence: 0.85 };
   if (QUERY.test(t) && !CREATE_CUE.test(t) && (QUESTION.test(t) || /^(?:show|list)/i.test(t))) return { intent: "query_tasks", confidence: 0.85 };
+  // CHAT_FIXES_V2: "change time", "set the time to 5 pm": the time of the task in focus (the one just added).
+  if (chatFixesOn() && CHANGE_TIME.test(t)) return { intent: "update_task", confidence: 0.9 };
+  // CHAT_FIXES_V2: asking about a day or a span ("what do I have next weekend", "anything on the 14th?", "tasks for the
+  // long weekend") is a task question, whatever the words around it; the range reader then answers or asks which days.
+  if (chatFixesOn() && ASKS_ABOUT.test(t) && (e.date || RANGE_WORD.test(t) || NEXT_N_DAYS.test(t) || UNREADABLE_SPAN.test(t)) && !CREATE_CUE.test(t) && !TASK_CUE.test(t)) {
+    return { intent: "query_tasks", confidence: 0.85 };
+  }
   // "X helps me when I'm stressed" shares a coping strategy — it is not a mood report.
   if (PROVIDE_INFO.test(t) && !e.date && !e.timeExplicit && !e.frequency && !/\b(?:remind me|add|create)\b/i.test(t)) {
     return { intent: "provide_info", confidence: 0.85 };
   }
-  if (mood && mood.explicit && !e.date && !e.time && !e.frequency) {
+  // CHAT_FIXES_V2: an explicit request ("remind me…", "add…") beats a feeling said beside it.
+  const requested = chatFixesOn() && TASK_CUE.test(t);
+  if (mood && mood.explicit && !e.date && !e.time && !e.frequency && !requested) {
     return { intent: "log_mood", confidence: mood.confidence };
   }
   if (SUPPORT.test(t)) return { intent: "support", confidence: 0.85 };
@@ -173,7 +193,7 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (MAKE_IT.test(t) || (UPDATE_VERB.test(t) && (e.date || e.time || e.priority || e.durationMinutes || /\b(?:to|rename|title)\b/i.test(t)))) {
     if (!/^(?:(?:i|we)\s+)?(?:need|have|want|must|remind)/i.test(t) && !addBeforeEdit(t)) return { intent: "update_task", confidence: 0.85 };
   }
-  if (mood && !e.date && !e.time) return { intent: "log_mood", confidence: mood.confidence * 0.9 };
+  if (mood && !e.date && !e.time && !requested) return { intent: "log_mood", confidence: mood.confidence * 0.9 };
   if (e.frequency) return { intent: "create_routine", confidence: 0.85 };
   if (isHabitLike(t) && (!chatFixesOn() || explicitRoutine(t)) && !e.date && !e.timeExplicit && words <= 6 && !/\b(?:remind me|today|tomorrow)\b/i.test(t)) {
     return { intent: "create_routine", confidence: 0.8 };
@@ -308,6 +328,8 @@ const WEAK_INTENTS = new Set<string>(["create_task", "unclear", "smalltalk", "sw
  */
 function clauseIntent(text: string, opts: ExtractOptions, base: { intent: Intent; confidence: number }): { intent: Intent; confidence: number } {
   if (!WEAK_INTENTS.has(base.intent)) return base;
+  // An explicit request ("remind me…", "add…") is what was asked; a feeling beside it ("stressed out, remind me…") isn't.
+  if (base.intent === "create_task" && TASK_CUE.test(text)) return base;
   const clauses = text.split(/\s*[,;]\s*|\.\s+|\s+(?:so|but|and then)\s+/i).map((c) => c.trim()).filter((c) => c.split(/\s+/).length >= 2);
   if (clauses.length < 2) return base;
   for (const clause of [...clauses].reverse()) {
@@ -331,7 +353,7 @@ export function rulesUnderstand(text: string, opts: ExtractOptions): Understandi
     source: "rules",
     entities,
     title: cleanTitle(entities.residual),
-    targetRef: targetFromText(targetFromText(entities.residual, rule.intent), rule.intent),
+    targetRef: changeTimeOfFocus(text) ?? targetFromText(targetFromText(entities.residual, rule.intent), rule.intent),
     mood,
     splitParts: rule.intent === "split_task" ? splitParts(text) : [],
     contextTarget: contextMatch ? contextMatch[1].trim() : null,
@@ -390,7 +412,7 @@ export async function understand(
     source,
     entities,
     title,
-    targetRef: targetFromText(targetRef, intent),
+    targetRef: changeTimeOfFocus(text) ?? targetFromText(targetRef, intent),
     mood: moodOut,
     splitParts: intent === "split_task" ? splitParts(text) : [],
     contextTarget: contextMatch ? contextMatch[1].trim() : null,

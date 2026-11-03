@@ -1,4 +1,5 @@
 import { ReminderMode, RoutinePriority, TaskStatus, type Task, type UserSettings } from "@prisma/client";
+import { chatFixesOn } from "../assistant/chatFixes.js";
 import { prisma } from "../../config/db.js";
 import {
   addDaysYmd,
@@ -169,7 +170,8 @@ function deadlineSequence(task: Task, settings: UserSettings, tz: string, peakSt
   }
   if (daysLeft >= 1) drafts.push({ at: atLocal(addDaysYmd(dueYmd, -1), 10, 0, tz), level: "urgent", body: `Due tomorrow! (${dueLabel})` });
   drafts.push({ at: critical, level: "critical", body: criticalBody });
-  drafts.push({ at: new Date(due.getTime() - 60 * 60000), level: "urgent", body: "1 hour left!" });
+  // CHAT_FIXES_V2: a date-only deadline (due "11:59 PM" by assumption) gets no late-night "1 hour left!".
+  if (!(chatFixesOn() && !task.dueTime)) drafts.push({ at: new Date(due.getTime() - 60 * 60000), level: "urgent", body: "1 hour left!" });
 
   if (mode === ReminderMode.ADAPTIVE && adapt && adapt.samples >= 3) {
     if (adapt.ignoreRate >= 0.5 && daysLeft >= 4) {

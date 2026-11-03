@@ -880,6 +880,7 @@ export async function proceedWithDraft(
   focusOn(turn, task.id);
 
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
+  if (draft.assumedEndOfDay && !draft.dueTime) lines.push("11:59 PM assumed. Say 'change time' to set another.");
   if (scheduleNote) lines.push(scheduleNote);
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
   // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
@@ -1439,6 +1440,11 @@ const OFFER_TIME = /\s*\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi;
  */
 export function acceptOffer(opts: ExtractOptions, offer: string, text: string): string | null {
   const lead = YES_LEAD.exec(text.trim());
+  // CHAT_FIXES_V2: the "change time" question takes a bare time ("5 pm", "at 6") as its answer.
+  if (!lead && chatFixesOn() && offer === "change time") {
+    const e = extractEntities(text, opts);
+    return e.time && e.timeExplicit && !e.residual.replace(/[^\p{L}\p{N}]+/gu, "").length ? `change time to ${e.time}` : null;
+  }
   if (!lead) return null;
   const rest = text.trim().slice(lead[0].length).replace(/[.!]+$/, "").trim();
   if (!rest) return offer;

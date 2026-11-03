@@ -1,0 +1,150 @@
+{
+ "description": "End-to-end expectations for chat-set2-ai-en.json (ids n-xxx). mustInclude / mustNotInclude = task or routine titles that must / must not appear in the reply text or in the reply's task payload. replySays = plain-language expectation. db = state the database must be in after the turn (and nothing else changed). Seed dates: Dentist appointment Thu 2026-10-08 16:00; Tax return Sun 10-11; Sales deck Wed 10-07; Call the bank no date; Passport renewal Wed 10-14; Project report Fri 10-09; Car wash no date; Quarterly budget review Mon 10-12; Team lunch booking Wed 10-07. Now = Mon 2026-10-05 10:00 Asia/Karachi. Written by Claude (AI), not by real users.",
+ "expectations": {
+  "n-006": {
+   "mustInclude": [
+    "Dentist appointment"
+   ],
+   "mustNotInclude": [
+    "Tax return",
+    "Project report"
+   ]
+  },
+  "n-008": {
+   "mustInclude": [
+    "Quarterly budget review"
+   ],
+   "mustNotInclude": [
+    "Tax return",
+    "Dentist appointment",
+    "Sales deck"
+   ]
+  },
+  "n-074": {
+   "mustInclude": [
+    "Quarterly budget review",
+    "Passport renewal"
+   ],
+   "mustNotInclude": [
+    "Dentist appointment",
+    "Sales deck",
+    "Project report",
+    "Tax return"
+   ]
+  },
+  "n-077": {
+   "mustInclude": [
+    "Tax return"
+   ],
+   "mustNotInclude": [
+    "Project report",
+    "Dentist appointment",
+    "Passport renewal"
+   ]
+  },
+  "n-076": {
+   "replySays": "nothing due today; no task titles listed"
+  },
+  "n-075": {
+   "replySays": "nothing overdue"
+  },
+  "n-078": {
+   "mustInclude": [
+    "Project report",
+    "Friday"
+   ]
+  },
+  "n-004": {
+   "mustInclude": [
+    "Gym",
+    "Medicine",
+    "Reading",
+    "Yoga"
+   ]
+  },
+  "n-002": {
+   "mustInclude": [
+    "Dentist appointment"
+   ]
+  },
+  "n-003": {
+   "mustInclude": [
+    "Tax return"
+   ]
+  },
+  "n-079": {
+   "mustInclude": [
+    "Passport renewal"
+   ]
+  },
+  "n-080": {
+   "mustInclude": [
+    "Team lunch booking"
+   ]
+  },
+  "n-090": {
+   "replySays": "no tasks completed yet"
+  },
+  "n-088": {
+   "mustInclude": [
+    "10 PM",
+    "6 AM"
+   ]
+  },
+  "n-032": {
+   "mustInclude": [
+    "2 hours"
+   ]
+  },
+  "n-087": {
+   "mustInclude": [
+    "1h 30m"
+   ]
+  },
+  "n-010": {
+   "db": "Medicine occurrence for today is DONE"
+  },
+  "n-014": {
+   "db": "Reading occurrence for today is DONE"
+  },
+  "n-012": {
+   "db": "Sales deck is completed"
+  },
+  "n-016": {
+   "db": "Gym occurrence for today is SKIPPED; nothing marked done"
+  },
+  "n-017": {
+   "db": "Yoga occurrence for today is SKIPPED; no new task 'Yoga' exists"
+  },
+  "n-018": {
+   "db": "Reading occurrence for today is SKIPPED; nothing marked done"
+  },
+  "n-020": {
+   "db": "Yoga routine is paused"
+  },
+  "n-022": {
+   "db": "a task about the dentist is created due 2026-10-09 15:00 (or asks which: the seeded 'Dentist appointment' exists)"
+  },
+  "n-062": {
+   "db": "Passport renewal due date is 2026-10-09"
+  },
+  "n-063": {
+   "db": "Project report priority is HIGH"
+  },
+  "n-065": {
+   "db": "the team lunch task is renamed 'Book the cafe'"
+  },
+  "n-066": {
+   "db": "Quarterly budget review time is 15:00"
+  },
+  "n-067": {
+   "db": "Passport renewal is completed"
+  },
+  "n-070": {
+   "db": "Car wash still exists until the user confirms (preview only)"
+  },
+  "n-071": {
+   "db": "Quarterly budget review still exists until the user confirms (preview only)"
+  }
+ }
+}

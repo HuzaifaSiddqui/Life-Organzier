@@ -1,0 +1,435 @@
+{
+ "description": "Machine checks for chat-set3-fixes-en.json, written from each row's 'expect' note (same shape as the set2 expectations: mustInclude / mustNotInclude are titles in the reply text or its task cards; db entries are state checks after the turn, and every other change fails the row). clarifyOk: 'Which days do you mean?' also passes; today's list never does.",
+ "rows": [
+  {
+   "id": "f-001",
+   "emptyList": true
+  },
+  {
+   "id": "f-002",
+   "mustInclude": [
+    "Tax return",
+    "Passport renewal",
+    "Quarterly budget review"
+   ]
+  },
+  {
+   "id": "f-003",
+   "mustInclude": [
+    "Sales deck",
+    "Team lunch booking",
+    "Dentist appointment"
+   ],
+   "mustNotInclude": [
+    "Project report"
+   ]
+  },
+  {
+   "id": "f-004",
+   "mustInclude": [
+    "Sales deck",
+    "Team lunch booking"
+   ],
+   "mustNotInclude": [
+    "Dentist appointment"
+   ]
+  },
+  {
+   "id": "f-005",
+   "emptyList": true
+  },
+  {
+   "id": "f-006",
+   "mustInclude": [
+    "Passport renewal"
+   ]
+  },
+  {
+   "id": "f-007",
+   "mustInclude": [
+    "Quarterly budget review"
+   ]
+  },
+  {
+   "id": "f-008",
+   "mustInclude": [
+    "Sales deck",
+    "Team lunch booking"
+   ]
+  },
+  {
+   "id": "f-009",
+   "clarifyOk": true,
+   "mustInclude": [
+    "Sales deck",
+    "Team lunch booking",
+    "Dentist appointment"
+   ]
+  },
+  {
+   "id": "f-010",
+   "clarifyOk": true
+  },
+  {
+   "id": "f-011",
+   "clarifyOk": true,
+   "clarifyOnly": true
+  },
+  {
+   "id": "f-012",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-013",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-014",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-015",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-016",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-017",
+   "db": [
+    {
+     "op": "created",
+     "title": "Call mom"
+    }
+   ]
+  },
+  {
+   "id": "f-018",
+   "notIntent": [
+    "mood_ask",
+    "mood_confirm",
+    "mood_logged"
+   ]
+  },
+  {
+   "id": "f-019",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-020",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-021",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-022",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-023",
+   "mustInclude": [
+    "Car wash"
+   ],
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-024",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-025",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-026",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-027",
+   "mustInclude": [
+    "Errand: pick up parcel",
+    "Errand: buy stamps"
+   ],
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-028",
+   "mustInclude": [
+    "Errand: pick up parcel",
+    "Errand: buy stamps"
+   ],
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-029",
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "f-030",
+   "listTitle": "Tomorrow",
+   "note": "the set's expect says nothing is due tomorrow, but its seed has 'Errand: pick up parcel' due 2026-10-06; checked: tomorrow's list, not a search"
+  },
+  {
+   "id": "f-031",
+   "mustInclude": [
+    "Sales deck",
+    "Team lunch booking",
+    "Dentist appointment",
+    "Project report",
+    "Tax return"
+   ]
+  },
+  {
+   "id": "f-032",
+   "db": [
+    {
+     "op": "created",
+     "dueYmd": "2026-10-09"
+    }
+   ]
+  },
+  {
+   "id": "f-033",
+   "db": [
+    {
+     "op": "created",
+     "dueYmd": "2026-11-03"
+    }
+   ]
+  },
+  {
+   "id": "f-034",
+   "db": [
+    {
+     "op": "created",
+     "dueYmd": "2026-11-01"
+    }
+   ]
+  },
+  {
+   "id": "f-035",
+   "db": [
+    {
+     "op": "created",
+     "dueYmd": "2026-10-24"
+    }
+   ]
+  },
+  {
+   "id": "f-036",
+   "db": [
+    {
+     "op": "created",
+     "dueYmd": "2026-10-05",
+     "dueTime": "3 PM"
+    }
+   ]
+  },
+  {
+   "id": "f-037",
+   "db": [
+    {
+     "op": "updated",
+     "title": "Passport renewal",
+     "dueYmd": "2026-10-09"
+    }
+   ]
+  },
+  {
+   "id": "f-038",
+   "db": [
+    {
+     "op": "updated",
+     "title": "Tax return",
+     "dueYmd": "2026-10-13"
+    }
+   ]
+  },
+  {
+   "id": "f-039",
+   "db": [
+    {
+     "op": "created",
+     "title": "plumber",
+     "dueYmd": "2026-10-06",
+     "dueTime": "2 PM"
+    }
+   ]
+  },
+  {
+   "id": "f-040",
+   "db": [
+    {
+     "op": "created",
+     "title": "electricity",
+     "dueYmd": "2026-10-09"
+    }
+   ]
+  },
+  {
+   "id": "f-041",
+   "db": [
+    {
+     "op": "completed",
+     "title": "Quarterly budget review"
+    }
+   ]
+  },
+  {
+   "id": "f-042",
+   "db": [
+    {
+     "op": "completed",
+     "title": "Team lunch booking"
+    }
+   ]
+  },
+  {
+   "id": "f-043",
+   "db": [
+    {
+     "op": "updated",
+     "title": "Project report",
+     "dueYmd": "2026-10-10"
+    }
+   ]
+  },
+  {
+   "id": "f-044",
+   "db": [
+    {
+     "op": "routine",
+     "days": "daily",
+     "hourFrom": 19,
+     "hourTo": 23
+    }
+   ]
+  },
+  {
+   "id": "f-045",
+   "db": [
+    {
+     "op": "routine",
+     "days": "daily",
+     "hourFrom": 5,
+     "hourTo": 11
+    }
+   ]
+  },
+  {
+   "id": "f-046",
+   "db": [
+    {
+     "op": "routine",
+     "days": [
+      0,
+      6
+     ],
+     "hourFrom": 16,
+     "hourTo": 21
+    }
+   ]
+  },
+  {
+   "id": "f-047",
+   "db": [
+    {
+     "op": "routine",
+     "days": [
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "hourFrom": 6,
+     "hourTo": 6
+    }
+   ]
+  },
+  {
+   "id": "f-048",
+   "db": [
+    {
+     "op": "routine",
+     "days": [
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "hourFrom": 16,
+     "hourTo": 21
+    }
+   ]
+  }
+ ]
+}

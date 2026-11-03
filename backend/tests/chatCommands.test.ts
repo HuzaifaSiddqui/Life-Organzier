@@ -9,7 +9,7 @@ import type { ActionPayload } from "../src/modules/assistant/types.js";
 import { createRoutine, occurrencesForDay } from "../src/modules/routines/routineService.js";
 import { addDaysYmd, localYmd } from "../src/lib/time.js";
 import { streakFromDays } from "../src/modules/analytics/analyticsService.js";
-import { classify, COMMANDS, parseCtx } from "../src/modules/assistant/commands/registry.js";
+import { activeCommands, classify, COMMANDS, parseCtx } from "../src/modules/assistant/commands/registry.js";
 import { routeWithLlm } from "../src/modules/assistant/commands/router.js";
 import { formatReply } from "../src/modules/whatsapp/inbound.js";
 import { dbAvailable } from "./fixtures.js";
@@ -461,9 +461,22 @@ test("WhatsApp: command replies are short plain text with numbered options; '1' 
 
 test("registry: every command's examples are understood by its own rules (help never shows a phrase that fails)", () => {
   const ctx = parseCtx({ now: new Date("2026-10-05T05:00:00.000Z"), tz: TZ, contexts: ["At Home", "At Work", "At University"] });
-  const wrong: string[] = [];
-  for (const c of COMMANDS) for (const ex of c.examples) if (classify(ex, ctx).command !== c.name) wrong.push(`${c.name}: "${ex}" → ${classify(ex, ctx).command}`);
-  assert.deepEqual(wrong, []);
+  // The commands available with flags off, then with CHAT_FIXES_V2 on (its commands are hidden while it is off).
+  for (const flag of [undefined, "on"]) {
+    const keep = process.env.CHAT_FIXES_V2;
+    if (flag) process.env.CHAT_FIXES_V2 = flag;
+    else delete process.env.CHAT_FIXES_V2;
+    try {
+      const wrong: string[] = [];
+      for (const c of activeCommands()) for (const ex of c.examples) if (classify(ex, ctx).command !== c.name) wrong.push(`${c.name}: "${ex}" → ${classify(ex, ctx).command}`);
+      assert.deepEqual(wrong, [], `CHAT_FIXES_V2=${flag ?? "off"}`);
+    } finally {
+      if (keep === undefined) delete process.env.CHAT_FIXES_V2;
+      else process.env.CHAT_FIXES_V2 = keep;
+    }
+  }
+  assert.ok(!activeCommands().some((c) => c.name === "bulk_move_group"), "flag off: the group commands are hidden");
+  assert.ok(COMMANDS.some((c) => c.name === "bulk_move_group"));
 });
 
 test("Urdu users get Urdu replies from settings and bulk commands (confirm buttons and re-ask too)", { skip }, async () => {

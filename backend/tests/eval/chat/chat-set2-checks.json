@@ -1,0 +1,330 @@
+{
+ "description": "Machine checks for chat-set2-ai-en.json, translated from the owner's chat-set2-expectations.json (kept unchanged beside it); each translated row keeps the original sentence under 'source'. Same shape as chat-set3-checks.json.",
+ "rows": [
+  {
+   "id": "n-002",
+   "mustInclude": [
+    "Dentist appointment"
+   ]
+  },
+  {
+   "id": "n-003",
+   "mustInclude": [
+    "Tax return"
+   ]
+  },
+  {
+   "id": "n-004",
+   "mustInclude": [
+    "Gym",
+    "Medicine",
+    "Reading",
+    "Yoga"
+   ]
+  },
+  {
+   "id": "n-006",
+   "mustInclude": [
+    "Dentist appointment"
+   ],
+   "mustNotInclude": [
+    "Tax return",
+    "Project report"
+   ]
+  },
+  {
+   "id": "n-008",
+   "mustInclude": [
+    "Quarterly budget review"
+   ],
+   "mustNotInclude": [
+    "Tax return",
+    "Dentist appointment",
+    "Sales deck"
+   ]
+  },
+  {
+   "id": "n-010",
+   "source": {
+    "db": "Medicine occurrence for today is DONE"
+   },
+   "db": [
+    {
+     "op": "occurrence",
+     "routine": "Medicine",
+     "status": "COMPLETED"
+    }
+   ]
+  },
+  {
+   "id": "n-012",
+   "source": {
+    "db": "Sales deck is completed"
+   },
+   "db": [
+    {
+     "op": "completed",
+     "title": "Sales deck"
+    }
+   ]
+  },
+  {
+   "id": "n-014",
+   "source": {
+    "db": "Reading occurrence for today is DONE"
+   },
+   "db": [
+    {
+     "op": "occurrence",
+     "routine": "Reading",
+     "status": "COMPLETED"
+    }
+   ]
+  },
+  {
+   "id": "n-016",
+   "source": {
+    "db": "Gym occurrence for today is SKIPPED; nothing marked done"
+   },
+   "db": [
+    {
+     "op": "occurrence",
+     "routine": "Gym",
+     "status": "SKIPPED"
+    }
+   ]
+  },
+  {
+   "id": "n-017",
+   "source": {
+    "db": "Yoga occurrence for today is SKIPPED; no new task 'Yoga' exists"
+   },
+   "db": [
+    {
+     "op": "occurrence",
+     "routine": "Yoga",
+     "status": "SKIPPED"
+    }
+   ]
+  },
+  {
+   "id": "n-018",
+   "source": {
+    "db": "Reading occurrence for today is SKIPPED; nothing marked done"
+   },
+   "db": [
+    {
+     "op": "occurrence",
+     "routine": "Reading",
+     "status": "SKIPPED"
+    }
+   ]
+  },
+  {
+   "id": "n-020",
+   "source": {
+    "db": "Yoga routine is paused"
+   },
+   "db": [
+    {
+     "op": "routine_paused",
+     "title": "Yoga"
+    }
+   ]
+  },
+  {
+   "id": "n-022",
+   "source": {
+    "db": "a task about the dentist is created due 2026-10-09 15:00 (or asks which: the seeded 'Dentist appointment' exists)"
+   },
+   "db": [
+    {
+     "op": "created",
+     "title": "dentist",
+     "dueYmd": "2026-10-09",
+     "dueTime": "3 PM"
+    }
+   ],
+   "orAsk": true
+  },
+  {
+   "id": "n-032",
+   "mustInclude": [
+    "2 hours"
+   ]
+  },
+  {
+   "id": "n-062",
+   "source": {
+    "db": "Passport renewal due date is 2026-10-09"
+   },
+   "db": [
+    {
+     "op": "updated",
+     "title": "Passport renewal",
+     "dueYmd": "2026-10-09"
+    }
+   ]
+  },
+  {
+   "id": "n-063",
+   "source": {
+    "db": "Project report priority is HIGH"
+   },
+   "db": [
+    {
+     "op": "updated",
+     "title": "Project report",
+     "priority": "HIGH"
+    }
+   ]
+  },
+  {
+   "id": "n-065",
+   "source": {
+    "db": "the team lunch task is renamed 'Book the cafe'"
+   },
+   "db": [
+    {
+     "op": "updated",
+     "title": "Book the cafe"
+    }
+   ]
+  },
+  {
+   "id": "n-066",
+   "source": {
+    "db": "Quarterly budget review time is 15:00"
+   },
+   "db": [
+    {
+     "op": "updated",
+     "title": "Quarterly budget review",
+     "dueTime": "3 PM"
+    }
+   ]
+  },
+  {
+   "id": "n-067",
+   "source": {
+    "db": "Passport renewal is completed"
+   },
+   "db": [
+    {
+     "op": "completed",
+     "title": "Passport renewal"
+    }
+   ]
+  },
+  {
+   "id": "n-070",
+   "source": {
+    "db": "Car wash still exists until the user confirms (preview only)"
+   },
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "n-071",
+   "source": {
+    "db": "Quarterly budget review still exists until the user confirms (preview only)"
+   },
+   "db": [
+    {
+     "op": "none"
+    }
+   ]
+  },
+  {
+   "id": "n-074",
+   "mustInclude": [
+    "Quarterly budget review",
+    "Passport renewal"
+   ],
+   "mustNotInclude": [
+    "Dentist appointment",
+    "Sales deck",
+    "Project report",
+    "Tax return"
+   ]
+  },
+  {
+   "id": "n-075",
+   "source": {
+    "replySays": "nothing overdue"
+   },
+   "emptyList": true
+  },
+  {
+   "id": "n-076",
+   "source": {
+    "replySays": "nothing due today; no task titles listed"
+   },
+   "emptyList": true,
+   "mustNotInclude": [
+    "Dentist appointment",
+    "Tax return",
+    "Sales deck",
+    "Call the bank",
+    "Passport renewal",
+    "Project report",
+    "Car wash",
+    "Quarterly budget review",
+    "Team lunch booking"
+   ]
+  },
+  {
+   "id": "n-077",
+   "mustInclude": [
+    "Tax return"
+   ],
+   "mustNotInclude": [
+    "Project report",
+    "Dentist appointment",
+    "Passport renewal"
+   ]
+  },
+  {
+   "id": "n-078",
+   "mustInclude": [
+    "Project report",
+    "Friday"
+   ]
+  },
+  {
+   "id": "n-079",
+   "mustInclude": [
+    "Passport renewal"
+   ]
+  },
+  {
+   "id": "n-080",
+   "mustInclude": [
+    "Team lunch booking"
+   ]
+  },
+  {
+   "id": "n-087",
+   "mustInclude": [
+    "1h 30m"
+   ]
+  },
+  {
+   "id": "n-088",
+   "mustInclude": [
+    "10 PM",
+    "6 AM"
+   ]
+  },
+  {
+   "id": "n-090",
+   "source": {
+    "replySays": "no tasks completed yet"
+   },
+   "replyMatches": "\\b(?:no|none|0|zero|nothing|haven't)\\b"
+  }
+ ]
+}

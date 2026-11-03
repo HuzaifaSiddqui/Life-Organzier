@@ -61,6 +61,8 @@ test("OOS_NOTE: the task flow is unchanged, the reply says plainly what the app 
     assert.match(call.content, /^I can't place calls myself/);
     assert.ok((call.actions ?? []).some((a) => a.label === "Undo"), "Undo stays");
     assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1, "the task is created as before");
+    const alarm = await send("add an alarm for tomorrow at 6 am");
+    assert.match(alarm.content, /^I can't set phone alarms myself/, "an alarm, even with 'add'");
     const milk = await send("buy printer paper tomorrow at 5 pm");
     assert.doesNotMatch(milk.content, /can't .* myself/, "an ordinary to-do: no note");
     delete process.env.OOS_NOTE;

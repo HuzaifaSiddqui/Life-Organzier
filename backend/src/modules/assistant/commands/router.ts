@@ -5,7 +5,7 @@ import { normalizeSpelled } from "../../../lib/spelled.js";
 import { extractEntities, extractTargetDay, extractTimeRange, extractWeekdays } from "../entities.js";
 import { findDateRange } from "./find.js";
 import { bankIndex, loadBank, nearest } from "./neighbours.js";
-import { COMMANDS, getCommand } from "./registry.js";
+import { activeCommands, getCommand } from "./registry.js";
 import type { Command, CommandArgs, CommandCategory, ParseCtx } from "./types.js";
 
 /**
@@ -67,7 +67,7 @@ export function routerMessages(text: string, stage: 1 | 2, category?: CommandCat
       { role: "user", content: text },
     ];
   }
-  const list = COMMANDS.filter((c) => c.category === category);
+  const list = activeCommands().filter((c) => c.category === category);
   const shown = examples.filter((e) => areaOf(e.command) === category).map((e) => `"${e.text}" → ${e.command}`);
   return [
     {
@@ -143,7 +143,7 @@ export async function routeWithLlm(text: string, ctx: ParseCtx, examples: RouteE
   const options = { maxTokens: 60, timeoutMs: 15000, job: "chat" as const };
   const first = await ai.json(routerMessages(text, 1, undefined, examples), stage1Schema, { ...options, ...withShots(1), json: { type: "object", properties: { category: { type: "string", enum: [...CATEGORY_IDS, "none"] } }, required: ["category"] } });
   if (!first || first.category === "none") return null;
-  const names = COMMANDS.filter((c) => c.category === first.category).map((c) => c.name);
+  const names = activeCommands().filter((c) => c.category === first.category).map((c) => c.name);
   if (!names.length) return null;
   const all: [string, ...string[]] = ["none", ...names];
   const second = await ai.json(routerMessages(text, 2, first.category, examples), stage2Schema(all), {

@@ -206,6 +206,20 @@ function monthIndex(word: string): number {
   return MONTHS.indexOf(word.slice(0, 3).toLowerCase());
 }
 
+/** Day `da` of this month, or of the next month that has it once it has passed (CHAT_FIXES_V2). */
+export function dayOfMonthAhead(todayYmd: string, da: number): string | null {
+  if (da < 1 || da > 31) return null;
+  let [y, mo] = todayYmd.split("-").map(Number);
+  if (da < Number(todayYmd.slice(8, 10))) mo += 1;
+  for (let i = 0; i < 3; i += 1, mo += 1) {
+    const yy = y + Math.floor((mo - 1) / 12);
+    const mm = ((mo - 1) % 12) + 1;
+    const d = new Date(Date.UTC(yy, mm - 1, da));
+    if (d.getUTCMonth() === mm - 1) return `${yy}-${String(mm).padStart(2, "0")}-${String(da).padStart(2, "0")}`;
+  }
+  return null;
+}
+
 function resolveYear(todayYmd: string, mo: number, da: number, explicitYear?: number): string | null {
   const today = splitYmd(todayYmd);
   if (!today) return null;
@@ -306,6 +320,14 @@ function extractDate(cur: Cursor, todayYmd: string, now: Date, tz: string): { da
     const ymd = resolveYear(todayYmd, monthIndex(m[1]) + 1, Number(m[2]), m[3] ? Number(m[3]) : undefined);
     if (ymd) return { date: mk(ymd, m[0]), time: null };
   }
+  // CHAT_FIXES_V2: "on the 12th", "dentist on the 20th": a day of this month, or of next month once it has passed.
+  if (chatFixesOn()) {
+    m = cur.take(/\b(?:on\s+(?:the\s+)?|the\s+)(\d{1,2})(?:st|nd|rd|th)\b/i);
+    if (m) {
+      const ymd = dayOfMonthAhead(todayYmd, Number(m[1]));
+      if (ymd) return { date: mk(ymd, m[0]), time: null };
+    }
+  }
 
   // Roman Urdu: "aaj", "kal" (tomorrow), "parson" (day after tomorrow), "agle hafte" (next week), "is hafte"
   m = cur.take(new RegExp(`\\bparson${UR_FOLLOW}\\b`, "i"));
@@ -353,7 +375,8 @@ function formatFromWord(word: string): string | null {
   return c ? formatClock(c.h, c.m) : null;
 }
 
-function extractTime(cur: Cursor): { time: string | null; explicit: boolean; rangeMinutes: number | null } {
+/** `partOfDay`: CHAT_FIXES_V2, the AM/PM a part-of-day word anywhere in the message gives a bare hour ("morning run at 6"). */
+function extractTime(cur: Cursor, partOfDay: "am" | "pm" | null = null): { time: string | null; explicit: boolean; rangeMinutes: number | null } {
   const urdu = extractUrduClock(cur);
   if (urdu) return { time: urdu, explicit: true, rangeMinutes: null };
   // Ranges: "10-11:30 AM", "2:30 - 4:00 PM", "from 9 to 11 am"
@@ -382,8 +405,8 @@ function extractTime(cur: Cursor): { time: string | null; explicit: boolean; ran
   if (m) {
     const h = Number(m[1]);
     if (h >= 1 && h <= 12) {
-      // Bare hours: 1–7 → PM, 8–11 → AM, 12 → noon.
-      const c = parseClock(`${h} ${h >= 8 && h <= 11 ? "am" : "pm"}`);
+      // Bare hours: 1–7 → PM, 8–11 → AM, 12 → noon; a part of the day said anywhere decides first.
+      const c = parseClock(`${h} ${h === 12 ? "pm" : (partOfDay ?? (h >= 8 && h <= 11 ? "am" : "pm"))}`);
       if (c) return { time: formatClock(c.h, c.m), explicit: true, rangeMinutes: null };
     }
     if (h >= 13 && h <= 23) return { time: formatClock(h, 0), explicit: true, rangeMinutes: null };
@@ -393,7 +416,8 @@ function extractTime(cur: Cursor): { time: string | null; explicit: boolean; ran
     const w = m[1].toLowerCase().startsWith("end") ? "eod" : m[1].toLowerCase();
     return { time: formatFromWord(w), explicit: true, rangeMinutes: null };
   }
-  m = cur.take(/\b(?:in the\s+)?(morning|afternoon|evening|night)\b/i);
+  // CHAT_FIXES_V2: "evenings", "in the mornings" give that part of the day's time too.
+  m = cur.take(chatFixesOn() ? /\b(?:in the\s+)?(morning|afternoon|evening|night)s?\b/i : /\b(?:in the\s+)?(morning|afternoon|evening|night)\b/i);
   if (m) return { time: formatFromWord(m[1].toLowerCase()), explicit: false, rangeMinutes: null };
   // Roman Urdu parts of the day without a clock time: subah 9 AM · dopahar 3 PM · shaam 6 PM · raat 9 PM
   m = cur.take(new RegExp(`\\b(${UR_PART_RE})\\b`, "i"));
@@ -486,9 +510,15 @@ function extractFrequency(cur: Cursor, todayYmd: string): { frequency: RoutineFr
   return { frequency: null, days: null, dayOfMonth: null };
 }
 
+const POSS_MARK = "qqposs";
+const POSSESSIVE_DAY = new RegExp(`\\b(today|tomorrow|tonight|yesterday|${["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].join("|")})['’]s\\b`, "gi");
+
 export function extractEntities(text: string, opts: ExtractOptions): Entities {
   const todayYmd = localYmd(opts.now, opts.tz);
-  const cur = new Cursor(text.replace(/\s+/g, " ").trim());
+  // CHAT_FIXES_V2: "today's lecture notes", "Friday's quiz" name a thing; the day word is part of its name, not the
+  // date. Marked so no date rule takes it, and restored in the residual.
+  const said = text.replace(/\s+/g, " ").trim();
+  const cur = new Cursor(chatFixesOn() ? said.replace(POSSESSIVE_DAY, `$1${POSS_MARK}`) : said);
 
   const tags: string[] = [];
   let tagMatch: RegExpMatchArray | null;
@@ -503,7 +533,8 @@ export function extractEntities(text: string, opts: ExtractOptions): Entities {
 
   const frequency = extractFrequency(cur, todayYmd);
   const dateResult = extractDate(cur, todayYmd, opts.now, opts.tz);
-  const timeResult = extractTime(cur);
+  const partOfDay = !chatFixesOn() ? null : /\bmornings?\b/i.test(said) ? "am" : /\b(?:afternoons?|evenings?|nights?|tonight)\b/i.test(said) ? "pm" : null;
+  const timeResult = extractTime(cur, partOfDay);
   let duration = extractDuration(cur);
   if (!duration && timeResult.rangeMinutes) duration = timeResult.rangeMinutes;
   const time = timeResult.time ?? dateResult.time;
@@ -554,7 +585,7 @@ export function extractEntities(text: string, opts: ExtractOptions): Entities {
     context,
     location,
     flexibleTime,
-    residual: cur.text,
+    residual: cur.text.replace(new RegExp(POSS_MARK, "g"), "'s"),
   };
 }
 

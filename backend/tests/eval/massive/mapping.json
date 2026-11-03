@@ -1,0 +1,12 @@
+{
+ "description": "MASSIVE 1.1 en-US (Amazon, CC BY 4.0; the data is not in this repo) intents mapped to Life Organizer commands. Approved by the owner 2 Nov 2026. Unlisted intents map to 'none' (the app must change nothing). safeOnly: the action passes only as a preview or a question (no data changed). replyIncludes: words the reply must contain. Out-of-distribution stress test; never tuned on.",
+ "intents": {
+  "calendar_set": { "command": "create_task", "alsoOk": ["create_routine"] },
+  "calendar_query": { "command": "query_tasks", "alsoOk": ["find_items", "plan_day", "routine_list"] },
+  "calendar_remove": { "command": "delete_task", "alsoOk": ["bulk_delete_open", "bulk_delete_group", "routine_delete"], "safeOnly": true },
+  "alarm_set": { "command": "create_task", "alsoOk": ["create_routine"], "replyIncludes": ["can't set phone alarms"] },
+  "lists_createoradd": { "command": "create_task" },
+  "lists_query": { "command": "query_tasks", "alsoOk": ["find_items"] },
+  "lists_remove": { "command": "delete_task" }
+ }
+}

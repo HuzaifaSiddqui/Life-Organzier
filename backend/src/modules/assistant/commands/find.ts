@@ -8,6 +8,9 @@ import { serializeTask } from "../../tasks/taskService.js";
 import { FIND_LIMIT, findFilterSchema, findItems, type FindFilter, type Found } from "../../search/searchService.js";
 import { dueLabel, focusOn, type Out, type Turn } from "../dialogue.js";
 import { extractEntities } from "../entities.js";
+import { resolveRange } from "../ranges.js";
+
+export { resolveRange, type DayRange } from "../ranges.js";
 import type { Card } from "../types.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 
@@ -54,6 +57,10 @@ const NOT_A_TERM = new Set(
 
 /** "overdue", "this week", or the day entities.ts reads ("today", "kal") when it is today or tomorrow. */
 export function findDateRange(text: string, ctx: ParseCtx): FindFilter["dateRange"] {
+  if (chatFixesOn()) {
+    const r = resolveRange(text, ctx);
+    if (r && r !== "unknown") return r.from === ctx.todayYmd && r.to === ctx.todayYmd ? "today" : { from: r.from, to: r.to };
+  }
   const lower = text.toLowerCase();
   if (/\b(?:overdue|late|missed)\b/.test(lower)) return "overdue";
   if (/\b(?:this week|is hafte|is haftay)\b/.test(lower)) return "week";

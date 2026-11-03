@@ -196,7 +196,7 @@ const routineUpdate: Command = {
       said.push(`${formatDuration(args.durationMinutes)} long`);
     }
     try {
-      const updated = await updateRoutine(turn.user.id, turn.tz, r.id, changes);
+      const updated = await updateRoutine(turn.user.id, turn.tz, r.id, changes, turn.now);
       if (!updated) return notFound(r.title);
       recordUndo(turn, { kind: "routine", routineId: r.id, before, label: `${r.title} change` });
       return { content: `Updated "${updated.title}": ${listJoin(said)}. Now ${scheduleLabel(updated)}.`, cards: [{ type: "routine", routine: updated as unknown as Record<string, unknown> }], actions: [UNDO_ACTION], intent: "routine_updated" };
@@ -228,7 +228,7 @@ function activeToggle(name: "routine_pause" | "routine_resume", active: boolean)
       const r = await routineById(turn, args);
       if (!r) return notFound(String(args.ref ?? ""));
       if (r.active === active) return { content: `"${r.title}" is already ${active ? "active" : "paused"}.`, intent: name };
-      await updateRoutine(turn.user.id, turn.tz, r.id, { active });
+      await updateRoutine(turn.user.id, turn.tz, r.id, { active }, turn.now);
       recordUndo(turn, { kind: "routine", routineId: r.id, before: { active: r.active }, label: `${r.title} ${active ? "resumed" : "paused"}` });
       return {
         content: active ? `Resumed "${r.title}" (${scheduleLabel(r)}). Reminders are back on.` : `Paused "${r.title}". No reminders until you resume it.`,

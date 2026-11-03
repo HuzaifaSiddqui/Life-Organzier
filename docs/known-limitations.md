@@ -15,6 +15,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   when the rules are unsure. On the AI-written held-out set (150 English rows, `tests/eval/chat-heldout-ai-written.json`,
   29 Oct 2026) the rules were sure about 132 rows and wrong on 27 of them; 18 rows reached a model. The 27 are listed
   for adjudication (label problem, real bug, capability gap) before any rule changes; fixes are tested on new rows.
+- **`CHAT_FIXES_V2` third round (off):** the two group bulk commands reply in English only (copy for Urdu after 10 Nov
+  2026); "move all of today to the weekend" falls back to tomorrow (the target-day reader has no "weekend"; the preview
+  shows the day before anything moves); "on weekday evenings" gets the evening time but not Mon–Fri ("weekdays" does).
 - **`CHAT_FIXES_V2` (off) is not yet measured on new rows.** It was written for the bug classes found on the held-out
   set, tested on new sentences (`tests/chatFixes.test.ts`, `tests/chatFixesLookup.test.ts`) and never tuned on the
   held-out rows. With it on: assistant eval 212/215 (m33 fixed, no new miss), pending 230/230, query eval unchanged,
