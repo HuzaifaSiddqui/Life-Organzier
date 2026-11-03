@@ -1,0 +1,10 @@
+Semester Schedule - BS Software Engineering
+
+Monday 8:30-10:00 Software Requirements (SE-210) - Dr. Ahrned Khan - Room 3
+Tuesday 8:30-10:00 Software Requirements (SE-210) - Dr Ahmad Khan - Room 3
+Monday 10:30-12:00 Database Systems (CS-220) - Prof. Bilal Hussain - Lab 2
+Wednesday 10:30-12:00 Database Systems (CS-220) - Prof Bilal Husain - Lab 2
+Thursday 1:00-2:30 PM Professional Ethics (HU-110) - Ms. Sara Ma1ik - Room 7
+Midterm exam Software Requirements on 22 October 2026 at 9 AM - Dr. Ahmed Khan
+Quiz 1 Database Systems on 14 October 2026 at 10:30 AM - Prof. Bilal Hussain
+Project report Professional Ethics due 30 October 2026 at 5 PM - Ms. Sara Malik

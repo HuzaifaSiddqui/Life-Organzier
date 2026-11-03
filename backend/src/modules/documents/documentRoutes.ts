@@ -7,7 +7,9 @@ import { handle, HttpError, parseBody, requireUser } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { applyDocumentItems } from "./applyItems.js";
-import { analyzeDocument, DOC_TYPES, EXTRACTOR_VERSION, processDocument } from "./documentProcessing.js";
+import { analyzeDocument, DOC_TYPES, EXTRACTOR_VERSION, processDocument, withInstruction } from "./documentProcessing.js";
+import { docInstructionsOn } from "./instructions.js";
+import { localYmd } from "../../lib/time.js";
 import { extractDeadlines } from "./extraction.js";
 import { DOC_KINDS, docFlag, itemsFromPickedLines } from "./routing.js";
 import { OcrBusyError } from "./textExtraction.js";
@@ -54,7 +56,7 @@ documentRouter.post(
       throw new HttpError(415, "UNSUPPORTED_FILE", "Supported formats: PDF, JPG, PNG, DOCX");
     }
     const body = parseBody(
-      z.object({ docType: z.enum(DOC_TYPES).default("OTHER"), language: z.enum(LANGS).default("eng"), autoCreate: z.enum(["true", "false"]).default("true") }),
+      z.object({ docType: z.enum(DOC_TYPES).default("OTHER"), language: z.enum(LANGS).default("eng"), autoCreate: z.enum(["true", "false"]).default("true"), instruction: z.string().max(300).optional() }),
       req.body,
     );
     // React Native percent-encodes non-ASCII file names in multipart uploads ("%E2%80%94" for "—").
@@ -71,6 +73,8 @@ documentRouter.post(
       docType: body.docType,
       language: body.language,
       autoCreate: body.autoCreate === "true",
+      // DOC_INSTRUCTIONS: "What do you need from this document?" (read only with the flag on).
+      ...(docInstructionsOn() && body.instruction?.trim() ? { instruction: body.instruction } : {}),
     }));
     sendSuccess(res, result, "Document processed", 201);
   }),
@@ -80,7 +84,7 @@ documentRouter.post(
   "/text",
   handle(async (req, res) => {
     const body = parseBody(
-      z.object({ text: z.string().min(10).max(200000), docType: z.enum(DOC_TYPES).default("OTHER"), title: z.string().max(120).default("Pasted text"), autoCreate: z.boolean().default(true) }),
+      z.object({ text: z.string().min(10).max(200000), docType: z.enum(DOC_TYPES).default("OTHER"), title: z.string().max(120).default("Pasted text"), autoCreate: z.boolean().default(true), instruction: z.string().max(300).optional() }),
       req.body,
     );
     const result = await processDocument(req.user, req.settings, {
@@ -90,8 +94,27 @@ documentRouter.post(
       docType: body.docType,
       language: "eng",
       autoCreate: body.autoCreate,
+      ...(docInstructionsOn() && body.instruction?.trim() ? { instruction: body.instruction } : {}),
     });
     sendSuccess(res, result, "Document processed", 201);
+  }),
+);
+
+/**
+ * DOC_INSTRUCTIONS: change what is wanted from a document ("Change request"), or answer "which one?" with a person.
+ * Re-filters the stored items: no OCR, no new reading, nothing created. An empty instruction shows everything.
+ */
+documentRouter.post(
+  "/:id/instruction",
+  handle(async (req, res) => {
+    if (!docInstructionsOn()) throw new HttpError(404, "FEATURE_OFF", "Not available");
+    const body = parseBody(z.object({ instruction: z.string().max(300), person: z.string().min(1).max(80).optional() }), req.body);
+    const doc = await prisma.document.findFirst({ where: { id: String(req.params.id), userId: req.user.id } });
+    if (!doc?.extracted) throw new HttpError(404, "NOT_FOUND", "Document not found");
+    const extracted = await withInstruction(doc.text, doc.extracted as unknown as Parameters<typeof withInstruction>[1], body.instruction, body.person ?? null, localYmd(new Date(), req.settings.timezone));
+    const saved = await prisma.document.update({ where: { id: doc.id }, data: { extracted: extracted as unknown as Prisma.InputJsonValue } });
+    const { text: _t, ...document } = saved;
+    sendSuccess(res, { document, extracted });
   }),
 );
 
@@ -104,7 +127,7 @@ documentRouter.get(
       select: { id: true, fileName: true, mimeType: true, sizeBytes: true, docType: true, ocrConfidence: true, createdAt: true, extracted: true },
     });
     const usedBytes = documents.reduce((s, d) => s + d.sizeBytes, 0);
-    sendSuccess(res, { documents, usedBytes });
+    sendSuccess(res, { documents, usedBytes, features: { instructions: docInstructionsOn() } });
   }),
 );
 

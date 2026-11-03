@@ -24,6 +24,26 @@ const en = {
   "docReview.unverified": "The AI's source line isn't in the document, so this isn't confirmed. Check it.",
   "docReview.modelsAgree": "Two AI readers found this. Please still check it.",
   "docRoute.readAs": "Read as: {kind}",
+  "docInstr.label": "What do you need from this document? (optional)",
+  "docInstr.placeholder": "e.g. only Dr. Ahmed's classes",
+  "docInstr.example.person": "Only one teacher's classes",
+  "docInstr.example.exams": "Just the exams",
+  "docInstr.example.days": "Mondays and Wednesdays",
+  "docInstr.example.course": "Only one course",
+  "docInstr.filteredBy": "Filtered by: {what} ({shown} of {total} items)",
+  "docInstr.showAll": "Show everything",
+  "docInstr.showFiltered": "Show only what I asked for",
+  "docInstr.change": "Change request",
+  "docInstr.apply": "Apply",
+  "docInstr.cancel": "Cancel",
+  "docInstr.clear": "Show everything (no request)",
+  "docInstr.askPerson": "More than one person matches \"{name}\". Which one?",
+  "docInstr.noPerson": "No one called \"{name}\" in this document.",
+  "docInstr.nearest": "Closest names:",
+  "docInstr.notUnderstood": "I understood: {understood}. I didn't understand: {leftover}. Can you rephrase?",
+  "docInstr.understoodNothing": "nothing yet",
+  "docInstr.nothingCreated": "Nothing was added automatically until this is settled.",
+  "docInstr.hiddenNote": "{count} items left out by your request (not ticked).",
   "docRoute.wrongType": "Wrong type? Read it again as:",
   "docRoute.kind.timetable": "Timetable",
   "docRoute.kind.schedule": "Schedule, outline or date sheet",
@@ -273,7 +293,7 @@ export type StringKey = keyof typeof en;
  * English-only keys until after the FYP evaluation (10 Nov 2026; Urdu is deferred, docs/known-limitations.md): Urdu
  * shows the English text for these (LocaleProvider falls back to English).
  */
-type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | "docReview.unverified" | "docReview.modelsAgree">;
+type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | `docInstr.${string}` | "docReview.unverified" | "docReview.modelsAgree">;
 
 const ur: Record<Exclude<StringKey, EnglishOnlyKey>, string> & Partial<Record<EnglishOnlyKey, string>> = {
   "common.retry": "دوبارہ کوشش کریں",

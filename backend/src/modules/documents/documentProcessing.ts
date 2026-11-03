@@ -11,6 +11,7 @@ import { aiDeadlines, chunkText, cleanDocumentText, extractCourseInfo, extractDe
 import { AGREE_MAX_CALLS, agreeOnAiItems, classifyDocument, docFlag, documentPriority, kindByRules, routeItems, verifyEvidence, type DocKind, type KindResult } from "./routing.js";
 import { gridSchedulesFromImage, gridSchedulesFromPdf, hasClockGrid, layoutRows } from "./gridTimetable.js";
 import { extractText } from "./textExtraction.js";
+import { applyInstruction, docInstructionsOn, enrichItems, modelInstruction, peopleIn, readInstruction, withModel, type FilterResult, type ItemMeta } from "./instructions.js";
 
 export const DOC_TYPES = ["SYLLABUS", "SCHEDULE", "NOTES", "OTHER"] as const;
 
@@ -54,8 +55,8 @@ export function capOcrConfidence<T extends { confidence: number }>(deadlines: T[
 
 type Extracted = {
   /** removedSinceUpload: it was added from this document but has been deleted since (a reused result says so). */
-  deadlines: Array<ExtractedDeadline & { created?: boolean; existing?: boolean; taskId?: string; removedSinceUpload?: boolean }>;
-  schedules: Array<ExtractedSchedule & { created?: boolean; existing?: boolean; routineId?: string; removedSinceUpload?: boolean }>;
+  deadlines: Array<ExtractedDeadline & InstructionFields & { created?: boolean; existing?: boolean; taskId?: string; removedSinceUpload?: boolean }>;
+  schedules: Array<ExtractedSchedule & InstructionFields & { created?: boolean; existing?: boolean; routineId?: string; removedSinceUpload?: boolean }>;
   course: CourseInfo;
   ocrConfidence: number;
   warning: string | null;
@@ -65,7 +66,12 @@ type Extracted = {
   extractorVersion?: number;
   /** DOC_ROUTING: the detected (or picked) type. Absent on older documents. */
   kind?: KindResult;
+  /** DOC_INSTRUCTIONS: what the user asked for (stored with the document) and how it was read; absent: everything. */
+  instruction?: FilterResult;
 };
+
+/** Per item, with DOC_INSTRUCTIONS: its structured fields, and whether the instruction leaves it out. */
+type InstructionFields = { meta?: ItemMeta; filteredOut?: boolean };
 
 /**
  * Bump when the readers change what a document yields (new formats, new rules): a re-upload within the reuse
@@ -200,7 +206,38 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : intervalNote ?? aiNote), needsLanguage: raw.needsLanguage, method: grid ? (/pdf/i.test(input.mimeType) ? "pdf-grid" : "image-grid") : raw.method, grid, ...(kind ? { kind } : {}) };
 }
 
-type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean };
+type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean; instruction?: string | null };
+
+/**
+ * DOC_INSTRUCTIONS: the items' structured fields (computed once from the stored text, then kept) and the instruction
+ * as a filter over them. No OCR, no new reading: a changed instruction only re-filters. With an instruction that
+ * isn't settled (a question pending), nothing is left out and nothing will be created automatically.
+ */
+export async function withInstruction(text: string, extracted: Extracted, instruction: string | null | undefined, chosenPerson: string | null, todayYmd: string): Promise<Extracted> {
+  const x = extracted;
+  if (![...x.deadlines, ...x.schedules].every((i) => i.meta)) {
+    const e = enrichItems(text, x.deadlines, x.schedules);
+    x.deadlines.forEach((d, i) => (d.meta = e.deadlines[i].meta));
+    x.schedules.forEach((s, i) => (s.meta = e.schedules[i].meta));
+  }
+  const items = [...x.deadlines, ...x.schedules];
+  for (const i of items) delete i.filteredOut;
+  delete x.instruction;
+  const said = instruction?.trim();
+  if (!said) return x;
+  const people = peopleIn(items.map((i) => i.meta?.person ?? null));
+  const courses = [...new Set(items.flatMap((i) => [i.meta?.course, i.meta?.courseCode]).filter((c): c is string => Boolean(c)))];
+  let read = readInstruction(said, people, courses, todayYmd);
+  // The local model only when the rules leave words they can't place (never a hosted provider).
+  if (read.leftover.length && getAi().enabled) read = withModel(read, await modelInstruction(said, todayYmd));
+  const { result, matches } = applyInstruction(read, items, people, chosenPerson);
+  items.forEach((it, i) => (it.filteredOut = result.status === "applied" ? !matches[i] : false));
+  x.instruction = { instruction: said, ...result };
+  return x;
+}
+
+/** With an instruction, only what it settled on may be created automatically (the usual thresholds still apply). */
+const mayCreate = (x: Extracted, item: InstructionFields) => !x.instruction || (x.instruction.status === "applied" && !item.filteredOut);
 
 /** DOC_FALLBACK_UI: how much of the extracted (masked) text the phone gets to show ("See what was read"). */
 export const TEXT_FOR_VIEW = 20000;
@@ -242,7 +279,10 @@ async function reuseOrProcess(user: User, settings: UserSettings, input: Process
   const saved = recent?.extracted as unknown as Extracted | null;
   if (recent && saved && saved.extractorVersion === EXTRACTOR_VERSION) {
     const { text, ...doc } = recent;
-    return { document: doc, extracted: await withCurrentState(user.id, recent.extracted as unknown as Extracted), createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), ...(docFlag("DOC_FALLBACK_UI") ? { text: text.slice(0, TEXT_FOR_VIEW) } : {}), reused: true };
+    let extracted = await withCurrentState(user.id, recent.extracted as unknown as Extracted);
+    // DOC_INSTRUCTIONS: the same file with a (new) request is filtered again from what was read; nothing is created.
+    if (docInstructionsOn() && input.instruction !== undefined) extracted = await withInstruction(text, extracted, input.instruction, null, localYmd(new Date(), settings.timezone));
+    return { document: doc, extracted, createdTasks: [] as ReturnType<typeof serializeTask>[], createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[], textPreview: text.slice(0, 1500), ...(docFlag("DOC_FALLBACK_UI") ? { text: text.slice(0, TEXT_FOR_VIEW) } : {}), reused: true };
   }
   return processDocumentOnce(user, settings, input, hash);
 }
@@ -293,11 +333,12 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
 
   const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method, extractorVersion: EXTRACTOR_VERSION, ...(a.kind ? { kind: a.kind } : {}) };
   const todayYmd = localYmd(new Date(), tz);
+  if (docInstructionsOn()) await withInstruction(text, extracted, input.instruction, null, todayYmd);
   const createdTasks = [];
   const createdRoutines = [];
   if (input.autoCreate && !raw.needsLanguage && raw.confidence >= 70) {
     for (const d of extracted.deadlines) {
-      if (d.confidence < DEADLINE_AUTO || !d.date) continue;
+      if (d.confidence < DEADLINE_AUTO || !d.date || !mayCreate(extracted, d)) continue;
       const already = await existingTaskId(user.id, d.title, dueDateFromYmd(d.date, tz), d.time);
       if (already) {
         d.created = true;
@@ -325,9 +366,9 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
       createdTasks.push(serializeTask(task));
     }
     // Large timetables are always shown for confirmation first (FR-DP-003 §5).
-    const autoSchedules = extracted.schedules.length <= 5;
+    const autoSchedules = extracted.schedules.filter((s) => mayCreate(extracted, s)).length <= 5;
     for (const s of extracted.schedules) {
-      if (!autoSchedules || s.confidence < SCHEDULE_AUTO || !s.daysOfWeek.length) continue;
+      if (!autoSchedules || s.confidence < SCHEDULE_AUTO || !s.daysOfWeek.length || !mayCreate(extracted, s)) continue;
       // Clean title; the room (only ever taken from the document text) goes into its own field.
       const title = s.title;
       const already = await existingRoutineId(user.id, title, s.daysOfWeek, s.time, s.room);

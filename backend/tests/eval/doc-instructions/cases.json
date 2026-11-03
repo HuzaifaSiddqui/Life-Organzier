@@ -1,0 +1,134 @@
+{
+ "description": "Synthetic multi-teacher documents (made-up names) and instructions. 'expect': substrings of the titles that must be shown, all others hidden (a shown item outside this list is a leak). 'status': the question expected instead (ask_person = which one, no_person = not in this document). Same names spelled differently by OCR count as the same person. 'offStatus': with AI off the rules can't place every word, so this question is expected instead (the local model may resolve it).",
+ "documents": [
+  {
+   "file": "per-teacher-tables.txt",
+   "shape": "one table per teacher",
+   "cases": [
+    {
+     "instruction": "only Dr. Ahmed Khan's classes",
+     "expect": [
+      "Data Structures (CS-201)"
+     ]
+    },
+    {
+     "instruction": "just the exams",
+     "expect": [
+      "Midterm exam Data Structures",
+      "Final exam Operating Systems"
+     ]
+    },
+    {
+     "instruction": "Dr. Ahmed",
+     "status": "ask_person",
+     "options": [
+      "Ahmed Khan",
+      "Ahmed Raza"
+     ]
+    },
+    {
+     "instruction": "only Dr. Ahmed Raza",
+     "expect": [
+      "Operating Systems (CS-301)",
+      "Quiz 2 Operating Systems",
+      "Final exam Operating Systems"
+     ]
+    },
+    {
+     "instruction": "Mondays and Wednesdays",
+     "expect": [
+      "Data Structures (CS-201)",
+      "Midterm exam Data Structures",
+      "Assignment 3 Technical Writing"
+     ]
+    },
+    {
+     "instruction": "only CS-301",
+     "expect": [
+      "Operating Systems (CS-301)",
+      "Quiz 2 Operating Systems",
+      "Final exam Operating Systems"
+     ]
+    },
+    {
+     "instruction": "Dr. Imran's classes",
+     "status": "no_person"
+    },
+    {
+     "instruction": "only Sara's assignments",
+     "expect": [
+      "Assignment 3 Technical Writing"
+     ]
+    },
+    {
+     "instruction": "whatever Raza teaches",
+     "expect": [
+      "Operating Systems (CS-301)",
+      "Quiz 2 Operating Systems",
+      "Final exam Operating Systems"
+     ],
+     "offStatus": "not_understood"
+    },
+    {
+     "instruction": "stuff happening in Hall B",
+     "expect": [
+      "Technical Writing (EN-102)"
+     ],
+     "offStatus": "not_understood"
+    }
+   ]
+  },
+  {
+   "file": "flat-list.txt",
+   "shape": "flat list, OCR-noisy names",
+   "cases": [
+    {
+     "instruction": "only Dr. Ahmed Khan",
+     "expect": [
+      "Software Requirements (SE-210)",
+      "Midterm exam Software Requirements"
+     ]
+    },
+    {
+     "instruction": "Bilal Hussain's quizzes",
+     "expect": [
+      "Quiz 1 Database Systems"
+     ]
+    },
+    {
+     "instruction": "only Ms. Sara Malik",
+     "expect": [
+      "Professional Ethics (HU-110)",
+      "Project report Professional Ethics"
+     ]
+    }
+   ]
+  },
+  {
+   "file": "grid",
+   "shape": "grid with names in cells",
+   "cases": [
+    {
+     "instruction": "only Dr Ahmed Raza's classes",
+     "expect": [
+      "CS301"
+     ]
+    },
+    {
+     "instruction": "Dr Ahmed",
+     "status": "ask_person",
+     "options": [
+      "Ahmed Khan",
+      "Ahmed Raza"
+     ]
+    },
+    {
+     "instruction": "only Sara Malik",
+     "expect": [
+      "EN102"
+     ]
+    }
+   ]
+  }
+ ]
+}
