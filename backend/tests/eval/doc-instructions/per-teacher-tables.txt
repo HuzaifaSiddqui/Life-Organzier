@@ -1,0 +1,17 @@
+Department of Computer Science - Fall 2026 Timetable and Assessments
+
+Instructor: Dr. Ahmed Khan
+Monday 9:00-10:30 Data Structures (CS-201) Room 12
+Wednesday 9:00-10:30 Data Structures (CS-201) Room 12
+Midterm exam Data Structures on 21 October 2026 at 10:00 AM
+Assignment 2 Data Structures due 16 October 2026 at 5 PM
+
+Instructor: Dr. Ahmed Raza
+Tuesday 11:00-12:30 Operating Systems (CS-301) Room 14
+Thursday 11:00-12:30 Operating Systems (CS-301) Room 14
+Quiz 2 Operating Systems on 15 October 2026 at 11 AM
+Final exam Operating Systems on 18 December 2026 at 9 AM
+
+Instructor: Ms. Sara Malik
+Friday 2:00-3:30 PM Technical Writing (EN-102) Hall B
+Assignment 3 Technical Writing due 19 October 2026 at 11 PM

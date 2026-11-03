@@ -7,7 +7,25 @@ import { scheduleReminderSync } from "./reminders";
 
 export type DocType = "SYLLABUS" | "SCHEDULE" | "NOTES" | "OTHER";
 
-export type ExtractedDeadline = {
+/** DOC_INSTRUCTIONS: an item's structured fields, and whether the user's request leaves it out. */
+export type ItemMeta = { person: string | null; courseCode: string | null; course: string | null; kind: "class" | "exam" | "quiz" | "assignment" | "other"; days: number[]; room: string | null };
+type Filterable = { meta?: ItemMeta; filteredOut?: boolean };
+
+/** DOC_INSTRUCTIONS: what the user asked for and how the server read it. */
+export type InstructionResult = {
+  instruction: string;
+  understood: string[];
+  /** applied: filtered. ask_person: several people match (options). no_person: nobody does (nearest). not_understood: some words weren't placed (leftover). */
+  status: "applied" | "ask_person" | "no_person" | "not_understood";
+  options?: string[];
+  nearest?: string[];
+  leftover?: string[];
+  person?: string | null;
+  shown: number;
+  total: number;
+};
+
+export type ExtractedDeadline = Filterable & {
   index: number;
   title: string;
   activity: string;
@@ -38,7 +56,7 @@ export type ExtractedDeadline = {
 export const DOC_KINDS = ["timetable", "schedule", "notice", "assignment", "other"] as const;
 export type DocKind = (typeof DOC_KINDS)[number];
 
-export type ExtractedSchedule = {
+export type ExtractedSchedule = Filterable & {
   index: number;
   title: string;
   daysOfWeek: number[];
@@ -79,6 +97,8 @@ export type ProcessResult = {
     method: string;
     /** DOC_ROUTING: the detected (or picked) type; absent when routing is off. */
     kind?: { kind: DocKind; confidence: number; via: "rules" | "model" | "user" };
+    /** DOC_INSTRUCTIONS: absent when no request was given (everything is shown). */
+    instruction?: InstructionResult;
   };
   createdTasks: Task[];
   createdRoutines: Array<{ id: string; title: string }>;
@@ -103,12 +123,14 @@ export async function uploadDocument(
   docType: DocType,
   language: string,
   onProgress?: (fraction: number) => void,
+  instruction?: string,
 ): Promise<ProcessResult> {
   const form = new FormData();
   form.append("file", { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
   form.append("docType", docType);
   form.append("language", language);
   form.append("autoCreate", "true");
+  if (instruction?.trim()) form.append("instruction", instruction.trim());
   // Plain XMLHttpRequest: it's the only client here that sends React Native's { uri, name, type } file parts.
   // axios mangles them, and Expo's global fetch throws "Unsupported FormDataPart implementation".
   // No Content-Type header — the native layer adds the multipart boundary.
@@ -153,15 +175,24 @@ export async function uploadDocument(
   return body.data;
 }
 
-export async function processText(text: string, docType: DocType, title: string): Promise<ProcessResult> {
+export async function processText(text: string, docType: DocType, title: string, instruction?: string): Promise<ProcessResult> {
   // No OCR for pasted text, but the AI pass can use most of the server's 150 s limit.
-  const result = await apiPost<ProcessResult>("/documents/text", { text, docType, title }, { timeout: 180000 });
+  const result = await apiPost<ProcessResult>("/documents/text", { text, docType, title, ...(instruction?.trim() ? { instruction: instruction.trim() } : {}) }, { timeout: 180000 });
   void syncNow();
   scheduleReminderSync();
   return result;
 }
 
-export async function listDocuments(): Promise<{ documents: DocumentSummary[]; usedBytes: number }> {
+/**
+ * DOC_INSTRUCTIONS: change what is wanted from a document ("Change request"), or answer "which one?" with a person.
+ * The server re-filters what it already read: no upload, nothing created. An empty request shows everything.
+ */
+export function setDocumentInstruction(id: string, instruction: string, person?: string): Promise<{ extracted: ProcessResult["extracted"] }> {
+  return apiPost<{ extracted: ProcessResult["extracted"] }>(`/documents/${id}/instruction`, { instruction, ...(person ? { person } : {}) });
+}
+
+/** `features.instructions`: the server reads requests (DOC_INSTRUCTIONS); the upload box is shown only then. */
+export async function listDocuments(): Promise<{ documents: DocumentSummary[]; usedBytes: number; features?: { instructions?: boolean } }> {
   return apiGet("/documents");
 }
 

@@ -5,6 +5,7 @@ import * as Network from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineReviewItem";
+import { InstructionInput, InstructionPanel } from "../../components/DocumentInstruction";
 import { DocumentTextView } from "../../components/DocumentTextView";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
@@ -20,6 +21,7 @@ import {
   pickLines,
   processText,
   reextractDocument,
+  setDocumentInstruction,
   uploadDocument,
   type DocKind,
   type DocType,
@@ -45,8 +47,9 @@ const LANGS = [
 const MAX_BYTES = 10 * 1024 * 1024;
 
 type Picked = { uri: string; name: string; mimeType: string; size: number };
-type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags };
-type EditableSchedule = { index: number; title: string; room: string; roomCheck: boolean; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean };
+/** filteredOut: DOC_INSTRUCTIONS, left out by the user's request (hidden unless "Show everything", never pre-ticked). */
+type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags; filteredOut: boolean };
+type EditableSchedule = { index: number; title: string; room: string; roomCheck: boolean; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean; filteredOut: boolean };
 
 /**
  * Staged status, in the order the server works (upload → read the text → find dates). The server doesn't report
@@ -69,12 +72,13 @@ function toEditable(d: ExtractedDeadline): EditableDeadline {
     time: d.time ?? "",
     confidence: d.confidence,
     // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
-    include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload,
+    include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload && !d.filteredOut,
     created: Boolean(d.created),
     existing: Boolean(d.existing),
     // DOC_EVIDENCE: the document line it came from, when the server checked it.
     source: d.evidence ?? d.source,
     flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, removedSinceUpload: d.removedSinceUpload, verified: d.verified, modelsAgree: d.modelsAgree },
+    filteredOut: Boolean(d.filteredOut),
   };
 }
 
@@ -95,6 +99,10 @@ export function DocumentsScreen({ navigation }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   /** DOC_ROUTING "Wrong type?" re-read, or DOC_FALLBACK_UI "Pick lines", in progress. */
   const [rereading, setRereading] = useState(false);
+  /** DOC_INSTRUCTIONS: the server reads requests; the request typed before upload; whether left-out items are shown. */
+  const [requests, setRequests] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const [elapsed, setElapsed] = useState(0);
   const busy = progress !== null;
@@ -115,6 +123,7 @@ export function DocumentsScreen({ navigation }: Props) {
       const r = await listDocuments();
       setDocs(r.documents);
       setUsedBytes(r.usedBytes);
+      setRequests(Boolean(r.features?.instructions));
     } catch {
       // offline
     }
@@ -138,9 +147,16 @@ export function DocumentsScreen({ navigation }: Props) {
           : "No deadlines or classes found in this file",
     );
     setTimeout(() => scrollRef.current?.scrollTo({ y: resultsY.current, animated: true }), 300);
-    setDeadlines(r.extracted.deadlines.map(toEditable));
+    showItems(r.extracted);
+    void load();
+  };
+
+  /** The review rows for what the server extracted (and, with a request, what it leaves out). */
+  const showItems = (extracted: ProcessResult["extracted"]) => {
+    setShowAll(false);
+    setDeadlines(extracted.deadlines.map(toEditable));
     setSchedules(
-      r.extracted.schedules.map((s) => ({
+      extracted.schedules.map((s) => ({
         index: s.index,
         title: s.title,
         room: s.room ?? "",
@@ -149,12 +165,27 @@ export function DocumentsScreen({ navigation }: Props) {
         time: s.time ?? "",
         durationMinutes: s.durationMinutes,
         confidence: s.confidence,
-        include: !s.created && s.daysOfWeek.length > 0,
+        include: !s.created && s.daysOfWeek.length > 0 && !s.filteredOut,
         created: Boolean(s.created),
         existing: Boolean(s.existing),
+        filteredOut: Boolean(s.filteredOut),
       })),
     );
-    void load();
+  };
+
+  /** DOC_INSTRUCTIONS: a changed request, or the person picked for "which one?". Re-filters what was read. */
+  const changeRequest = async (text: string, person?: string) => {
+    if (!result) return;
+    setRereading(true);
+    try {
+      const r = await setDocumentInstruction(result.document.id, text, person);
+      setResult({ ...result, extracted: r.extracted, reused: false });
+      showItems(r.extracted);
+    } catch (e) {
+      setToast(getApiErrorMessage(e));
+    } finally {
+      setRereading(false);
+    }
   };
 
   /** DOC_ROUTING: read the same document again as the type the user picked. */
@@ -214,7 +245,7 @@ export function DocumentsScreen({ navigation }: Props) {
     }
     setProgress(0);
     try {
-      showResult(await uploadDocument(picked, docType, language, setProgress));
+      showResult(await uploadDocument(picked, docType, language, setProgress, requests ? instruction : undefined));
     } catch (e) {
       setToast(getApiErrorMessage(e, "Upload failed — please retry."));
     } finally {
@@ -226,7 +257,7 @@ export function DocumentsScreen({ navigation }: Props) {
     if (pasted.trim().length < 10 || !docType) return;
     setProgress(1);
     try {
-      showResult(await processText(pasted, docType, "Pasted text"));
+      showResult(await processText(pasted, docType, "Pasted text", requests ? instruction : undefined));
       setPasteMode(false);
       setPasted("");
     } catch (e) {
@@ -261,6 +292,10 @@ export function DocumentsScreen({ navigation }: Props) {
   };
 
   const course = result?.extracted.course;
+  // DOC_INSTRUCTIONS: items the request leaves out stay hidden until "Show everything".
+  const shownDeadlines = deadlines.filter((d) => showAll || !d.filteredOut);
+  const shownSchedules = schedules.filter((s) => showAll || !s.filteredOut);
+  const hiddenCount = showAll ? 0 : deadlines.length + schedules.length - shownDeadlines.length - shownSchedules.length;
   const pending = deadlines.filter((d) => d.include && !d.created).length + schedules.filter((s) => s.include && !s.created).length;
 
   return (
@@ -304,6 +339,7 @@ export function DocumentsScreen({ navigation }: Props) {
                   </View>
                 </>
               ) : null}
+              {requests ? <InstructionInput value={instruction} onChange={setInstruction} disabled={busy} /> : null}
               {busy ? (
                 <View style={styles.busy}>
                   <View style={styles.rowBetween}>
@@ -363,6 +399,16 @@ export function DocumentsScreen({ navigation }: Props) {
                 </View>
               </Card>
             ) : null}
+            {result.extracted.instruction ? (
+              <InstructionPanel
+                key={`${result.document.id}:${result.extracted.instruction.instruction}:${result.extracted.instruction.status}`}
+                result={result.extracted.instruction}
+                showAll={showAll}
+                busy={rereading}
+                onToggleShowAll={() => setShowAll((v) => !v)}
+                onChange={(text, person) => void changeRequest(text, person)}
+              />
+            ) : null}
             {result.text ? (
               <DocumentTextView
                 key={result.document.id}
@@ -374,19 +420,19 @@ export function DocumentsScreen({ navigation }: Props) {
               />
             ) : null}
 
-            <SectionTitle title={`Extracted deadlines (${deadlines.length})`} />
-            {deadlines.length ? (
-              deadlines.map((d, i) => (
+            <SectionTitle title={`Extracted deadlines (${shownDeadlines.length})`} />
+            {shownDeadlines.length ? (
+              shownDeadlines.map((d) => (
                 <Card key={d.index} style={{ gap: 8, opacity: d.created ? 0.7 : 1 }}>
                   <View style={styles.rowBetween}>
                     <Pressable
                       disabled={d.created}
-                      onPress={() => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, include: !x.include } : x)))}
+                      onPress={() => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, include: !x.include } : x)))}
                       style={[styles.box, (d.include || d.created) && styles.boxOn]}
                     >
                       <Text style={{ color: "#fff", fontFamily: "Inter_700Bold" }}>{d.include || d.created ? "✓" : ""}</Text>
                     </Pressable>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, title } : x)))} />
+                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, title } : x)))} />
                   </View>
                   <DeadlineReviewItem
                     date={d.date}
@@ -394,8 +440,8 @@ export function DocumentsScreen({ navigation }: Props) {
                     source={d.source}
                     flags={d.created ? { assumedTime: false } : d.flags}
                     disabled={d.created}
-                    onChangeDate={(date) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, date, include: true, flags: { ...x.flags, needsSemesterStart: false } } : x)))}
-                    onChangeTime={(time) => setDeadlines((l) => l.map((x, j) => (j === i ? { ...x, time, flags: { ...x.flags, assumedTime: false } } : x)))}
+                    onChangeDate={(date) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, date, include: true, flags: { ...x.flags, needsSemesterStart: false } } : x)))}
+                    onChangeTime={(time) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, time, flags: { ...x.flags, assumedTime: false } } : x)))}
                   />
                   <Text style={[styles.meta, { color: confColor(d.confidence) }]}>
                     {d.existing ? "Already in your tasks · " : d.created ? "Added automatically · " : ""}Confidence {d.confidence}%
@@ -406,20 +452,20 @@ export function DocumentsScreen({ navigation }: Props) {
               <Text style={styles.meta}>No deadlines found.</Text>
             )}
 
-            <SectionTitle title={`Extracted schedules (${schedules.length})`} />
-            {schedules.length > 5 ? <Text style={styles.meta}>Found {schedules.length} classes — choose which to create.</Text> : null}
-            {schedules.length ? (
-              schedules.map((s, i) => (
+            <SectionTitle title={`Extracted schedules (${shownSchedules.length})`} />
+            {shownSchedules.length > 5 ? <Text style={styles.meta}>Found {shownSchedules.length} classes — choose which to create.</Text> : null}
+            {shownSchedules.length ? (
+              shownSchedules.map((s) => (
                 <Card key={s.index} style={{ gap: 8, opacity: s.created ? 0.7 : 1 }}>
                   <View style={styles.rowBetween}>
                     <Pressable
                       disabled={s.created}
-                      onPress={() => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, include: !x.include } : x)))}
+                      onPress={() => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, include: !x.include } : x)))}
                       style={[styles.box, (s.include || s.created) && styles.boxOn]}
                     >
                       <Text style={{ color: "#fff", fontFamily: "Inter_700Bold" }}>{s.include || s.created ? "✓" : ""}</Text>
                     </Pressable>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={s.title} editable={!s.created} onChangeText={(title) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, title } : x)))} />
+                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={s.title} editable={!s.created} onChangeText={(title) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, title } : x)))} />
                   </View>
                   <View style={ui.wrap}>
                     {WEEKDAYS_SHORT.map((label, d) => (
@@ -428,13 +474,13 @@ export function DocumentsScreen({ navigation }: Props) {
                         small
                         label={label}
                         selected={s.days.includes(d)}
-                        onPress={s.created ? undefined : () => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, days: x.days.includes(d) ? x.days.filter((y) => y !== d) : [...x.days, d].sort() } : x)))}
+                        onPress={s.created ? undefined : () => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, days: x.days.includes(d) ? x.days.filter((y) => y !== d) : [...x.days, d].sort() } : x)))}
                       />
                     ))}
                   </View>
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, time } : x)))} />
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, time } : x)))} />
                   {/* Room only as read from the document (empty when the document has none); the user may correct it. */}
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x, j) => (j === i ? { ...x, room, roomCheck: false } : x)))} accessibilityLabel="Room" />
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, room, roomCheck: false } : x)))} accessibilityLabel="Room" />
                   {/* Read from an image and not shaped like a room code: ask, don't guess. Editing it clears the note. */}
                   {s.roomCheck && !s.created ? <Text style={[styles.meta, { color: palette.warning }]}>{t("docReview.checkRoom")}</Text> : null}
                   <Text style={[styles.meta, { color: confColor(s.confidence) }]}>
@@ -446,6 +492,7 @@ export function DocumentsScreen({ navigation }: Props) {
               <Text style={styles.meta}>No class schedules found.</Text>
             )}
 
+            {hiddenCount ? <Text style={styles.meta}>{t("docInstr.hiddenNote", { count: String(hiddenCount) })}</Text> : null}
             {pending ? <Button title={`Create ${pending} selected`} onPress={() => void apply()} loading={applying} /> : null}
 
             {course && (course.code || course.name || course.topics.length) ? (

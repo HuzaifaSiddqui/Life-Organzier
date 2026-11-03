@@ -92,6 +92,15 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Documents and OCR
 
+- **Requests on documents (`DOC_INSTRUCTIONS`, off).** A teacher is found only when the document names one: a grid
+  cell's first line, an "Instructor: / Teacher: / Taught by" label, a "Dr. / Prof. / Sir / Madam / Mr. / Ms." name on
+  the item's line, or a heading above a section. A name the OCR cannot read (or reads as another word) can't be
+  matched, so its items are left out by a "only X" request; "Show everything" brings them back. Spelling variants and
+  OCR slips (digits for letters, "rn" for "m", one or two letters off) are one person; two teachers who share a first
+  name are never merged ("Dr. Ahmed" asks which one). The grid reader still needs the timetable's day labels and clock
+  row to be read by OCR; a sparse grid where only the class boxes are read gives no classes (as without a request).
+  Requests are English only; the local model is asked only when the rules leave words unplaced.
+
 - **Document routing flags (all off): `DOC_FALLBACK_UI`, `DOC_ROUTING`, `DOC_PRIORITY_V2`, `DOC_EVIDENCE`,
   `DOC_LAYOUT`, `DOC_AGREE`.** Gate (29 Oct 2026, Ollama qwen2.5:7b, laptop kept awake): AI off, every flag equals the
   baseline on the text fixtures (82/82 recall and precision, 0 wrong items reaching auto-create). AI on:

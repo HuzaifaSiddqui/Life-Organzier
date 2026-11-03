@@ -19,6 +19,7 @@
     "docs:manifest-template": "tsx scripts/doc-manifest-template.ts",
     "eval:assistant": "tsx scripts/eval-assistant.ts",
     "eval:queries": "tsx scripts/eval-queries.ts",
+    "eval:doc-instructions": "tsx scripts/eval-doc-instructions.ts",
     "eval:routing": "tsx scripts/eval-chat-set.ts",
     "eval:router": "tsx scripts/eval-router.ts",
     "unknown:review": "tsx scripts/unknown-review.ts",
