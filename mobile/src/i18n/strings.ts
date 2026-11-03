@@ -285,6 +285,34 @@ const en = {
 
   "restart.title": "Restart to switch layout",
   "restart.body": "The app needs to restart to change reading direction.",
+  "calendar.section": "Phone calendar",
+  "calendar.toggle": "Add tasks and routines to my calendar",
+  "calendar.toggleHint": "Uses a separate \"Life Organizer\" calendar. Your other calendars are only read, on this phone, to warn about clashes and find free time.",
+  "calendar.denied": "Calendar access is off. You can allow it in your phone's settings.",
+  "calendar.unavailable": "The calendar needs the latest version of the app.",
+  "calendar.removeAll": "Remove all Life Organizer events",
+  "calendar.removeTitle": "Remove all Life Organizer events?",
+  "calendar.removeBody": "This deletes the Life Organizer calendar on this phone ({count} events) and turns syncing off. Your other calendars are not touched. Past routine events will not come back with Undo.",
+  "calendar.remove": "Remove",
+  "calendar.cancel": "Cancel",
+  "calendar.removed": "Life Organizer events removed",
+  "calendar.removeFailed": "Couldn't remove the events. Try again.",
+  "calendar.undo": "Undo",
+  "calendar.off": "Calendar sync is off.",
+  "calendar.turnOn": "Turn on calendar",
+  "calendar.nothing": "Nothing on your calendar.",
+  "calendar.allDay": "All day",
+  "calendar.noFree": "No free time left between 8 AM and 10 PM.",
+  "calendar.freeHint": "Between 8 AM and 10 PM, 30 minutes or more.",
+  "calendar.added": "In your calendar. It updates when the task changes.",
+  "calendar.clashTitle": "You have {title} at {time}",
+  "calendar.clashMore": "{title} and {count} more at {time}",
+  "calendar.addAnyway": "Add anyway",
+  "calendar.changeTime": "Change time",
+  "calendar.clashChat": "You have {title} at {time}. Keep it?",
+  "calendar.clashChatMore": "You have {title} and {count} more at {time}. Keep it?",
+  "calendar.keep": "Keep",
+  "calendar.kept": "Kept.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -293,7 +321,7 @@ export type StringKey = keyof typeof en;
  * English-only keys until after the FYP evaluation (10 Nov 2026; Urdu is deferred, docs/known-limitations.md): Urdu
  * shows the English text for these (LocaleProvider falls back to English).
  */
-type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | `docInstr.${string}` | "docReview.unverified" | "docReview.modelsAgree">;
+type EnglishOnlyKey = Extract<StringKey, `docRoute.${string}` | `docInstr.${string}` | `calendar.${string}` | "docReview.unverified" | "docReview.modelsAgree">;
 
 const ur: Record<Exclude<StringKey, EnglishOnlyKey>, string> & Partial<Record<EnglishOnlyKey, string>> = {
   "common.retry": "دوبارہ کوشش کریں",

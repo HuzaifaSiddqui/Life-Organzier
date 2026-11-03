@@ -39,7 +39,7 @@ function visible(tasks: Task[]): Task[] {
 }
 
 /** Local deadline instant for optimistic tasks (server recomputes authoritatively). */
-function localDueAt(dueDate: string | null | undefined, dueTime: string | null | undefined): string | null {
+export function localDueAt(dueDate: string | null | undefined, dueTime: string | null | undefined): string | null {
   if (!dueDate) return null;
   const d = new Date(dueDate);
   if (Number.isNaN(d.getTime())) return null;

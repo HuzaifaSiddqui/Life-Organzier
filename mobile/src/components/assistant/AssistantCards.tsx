@@ -5,6 +5,7 @@ import { formatDue, formatDuration, formatTime } from "../../utils/format";
 import { priorityColor } from "../../utils/priorityColors";
 import { ProgressBar } from "../ui";
 import { BreathingExercise } from "./BreathingExercise";
+import { CalendarCard, CalendarClashCard } from "./CalendarCard";
 import { CrisisCard } from "./CrisisCard";
 import { LocationSetupCard } from "./LocationSetupCard";
 
@@ -203,6 +204,10 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
             return <CrisisCard key={i} resources={card.resources ?? []} />;
           case "location_setup":
             return <LocationSetupCard key={i} taskId={card.taskId} place={card.place} saved={card.saved} />;
+          case "calendar":
+            return <CalendarCard key={i} card={card} />;
+          case "calendar_clash":
+            return <CalendarClashCard key={i} card={card} onAction={onAction} />;
           default:
             return null;
         }

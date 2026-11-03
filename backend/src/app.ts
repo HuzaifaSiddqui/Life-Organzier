@@ -25,6 +25,7 @@ import { userRouter } from "./modules/users/userRoutes.js";
 import { whatsappRouter } from "./modules/whatsapp/whatsappRoutes.js";
 import { pushRouter } from "./modules/push/pushRoutes.js";
 import { whatsappAgentRouter } from "./modules/whatsappAgent/routes.js";
+import { calendarRouter } from "./modules/calendar/calendarRoutes.js";
 import { sendError } from "./utils/apiResponse.js";
 
 /**
@@ -95,6 +96,7 @@ app.get("/health/ai", (_req, res) => {
   app.use("/api/whatsapp", whatsappRouter);
   app.use("/api/push", pushRouter);
   app.use("/api/whatsapp-agent", whatsappAgentRouter);
+  app.use("/api/calendar", calendarRouter);
 
   app.use((_req, res) => sendError(res, "Not found", "NOT_FOUND", 404));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

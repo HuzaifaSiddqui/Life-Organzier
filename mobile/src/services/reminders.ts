@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { dictionaries, type Language, type StringKey } from "../i18n/strings";
 import { auth } from "../lib/firebase";
 import { apiGet, apiPost } from "./api";
+import { scheduleCalendarSync } from "./calendar";
 import { answerCheckin, showCheckinSheet, type CheckinResponse, type PlannedCheckin } from "./checkins";
 import { addSnooze, applySnoozes, pruneSnoozes, SNOOZE_MINUTES, snoozeRepeats, type Snoozes } from "../utils/routineSnooze";
 import { addTaskSnooze, liveTaskSnoozes, TASK_SNOOZE_MINUTES, withoutTask, type TaskSnooze } from "../utils/taskSnooze";
@@ -283,6 +284,8 @@ async function cancelOurs(): Promise<void> {
 /** Downloads the reminder plan and (re)schedules local notifications. Keeps old ones when offline. */
 export async function syncReminders(): Promise<number | null> {
   if (!auth.currentUser) return null;
+  // CALENDAR_SYNC: the phone calendar follows the same changes (returns at once while it's off).
+  scheduleCalendarSync();
   let plan: PlanResponse;
   try {
     plan = await apiGet<PlanResponse>("/reminders/plan?days=7");

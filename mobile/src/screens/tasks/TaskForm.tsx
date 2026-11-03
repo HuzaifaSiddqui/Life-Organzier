@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
 import { Button, Card, Chip, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getTags } from "../../services/settingsApi";
 import { apiGet, apiPost } from "../../services/api";
-import { suggestForTitle, type TaskInput } from "../../services/tasksApi";
+import { clashesForTask } from "../../services/calendar";
+import { localDueAt, suggestForTitle, type TaskInput } from "../../services/tasksApi";
 import { useLocale } from "../../i18n/LocaleProvider";
-import { formatDuration } from "../../utils/format";
+import { taskSpan } from "../../utils/calendarSync";
+import { formatDuration, formatTime } from "../../utils/format";
 import { TaskLocationsField } from "../../components/TaskLocationsField";
 import type { Priority, ReminderMode, SavedLocation, Task, TaskLocation, TaskStatus, TaskType } from "../../types/models";
 import {
@@ -262,10 +264,42 @@ export function TaskForm({
     setTagDraft("");
   };
 
+  /** CALENDAR_SYNC: the time this task would take, as the calendar would show it (null: no time to check). */
+  const spanOf = (vals: TaskFormValues) => {
+    const { payload } = toPayload(vals, { allowPast: true });
+    const task = {
+      dueDate: payload.dueDate ?? null,
+      dueTime: payload.dueTime ?? null,
+      dueAt: localDueAt(payload.dueDate, payload.dueTime),
+      scheduledStart: payload.scheduledStart ?? null,
+      scheduledEnd: payload.scheduledEnd ?? null,
+      durationMinutes: payload.durationMinutes ?? null,
+    };
+    return { task, span: taskSpan(task) };
+  };
+
+  /** "You have X at 3 PM. Add anyway?" when the new time overlaps an event on the phone's other calendars. */
+  const clashOk = async (): Promise<boolean> => {
+    const next = spanOf(v);
+    const before = spanOf(initial).span;
+    if (!next.span || v.status === "COMPLETED" || (before && before.start === next.span.start && before.end === next.span.end)) return true;
+    const hits = await clashesForTask(next.task);
+    if (!hits.length) return true;
+    const time = formatTime(new Date(hits[0].start).toISOString());
+    const title = hits.length > 1 ? t("calendar.clashMore", { title: hits[0].title, count: String(hits.length - 1), time }) : t("calendar.clashTitle", { title: hits[0].title, time });
+    return new Promise((resolve) =>
+      Alert.alert(title, undefined, [
+        { text: t("calendar.changeTime"), style: "cancel", onPress: () => resolve(false) },
+        { text: t("calendar.addAnyway"), onPress: () => resolve(true) },
+      ], { cancelable: true, onDismiss: () => resolve(false) }),
+    );
+  };
+
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
+      if (!(await clashOk())) return;
       const err = await onSubmit(v);
       if (err) setError(err);
     } finally {

@@ -212,7 +212,11 @@ export type AssistantCard =
   | { type: "insight"; text: string; confidence: number }
   | { type: "resources"; resources?: CrisisPayload["resources"] }
   | { type: "progress"; task: Task }
-  | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean };
+  | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean }
+  /** CALENDAR_SYNC: filled in on the phone from its own calendars. */
+  | { type: "calendar"; kind: "agenda" | "free" | "add"; date: string; taskId?: string; title?: string }
+  /** Added on the phone (never sent by the server): a chat-created task overlaps an event on another calendar. */
+  | { type: "calendar_clash"; taskId: string; title: string; time: string; more: number };
 
 export type ChatMessage = {
   id: string;

@@ -165,7 +165,9 @@ export type Card =
   | { type: "resources"; resources: CrisisPayload["resources"] }
   | { type: "progress"; task: SerializedTask }
   /** In-chat Location reminders toggle, then "Set <place> on the map" when the place isn't saved yet. */
-  | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean };
+  | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean }
+  /** CALENDAR_SYNC: filled in on the phone from its own calendar (nothing from it reaches the server). */
+  | { type: "calendar"; kind: "agenda" | "free" | "add"; date: string; taskId?: string; title?: string };
 
 export type AssistantMessageMeta = {
   cards?: Card[];
