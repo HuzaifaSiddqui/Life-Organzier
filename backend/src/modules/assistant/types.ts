@@ -22,6 +22,8 @@ export type TaskDraft = {
   location?: string | null;
   /** User explicitly accepted an end-of-day deadline / no time. */
   allowNoTime?: boolean;
+  /** CHAT_FIXES_V2: a deadline given a date but no time is created for the end of that day (FRD deviation, FR-TM-001). */
+  assumedEndOfDay?: boolean;
   allowNoDuration?: boolean;
   allowNoDate?: boolean;
   overrideCapacity?: boolean;

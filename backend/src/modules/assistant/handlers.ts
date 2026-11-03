@@ -54,7 +54,7 @@ import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
-import { bareImperative } from "./nlu.js";
+import { bareImperative, CHANGE_TIME, IMPERATIVE_START } from "./nlu.js";
 import { chatFixesOn, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
@@ -95,8 +95,12 @@ const CANT_DO: Array<[RegExp, string]> = [
   [/^(?:please\s+)?translate\b/i, "translate"],
   [/^(?:please\s+)?(?:turn|switch)\s+(?:on|off)\b/i, "control devices"],
 ];
+/** An alarm is a phone feature: said even with "add" or "set" ("add an alarm for 6"), unlike the cues above. */
+const ALARM = /\balarms?\b|\bwake me(?:\s+up)?\b|\bget me up\b/i;
 function cantDoNote(text: string): string | null {
-  if (process.env.OOS_NOTE?.toLowerCase() !== "on" || TASK_CUE.test(text)) return null;
+  if (process.env.OOS_NOTE?.toLowerCase() !== "on") return null;
+  if (ALARM.test(text)) return "I can't set phone alarms myself, so I'll keep it as a task for you.";
+  if (TASK_CUE.test(text)) return null;
   const hit = CANT_DO.find(([re]) => re.test(text.trim()));
   return hit ? `I can't ${hit[1]} myself, so I'll keep it as a task for you.` : null;
 }
@@ -132,6 +136,17 @@ const CHANGE_CUE = /\b(?:now|instead|anymore|moved|rescheduled|long)\b/i;
  * Every reply says which command handled it (internal: stored with the message, never shown). A hand-off inside a
  * handler sets its own command; otherwise it is the intent dispatched here, when that is a registry command.
  */
+/** "Change "X", or add a new task?": nothing changes until the user picks (CHAT_FIXES_V2). */
+function changeOrNew(turn: Turn, task: Task, text: string): Out {
+  focusOn(turn, task.id);
+  return {
+    content: `Change "${task.title}", or add a new task?`,
+    actions: [commandAction(`Change "${truncate(task.title, 24)}"`, "update_task", { text, ref: task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
+    intent: "change_or_new",
+    command: "update_task", // the question is about changing that task
+  };
+}
+
 /** "by <day>" / "by the <date>": a due date (CHAT_FIXES_V2). */
 const BY_DUE = /\bby\s+(?:the\s+)?(?:\d{1,2}(?:st|nd|rd|th)?\b|mon|tue|wed|thu|fri|sat|sun|tomorrow|tonight|next|this|end)/i;
 /** Asking for a new task outright; "must" / "has to" state a deadline and don't. */
@@ -150,20 +165,14 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   if (chatFixesOn() && u.intent === "create_task" && u.entities.date && BY_DUE.test(text) && !EXPLICIT_CREATE.test(text) && u.targetRef) {
     // "the tax return needs to be done by the 13th": a due date for a task the user already has, when its title matches.
     const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { listed: turn.state.listed });
+    // Opening with a creation verb ("submit the tax return by sunday") may be a new task of the same name: ask.
+    if (r.task && IMPERATIVE_START.test(text.trim())) return changeOrNew(turn, r.task, text);
     if (r.task) return { ...(await updateIntent(turn, { ...u, intent: "update_task", targetRef: r.task.title }, text)), command: "update_task" };
   }
   if (chatFixesOn() && u.intent === "create_task" && !TASK_CUE.test(text) && CHANGE_CUE.test(text) && u.targetRef) {
     // C: a change to a task the user already has: ask instead of adding a duplicate.
     const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { listed: turn.state.listed });
-    if (r.task) {
-      focusOn(turn, r.task.id);
-      return {
-        content: `Change "${r.task.title}", or add a new task?`,
-        actions: [commandAction(`Change "${truncate(r.task.title, 24)}"`, "update_task", { text, ref: r.task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
-        intent: "change_or_new",
-        command: "update_task", // C: the question is about changing that task
-      };
-    }
+    if (r.task) return changeOrNew(turn, r.task, text);
   }
   if (chatFixesOn() && (u.intent === "complete_task" || u.intent === "update_task") && u.targetRef && (await noTaskFor(turn, u.targetRef, u.intent === "update_task"))) {
     // E / h-102: no task by that name, but a routine: done today, or moved once.
@@ -477,6 +486,16 @@ async function updateIntent(turn: Turn, u: Understanding, text: string): Promise
   const found = await chooseOrResolve(turn, u, "update", { text });
   if ("out" in found) return found.out;
   const { changes, summary } = changesFromUnderstanding(turn, found.task, u, text);
+  if (!summary.length && chatFixesOn() && CHANGE_TIME.test(text.trim())) {
+    // "change time" with no time: ask for one; a reply like "5 pm" answers it (an offer, see acceptOffer).
+    focusOn(turn, found.task.id);
+    turn.state.pending = { kind: "offer", text: "change time" };
+    return {
+      content: `What time should "${found.task.title}" be due?`,
+      actions: ["9 AM", "12 PM", "5 PM", "9 PM"].map((t) => commandAction(t, "update_task", { text: `change time to ${t}`, ref: found.task.title }, { text: `change time to ${t}` })),
+      intent: "update_ask",
+    };
+  }
   if (!summary.length) {
     focusOn(turn, found.task.id);
     return {

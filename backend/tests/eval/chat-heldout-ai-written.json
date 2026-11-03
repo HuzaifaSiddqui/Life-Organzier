@@ -11,7 +11,7 @@
   { "id": "h-006", "lang": "en", "text": "I have to prepare the quarterly sales deck, about 3 hours, due Wednesday", "command": "create_task", "source": "ai-written", "args": { "date": "2026-10-07", "duration": 180 } },
   { "id": "h-007", "lang": "en", "text": "buy milk and eggs on the way home", "command": "create_task", "source": "ai-written" },
   { "id": "h-008", "lang": "en", "text": "Pay electricity bill on the 10th", "command": "create_task", "source": "ai-written", "args": { "date": "2026-10-10" } },
-  { "id": "h-009", "lang": "en", "text": "submit the tax return by sunday night", "command": "create_task", "source": "ai-written", "args": { "date": "2026-10-11" } },
+  { "id": "h-009", "lang": "en", "text": "submit the tax return by sunday night", "command": "create_task", "alsoOk": ["change_or_new"], "note": "relabelled 2 Nov 2026 (owner): with a seeded 'Tax return', asking change-or-new is also right", "source": "ai-written", "args": { "date": "2026-10-11" } },
   { "id": "h-010", "lang": "en", "text": "book flight tickets for the wedding this weekend", "command": "create_task", "source": "ai-written" },
   { "id": "h-011", "lang": "en", "text": "team standup tomorrow 9:30am", "command": "create_task", "source": "ai-written", "args": { "date": "2026-10-06", "time": "9:30 AM" } },
   { "id": "h-012", "lang": "en", "text": "water the plants tonight", "command": "create_task", "source": "ai-written", "args": { "date": "2026-10-05" } },

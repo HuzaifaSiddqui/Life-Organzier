@@ -289,3 +289,73 @@ test("whole chat: 'by <day>' updates a task whose title matches, and creates one
     await prisma.user.delete({ where: { id: user.id } });
   }
 });
+
+test("a deadline with a date but no time: created for the end of that day with a note, useful reminders, 'change time' works; no date still asks", { skip }, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { prisma } = await import("../src/config/db.js");
+  const { AiService, setAi } = await import("../src/ai/llm.js");
+  const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
+  const { sequenceForTask } = await import("../src/modules/reminders/reminderService.js");
+  const { localParts, localYmd } = await import("../src/lib/time.js");
+  const { NOW, TZ } = await import("./fixtures.js"); // Monday 5 Oct, 10:00
+  setAi(new AiService([]));
+  const keep = process.env.CHAT_FIXES_V2;
+  process.env.CHAT_FIXES_V2 = "on";
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  const settings = await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ } });
+  const say = async (text: string) => (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text, payload: null, label: null })).message as { content: string; intent?: string };
+  try {
+    const added = await say("submit the lease form on thursday");
+    assert.equal(added.intent, "task_created", added.content);
+    assert.match(added.content, /11:59 PM assumed\. Say 'change time' to set another\./);
+    const task = await prisma.task.findFirstOrThrow({ where: { userId: user.id } });
+    assert.equal(task.dueTime, null, "date only");
+    assert.equal(localYmd(task.dueAt!, TZ), "2026-10-08");
+    // Reminders: none late at night; one the day before or on the morning of the day.
+    const drafts = sequenceForTask(task, settings, TZ, 9, undefined, NOW);
+    assert.ok(drafts.length > 0, "it has reminders");
+    for (const d of drafts) assert.ok(localParts(d.at, TZ).h < 22, `no late-night reminder (${d.at.toISOString()} ${d.body})`);
+    assert.ok(drafts.some((d) => { const ymd = localYmd(d.at, TZ); const h = localParts(d.at, TZ).h; return ymd === "2026-10-07" || (ymd === "2026-10-08" && h <= 12); }), "a reminder the day before or that morning");
+    // "change time", then a bare time, sets it.
+    assert.match((await say("change time")).content, /What time should "Submit the lease form" be due\?/);
+    await say("6 pm");
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).dueTime, "6 PM");
+    // No date: still asks.
+    const noDate = await say("submit the rent slip");
+    assert.equal(noDate.intent, "clarify");
+    assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1);
+  } finally {
+    if (keep === undefined) delete process.env.CHAT_FIXES_V2;
+    else process.env.CHAT_FIXES_V2 = keep;
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("'by <day>' on an existing title: a creation verb first asks change-or-new (nothing changes); otherwise it updates", { skip }, async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { prisma } = await import("../src/config/db.js");
+  const { AiService, setAi } = await import("../src/ai/llm.js");
+  const { handleAssistantMessage } = await import("../src/modules/assistant/dialogue.js");
+  const { zonedTimeToUtc, localYmd } = await import("../src/lib/time.js");
+  const { NOW, TZ } = await import("./fixtures.js");
+  setAi(new AiService([]));
+  const keep = process.env.CHAT_FIXES_V2;
+  process.env.CHAT_FIXES_V2 = "on";
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ } });
+  const visa = await prisma.task.create({ data: { userId: user.id, title: "Visa form", priority: "MEDIUM", source: "CHAT", dueDate: zonedTimeToUtc("2026-10-20", 0, 0, TZ), dueAt: zonedTimeToUtc("2026-10-20", 23, 59, TZ) } });
+  const say = async (text: string) => (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", now: NOW, text, payload: null, label: null })).message as { content: string; intent?: string };
+  try {
+    const ask = await say("submit the visa form by friday");
+    assert.equal(ask.intent, "change_or_new");
+    assert.match(ask.content, /Change "Visa form", or add a new task\?/);
+    assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: visa.id } })).dueAt?.toISOString(), visa.dueAt?.toISOString(), "nothing changes before the choice");
+    assert.equal(await prisma.task.count({ where: { userId: user.id } }), 1);
+    await say("the visa form has to be in by friday");
+    assert.equal(localYmd((await prisma.task.findUniqueOrThrow({ where: { id: visa.id } })).dueAt!, TZ), "2026-10-09", "no verb first: updated");
+  } finally {
+    if (keep === undefined) delete process.env.CHAT_FIXES_V2;
+    else process.env.CHAT_FIXES_V2 = keep;
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});

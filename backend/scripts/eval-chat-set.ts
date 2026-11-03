@@ -49,9 +49,12 @@ type DbCheck =
   | { op: "none" }
   | { op: "created"; title?: string; dueYmd?: string; dueTime?: string }
   | { op: "completed"; title: string }
-  | { op: "updated"; title: string; dueYmd?: string }
-  | { op: "routine"; days?: "daily" | number[]; hourFrom?: number; hourTo?: number };
-type Check = { id: string; mustInclude?: string[]; mustNotInclude?: string[]; db?: DbCheck[]; clarifyOk?: boolean; clarifyOnly?: boolean; emptyList?: boolean; listTitle?: string; notIntent?: string[] };
+  | { op: "updated"; title: string; dueYmd?: string; dueTime?: string; priority?: string }
+  | { op: "routine"; days?: "daily" | number[]; hourFrom?: number; hourTo?: number }
+  | { op: "occurrence"; routine: string; status: string }
+  | { op: "routine_paused"; title: string };
+/** orAsk: a question with nothing changed also passes the db check. replyMatches: a pattern the reply text must match. */
+type Check = { id: string; mustInclude?: string[]; mustNotInclude?: string[]; db?: DbCheck[]; orAsk?: boolean; replyMatches?: string; clarifyOk?: boolean; clarifyOnly?: boolean; emptyList?: boolean; listTitle?: string; notIntent?: string[] };
 const checks = new Map((arg("checks") ? (JSON.parse(readFileSync(arg("checks") as string, "utf8")) as { rows: Check[] }).rows : []).map((c) => [c.id, c]));
 const file = JSON.parse(readFileSync(arg("file") as string, "utf8")) as { now: string; timezone: string; seed?: Seed; commands: Row[] };
 const seed: Seed = arg("seed-from") ? (JSON.parse(readFileSync(arg("seed-from") as string, "utf8")) as { seed: Seed }).seed : (file.seed ?? {});
@@ -88,7 +91,8 @@ async function seedUser(userId: string) {
 const WRONG_OUTCOME = new Set(["not_found", "choose_task", "routine_not_today"]);
 
 type Snap = Awaited<ReturnType<typeof snapshot>>;
-type TaskRow = { id: string; title: string; status: string; dueAt: Date | string | null; dueTime: string | null };
+type TaskRow = { id: string; title: string; status: string; dueAt: Date | string | null; dueTime: string | null; priority: string };
+type OccRow = { id: string; routineId: string; status: string };
 type RoutineRow = { id: string; title: string; frequency: string; daysOfWeek: number[] | null; dueTime: string | null };
 
 /** What failed for this row's checks (empty = passed). */
@@ -107,7 +111,12 @@ function checkRow(c: Check | undefined, out: { content: string; cards?: unknown[
   }
   for (const t of c.mustNotInclude ?? []) if (shown.includes(t.toLowerCase())) fail.push(`shows "${t}"`);
   if (c.notIntent?.includes(intent)) fail.push(`reply was ${intent}`);
-  if (c.db) fail.push(...checkDb(c.db, before, after));
+  if (c.replyMatches && !new RegExp(c.replyMatches, "i").test(out.content)) fail.push(`reply doesn't say /${c.replyMatches}/`);
+  if (c.db) {
+    const db = checkDb(c.db, before, after);
+    const asked = /\?\s*$/.test(out.content.trim()) && checkDb([{ op: "none" }], before, after).length === 0;
+    if (db.length && !(c.orAsk && asked)) fail.push(...db);
+  }
   return fail;
 }
 
@@ -126,6 +135,7 @@ function checkDb(db: DbCheck[], before: Snap, after: Snap): string[] {
   const newRoutines = (after.routines as unknown as RoutineRow[]).filter((r) => !br.has(r.id));
   const changedRoutines = after.routines.filter((r) => br.has(r.id) && JSON.stringify(r) !== JSON.stringify(before.routines.find((x) => x.id === r.id)));
   const used = new Set<string>();
+  const usedOcc = new Set<string>();
   const has = (title: string, want?: string) => !want || title.toLowerCase().includes(want.toLowerCase());
   for (const d of db) {
     if (d.op === "none") continue;
@@ -138,9 +148,22 @@ function checkDb(db: DbCheck[], before: Snap, after: Snap): string[] {
       if (m) used.add(m.id);
       else fail.push(`"${d.title}" not completed`);
     } else if (d.op === "updated") {
-      const m = changed.find((t) => !used.has(t.id) && has(t.title, d.title) && (!d.dueYmd || ymdOf(t.dueAt) === d.dueYmd));
+      const m = changed.find((t) => !used.has(t.id) && has(t.title, d.title) && (!d.dueYmd || ymdOf(t.dueAt) === d.dueYmd) && (!d.dueTime || t.dueTime === d.dueTime) && (!d.priority || t.priority === d.priority));
       if (m) used.add(m.id);
-      else fail.push(`"${d.title}" not moved${d.dueYmd ? ` to ${d.dueYmd}` : ""}`);
+      else fail.push(`"${d.title}" not updated${d.dueYmd ? ` to ${d.dueYmd}` : ""}${d.dueTime ? ` at ${d.dueTime}` : ""}${d.priority ? ` (${d.priority})` : ""}`);
+    } else if (d.op === "occurrence") {
+      const routine = (after.routines as unknown as RoutineRow[]).find((r) => has(r.title, d.routine));
+      const bo = new Map((before.occ as unknown as OccRow[]).map((o) => [o.id, o]));
+      const m = (after.occ as unknown as OccRow[]).find((o) => routine && o.routineId === routine.id && o.status === d.status && bo.get(o.id)?.status !== d.status);
+      if (m) usedOcc.add(m.id);
+      else fail.push(`${d.routine} today is not ${d.status}`);
+    } else if (d.op === "routine_paused") {
+      const m = (after.routines as unknown as Array<RoutineRow & { active: boolean }>).find((r) => has(r.title, d.title) && r.active === false && before.routines.some((x) => x.id === r.id && (x as unknown as { active: boolean }).active));
+      if (m) {
+        used.add(m.id);
+        // Pausing also settles that routine's upcoming occurrences: part of the pause, not another change.
+        for (const o of after.occ as unknown as OccRow[]) if (o.routineId === m.id) usedOcc.add(o.id);
+      } else fail.push(`${d.title} not paused`);
     } else if (d.op === "routine") {
       const m = newRoutines.find((r) => {
         if (used.has(r.id)) return false;
@@ -158,8 +181,8 @@ function checkDb(db: DbCheck[], before: Snap, after: Snap): string[] {
     ...changed.filter((t) => !used.has(t.id)).map((t) => `task changed "${t.title}"`),
     ...gone.map((t) => `task deleted "${t.title}"`),
     ...newRoutines.filter((r) => !used.has(r.id)).map((r) => `routine created "${r.title}"`),
-    ...changedRoutines.map((r) => `routine changed "${r.title}"`),
-    ...(JSON.stringify(before.occ) !== JSON.stringify(after.occ) ? ["routine occurrence changed"] : []),
+    ...changedRoutines.filter((r) => !used.has(r.id)).map((r) => `routine changed "${r.title}"`),
+    ...(after.occ as unknown as OccRow[]).filter((o) => !usedOcc.has(o.id) && JSON.stringify(o) !== JSON.stringify((before.occ as unknown as OccRow[]).find((x) => x.id === o.id))).map(() => "routine occurrence changed"),
     ...(JSON.stringify(before.settings) !== JSON.stringify(after.settings) ? ["settings changed"] : []),
   ];
   return [...fail, ...unexpected.map((u) => `unexpected: ${u}`)];

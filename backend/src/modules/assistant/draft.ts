@@ -14,7 +14,7 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
   const taskType = classifyTaskType(text, e);
   let priority = e.priority ?? Priority.MEDIUM;
   if (!e.priority && e.date && !e.date.fuzzy && diffDaysYmd(todayYmd, e.date.ymd) <= 1 && taskType === TaskType.DEADLINE) priority = Priority.HIGH;
-  return {
+  const draft: TaskDraft = {
     title: title || null,
     description: null,
     // "Call Mooz at 6 pm" means today (a time already past asks "tomorrow, or a later time today?").
@@ -32,6 +32,13 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
     context: e.context,
     location: e.location,
   };
+  // CHAT_FIXES_V2 (deliberate FRD deviation from the FR-TM-001 Clarity Index): a deadline with a real date but no time
+  // is not asked about; it is due at the end of that day and the reply says so. No date still asks.
+  if (chatFixesOn() && draft.taskType === TaskType.DEADLINE && draft.dueYmd && !draft.dueTime && !e.date?.fuzzy) {
+    draft.allowNoTime = true;
+    draft.assumedEndOfDay = true;
+  }
+  return draft;
 }
 
 function needsTime(d: TaskDraft): boolean {

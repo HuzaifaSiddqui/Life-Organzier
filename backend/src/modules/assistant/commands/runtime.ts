@@ -192,7 +192,7 @@ export async function applyCommandUndo(turn: Turn): Promise<Out | null> {
           active: s.active !== false,
         },
       });
-      await generateRoutineOccurrences(userId, turn.tz);
+      await generateRoutineOccurrences(userId, turn.tz, undefined, turn.now);
       break;
     }
     case "occurrence": {
