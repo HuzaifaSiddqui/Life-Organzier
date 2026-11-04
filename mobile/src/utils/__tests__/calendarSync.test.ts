@@ -7,6 +7,7 @@ import {
   desiredEvents,
   expoPort,
   freeSlots,
+  freeTitle,
   planOps,
   taskEvent,
   taskSpan,
@@ -138,7 +139,13 @@ describe("eventId sync (mocked expo-calendar)", () => {
     const created: Array<{ startDate: Date; timeZone: string }> = [];
     const port = expoPort({ createEvent: async (d) => (created.push(d), { id: "x" }) }, async () => ({ update: async () => undefined, delete: async () => undefined }), { timeZone: "Asia/Karachi", allDayUtc: true });
     await port.createEvent({ title: "Essay", start: new Date(2026, 10, 6).toISOString(), end: new Date(2026, 10, 7).toISOString(), allDay: true });
-    expect(created[0]).toMatchObject({ startDate: new Date("2026-11-06T00:00:00.000Z"), timeZone: "UTC" });
+    expect(created[0]).toMatchObject({ startDate: new Date("2026-11-06T00:00:00.000Z"), timeZone: "UTC", notes: "Created by Life Organizer" });
+  });
+
+  it("a new calendar's title avoids taken names", () => {
+    expect(freeTitle(["Work"])).toBe("Life Organizer");
+    expect(freeTitle(["Life Organizer"])).toBe("Life Organizer (2)");
+    expect(freeTitle(["Life Organizer", "Life Organizer (2)"])).toBe("Life Organizer (3)");
   });
 });
 

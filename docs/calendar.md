@@ -49,14 +49,18 @@ all-day events and events marked "free" never clash). Free time: gaps of 30 minu
 - Chat: a clear task is created at once by the server, so the phone checks after the reply and adds
   "You have X at 3 PM. Keep it?" with Keep / Undo (Undo removes the task the same way the reply's Undo does).
 
+**Marker.** Every event the app writes has "Created by Life Organizer" in its notes (kept on every update).
+
 **Which calendar.** The phone stores the id of its calendar and whether this app created it. When that id is gone
-(e.g. a reinstall cleared the app's storage), a calendar titled "Life Organizer" is adopted instead, and because the
-event map is empty its events are deleted first and then rebuilt, so nothing is duplicated. Without a title match a
-new calendar is created (and marked as created by the app).
+(e.g. a reinstall cleared the app's storage), a calendar titled "Life Organizer" (or "Life Organizer (2)", …) is
+adopted only if **every** event in it carries the marker, searched over its whole span (1970–2100 in 3-year queries,
+since iOS caps one query at 4 years). Its marked events are deleted and the calendar is rebuilt, so nothing is
+duplicated. A calendar with any unmarked event (one the user made or added to) is never adopted or changed: the app
+creates a new calendar instead, "Life Organizer (2)" (or the next free number), marked as created by the app.
 
 **Remove all.** Shows how many events will go, asks, then acts on the **stored** calendar only (never a title match):
-a calendar this app created is deleted with all its events; an adopted one keeps the calendar and loses only the events
-in the map. Syncing is turned off. Undo turns syncing on again, which re-creates the current tasks and the next 14 days
+a calendar this app created is deleted with all its events; an adopted one (all its events were ours) keeps the
+calendar and loses only the events in the map. Syncing is turned off. Undo turns syncing on again, which re-creates the current tasks and the next 14 days
 of routines; past routine events don't come back (the dialog says so). Turning the switch off only stops updates; the
 events stay (the note beside the switch says so).
 
@@ -107,6 +111,8 @@ the audit build order) is an Expo SDK 57 module too and can go into the same dev
    untouched → Undo → events back.
 9a. Reinstall (or clear app data) with the Life Organizer calendar still on the phone → turn the switch on → its old
    events are replaced, not doubled; Remove all then removes the events but leaves that (adopted) calendar.
+9b. In Google Calendar add your own event to the Life Organizer calendar, then clear app data and turn the switch on →
+   that calendar is left as it is (your event and the old ones stay) and a new "Life Organizer (2)" calendar appears.
 10. Deny the permission (fresh install, or revoke in system settings) → switch stays off with the note; the rest of the
    app works.
 11. Airplane mode: edit a dated task → its event updates; routines unchanged until online.

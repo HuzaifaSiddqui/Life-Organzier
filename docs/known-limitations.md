@@ -111,9 +111,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   the events; another account signed in on the same phone writes into the same "Life Organizer" calendar.
 - **English only** for the Settings line, chat cards and clash messages until after 10 Nov (Urdu falls back to English).
 - **The switch off stops updates only**; events already written stay until "Remove all".
-- **Adopting by title.** When the app's stored calendar id is gone, a calendar titled "Life Organizer" is adopted and
-  its events are replaced. A calendar the user made with that exact title would lose its events; Remove all never
-  deletes an adopted calendar, only the events the app wrote.
+- **A second calendar after a reinstall.** If the app's storage is lost and its old "Life Organizer" calendar holds
+  any event without the app's marker (the user added one), the old calendar is left alone and a new "Life Organizer
+  (2)" is made, so the old calendar's events show as well until the user deletes that calendar.
 - **"Am I free …" needs the switch.** With the switch off (or an older app that doesn't send it) the question gets the
   task-list answer plus a line about Settings, never the calendar.
 

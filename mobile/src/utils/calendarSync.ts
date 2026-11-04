@@ -10,6 +10,20 @@ import { ymdFromLocalDate } from "./datetimeValidation";
  */
 
 export const DEFAULT_EVENT_MINUTES = 30;
+export const CALENDAR_TITLE = "Life Organizer";
+/** Written in the notes of every event the app creates: only marked events are ever deleted on adoption. */
+export const EVENT_MARKER = "Created by Life Organizer";
+
+export const isOurEvent = (notes: string | null | undefined) => (notes ?? "").includes(EVENT_MARKER);
+export const isOurTitle = (title: string) => title === CALENDAR_TITLE || /^Life Organizer \(\d+\)$/.test(title);
+
+/** "Life Organizer", or "Life Organizer (2)", (3)… when a calendar already has the name. */
+export function freeTitle(taken: string[]): string {
+  if (!taken.includes(CALENDAR_TITLE)) return CALENDAR_TITLE;
+  let n = 2;
+  while (taken.includes(`${CALENDAR_TITLE} (${n})`)) n += 1;
+  return `${CALENDAR_TITLE} (${n})`;
+}
 export const DONE_MARK = "✓ ";
 
 export type EventSpec = { title: string; start: string; end: string; allDay: boolean };
@@ -135,7 +149,7 @@ export async function applyOps(port: CalendarPort, ops: Op[], map: EventMap): Pr
   return { map: next, failed };
 }
 
-type EventDetails = { title: string; startDate: Date; endDate: Date; allDay: boolean; timeZone: string };
+type EventDetails = { title: string; startDate: Date; endDate: Date; allDay: boolean; timeZone: string; notes: string };
 type ExpoLikeEvent = { update(details: Partial<EventDetails>): Promise<void>; delete(): Promise<void> };
 type ExpoLikeCalendar = { createEvent(details: EventDetails): Promise<{ id: string }> };
 
@@ -148,9 +162,9 @@ export function expoPort(cal: ExpoLikeCalendar, getEvent: (id: string) => Promis
     if (s.allDay && opts.allDayUtc) {
       const d = new Date(s.start);
       const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      return { title: s.title, startDate: start, endDate: new Date(start.getTime() + 86400000), allDay: true, timeZone: "UTC" };
+      return { title: s.title, startDate: start, endDate: new Date(start.getTime() + 86400000), allDay: true, timeZone: "UTC", notes: EVENT_MARKER };
     }
-    return { title: s.title, startDate: new Date(s.start), endDate: new Date(s.end), allDay: s.allDay, timeZone: opts.timeZone };
+    return { title: s.title, startDate: new Date(s.start), endDate: new Date(s.end), allDay: s.allDay, timeZone: opts.timeZone, notes: EVENT_MARKER };
   };
   return {
     createEvent: async (s) => (await cal.createEvent(details(s))).id,

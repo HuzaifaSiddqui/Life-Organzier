@@ -6,22 +6,25 @@ const server = { enabled: false };
 const log: string[] = [];
 const apiGet = vi.fn(async () => (server.enabled ? { enabled: true, windowStart: "2026-11-03T19:00:00.000Z", windowEnd: "2026-11-17T19:00:00.000Z", occurrences: [] } : { enabled: false }));
 
-type FakeCalendar = { id: string; title: string; allowsModifications: boolean; events: Map<string, { title: string }>; createEvent: ReturnType<typeof vi.fn>; listEvents: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+type FakeEvent = { title: string; notes?: string };
+type FakeCalendar = { id: string; title: string; allowsModifications: boolean; events: Map<string, FakeEvent>; createEvent: ReturnType<typeof vi.fn>; listEvents: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
 let calendars: FakeCalendar[] = [];
-const allEvents = new Map<string, { title: string; cal: FakeCalendar }>();
+const allEvents = new Map<string, FakeEvent & { cal: FakeCalendar }>();
+const MARK = "Created by Life Organizer";
 let n = 0;
 
+/** `existing`: events already in the calendar; "mine:<title>" carries our marker, plain titles are the user's own. */
 function fakeCalendar(id: string, title = "Life Organizer", existing: string[] = []): FakeCalendar {
   const cal: FakeCalendar = {
     id,
     title,
     allowsModifications: true,
     events: new Map(),
-    createEvent: vi.fn(async (d: { title: string }) => {
+    createEvent: vi.fn(async (d: FakeEvent) => {
       const eid = `ev${++n}`;
       log.push(`create ${d.title}`);
       cal.events.set(eid, d);
-      allEvents.set(eid, { title: d.title, cal });
+      allEvents.set(eid, { ...d, cal });
       return { id: eid };
     }),
     listEvents: vi.fn(async () => [...cal.events.keys()].map((eid) => eventObject(eid))),
@@ -30,16 +33,19 @@ function fakeCalendar(id: string, title = "Life Organizer", existing: string[] =
       calendars = calendars.filter((c) => c !== cal);
     }),
   };
-  for (const title of existing) {
+  for (const raw of existing) {
     const eid = `old${++n}`;
-    cal.events.set(eid, { title });
-    allEvents.set(eid, { title, cal });
+    const e = raw.startsWith("mine:") ? { title: raw.slice(5), notes: MARK } : { title: raw };
+    cal.events.set(eid, e);
+    allEvents.set(eid, { ...e, cal });
   }
   return cal;
 }
 
 function eventObject(eid: string) {
   return {
+    id: eid,
+    notes: allEvents.get(eid)?.notes ?? "",
     update: async () => undefined,
     delete: async () => {
       const e = allEvents.get(eid);
@@ -55,8 +61,8 @@ const calendarApi = {
   requestCalendarPermissions: vi.fn(async () => ({ granted: true })),
   getCalendarPermissions: vi.fn(async () => ({ granted: true })),
   getCalendars: vi.fn(async () => calendars),
-  createCalendar: vi.fn(async () => {
-    const cal = fakeCalendar("new1");
+  createCalendar: vi.fn(async (d: { title: string }) => {
+    const cal = fakeCalendar("new1", d.title);
     calendars.push(cal);
     return cal;
   }),
@@ -138,9 +144,18 @@ describe("calendar service: flag off changes nothing", () => {
 });
 
 describe("calendar service: adopting and removing", () => {
-  it("empty map + a 'Life Organizer' calendar found by title: its events are deleted first, then rebuilt, no duplicates", async () => {
+  it("every event we write carries the marker", async () => {
+    calendars = [fakeCalendar("cal1")];
+    setState({ on: true, calendarId: "cal1", owned: true, map: {} });
     server.enabled = true;
-    const old = fakeCalendar("cal2", "Life Organizer", ["Physics report", "Gym"]); // e.g. left by an earlier install
+    const cal = await load();
+    await cal.syncCalendar();
+    expect([...calendars[0].events.values()]).toEqual([expect.objectContaining({ title: "Physics report", notes: MARK })]);
+  });
+
+  it("reinstall with only marked events: adopted, its events deleted (no date window) and rebuilt, no duplicates", async () => {
+    server.enabled = true;
+    const old = fakeCalendar("cal2", "Life Organizer", ["mine:Physics report", "mine:Gym"]);
     calendars = [fakeCalendar("work", "Work", ["Standup"]), old];
     const cal = await load();
     expect(await cal.enableCalendarSync()).toBe("on");
@@ -149,34 +164,55 @@ describe("calendar service: adopting and removing", () => {
     expect(calendars[0].events.size).toBe(1); // the Work calendar is untouched
     expect(state()).toMatchObject({ on: true, calendarId: "cal2", owned: false });
     expect(calendarApi.createCalendar).not.toHaveBeenCalled();
+    // The whole span is searched (1970–2100 in 3-year queries), not just a window around today.
+    const ranges = old.listEvents.mock.calls.map((c) => [(c[0] as Date).getFullYear(), (c[1] as Date).getFullYear()]);
+    expect(ranges[0]).toEqual([1970, 1973]);
+    expect(ranges.at(-1)?.[1]).toBeGreaterThanOrEqual(2100);
+    await cal.syncCalendar();
+    expect(old.events.size).toBe(1);
   });
 
-  it("Remove all deletes only the stored calendar we created; another 'Life Organizer' calendar is left alone", async () => {
+  it("marked and unmarked events: the calendar is not adopted, every event survives, a new 'Life Organizer (2)' is made", async () => {
     server.enabled = true;
-    const lookalike = fakeCalendar("user-made", "Life Organizer", ["Mum's birthday"]);
-    calendars = [lookalike];
+    const users = fakeCalendar("user-made", "Life Organizer", ["Mum's birthday", "mine:Physics report"]);
+    calendars = [users];
+    const cal = await load();
+    expect(await cal.enableCalendarSync()).toBe("on");
+    expect([...users.events.values()].map((e) => e.title)).toEqual(["Mum's birthday", "Physics report"]);
+    expect(log.filter((l) => l.startsWith("delete"))).toEqual([]);
+    expect(calendarApi.createCalendar).toHaveBeenCalledWith(expect.objectContaining({ title: "Life Organizer (2)" }));
+    expect(state()).toMatchObject({ calendarId: "new1", owned: true });
+    expect(log).toEqual(["create Physics report"]);
+  });
+
+  it("Remove all deletes only the stored calendar we created; the user's 'Life Organizer' calendar is left alone", async () => {
+    server.enabled = true;
+    const users = fakeCalendar("user-made", "Life Organizer", ["Mum's birthday"]);
+    calendars = [users];
     setState({ on: true, calendarId: "gone", owned: true, map: {} });
     const cal = await load();
-    // Stored id gone → the title match is adopted (events cleared, rebuilt) but it is not ours to delete.
-    await cal.syncCalendar();
-    log.length = 0;
+    await cal.syncCalendar(); // stored id gone, the title match has the user's event: a new calendar is made
     expect(await cal.removeAllCalendarEvents()).toBe(true);
-    expect(lookalike.delete).not.toHaveBeenCalled();
-    expect(log).toEqual(["delete Physics report"]);
-    expect(calendars).toEqual([lookalike]);
-
-    // A calendar this app created is deleted whole, and nothing else.
-    const mine = fakeCalendar("mine");
-    calendars = [lookalike, mine];
-    setState({ on: true, calendarId: "mine", owned: true, map: {} });
-    expect(await cal.removeAllCalendarEvents()).toBe(true);
-    expect(mine.delete).toHaveBeenCalledTimes(1);
-    expect(lookalike.delete).not.toHaveBeenCalled();
+    expect(users.delete).not.toHaveBeenCalled();
+    expect(users.events.size).toBe(1);
+    expect(calendars).toEqual([users]);
     expect(state()).toMatchObject({ on: false, calendarId: null, map: {} });
   });
 
+  it("an adopted calendar is never deleted by Remove all: only the mapped events go", async () => {
+    server.enabled = true;
+    const old = fakeCalendar("cal2", "Life Organizer", ["mine:Gym"]);
+    calendars = [old];
+    const cal = await load();
+    await cal.enableCalendarSync();
+    log.length = 0;
+    expect(await cal.removeAllCalendarEvents()).toBe(true);
+    expect(old.delete).not.toHaveBeenCalled();
+    expect(log).toEqual(["delete Physics report"]);
+  });
+
   it("Remove all with the stored calendar gone touches nothing (no title fallback)", async () => {
-    const lookalike = fakeCalendar("user-made", "Life Organizer", ["Mum's birthday"]);
+    const lookalike = fakeCalendar("user-made", "Life Organizer", ["mine:Gym"]);
     calendars = [lookalike];
     setState({ on: true, calendarId: "gone", owned: true, map: { "t:t1": { eventId: "x", hash: "h", start: "2026-11-06T10:00:00.000Z" } } });
     const cal = await load();

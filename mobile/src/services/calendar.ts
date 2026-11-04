@@ -5,6 +5,10 @@ import { palettes } from "../theme/tokens";
 import {
   applyOps,
   atClock,
+  CALENDAR_TITLE,
+  freeTitle,
+  isOurEvent,
+  isOurTitle,
   clashesWith,
   desiredEvents,
   expoPort,
@@ -28,7 +32,6 @@ import { readTasks } from "./syncEngine";
  * import must not break the app there (the feature then reports itself unavailable).
  */
 
-const CALENDAR_TITLE = "Life Organizer";
 const FEATURE_KEY = "life-organizer:calendar-feature";
 const stateKey = () => `life-organizer:calendar:v1:${auth.currentUser?.uid ?? "guest"}`;
 
@@ -90,30 +93,41 @@ export async function calendarSyncActive(): Promise<boolean> {
 
 type ExpoCalendar = Awaited<ReturnType<ExpoCalendarModule["getCalendars"]>>[number];
 
-/** Deletes every event in one of our calendars (three years either side of today). */
-async function clearEvents(cal: ExpoCalendar): Promise<void> {
-  const year = 365 * 86400000;
-  for (const e of await cal.listEvents(new Date(Date.now() - 3 * year), new Date(Date.now() + 3 * year))) await e.delete().catch(() => undefined);
+/** Every event in a calendar, in 3-year queries (iOS caps one query at 4 years) from 1970 to 2100: no window. */
+async function everyEvent(cal: ExpoCalendar) {
+  const seen = new Map<string, Awaited<ReturnType<ExpoCalendar["listEvents"]>>[number]>();
+  for (let y = 1970; y < 2100; y += 3) for (const e of await cal.listEvents(new Date(y, 0, 1), new Date(y + 3, 0, 1))) seen.set(e.id, e);
+  return [...seen.values()];
+}
+
+/** A "Life Organizer" calendar is ours to adopt only when every event in it carries our marker; its events are returned. */
+async function adoptable(cal: ExpoCalendar) {
+  if (!cal.allowsModifications || !isOurTitle(cal.title)) return null;
+  const events = await everyEvent(cal);
+  return events.every((e) => isOurEvent(e.notes)) ? events : null;
 }
 
 /**
- * Our calendar and the state that goes with it. The stored id first. When it's gone, a calendar titled "Life
- * Organizer" is adopted (e.g. after a reinstall lost the map) with an empty map, so its events are deleted first:
- * they can't be matched without the map, and rebuilding next to them would duplicate everything. Otherwise a calendar
- * is created. (A stored calendar keeps its past, forgotten routine events.)
+ * Our calendar and the state that goes with it. The stored id first. When it's gone (e.g. a reinstall cleared the
+ * app's storage), a "Life Organizer" calendar whose events all carry our marker is adopted: those events are deleted,
+ * since without the map they can't be matched and rebuilding next to them would duplicate everything. A calendar with
+ * any unmarked event (the user's own) is never adopted or touched; a new one is created, "Life Organizer (2)" if the
+ * name is taken.
  */
 async function resolveCalendar(Cal: ExpoCalendarModule, s: State): Promise<{ cal: ExpoCalendar; state: State }> {
   const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
   const stored = s.calendarId ? calendars.find((c) => c.id === s.calendarId) : undefined;
-  const adopted = stored ? undefined : calendars.find((c) => c.title === CALENDAR_TITLE && c.allowsModifications);
   if (stored) return { cal: stored, state: s };
-  if (adopted) {
-    await clearEvents(adopted);
-    return { cal: adopted, state: { ...s, calendarId: adopted.id, owned: false, map: {} } };
+  for (const c of calendars) {
+    const events = await adoptable(c);
+    if (!events) continue;
+    for (const e of events) await e.delete().catch(() => undefined);
+    return { cal: c, state: { ...s, calendarId: c.id, owned: false, map: {} } };
   }
+  const title = freeTitle(calendars.map((c) => c.title));
   const source = Platform.OS === "ios" ? Cal.getDefaultCalendarSync().source : { isLocalAccount: true, name: CALENDAR_TITLE, type: "LOCAL" };
   const cal = await Cal.createCalendar({
-    title: CALENDAR_TITLE,
+    title,
     name: "life-organizer",
     color: palettes.light.accent,
     entityType: Cal.EntityTypes.EVENT,
@@ -239,7 +253,7 @@ export async function readEvents(from: number, to: number, opts: { others?: bool
   try {
     if (!(await Cal.getCalendarPermissions()).granted) return null;
     const s = await readState();
-    const calendars = (await Cal.getCalendars(Cal.EntityTypes.EVENT)).filter((c) => !opts.others || (c.id !== s.calendarId && c.title !== CALENDAR_TITLE));
+    const calendars = (await Cal.getCalendars(Cal.EntityTypes.EVENT)).filter((c) => !opts.others || c.id !== s.calendarId);
     if (!calendars.length) return [];
     const events = await Cal.listEvents(calendars, new Date(from), new Date(to));
     return events.map((e) => ({
