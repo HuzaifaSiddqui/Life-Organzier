@@ -71,6 +71,8 @@ export type Task = {
   reminderMode?: ReminderMode;
   version?: number;
   isOverdue?: boolean;
+  /** Task collaboration: this task is my copy of a shared task. */
+  sharedTaskId?: string | null;
   /** Client-only: change not yet confirmed by the server. */
   pendingSync?: boolean;
 };

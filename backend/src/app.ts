@@ -17,6 +17,7 @@ import { reminderRouter } from "./modules/reminders/reminderRoutes.js";
 import { routineRouter } from "./modules/routines/routineRoutes.js";
 import { schedulingRouter } from "./modules/scheduling/schedulingRoutes.js";
 import { checkinRouter } from "./modules/checkins/checkinRoutes.js";
+import { collabRouter } from "./modules/collab/collabRoutes.js";
 import { categoryRouter, settingsRouter, tagRouter } from "./modules/settings/settingsRoutes.js";
 import { syncRouter } from "./modules/sync/syncRoutes.js";
 import { recomputeDueAts } from "./modules/tasks/taskService.js";
@@ -95,6 +96,7 @@ app.get("/health/ai", (_req, res) => {
   app.use("/api/whatsapp", whatsappRouter);
   app.use("/api/push", pushRouter);
   app.use("/api/whatsapp-agent", whatsappAgentRouter);
+  app.use("/api/collab", collabRouter);
 
   app.use((_req, res) => sendError(res, "Not found", "NOT_FOUND", 404));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

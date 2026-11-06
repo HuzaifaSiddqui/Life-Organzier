@@ -20,6 +20,8 @@ model User {
   /// WhatsApp number (E.164). Set only by the LINK flow, together with phoneVerifiedAt.
   phoneNumber         String?   @unique
   phoneVerifiedAt     DateTime?
+  /// Task collaboration (COLLAB_TASKS): the handle people search for and @mention. Lowercase, 3–20 of a-z 0-9 _.
+  username            String?   @unique
   deletionRequestedAt DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -43,6 +45,12 @@ model User {
   whatsappLinkCode     WhatsappLinkCode?
   pushTokens           PushToken[]
   whatsappAgent        WhatsAppAgentConnection?
+  sentConnections      Connection[]             @relation("ConnectionRequester")
+  receivedConnections  Connection[]             @relation("ConnectionAddressee")
+  ownedSharedTasks     SharedTask[]
+  sharedTaskMembers    SharedTaskMember[]
+  collabNotices        CollabNotice[]           @relation("CollabNoticeRecipient")
+  collabNoticesSent    CollabNotice[]           @relation("CollabNoticeActor")
 }
 
 model Task {
@@ -89,8 +97,12 @@ model Task {
   completedVia    String?
   /// FR-RN-004: pre-generated check-in messages + the scheduledStart they were written for.
   checkinCopy     Json?
+  /// Task collaboration: this task is the user's own copy of a shared task (created when they accepted it,
+  /// or the owner's copy of a task done together).
+  sharedTaskId    String?
 
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedTask  SharedTask?    @relation(fields: [sharedTaskId], references: [id], onDelete: SetNull)
   parentTask  Task?          @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks    Task[]         @relation("TaskSubtasks")
   versions    TaskVersion[]
@@ -103,6 +115,108 @@ model Task {
   @@index([userId, status])
   @@index([userId, updatedAt])
   @@index([parentTaskId])
+  @@index([sharedTaskId])
+}
+
+/// Task collaboration (COLLAB_TASKS): a request to connect. Accepted = connected both ways; a declined or
+/// cancelled request is deleted, so it can be sent again.
+model Connection {
+  id          String           @id @default(uuid())
+  requesterId String
+  addresseeId String
+  status      ConnectionStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  requester User @relation("ConnectionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("ConnectionAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+}
+
+/// A task one person shares with their connections: assigned to them (ASSIGN: the owner keeps no copy) or done
+/// together (COLLAB: the owner has a copy too). Nothing reaches a member's timeline until they accept.
+model SharedTask {
+  id              String         @id @default(uuid())
+  ownerId         String
+  kind            SharedTaskKind
+  title           String
+  description     String?
+  dueDate         DateTime?
+  dueTime         String?
+  priority        Priority       @default(MEDIUM)
+  category        String?
+  durationMinutes Int?
+  taskType        TaskType       @default(FLEXIBLE)
+  /// Goes up each time the owner changes a detail members agreed to (title, description, due date or time,
+  /// duration); members who had accepted are asked again.
+  revision        Int            @default(1)
+  /// The owner cancelled it for everyone: pending cards are withdrawn, accepted copies stay with their owners.
+  cancelledAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  owner   User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members SharedTaskMember[]
+  tasks   Task[]
+
+  @@index([ownerId, createdAt])
+}
+
+enum SharedTaskKind {
+  ASSIGN
+  COLLAB
+}
+
+model SharedTaskMember {
+  id             String             @id @default(uuid())
+  sharedTaskId   String
+  userId         String
+  status         SharedMemberStatus @default(PENDING)
+  /// PENDING again because the owner changed the task after this member accepted it.
+  reapproval     Boolean            @default(false)
+  /// What the member changed when accepting ({ dueDate, dueTime }), shown to the owner.
+  proposedChange Json?
+  respondedAt    DateTime?
+  createdAt      DateTime           @default(now())
+
+  sharedTask SharedTask @relation(fields: [sharedTaskId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sharedTaskId, userId])
+  @@index([userId, status])
+}
+
+enum SharedMemberStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+/// In-app activity for task collaboration (requests, answers, changes, completions); also sent as a push.
+model CollabNotice {
+  id           String    @id @default(uuid())
+  userId       String
+  actorId      String?
+  /// CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED ·
+  /// TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED
+  kind         String
+  sharedTaskId String?
+  /// Small facts for the text: { title, dueDate, dueTime }.
+  payload      Json?
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  user  User  @relation("CollabNoticeRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("CollabNoticeActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
 }
 
 model TaskVersion {

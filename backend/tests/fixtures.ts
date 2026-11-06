@@ -81,6 +81,7 @@ export function task(overrides: Partial<Task> = {}): Task {
     documentId: null,
     startedAt: null,
     checkinCopy: null,
+    sharedTaskId: null,
     ...overrides,
   };
 }

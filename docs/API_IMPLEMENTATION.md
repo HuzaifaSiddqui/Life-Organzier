@@ -229,6 +229,42 @@ switched off with `WHATSAPP_AGENT=off`; connect and test need Pro (403 `PRO_REQU
 
 - **`POST /api/push/register`** (auth) `{ token, platform: "android"|"ios", deviceId? }` saves the device's Expo push token (a token used by another account on the same phone moves to this one). **`DELETE /api/push/register`** `{ token }` removes it (only the owner's). **`POST /api/push/unregister-device`** `{ token, deviceId }` (no login) is used by the phone's sign-out retry queue: it deletes the token only when the device id matches the one it was registered with. Tokens are never logged.
 
+### Task collaboration (`/api/collab`, `COLLAB_TASKS=on`; every route 404 while off)
+
+All routes need the Firebase token; every query is scoped by the caller. Error codes: `INVALID_USERNAME`,
+`USERNAME_TAKEN`, `NOT_CONNECTED`, `ALREADY_ANSWERED`, `SHARED_TASK_CANCELLED`, `TOO_MANY_MEMBERS`, `OPEN_SHARED_TASKS`.
+
+- **`GET /me`** → `{ username, requests, cards, unread }` (requests to me, cards waiting for my answer, unread notices).
+  The app shows the feature only when this answers.
+- **`PUT /username`** `{ username }` → `{ username }`: 3–20 of a-z 0-9 `_`, stored lowercase, unique.
+- **`GET /users/search?q=`** → `{ users: [{ id, username, displayName, photoUrl, email, state, connectionId }] }`, at
+  most 15. From one letter: usernames, any word of the name and emails starting with `q`; `@q` searches usernames
+  only. `email` is masked (`a•••@gmail.com`) unless `q` is the whole address. `state`: `none · requested · incoming · connected`.
+- **`GET /connections`** → `{ connected, incoming, outgoing }`. **`POST /connections`** `{ userId }` sends a request
+  (if they already asked me, it accepts theirs). **`POST /connections/:id/accept`**, **`/reject`** (a declined request
+  is deleted and can be sent again). **`DELETE /connections/:id`**: cancel my request, or remove a connection; 409
+  `OPEN_SHARED_TASKS` with `data.openTasks: [{ sharedTaskId, title, kind, ownerIsMe }]` while a shared task between us
+  is unanswered or not done (the member's copy, or for COLLAB also the owner's).
+- **`POST /tasks`** `{ title, description?, dueDate?, dueTime?, priority, category?, durationMinutes?, taskType?, kind: "ASSIGN"|"COLLAB", memberIds }`
+  → 201 `{ shared, task }`. Members must be connected (403 `NOT_CONNECTED`), at most 10. COLLAB: `task` is the owner's
+  own copy (on their timeline now); ASSIGN: `task: null` (nothing on the owner's timeline). Each member gets a card.
+- **`GET /tasks`** → `{ cards, shared }`: cards waiting for my answer (not cancelled), and the tasks I own or accepted.
+  **`GET /tasks/:id`** → `{ shared }` (owner or a member only; others 404). A shared task view: the details, `revision`,
+  `cancelled`, `owner`, `isOwner`, `myStatus`, `reapproval`, `myTaskId` and `participants: [{ user, role, state, proposedChange, completedAt }]`
+  with `state` `waiting · changed · accepted · in_progress · done · declined · removed`.
+- **`POST /tasks/:id/accept`** `{ dueDate?, dueTime? }` → `{ shared, task }`: creates my copy (`Task.sharedTaskId`), or
+  updates it when I am accepting the owner's change. A different date/time is kept as `proposedChange` and the
+  owner is told. **`POST /tasks/:id/reject`**: declining a change removes my copy (restorable for 24 h).
+- **`PATCH /tasks/:id`** (owner) any of the create fields: a change to title, description, due date/time or
+  duration bumps `revision` and puts every accepted member back to `PENDING` with `reapproval: true` (their copy is
+  unchanged until they accept). Editing those fields on the owner's own COLLAB copy through `PUT/PATCH /api/tasks/:id`
+  does the same. **`POST /tasks/:id/resend`** `{ userId }` (a declined member). **`DELETE /tasks/:id`** cancels for
+  everyone: unanswered cards are withdrawn, accepted copies stay.
+- **`GET /notices`** → the last 50 `{ id, kind, sharedTaskId, payload, read, createdAt, actor }`; **`POST /notices/read`**.
+  Each notice is also a push `{ type: "collab", kind, sharedTaskId }` (the phone syncs; a tap opens People & sharing).
+  Kinds: `CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED · TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED`.
+- Tasks (`/api/tasks`, `/api/sync`) carry `sharedTaskId` (null for ordinary tasks).
+
 ### Routine reminders (phase 1)
 
 - **`POST /api/routines`** and **`PUT /api/routines/:id`** accept `noReminder?: boolean`. Create: without `dueTime`

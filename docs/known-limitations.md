@@ -203,6 +203,26 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
 - WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
 
+## Task collaboration (COLLAB_TASKS, off by default)
+
+- **Server flag, off by default.** With `COLLAB_TASKS` off every `/api/collab` route is 404 and the app hides People
+  & sharing and the task form's "Share with".
+- **Sharing needs a connection.** Requests, cards and answers are online only; nothing is queued offline. A member's
+  copy is an ordinary task once accepted, so it then syncs and reminds offline like any other.
+- **Each person has their own copy.** Completing, rescheduling or deleting a copy changes only that person's copy.
+  Only the owner's changes to title, notes, due date/time or length go to the others, and only after they accept
+  them again; until then their copy keeps the old details. Priority, category and planned start stay personal.
+- **Search shows names to anyone signed in.** Typing one letter lists accounts whose username, name or email starts
+  with it (15 at most, accounts being deleted left out). Emails are masked unless typed in full, but the list still
+  shows that an account exists. There is no blocking or hiding from search yet.
+- **No @mentions in chat, voice or WhatsApp yet.** People are mentioned only in the task form's "Share with" field;
+  "remind @ali and me ..." in the assistant is not understood as sharing.
+- **Members are fixed after sharing.** The owner can't add or remove people on an existing shared task (share a new
+  one). A connection can't be removed while a shared task between the two is unanswered or not done.
+- **Notices rely on push.** Each event is a push plus an in-app notice under Requests → Activity. Without a push
+  token (no permission, emulator) only the in-app list shows it.
+- **Copy is English only** until after 10 Nov 2026 (`collab.*` keys; Urdu shows English).
+
 ## WhatsApp (FR-WA)
 
 - **Pro only.** Free accounts that are linked get one "WhatsApp is a Pro feature" reply a day and nothing is processed.

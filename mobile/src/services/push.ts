@@ -8,6 +8,7 @@ import { classifyFailure } from "./checkins";
 import { getDeviceId } from "./device";
 import { scheduleReminderSync } from "./reminders";
 import { syncNow } from "./syncEngine";
+import { openAppScreen } from "../navigation/navigationRef";
 
 /**
  * P2: a task added on WhatsApp reaches the phone straight away. The server sends a visible push
@@ -98,13 +99,18 @@ export function flushPushQueue(): Promise<void> {
   return flushing;
 }
 
-/** A "sync" push received in the foreground, or tapped, pulls changes and re-plans local alarms. */
+/**
+ * A "sync" push received in the foreground, or tapped, pulls changes and re-plans local alarms. A "collab" push
+ * (task collaboration: a request, a shared task card, an answer) pulls too; tapping it opens People & sharing.
+ */
 export function startPushListeners(): () => void {
-  const onData = (data: unknown) => {
-    if ((data as { type?: string } | null)?.type === "sync") void syncNow().then(() => scheduleReminderSync());
+  const onData = (data: unknown, tapped: boolean) => {
+    const type = (data as { type?: string } | null)?.type;
+    if (type === "sync" || type === "collab") void syncNow().then(() => scheduleReminderSync());
+    if (type === "collab" && tapped) openAppScreen("Collab", { tab: (data as { kind?: string }).kind === "TASK_COMPLETED" ? "shared" : "requests" });
   };
-  const received = Notifications.addNotificationReceivedListener((n) => onData(n.request.content.data));
-  const tapped = Notifications.addNotificationResponseReceivedListener((r) => onData(r.notification.request.content.data));
+  const received = Notifications.addNotificationReceivedListener((n) => onData(n.request.content.data, false));
+  const tapped = Notifications.addNotificationResponseReceivedListener((r) => onData(r.notification.request.content.data, true));
   return () => {
     received.remove();
     tapped.remove();

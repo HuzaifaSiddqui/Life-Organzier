@@ -1,10 +1,14 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { ui } from "../../components/ui";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { getApiErrorMessage } from "../../services/api";
+import { ShareWithField, type ShareValue } from "../../components/collab/ShareWithField";
+import { apiErrorCode, getApiErrorMessage, isNetworkError } from "../../services/api";
+import { shareTask } from "../../services/collabApi";
+import type { StringKey } from "../../i18n/strings";
+import { collabErrorKey, personLabel } from "../../utils/collab";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { attachPlace } from "../../services/locationsApi";
 import { isLocalId } from "../../services/syncEngine";
@@ -18,6 +22,9 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const prefill = route.params?.prefill;
   const places = useRef<SavedLocation[]>([]);
   const { t } = useLocale();
+  // Task collaboration: people @mentioned under "Share with" (empty = an ordinary task).
+  const [share, setShare] = useState<ShareValue>({ people: [], kind: "COLLAB" });
+  const sharing = share.people.length > 0;
   const initial = useMemo<TaskFormValues>(
     () => ({
       ...EMPTY_VALUES,
@@ -38,11 +45,22 @@ export function AddTaskScreen({ navigation, route }: Props) {
       <ScreenHeader title="New task" onBack={() => navigation.goBack()} />
       <TaskForm
         initial={initial}
-        submitLabel="Add task"
+        submitLabel={sharing ? t("collab.share.submit") : "Add task"}
         onPendingPlaces={(p) => (places.current = p)}
+        extra={<ShareWithField value={share} onChange={setShare} onManage={() => navigation.navigate("Collab")} />}
         onSubmit={async (values) => {
           const { payload, error } = toPayload(values);
           if (error) return error;
+          if (sharing) {
+            try {
+              const { title, description, dueDate, dueTime, priority, category, durationMinutes, taskType } = payload;
+              await shareTask({ title, description, dueDate, dueTime, priority, category, durationMinutes, taskType }, share.kind, share.people.map((p) => p.id));
+              navigation.replace("TaskList", { toast: t("collab.share.sent", { names: share.people.map(personLabel).join(", ") }) });
+              return null;
+            } catch (e) {
+              return t(collabErrorKey(apiErrorCode(e), isNetworkError(e)) as StringKey);
+            }
+          }
           try {
             const task = await createTask({ ...payload, source: "MANUAL" });
             // FR-LB-001: places chosen before the task existed are attached once it has a server id.
