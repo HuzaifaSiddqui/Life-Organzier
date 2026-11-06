@@ -137,14 +137,16 @@ function SyncErrorScreen() {
 }
 
 export function RootNavigator() {
-  const { firebaseUser, bootstrapping, authReady, apiEndpointsReady } = useAuth();
+  const { firebaseUser, dbUser, bootstrapping, authReady } = useAuth();
+  // Finding the server and syncing the profile run in the background; the app opens as soon as
+  // Firebase restores the session (no network needed). Only a first sign-in on this device, with
+  // no cached profile yet, waits for the server to create the account.
+  const firstSync = bootstrapping && !dbUser;
 
-  if (!apiEndpointsReady || !authReady) {
+  if (!authReady) {
     return (
       <View style={styles.centered}>
-        <BrandedBootLoader
-          message={!apiEndpointsReady ? "Finding API server…" : "Starting…"}
-        />
+        <BrandedBootLoader message="Starting…" />
       </View>
     );
   }
@@ -157,7 +159,7 @@ export function RootNavigator() {
             <Stack.Screen name="Auth" component={AuthStack} />
           ) : !firebaseUser.emailVerified ? (
             <Stack.Screen name="VerifyEmail" component={EmailVerificationScreen} />
-          ) : bootstrapping ? (
+          ) : firstSync ? (
             <Stack.Screen name="Boot">
               {() => (
                 <View style={styles.centered}>
@@ -169,8 +171,8 @@ export function RootNavigator() {
             <Stack.Screen name="App" component={MainStack} />
           )}
         </Stack.Navigator>
-        {firebaseUser?.emailVerified && !bootstrapping ? <CheckinSheet /> : null}
-        {firebaseUser?.emailVerified && !bootstrapping ? <LocationSnackbar /> : null}
+        {firebaseUser?.emailVerified && !firstSync ? <CheckinSheet /> : null}
+        {firebaseUser?.emailVerified && !firstSync ? <LocationSnackbar /> : null}
       </NavigationContainer>
     </KeyboardPad>
   );
