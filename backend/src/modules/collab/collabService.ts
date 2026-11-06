@@ -16,9 +16,10 @@ import { prisma } from "../../config/db.js";
 import { background } from "../../lib/background.js";
 import { ensureSettings, HttpError } from "../../lib/http.js";
 import { sendPushToUser } from "../push/pushService.js";
-import { createTask, setSharedTaskHooks, softDeleteTask, updateTask, type TaskChanges } from "../tasks/taskService.js";
+import { createTask, setSharedTaskHooks, softDeleteTask, updateTask, type CreateTaskInput, type TaskChanges } from "../tasks/taskService.js";
 import {
   AGREED_FIELDS,
+  collabOn,
   changedAgreedFields,
   isUnsettled,
   maskEmail,
@@ -354,7 +355,13 @@ export async function getSharedTask(userId: string, id: string): Promise<SharedT
 export async function createSharedTask(
   me: User,
   tz: string,
-  input: SharedTaskInput & { kind: SharedTaskKind; memberIds: string[]; deviceId?: string | null },
+  input: SharedTaskInput & {
+    kind: SharedTaskKind;
+    memberIds: string[];
+    deviceId?: string | null;
+    /** COLLAB from chat: the owner's copy as the assistant built it (planned slot, tags, source, confidence). */
+    ownerCopy?: Partial<CreateTaskInput>;
+  },
 ): Promise<{ shared: SharedTaskView; ownerTask: Task | null }> {
   const memberIds = [...new Set(input.memberIds)].filter((id) => id !== me.id);
   if (!memberIds.length) throw new HttpError(400, "NO_MEMBERS", "Mention at least one person.");
@@ -379,7 +386,7 @@ export async function createSharedTask(
   });
   const ownerTask =
     input.kind === SharedTaskKind.COLLAB
-      ? await createTask({ userId: me.id, tz, deviceId: input.deviceId }, { ...copyInput(shared), source: TaskSource.MANUAL, sharedTaskId: shared.id })
+      ? await createTask({ userId: me.id, tz, deviceId: input.deviceId }, { source: TaskSource.MANUAL, ...input.ownerCopy, ...copyInput(shared), sharedTaskId: shared.id })
       : null;
   for (const id of memberIds) await notify(id, me, "TASK_INVITE", shared, { kind: input.kind });
   return { shared: await viewFor(shared.id, me.id), ownerTask };
@@ -551,3 +558,30 @@ async function onCopyEdited(task: Task, prev: Task): Promise<void> {
 }
 
 setSharedTaskHooks({ completed: onCopyCompleted, edited: onCopyEdited });
+
+/**
+ * WhatsApp has no push: the next WhatsApp reply (the 24-hour window is open then) mentions what arrived since,
+ * once. Those notices count as seen. Empty when nothing is new or the feature is off.
+ */
+export async function whatsappCollabLine(userId: string): Promise<string> {
+  if (!collabOn()) return "";
+  const kinds = ["TASK_INVITE", "TASK_CHANGED", "CONNECTION_REQUEST"];
+  const notices = await prisma.collabNotice.findMany({ where: { userId, readAt: null, kind: { in: kinds } }, include: { actor: { select: PERSON } }, orderBy: { createdAt: "asc" }, take: 20 });
+  if (!notices.length) return "";
+  await prisma.collabNotice.updateMany({ where: { id: { in: notices.map((n) => n.id) } }, data: { readAt: new Date() } });
+  // Only what still waits for an answer (a request already accepted in the app isn't news).
+  const [cards, incoming] = await Promise.all([
+    prisma.sharedTaskMember.findMany({ where: { userId, status: SharedMemberStatus.PENDING, sharedTask: { cancelledAt: null } }, select: { sharedTaskId: true } }),
+    prisma.connection.findMany({ where: { addresseeId: userId, status: ConnectionStatus.PENDING }, select: { requesterId: true } }),
+  ]);
+  const open = new Set(cards.map((c) => c.sharedTaskId));
+  const askers = new Set(incoming.map((c) => c.requesterId));
+  const tasks = notices.filter((n) => n.kind !== "CONNECTION_REQUEST" && n.sharedTaskId && open.has(n.sharedTaskId));
+  const requests = notices.filter((n) => n.kind === "CONNECTION_REQUEST" && n.actorId && askers.has(n.actorId)).length;
+  if (!tasks.length && !requests) return "";
+  const parts: string[] = [];
+  if (tasks.length === 1) parts.push(`${personLabel(tasks[0].actor)} shared "${(tasks[0].payload as { title?: string } | null)?.title ?? "a task"}" with you`);
+  else if (tasks.length > 1) parts.push(`${tasks.length} tasks were shared with you`);
+  if (requests) parts.push(`${requests === 1 ? "1 person wants" : `${requests} people want`} to connect`);
+  return `\n\nAlso: ${parts.join(", and ")}. Say "show shared tasks" to answer.`;
+}

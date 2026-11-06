@@ -264,6 +264,11 @@ All routes need the Firebase token; every query is scoped by the caller. Error c
   Each notice is also a push `{ type: "collab", kind, sharedTaskId }` (the phone syncs; a tap opens People & sharing).
   Kinds: `CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED · TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED`.
 - Tasks (`/api/tasks`, `/api/sync`) carry `sharedTaskId` (null for ordinary tasks).
+- Assistant (`POST /api/assistant/message`, voice, WhatsApp): new intents `share_choice` (question; answer payload
+  `{ type: "answer", pending: "share_choice", text: "together" | "only for them" | "just me" | "@username" }`),
+  `task_shared`, `shared_requests`, `shared_accepted`, `shared_declined`, `shared_unshared`, `shared_cancelled`;
+  commands `shared_accept` / `shared_decline` `{ ref?, sharedTaskId? }`, buttons `shared_cancel` `{ sharedTaskId, keepMine }`
+  and `connection_answer` `{ connectionId, accept }`; `navigate` screen `Collab`.
 
 ### Routine reminders (phase 1)
 

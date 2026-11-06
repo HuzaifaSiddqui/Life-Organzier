@@ -108,9 +108,11 @@ test("collab: usernames are unique; live search from the first letter, emails ma
   await assert.rejects(setUsername(me.id, taken), /taken/);
   await assert.rejects(setUsername(me.id, "x"), /3–20/);
 
+  // One letter already searches (other test users share the letter, so only the shape is checked here).
   const byLetter = await searchUsers(me.id, "s");
-  assert.ok(byLetter.some((u) => u.id === sana.id), "one letter finds her");
+  assert.ok(byLetter.length > 0 && byLetter.length <= 15, "one letter lists people, at most 15");
   assert.ok(!byLetter.some((u) => u.id === me.id), "never myself");
+  assert.ok((await searchUsers(me.id, taken.slice(0, 6))).some((u) => u.id === sana.id), "a username prefix finds her");
   const byName = await searchUsers(me.id, "zai");
   assert.ok(byName.some((u) => u.id === sana.id), "any word of the name");
   const hit = byName.find((u) => u.id === sana.id)!;

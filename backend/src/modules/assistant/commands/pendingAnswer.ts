@@ -1,6 +1,7 @@
 import { fuzzySimilarity } from "../../../lib/text.js";
 import { answerAction } from "../actions.js";
 import { cleanTitle, extractEntities } from "../entities.js";
+import { shareAnswer } from "../shareRules.js";
 import type { Pending, QuickAction } from "../types.js";
 import { commandText } from "./copy.js";
 import { matchCommand } from "./registry.js";
@@ -62,6 +63,11 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
     if (p.kind === "task_draft" && p.awaiting.includes("title")) return words <= 8 && !matchCommand(t, ctx);
     if (p.kind === "routine_draft" && p.awaiting.includes("title")) return words <= 6 && !matchCommand(t, ctx);
     return /^(?:pick another day|another (?:day|date|time)|different day|add anyway|anyway|move (?:flexible )?tasks|keep the routine|do the task anyway|later today|end of day|no deadline|not sure|flexible|no reminders?|without (?:a )?reminder|don'?t remind me|bina reminder|reminder (?:nahi|nahin|mat))\b/i.test(t);
+  }
+  // "Share this with @ali?": together / only for them / just me, or a person's name when one name fits two people.
+  if (p.kind === "share_choice") {
+    const said = t.toLowerCase();
+    return words <= 6 && (shareAnswer(t) !== null || (p.draft.share?.people ?? []).some((x) => said.includes(x.label.replace(/^@/, "").toLowerCase())));
   }
   return CONFIRM_KINDS.has(p.kind) && words <= 2 && !matchCommand(t, ctx);
 }
