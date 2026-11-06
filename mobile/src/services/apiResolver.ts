@@ -10,6 +10,7 @@ import {
   inferPortFromApiUrl,
   normalizeApiBase,
 } from "../constants/config";
+import { firstReachableInOrder } from "../utils/firstReachable";
 import { api } from "./api";
 
 const STORAGE_LAST_GOOD = "life-organizer:last-working-api-base:v2";
@@ -223,21 +224,60 @@ function getLanSubnetPrefix(ip: string): string | null {
 }
 
 
-/**
- * Probes `/health` for each candidate (last-good → env primary → Expo QR host → fallbacks → saved IPs)
- * and sets `api.defaults.baseURL` to the first match. Persists the winner for the next launch.
- */
-export async function resolveAndApplyApiBase(): Promise<boolean> {
-  const candidates = await buildCandidateBases();
+let inFlight: Promise<boolean> | null = null;
+let lastResolved = false;
 
-  for (const base of candidates) {
-    if (await probe(base)) {
-      api.defaults.baseURL = base;
-      await persistLastGoodBase(base);
-      return true;
-    }
+/** Whether the last probe pass found a reachable server (false before the first pass ends). */
+export function isApiReachable(): boolean {
+  return lastResolved;
+}
+
+/**
+ * Points axios at the last address that worked, without any network call, so requests made
+ * before the background probe finishes already go to the most likely server.
+ */
+export async function applyLastGoodApiBase(): Promise<void> {
+  const lastGood = await loadLastGoodBase();
+  if (lastGood) api.defaults.baseURL = lastGood;
+}
+
+async function resolveOnce(): Promise<boolean> {
+  try {
+    const state = await Network.getNetworkStateAsync();
+    // No network at all: nothing to probe; keep the current base and try again on reconnect.
+    if (state.isConnected === false) return false;
+  } catch {
+    // unknown network state: probe anyway
   }
 
-  api.defaults.baseURL = normalizeApiBase(getPrimaryApiBaseUrl());
+  const candidates = await buildCandidateBases();
+  // All candidates are probed at once (each has a 4 s timeout), in priority order:
+  // last-good → env primary → Expo QR host → local LAN guesses → env fallbacks → saved IPs.
+  const winner = await firstReachableInOrder(candidates, probe);
+  if (winner) {
+    api.defaults.baseURL = winner;
+    await persistLastGoodBase(winner);
+    return true;
+  }
+  // Keep the last-good base (if any) rather than resetting to the env primary.
   return false;
+}
+
+/**
+ * Finds a reachable API base and sets `api.defaults.baseURL`. Concurrent callers share one probe
+ * pass. Never blocks app start: callers run it in the background.
+ */
+export function resolveAndApplyApiBase(): Promise<boolean> {
+  if (!inFlight) {
+    inFlight = resolveOnce()
+      .catch(() => false)
+      .then((ok) => {
+        lastResolved = ok;
+        return ok;
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+  }
+  return inFlight;
 }

@@ -58,6 +58,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Offline sync
 
+- **Start-up never waits for the server.** The app opens on the dashboard as soon as Firebase restores the
+  session, using the profile cached from the last successful sync. Finding the server (all candidate addresses
+  probed at once, 4 s) and the profile sync run in the background and retry on reconnect and when the app returns
+  to the foreground. Exception: the first sign-in on a device has no cached profile, so it waits for that one
+  sync (the server must create the account first); if the server can't be reached, the app opens anyway and
+  server-backed screens fill in once it can.
 - **Only tasks sync offline.** Routines, mood logs, memories, documents and settings call the API directly and
   need a connection.
 - **Conflicts compare device clocks.** A true conflict (both sides changed the same field) is resolved by the newer
