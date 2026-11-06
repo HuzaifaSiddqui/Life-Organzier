@@ -221,6 +221,39 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
 - WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
 
+## Task collaboration (COLLAB_TASKS, off by default)
+
+- **Server flag, off by default.** With `COLLAB_TASKS` off every `/api/collab` route is 404 and the app hides People
+  & sharing and the task form's "Share with".
+- **Sharing needs a connection.** Requests, cards and answers are online only; nothing is queued offline. A member's
+  copy is an ordinary task once accepted, so it then syncs and reminds offline like any other.
+- **Each person has their own copy.** Completing, rescheduling or deleting a copy changes only that person's copy.
+  Only the owner's changes to title, notes, due date/time or length go to the others, and only after they accept
+  them again; until then their copy keeps the old details. Priority, category and planned start stay personal.
+- **Search shows names to anyone signed in.** Typing one letter lists accounts whose username, name or email starts
+  with it (15 at most, accounts being deleted left out). Emails are masked unless typed in full, but the list still
+  shows that an account exists. There is no blocking or hiding from search yet.
+- **Sharing from chat, voice and WhatsApp reads the wording.** Only people the user is connected to are candidates
+  ("@username", their username, or a word of their name; a name that is also a common word, like "Will", counts only
+  with a capital or "@"). Rules decide clear wording: "ask Ali to …", "assign it to Ali", "Ali should …" (only for
+  them); "with Ali", "Ali and I", "we" (together); "call / text / pay / visit Ali", "Ali's …", "a gift for Ali", "from
+  Ali" (just a name). Anything else goes to the model (a narrow, schema-checked choice); its answer is used as is only
+  at 85 % confidence for sharing or 70 % for "just a name", otherwise, or with AI off, the user is asked "Together,
+  only for Ali, or just for you?". One name that fits two connections always asks which one. The rules are English
+  only (Roman Urdu wording goes to the model or the question; no new Roman Urdu rules before 10 Nov 2026). Shared from
+  chat, the reply has Undo (cancel for everyone) and "Just for me" (keep my copy, withdraw the cards). A multi-task
+  message ("add A and B") is never shared.
+- **Answering on WhatsApp.** "Show shared tasks" / "what did people share with me" lists cards and requests with
+  numbered Accept / Decline; "accept the slides task", "decline Sana's task" answer by name. Accepting on WhatsApp
+  uses the card's date and time (another time: in the app). There is no proactive WhatsApp message when something is
+  shared: the next WhatsApp reply adds one line ("Also: Sana shared "Slides" with you …"), once, for cards and
+  requests still waiting. Sending a connection request needs the app.
+- **Members are fixed after sharing.** The owner can't add or remove people on an existing shared task (share a new
+  one). A connection can't be removed while a shared task between the two is unanswered or not done.
+- **Notices rely on push.** Each event is a push plus an in-app notice under Requests → Activity. Without a push
+  token (no permission, emulator) only the in-app list shows it.
+- **Copy is English only** until after 10 Nov 2026 (`collab.*` keys; Urdu shows English).
+
 ## WhatsApp (FR-WA)
 
 - **Pro only.** Free accounts that are linked get one "WhatsApp is a Pro feature" reply a day and nothing is processed.

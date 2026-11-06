@@ -33,6 +33,22 @@ export type TaskDraft = {
   estimateHandled?: boolean;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  /** Task collaboration: connected people named in the message and whether the task is shared with them. */
+  share?: DraftShare | null;
+};
+
+/**
+ * Task collaboration (COLLAB_TASKS). `names`: the words the user used for them. `decided`: "share" (create a shared
+ * task of `kind`), "none" (an ordinary task, the names were just names) or null (ask the user; `kind` is the guess).
+ */
+export type DraftShare = {
+  people: Array<{ id: string; label: string }>;
+  names: string[];
+  kind: "COLLAB" | "ASSIGN" | null;
+  decided: "share" | "none" | null;
+  via: "rules" | "model" | "user";
+  /** One name word fits two connections ("Ali"): ask which one first. */
+  ambiguous?: boolean;
 };
 
 export type RoutineDraft = {
@@ -78,6 +94,8 @@ export type Pending =
   | { kind: "typo"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; corrected: string }
   | { kind: "capacity"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; ymd: string }
   | { kind: "conflict"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; routine: string }
+  /** Task collaboration: "Share this with @ali?" — together, only for them, or just me (draft.share has the people). */
+  | { kind: "share_choice"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP" }
   /** Chat command waiting for "yes" (destructive or bulk); args are already resolved. */
   | { kind: "confirm_command"; command: string; args: Record<string, unknown>; summary: string; at?: string; text?: string }
   /** Chat command waiting for "which one?"; the answer fills args[field] with the chosen id. */

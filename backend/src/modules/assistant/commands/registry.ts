@@ -4,6 +4,7 @@ import type { ExtractOptions } from "../entities.js";
 import { rulesUnderstand } from "../nlu.js";
 import type { Command, CommandArgs, ParseCtx } from "./types.js";
 import { bulkCommands } from "./bulk.js";
+import { collabButtonCommands, collabCommands } from "./collab.js";
 import { internalCommands } from "./documents.js";
 import { findItemsCommand } from "./find.js";
 import { insightCommands } from "./insights.js";
@@ -18,10 +19,10 @@ import { wrappedCommands } from "./wrapped.js";
  * goes to the first whose rule parse accepts it. Wrapped existing intents come last and are matched by
  * nlu.ts. Everything here works with AI off; the LLM router (router.ts) only picks from this list.
  */
-export const COMMANDS: Command[] = [...bulkCommands, ...settingsCommands, ...insightCommands, ...routineCommands, findItemsCommand, ...taskCommands, ...wrappedCommands];
+export const COMMANDS: Command[] = [...bulkCommands, ...settingsCommands, ...insightCommands, ...routineCommands, ...collabCommands, findItemsCommand, ...taskCommands, ...wrappedCommands];
 
 /** COMMANDS plus internal ones (commands/documents.ts) that only a button starts: never matched, listed or routed. */
-const byName = new Map([...COMMANDS, ...internalCommands].map((c) => [c.name, c]));
+const byName = new Map([...COMMANDS, ...internalCommands, ...collabButtonCommands].map((c) => [c.name, c]));
 
 const isActive = (c: Command) => !c.enabled || c.enabled();
 

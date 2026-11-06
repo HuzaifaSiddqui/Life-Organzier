@@ -28,6 +28,7 @@ backend/
     checkins/   (FR-RN-004: checkinPlanner.ts pure rules, copy/templates first steps, checkinService.ts plan+respond, evaluation.ts report aggregation)
     analytics/ conversations/ settings/ account/ auth/ users/ events/ preferences/ whatsapp/
     whatsappAgent/ (Pro, on by default: the user's own WhatsApp Agent; poller, client, outbox, inbound)
+    collab/     (COLLAB_TASKS, off: connections, shared tasks with an approval card per member; collabRules.ts pure rules)
   prisma/schema.prisma, migrations/
   tests/*.test.ts              node:test unit tests (DB-backed ones skip without Postgres; CI sets REQUIRE_DB=true)
   tests/eval/                  Fixed evaluation sets (assistant-eval.json, Roman Urdu held-out set — see its README)
@@ -93,7 +94,6 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 ## Out of scope (future work — do not implement)
 
 - Calendar integration (Google/Outlook)
-- Collaboration / shared tasks
 - FR-OB-003 guest mode
 - Payments / subscriptions (the Pro tier is a settings flag, no billing)
 - Desktop app

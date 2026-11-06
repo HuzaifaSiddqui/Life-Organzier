@@ -1,4 +1,6 @@
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useCallback, useState } from "react";
 import { unregisterPush } from "../../services/push";
 import { signOut } from "firebase/auth";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -9,6 +11,8 @@ import { Card, SyncBadge, Text } from "../../components/ui";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { auth } from "../../lib/firebase";
+import { useLocale } from "../../i18n/LocaleProvider";
+import { getCollabSummary, type Summary } from "../../services/collabApi";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { clearGeofenceData } from "../../services/locationReminders";
 import { clearAllReminders } from "../../services/reminders";
@@ -30,6 +34,15 @@ export function ProfileScreen({ navigation }: Props) {
   const { dbUser } = useAuth();
   const { settings, isPro } = usePreferences();
   const name = dbUser?.displayName ?? dbUser?.email?.split("@")[0] ?? "Account";
+  const { t } = useLocale();
+  // Task collaboration: shown only when the server has it on (null = off or not reachable yet).
+  const [collab, setCollab] = useState<Summary | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      getCollabSummary().then(setCollab, () => undefined);
+    }, []),
+  );
+  const waitingForMe = collab ? collab.requests + collab.cards : 0;
 
   const groups: Array<{ title: string; items: Array<{ icon: IconName; title: string; subtitle: string; go: () => void }> }> = [
     {
@@ -42,6 +55,21 @@ export function ProfileScreen({ navigation }: Props) {
         { icon: "insights", title: "Insights", subtitle: "Productivity analytics", go: () => navigation.navigate("Insights") },
       ],
     },
+    ...(collab
+      ? [
+          {
+            title: t("collab.title"),
+            items: [
+              {
+                icon: "people" as IconName,
+                title: t("collab.title"),
+                subtitle: waitingForMe ? t("collab.profile.waiting", { count: waitingForMe }) : t("collab.profile.subtitle"),
+                go: () => navigation.navigate("Collab", waitingForMe ? { tab: "requests" } : undefined),
+              },
+            ],
+          },
+        ]
+      : []),
     {
       title: "App",
       items: [{ icon: "settings", title: "Settings", subtitle: "Preferences, notifications and account", go: () => navigation.navigate("Settings") }],

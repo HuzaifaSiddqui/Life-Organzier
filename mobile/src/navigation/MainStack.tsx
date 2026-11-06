@@ -1,6 +1,8 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { colors } from "../constants/theme";
 import { AssistantScreen } from "../screens/assistant/AssistantScreen";
+import { CollabScreen } from "../screens/collab/CollabScreen";
+import { SharedTaskEditScreen } from "../screens/collab/SharedTaskEditScreen";
 import { DashboardScreen } from "../screens/dashboard/DashboardScreen";
 import { DocumentsScreen } from "../screens/documents/DocumentsScreen";
 import { InsightsScreen } from "../screens/insights/InsightsScreen";
@@ -44,6 +46,10 @@ export type MainStackParamList = {
   SavedPlaces: undefined;
   Onboarding: undefined;
   Profile: undefined;
+  /** Task collaboration (COLLAB_TASKS): requests, people, shared tasks. */
+  Collab: { tab?: "requests" | "people" | "shared" } | undefined;
+  /** edit: the owner changes a shared task; accept: a member accepts it for their own date/time. */
+  SharedTaskEdit: { id: string; mode: "edit" | "accept" };
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -72,6 +78,8 @@ export function MainStack() {
       <Stack.Screen name="SavedPlaces" component={SavedPlacesScreen} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Collab" component={CollabScreen} />
+      <Stack.Screen name="SharedTaskEdit" component={SharedTaskEditScreen} />
     </Stack.Navigator>
   );
 }
