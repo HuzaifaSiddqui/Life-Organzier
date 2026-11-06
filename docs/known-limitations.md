@@ -167,18 +167,30 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   that row has the same number of cells; otherwise the rows are skipped rather than guessed.
 - **Grid timetables** (days down the side, 30-minute slots across, classes as boxes) are read by position:
   from the PDF text layer, or from a photo/screenshot (ruling lines removed for the day and time headers;
-  class blocks found by their colour fill and read one by one). An image starts the grid reader when its
+  class blocks found by their colour fill, or the cells of a ruled table, read one by one). An image starts the grid reader when its
   OCR text has 6+ different "hh:mm" times, and the reader stops after its first header read unless it sees
   3+ different weekday labels (English, Roman Urdu, Urdu) as well. Image classes are capped at 85 % so they
   go to review, never auto-created: a section's timetable lists every group (G1, G2, G3) and the student
   ticks theirs. About 4–6 s extra.
-- **Grid timetables: COMSATS-style course codes only.** A class block is recognised by a code of 2–5 capital
-  letters and 3 digits, optionally a letter and a group ("CSC461", "MGT350", "CSC461 - G1", "CS-101L").
-  Codes like "MATH 1A", "EE2020" (4 digits), "BIO-1101" or blocks with only a course name are not
-  recognised, so those classes are missed.
-- **Grid timetables: light-coloured block fills only.** Blocks must be a light fill (grey, blue, orange, …)
-  on a white page; dark or saturated fills, outline-only boxes, dark-mode screenshots, handwritten or
-  skewed photos are not read as a grid and fall back to the line-based rules.
+- **Grid timetables: COMSATS-style course codes only (coloured-block reader).** A class block is recognised by a
+  code of 2–5 capital letters and 3 digits, optionally a letter and a group ("CSC461", "MGT350", "CSC461 - G1",
+  "CS-101L"). Codes like "MATH 1A", "EE2020" (4 digits) or "BIO-1101" are not recognised there; a ruled grid
+  with course names is read by the ruled-grid reader below.
+- **Grid timetables: light-coloured block fills or a ruled table.** The first reader needs blocks with a light
+  fill (grey, blue, orange, …) on a white page. When it finds fewer than 2 classes, a second reader
+  (`documents/ruledGrid.ts`) looks for a **ruled table**: a header row of one start time per slot column
+  ("1 / 8:30 AM"), day labels down the side, and classes as white merged cells with no column line inside,
+  each starting at a column line or a corner marker (a coloured or black triangle, as in timetable-generator
+  "My Version" exports). Any text is a title (course names, no code needed); the next line is the teacher (a
+  section code like "sp23-bcs-b" is dropped) and the last line, if it looks like one, the room. Each header,
+  day and class cell is read on its own (about 3–4 s). Limits: the table must be upright and fully ruled
+  (header column lines through the whole header row, a line under each day row); dark-mode screenshots,
+  handwritten or skewed photos and outline-free layouts still fall back to the line-based rules. Text drawn
+  over a **black** corner triangle loses the letters inside it ("tro to Psych"); a title that is another class's
+  title minus its first 1–5 letters takes that full title, otherwise it stays clipped for the student to fix in
+  review. Small print in a compressed WhatsApp JPEG can still be misread ("Autoniated Software Testing"). On
+  the real "My Version" screenshot: 13/13 classes with the right day, start, length and room (PNG); the
+  WhatsApp JPEG of it had 13/13 slots right with 3 titles and 1 room misread.
 - **Grid timetables: rooms are the weak part.** Rooms read from an image get their hyphen back ("D118" →
   "D-118"); one that doesn't look like a room code (capital-hyphen-digits, or a named lab with a code) keeps
   its text as read and the review row says "Check the room" (characters are never guessed). A misread that
