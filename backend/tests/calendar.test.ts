@@ -93,6 +93,9 @@ test("feed: occurrences in the 14-day window from today, untimed ones all-day, e
     await createRoutine(user.id, TZ, { title: "Gym", frequency: RoutineFrequency.DAILY, dueTime: "7 PM", durationMinutes: 45 }, NOW);
     await createRoutine(user.id, TZ, { title: "Hostel breakfast", frequency: RoutineFrequency.DAILY, dueTime: "8 AM", locationContext: "At University" }, NOW);
     await createRoutine(user.id, TZ, { title: "Journal", frequency: RoutineFrequency.DAILY, noReminder: true }, NOW);
+    // Occurrences start from the routine's real creation time: put it before the test's clock so the test doesn't
+    // depend on the day it runs.
+    await prisma.routine.updateMany({ where: { userId: user.id }, data: { createdAt: new Date(NOW.getTime() - 7 * 86400000) } });
     const feed = await calendarFeed(user.id, TZ, NOW);
     assert.equal(feed.windowStart, "2026-11-03T19:00:00.000Z");
     assert.equal(feed.windowEnd, "2026-11-17T19:00:00.000Z");
