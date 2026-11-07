@@ -14,6 +14,8 @@ import {
   acceptSharedTask,
   answerConnection,
   cancelSharedTask,
+  leaveSharedTask,
+  removeSharedMember,
   declineSharedTask,
   getCollabSummary,
   getConnections,
@@ -34,7 +36,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Task } from "../../types/models";
-import { cleanUsername, collabErrorKey, doneCount, personLabel } from "../../utils/collab";
+import { cleanUsername, collabErrorKey, doneCount, personLabel, searchable } from "../../utils/collab";
 import { formatDue, formatDuration, relativeTime } from "../../utils/format";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Collab">;
@@ -301,10 +303,10 @@ function PeopleTab({ data, busy, run, onRefresh }: { data: Data; busy: string | 
   const [editingName, setEditingName] = useState(false);
   const abort = useRef<AbortController | null>(null);
 
-  // Live search from the first letter (debounced; an older request is aborted when the text changes).
+  // Search a username prefix (3+) or a whole email, debounced; an older request is aborted when the text changes.
   const search = useCallback((text: string) => {
     abort.current?.abort();
-    if (!text.trim()) return setResults(null);
+    if (!searchable(text)) return setResults(null);
     const ctrl = new AbortController();
     abort.current = ctrl;
     searchPeople(text, ctrl.signal).then(
@@ -386,6 +388,11 @@ function PeopleTab({ data, busy, run, onRefresh }: { data: Data; busy: string | 
           {q ? <IconButton icon={<Icon name="close" size={16} color={colors.textSecondary} />} accessibilityLabel={t("common.close")} onPress={() => setQ("")} /> : null}
         </View>
       </View>
+      {q.trim() && !searchable(q) ? (
+        <Text variant="caption" color="secondary">
+          {t("collab.search.hint")}
+        </Text>
+      ) : null}
       {results ? (
         results.length ? (
           <View>
@@ -490,6 +497,16 @@ const SharedCard = memo(function SharedCard({
   ]
     .filter(Boolean)
     .join(" · ");
+  const confirmRemove = (userId: string, name: string) =>
+    Alert.alert(t("collab.shared.removeConfirm", { name, title: s.title }), t("collab.shared.removeBody"), [
+      { text: t("collab.shared.cancelNo"), style: "cancel" },
+      { text: t("collab.shared.removeYes"), style: "destructive", onPress: () => void run(`remove-${s.id}-${userId}`, () => removeSharedMember(s.id, userId)) },
+    ]);
+  const confirmLeave = () =>
+    Alert.alert(t("collab.shared.leaveConfirm", { title: s.title }), t("collab.shared.leaveBody"), [
+      { text: t("collab.shared.cancelNo"), style: "cancel" },
+      { text: t("collab.shared.leaveYes"), style: "destructive", onPress: () => void run(`leave-${s.id}`, () => leaveSharedTask(s.id)) },
+    ]);
   const confirmCancel = () =>
     Alert.alert(t("collab.shared.cancelConfirm", { title: s.title }), t("collab.shared.cancelBody"), [
       { text: t("collab.shared.cancelNo"), style: "cancel" },
@@ -522,6 +539,16 @@ const SharedCard = memo(function SharedCard({
                   {isMe ? ` (${t("collab.you")})` : ""}
                 </Text>
                 <StateChip state={p.state} />
+                {s.isOwner && !s.cancelled && p.role === "member" && !isMe ? (
+                  <Button
+                    title={t("collab.shared.removeMember")}
+                    kind="ghost"
+                    size="sm"
+                    loading={busy === `remove-${s.id}-${p.user.id}`}
+                    accessibilityLabel={t("collab.shared.removeConfirm", { name: personLabel(p.user), title: s.title })}
+                    onPress={() => confirmRemove(p.user.id, personLabel(p.user))}
+                  />
+                ) : null}
               </View>
               {p.proposedChange ? (
                 <Text variant="caption" color="warning" style={{ paddingStart: spacing.xl + spacing.xs }}>
@@ -550,6 +577,7 @@ const SharedCard = memo(function SharedCard({
             <Button title={t("collab.shared.cancel")} kind="ghost" size="sm" loading={busy === `cancel-${s.id}`} onPress={confirmCancel} />
           </>
         ) : null}
+        {!s.isOwner && !s.cancelled ? <Button title={t("collab.shared.leave")} kind="ghost" size="sm" loading={busy === `leave-${s.id}`} onPress={confirmLeave} /> : null}
       </View>
     </Card>
   );

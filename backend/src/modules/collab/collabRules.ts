@@ -11,6 +11,11 @@ export const collabOn = () => process.env.COLLAB_TASKS?.toLowerCase() === "on";
 /** Members per shared task, besides the owner. */
 export const MAX_MEMBERS = 10;
 export const SEARCH_LIMIT = 15;
+/** Shortest username prefix that searches (shorter text finds nobody, so letters can't list everyone). */
+export const SEARCH_MIN_CHARS = 3;
+/** Per user: searches per minute, connection requests per hour (lib/rateLimit.ts). */
+export const SEARCH_PER_MINUTE = 30;
+export const REQUESTS_PER_HOUR = 20;
 
 const USERNAME = /^[a-z0-9_]{3,20}$/;
 
@@ -20,19 +25,17 @@ export function normalizeUsername(raw: string): string | null {
   return USERNAME.test(name) ? name : null;
 }
 
-/** "ali.khan@gmail.com" → "a•••@gmail.com". Search shows the full address only to someone who typed all of it. */
-export function maskEmail(email: string): string {
-  const at = email.indexOf("@");
-  if (at < 1) return "•••";
-  return `${email[0]}•••${email.slice(at)}`;
-}
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** What a search box text means: a leading "@" searches usernames only; anything else also names and emails. */
-export function searchTerm(raw: string): { text: string; usernameOnly: boolean } | null {
-  const trimmed = raw.trim();
-  const usernameOnly = trimmed.startsWith("@");
-  const text = trimmed.replace(/^@/, "").toLowerCase().slice(0, 80);
-  return text ? { text, usernameOnly } : null;
+/**
+ * What a search box text means: a whole email address (matched exactly, never by prefix), or a username prefix of at
+ * least SEARCH_MIN_CHARS (a leading "@" is allowed). Names and partial emails are not searched. Null: search nothing.
+ */
+export function searchTerm(raw: string): { kind: "email"; email: string } | { kind: "username"; prefix: string } | null {
+  const text = raw.trim().toLowerCase().slice(0, 120);
+  if (EMAIL.test(text)) return { kind: "email", email: text };
+  const prefix = text.replace(/^@/, "");
+  return /^[a-z0-9_]+$/.test(prefix) && prefix.length >= SEARCH_MIN_CHARS ? { kind: "username", prefix: prefix.slice(0, 20) } : null;
 }
 
 /** A participant's state as the shared task view shows it. */
@@ -88,7 +91,9 @@ export type NoticeKind =
   | "TASK_CHANGED"
   | "TASK_TIME_CHANGED"
   | "TASK_CANCELLED"
-  | "TASK_COMPLETED";
+  | "TASK_COMPLETED"
+  | "TASK_MEMBER_REMOVED"
+  | "TASK_MEMBER_LEFT";
 
 /** The push for a notice (the app shows its own copy for the in-app list). */
 export function pushText(kind: NoticeKind, actor: string, title?: string | null): { title: string; body: string } {
@@ -112,6 +117,10 @@ export function pushText(kind: NoticeKind, actor: string, title?: string | null)
       return { title: "Task cancelled", body: `${actor} cancelled ${t}.` };
     case "TASK_COMPLETED":
       return { title: "Task done", body: `${actor} finished their part of ${t}.` };
+    case "TASK_MEMBER_REMOVED":
+      return { title: "Removed from a task", body: `${actor} removed you from ${t}. Your copy is still yours.` };
+    case "TASK_MEMBER_LEFT":
+      return { title: "Left a task", body: `${actor} left ${t}.` };
   }
 }
 

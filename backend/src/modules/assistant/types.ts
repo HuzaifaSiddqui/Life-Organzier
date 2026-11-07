@@ -39,7 +39,8 @@ export type TaskDraft = {
 
 /**
  * Task collaboration (COLLAB_TASKS). `names`: the words the user used for them. `decided`: "share" (create a shared
- * task of `kind`), "none" (an ordinary task, the names were just names) or null (ask the user; `kind` is the guess).
+ * task of `kind`; only ever set from the user's answer to the preview, `via: "user"`), "none" (an ordinary task, the
+ * names were just names) or null (show the preview; `kind` is the rules' or the model's proposal).
  */
 export type DraftShare = {
   people: Array<{ id: string; label: string }>;
@@ -109,6 +110,8 @@ export type UndoRecord = { at: string; label: string } & (
   | { kind: "occurrence"; occurrenceId: string; before: { status: string; occurrenceDate: string; dueTime: string | null } }
   /** `before`: each task's fields before an edit (restored as they were; version history is the fallback). */
   | { kind: "tasks"; op: "edit" | "delete" | "create"; taskIds: string[]; before?: Record<string, Record<string, unknown>> }
+  /** A confirmed share: undo cancels it for everyone and removes the user's own copy. */
+  | { kind: "share"; sharedTaskId: string }
 );
 
 export type DialogueState = {

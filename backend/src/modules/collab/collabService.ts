@@ -22,7 +22,6 @@ import {
   collabOn,
   changedAgreedFields,
   isUnsettled,
-  maskEmail,
   MAX_MEMBERS,
   normalizeUsername,
   participantState,
@@ -40,6 +39,8 @@ import {
 type Person = { id: string; username: string | null; displayName: string | null; photoUrl: string | null };
 const PERSON = { id: true, username: true, displayName: true, photoUrl: true } as const;
 const person = (u: Person): Person => ({ id: u.id, username: u.username, displayName: u.displayName, photoUrl: u.photoUrl });
+/** Someone not (yet) connected: name and username only, no photo. */
+const stranger = (u: Person): Person => ({ ...person(u), photoUrl: null });
 
 /* ------------------------------------------------------------------ notices */
 
@@ -120,30 +121,27 @@ function stateWith(userId: string, otherId: string, rows: Awaited<ReturnType<typ
 }
 
 /**
- * Live search from the first letter: usernames, names (any word) and emails that start with the text. An email is
- * shown masked unless the whole address was typed. "@ali" searches usernames only. Accounts being deleted are left out.
+ * Search: a username prefix of at least 3 characters, or a whole email address (exact, any case). Display names and
+ * partial emails are never matched, so typing letters can't list people. Results show username and display name;
+ * the photo only for people already connected, the email only when that exact address was typed. Accounts being
+ * deleted are left out. Rate-limited per user in the route.
  */
 export async function searchUsers(userId: string, raw: string) {
   const term = searchTerm(raw);
   if (!term) return [];
-  const { text, usernameOnly } = term;
-  const mode = Prisma.QueryMode.insensitive;
-  const or: Prisma.UserWhereInput[] = [{ username: { startsWith: text } }];
-  if (!usernameOnly) {
-    or.push({ displayName: { startsWith: text, mode } }, { displayName: { contains: ` ${text}`, mode } }, { email: { startsWith: text, mode } });
-  }
+  const match: Prisma.UserWhereInput =
+    term.kind === "email" ? { email: { equals: term.email, mode: Prisma.QueryMode.insensitive } } : { username: { startsWith: term.prefix } };
   const users = await prisma.user.findMany({
-    where: { id: { not: userId }, deletionRequestedAt: null, OR: or },
+    where: { id: { not: userId }, deletionRequestedAt: null, ...match },
     select: { ...PERSON, email: true },
-    orderBy: [{ username: "asc" }, { displayName: "asc" }],
+    orderBy: { username: "asc" },
     take: SEARCH_LIMIT,
   });
   const rows = await connectionsOf(userId);
-  return users.map((u) => ({
-    ...person(u),
-    email: u.email.toLowerCase() === text ? u.email : maskEmail(u.email),
-    ...stateWith(userId, u.id, rows),
-  }));
+  return users.map((u) => {
+    const state = stateWith(userId, u.id, rows);
+    return { ...(state.state === "connected" ? person(u) : stranger(u)), email: term.kind === "email" ? u.email : null, ...state };
+  });
 }
 
 /* ------------------------------------------------------------------ connections */
@@ -156,13 +154,19 @@ export async function listConnections(userId: string) {
   });
   const out = { connected: [] as Array<{ connectionId: string; user: Person; since: Date | null }>, incoming: [] as Array<{ connectionId: string; user: Person; at: Date }>, outgoing: [] as Array<{ connectionId: string; user: Person; at: Date }> };
   for (const c of rows) {
-    const other = person(c.requesterId === userId ? c.addressee : c.requester);
+    const raw = c.requesterId === userId ? c.addressee : c.requester;
+    const other = c.status === ConnectionStatus.ACCEPTED ? person(raw) : stranger(raw);
     if (c.status === ConnectionStatus.ACCEPTED) out.connected.push({ connectionId: c.id, user: other, since: c.respondedAt });
     else if (c.addresseeId === userId) out.incoming.push({ connectionId: c.id, user: other, at: c.createdAt });
     else out.outgoing.push({ connectionId: c.id, user: other, at: c.createdAt });
   }
   out.connected.sort((a, b) => personLabel(a.user).localeCompare(personLabel(b.user)));
   return out;
+}
+
+/** The account asked to be deleted (30 days to recover): nothing new is shared with it. */
+async function deleting(userId: string): Promise<boolean> {
+  return !(await prisma.user.findFirst({ where: { id: userId, deletionRequestedAt: null }, select: { id: true } }));
 }
 
 export async function areConnected(a: string, b: string): Promise<boolean> {
@@ -341,10 +345,18 @@ async function viewFor(id: string, userId: string): Promise<SharedTaskView> {
   return viewOf(s, userId);
 }
 
-/** The owner, or someone it was shared with (any answer), may see it. */
+/** Members with access: a card to answer (pending) or a task they accepted. Declined, removed or left: none. */
+const WITH_ACCESS: SharedMemberStatus[] = [SharedMemberStatus.PENDING, SharedMemberStatus.ACCEPTED];
+
+/** The owner always; a member only while the task isn't cancelled and their answer is pending or accepted. */
+function canSee(s: Pick<SharedTask, "ownerId" | "cancelledAt"> & { members: Array<Pick<SharedTaskMember, "userId" | "status">> }, userId: string): boolean {
+  if (s.ownerId === userId) return true;
+  return !s.cancelledAt && s.members.some((m) => m.userId === userId && WITH_ACCESS.includes(m.status));
+}
+
 export async function getSharedTask(userId: string, id: string): Promise<SharedTaskView> {
   const s = await loadShared(id);
-  if (!s || (s.ownerId !== userId && !s.members.some((m) => m.userId === userId))) throw new HttpError(404, "SHARED_TASK_NOT_FOUND", "Shared task not found.");
+  if (!s || !canSee(s, userId)) throw new HttpError(404, "SHARED_TASK_NOT_FOUND", "Shared task not found.");
   return viewOf(s, userId);
 }
 
@@ -368,6 +380,7 @@ export async function createSharedTask(
   if (memberIds.length > MAX_MEMBERS) throw new HttpError(400, "TOO_MANY_MEMBERS", `Share with at most ${MAX_MEMBERS} people.`);
   for (const id of memberIds) {
     if (!(await areConnected(me.id, id))) throw new HttpError(403, "NOT_CONNECTED", "You can only share tasks with people who accepted your request.");
+    if (await deleting(id)) throw new HttpError(403, "NOT_CONNECTED", "That account is being deleted.");
   }
   const shared = await prisma.sharedTask.create({
     data: {
@@ -395,7 +408,7 @@ export async function createSharedTask(
 /** Cards waiting for my answer, and the shared tasks I own or accepted (newest first). */
 export async function listSharedTasks(userId: string) {
   const rows = await prisma.sharedTask.findMany({
-    where: { OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
+    where: { OR: [{ ownerId: userId }, { cancelledAt: null, members: { some: { userId, status: { in: WITH_ACCESS } } } }] },
     orderBy: { updatedAt: "desc" },
     take: 100,
     select: { id: true },
@@ -410,9 +423,10 @@ export async function listSharedTasks(userId: string) {
   return { cards, shared };
 }
 
+/** My membership, only while I still have access (see canSee): otherwise the task is "not found" for me. */
 async function memberRow(sharedTaskId: string, userId: string): Promise<{ s: SharedTask; m: SharedTaskMember }> {
   const m = await prisma.sharedTaskMember.findUnique({ where: { sharedTaskId_userId: { sharedTaskId, userId } }, include: { sharedTask: true } });
-  if (!m) throw new HttpError(404, "SHARED_TASK_NOT_FOUND", "Shared task not found.");
+  if (!m || m.sharedTask.cancelledAt || !WITH_ACCESS.includes(m.status)) throw new HttpError(404, "SHARED_TASK_NOT_FOUND", "Shared task not found.");
   const { sharedTask, ...member } = m;
   return { s: sharedTask, m: member };
 }
@@ -429,7 +443,6 @@ export async function acceptSharedTask(
   deviceId?: string | null,
 ): Promise<{ shared: SharedTaskView; task: Task }> {
   const { s, m } = await memberRow(id, me.id);
-  if (s.cancelledAt) throw new HttpError(409, "SHARED_TASK_CANCELLED", "This task was cancelled.");
   if (m.status !== SharedMemberStatus.PENDING) throw new HttpError(409, "ALREADY_ANSWERED", "You already answered this.");
   const change = proposedChange(s, mine);
   const details = { ...copyInput(s), ...(change ? { dueDate: change.dueDate ? new Date(change.dueDate) : null, dueTime: change.dueTime } : {}) };
@@ -501,19 +514,58 @@ export async function resendSharedTask(owner: User, id: string, memberUserId: st
   const m = await prisma.sharedTaskMember.findUnique({ where: { sharedTaskId_userId: { sharedTaskId: s.id, userId: memberUserId } } });
   if (!m) throw new HttpError(404, "MEMBER_NOT_FOUND", "That person isn't on this task.");
   if (m.status !== SharedMemberStatus.REJECTED) throw new HttpError(409, "NOT_DECLINED", "Only a declined task can be sent again.");
-  if (!(await areConnected(owner.id, memberUserId))) throw new HttpError(403, "NOT_CONNECTED", "You can only share tasks with people who accepted your request.");
+  if (!(await areConnected(owner.id, memberUserId)) || (await deleting(memberUserId))) throw new HttpError(403, "NOT_CONNECTED", "You can only share tasks with people who accepted your request.");
   await prisma.sharedTaskMember.update({ where: { id: m.id }, data: { status: SharedMemberStatus.PENDING, reapproval: false, respondedAt: null, proposedChange: Prisma.JsonNull } });
   await notify(memberUserId, owner, "TASK_INVITE", s, { kind: s.kind });
   return viewFor(s.id, owner.id);
 }
 
-/** Cancel for everyone: unanswered cards are withdrawn; copies already accepted stay with their owners (they're told). */
+/**
+ * Cancel for everyone: unanswered cards are withdrawn and members lose access; copies already accepted stay with
+ * their owners as ordinary tasks (unlinked; they're told).
+ */
 export async function cancelSharedTask(owner: User, id: string): Promise<SharedTaskView> {
   const s = await ownedShared(owner.id, id);
   await prisma.sharedTask.update({ where: { id: s.id }, data: { cancelledAt: new Date() } });
   const members = await prisma.sharedTaskMember.findMany({ where: { sharedTaskId: s.id, status: { not: SharedMemberStatus.REJECTED } } });
+  await prisma.task.updateMany({ where: { sharedTaskId: s.id, userId: { not: owner.id } }, data: { sharedTaskId: null } });
   for (const m of members) await notify(m.userId, owner, "TASK_CANCELLED", s);
   return viewFor(s.id, owner.id);
+}
+
+/**
+ * Undo of a share (the Undo button, or "undo" in chat): cancelled for everyone; the owner's copy is removed (24 h to
+ * restore, as any delete) or, with `keepMine`, kept as an ordinary task.
+ */
+export async function unshareTask(owner: User, tz: string, id: string, keepMine: boolean, deviceId?: string | null): Promise<{ shared: SharedTaskView; kept: boolean }> {
+  const shared = await cancelSharedTask(owner, id);
+  const mine = await prisma.task.findFirst({ where: { sharedTaskId: id, userId: owner.id, status: { not: TaskStatus.DELETED } } });
+  if (mine && keepMine) await prisma.task.update({ where: { id: mine.id }, data: { sharedTaskId: null } });
+  else if (mine) await softDeleteTask({ userId: owner.id, tz, deviceId }, mine.id);
+  return { shared, kept: Boolean(mine && keepMine) };
+}
+
+/** Their membership goes; a copy they accepted stays theirs as an ordinary task (unlinked). */
+async function dropMember(s: SharedTask, m: SharedTaskMember): Promise<void> {
+  await prisma.task.updateMany({ where: { sharedTaskId: s.id, userId: m.userId }, data: { sharedTaskId: null } });
+  await prisma.sharedTaskMember.delete({ where: { id: m.id } });
+}
+
+/** The owner takes someone off the task: they lose access at once and are told. */
+export async function removeMember(owner: User, id: string, memberUserId: string): Promise<SharedTaskView> {
+  const s = await ownedShared(owner.id, id);
+  const m = await prisma.sharedTaskMember.findUnique({ where: { sharedTaskId_userId: { sharedTaskId: s.id, userId: memberUserId } } });
+  if (!m) throw new HttpError(404, "MEMBER_NOT_FOUND", "That person isn't on this task.");
+  await dropMember(s, m);
+  if (m.status !== SharedMemberStatus.REJECTED) await notify(m.userId, owner, "TASK_MEMBER_REMOVED", s);
+  return viewFor(s.id, owner.id);
+}
+
+/** A member leaves (a card waiting for an answer, or a task they accepted). The owner is told. */
+export async function leaveSharedTask(me: User, id: string): Promise<void> {
+  const { s, m } = await memberRow(id, me.id);
+  await dropMember(s, m);
+  await notify(s.ownerId, me, "TASK_MEMBER_LEFT", s);
 }
 
 /* ------------------------------------------------------------------ hooks from the task module */

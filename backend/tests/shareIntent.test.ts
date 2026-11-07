@@ -118,71 +118,116 @@ function withFlag(fn: () => Promise<void>) {
   };
 }
 
-test("chat: 'with Ali' shares it together; 'call Ali' stays mine; 'ask Ali to' is only for Ali", { skip }, withFlag(async () => {
+/** Task notices only (pair() sends a connection request first). Every push comes with a notice (collabService notify). */
+const noticesFor = (u: User) => prisma.collabNotice.count({ where: { userId: u.id, kind: { startsWith: "TASK_" } } });
+const sharedBy = (u: User) => prisma.sharedTask.count({ where: { ownerId: u.id } });
+
+test("chat: clear wording only proposes — the preview comes first, nothing reaches Ali until 'Together' / 'Only for them'", { skip }, withFlag(async () => {
   const { me, ali } = await pair();
 
   const together = await me.say("finish the group slides with Ali tomorrow at 5 pm, takes 2 hours");
-  assert.equal(together.message.intent, "task_shared", together.message.content);
-  assert.match(together.message.content, /shared with @ali_/);
+  assert.equal(together.message.intent, "share_choice", together.message.content);
+  assert.match(together.message.content, /^Share "Finish the group slides with Ali" with @ali_\w+\?/);
+  assert.deepEqual(together.message.actions?.map((a) => a.label), ["Together", "Only for them", "Just me"]);
+  assert.equal(await sharedBy(me.user), 0, "nothing shared yet");
+  assert.equal(await noticesFor(ali.user), 0, "no notice (so no push) for Ali before the answer");
+  assert.equal((await tasksOf(me.user)).length, 0);
+
+  const done = await me.tap(together.message.actions![0].payload);
+  assert.equal(done.message.intent, "task_shared", done.message.content);
   const mine = await tasksOf(me.user);
   assert.equal(mine.length, 1);
   assert.ok(mine[0].sharedTaskId, "my copy is linked to the shared task");
   assert.equal((await tasksOf(ali.user)).length, 0, "nothing on Ali's timeline until Ali accepts");
   assert.equal((await cardsFor(ali.user)).length, 1);
-
-  const call = await me.say("call Ali tomorrow at 6 pm");
-  assert.equal(call.message.intent, "task_created", "a name alone is just a name");
-  assert.equal((await cardsFor(ali.user)).length, 1, "no new card");
+  assert.equal(await noticesFor(ali.user), 1, "Ali hears about it only now");
 
   const assign = await me.say("ask Ali to print the handouts tomorrow at 9 am");
-  assert.equal(assign.message.intent, "task_shared", assign.message.content);
-  assert.match(assign.message.content, /Sent to @ali_.*Print the handouts.*isn't on your timeline/s);
+  assert.equal(assign.message.intent, "share_choice", assign.message.content);
+  assert.equal(assign.message.actions?.[0].label, "Only for them", "the rules' proposal is offered first");
+  assert.equal((await cardsFor(ali.user)).length, 1, "still only the first card");
+  const sent = await me.say("only for them");
+  assert.equal(sent.message.intent, "task_shared", sent.message.content);
+  assert.match(sent.message.content, /Sent to @ali_.*Print the handouts.*isn't on your timeline/s);
   assert.equal((await tasksOf(me.user)).filter((t) => /handouts/i.test(t.title)).length, 0, "not on my timeline");
   assert.equal((await cardsFor(ali.user)).length, 2);
 }));
 
-test("chat: unclear wording asks (AI off); the answer decides; Undo / Just for me after sharing", { skip }, withFlag(async () => {
+test("chat: unclear wording asks too; 'Just me' shares nothing; typing 'undo' cancels a confirmed share, as the Undo button does", { skip }, withFlag(async () => {
   const { me, ali } = await pair();
   const asked = await me.say("meeting with Ali tomorrow at 3 pm for 1 hour");
   assert.equal(asked.message.intent, "share_choice", asked.message.content);
-  assert.deepEqual(asked.message.actions?.map((a) => a.label), ["Together", `Only for @${ali.user.username}`, "Just for me"]);
-  const own = await me.say("just for me");
+  const own = await me.say("just me");
   assert.equal(own.message.intent, "task_created");
   assert.equal((await cardsFor(ali.user)).length, 0);
+  assert.equal(await noticesFor(ali.user), 0);
 
-  const again = await me.say("meeting with Ali on monday at 11 am for 1 hour");
-  assert.equal(again.message.intent, "share_choice", again.message.content);
+  // Confirmed, then undone by typing.
+  await me.say("meeting with Ali on monday at 11 am for 1 hour");
   const shared = await me.say("together");
   assert.equal(shared.message.intent, "task_shared", shared.message.content);
   assert.equal((await cardsFor(ali.user)).length, 1);
-  // "Just for me": the card is withdrawn, my copy stays (and is no longer shared).
-  const justMe = shared.message.actions!.find((a) => a.label === "Just for me")!;
+  const undone = await me.say("undo");
+  assert.equal(undone.message.intent, "undone", undone.message.content);
+  assert.match(undone.message.content, /sharing "Meeting/);
+  assert.equal((await prisma.sharedTaskMember.findMany({ where: { userId: ali.user.id, status: SharedMemberStatus.PENDING, sharedTask: { cancelledAt: null } } })).length, 0, "Ali's card is withdrawn");
+  assert.ok(!(await tasksOf(me.user)).some((t) => t.dueTime === "11 AM"), "my copy is removed");
+
+  // "Just for me" button after a share: the card is withdrawn, my copy stays (and is no longer shared).
+  await me.say("meeting with Ali on tuesday at 10 am for 1 hour");
+  const again = await me.say("together");
+  const justMe = again.message.actions!.find((a) => a.label === "Just for me")!;
   const unshared = await me.tap(justMe.payload);
   assert.equal(unshared.message.intent, "shared_unshared");
-  assert.equal((await prisma.sharedTaskMember.findMany({ where: { userId: ali.user.id, status: SharedMemberStatus.PENDING, sharedTask: { cancelledAt: null } } })).length, 0);
-  const kept = (await tasksOf(me.user)).find((t) => /meeting/i.test(t.title) && t.dueTime === "11 AM");
+  const kept = (await tasksOf(me.user)).find((t) => /meeting/i.test(t.title) && t.dueTime === "10 AM");
   assert.ok(kept && !kept.sharedTaskId);
+  const liveCards = () => prisma.sharedTaskMember.count({ where: { userId: ali.user.id, status: SharedMemberStatus.PENDING, sharedTask: { cancelledAt: null } } });
+  assert.equal(await liveCards(), 0);
+  // The button used the share's undo step up: a later "undo" doesn't try to unshare it again.
+  assert.doesNotMatch((await me.say("undo")).message.content, /sharing/);
 }));
 
-test("chat: the model decides unclear wording when it is sure; unsure → ask", { skip }, withFlag(async () => {
+test("chat: the model only proposes — even at 99% nothing is shared before the preview's answer", { skip }, withFlag(async () => {
   const { me, ali } = await pair();
-  let answer = { decision: "together", confidence: 0.95 };
+  let answer = { decision: "together", confidence: 0.99 };
   setAi(new AiService([{ name: "fake", chat: async (messages) => (messages[0].content.includes("named people they know") ? JSON.stringify(answer) : "{}") }]));
-  const decided = await me.say("Ali presentation slides tomorrow at 4 pm, 1 hour");
-  assert.equal(decided.message.intent, "task_shared", decided.message.content);
+  const proposed = await me.say("Ali presentation slides tomorrow at 4 pm, 1 hour");
+  assert.equal(proposed.message.intent, "share_choice", proposed.message.content);
+  assert.equal(proposed.message.actions?.[0].label, "Together", "the model's proposal is offered first");
+  assert.equal(await sharedBy(me.user), 0);
+  assert.equal(await noticesFor(ali.user), 0);
+  await me.say("just me");
   answer = { decision: "none", confidence: 0.9 };
   const mine = await me.say("return the book to Ali tomorrow at 1 pm");
   assert.equal(mine.message.intent, "task_created");
   answer = { decision: "assign", confidence: 0.6 };
   const asked = await me.say("Ali lab manual tomorrow at 2 pm, 30 minutes");
   assert.equal(asked.message.intent, "share_choice");
-  assert.equal(asked.message.actions?.[0].label, `Only for @${ali.user.username}`, "the model's guess is offered first");
+  assert.equal(asked.message.actions?.[0].label, "Only for them");
+  assert.equal(await sharedBy(me.user), 0, "nothing was ever shared without an answer");
+}));
+
+test("chat: a connected person's name in a task ('gift for Ali', 'call Ali', 'Ali's birthday') is never shared without confirmation", { skip }, withFlag(async () => {
+  const { me, ali } = await pair();
+  const titles = ["buy a gift for Ali tomorrow at 5 pm", "call Ali tomorrow at 6 pm", "Ali's birthday on friday", "pick up Ali from the station tomorrow at 8 am"];
+  for (const model of [null, { decision: "together", confidence: 0.99 }, { decision: "assign", confidence: 0.99 }]) {
+    setAi(new AiService(model ? [{ name: "fake", chat: async (messages) => (messages[0].content.includes("named people they know") ? JSON.stringify(model) : "{}") }] : []));
+    for (const text of titles) {
+      const out = await me.say(text);
+      assert.notEqual(out.message.intent, "task_shared", `${text} (${model?.decision ?? "AI off"})`);
+      if (out.message.intent === "share_choice") await me.say("just me");
+      assert.equal(await sharedBy(me.user), 0, `${text}: nothing shared`);
+      assert.equal(await noticesFor(ali.user), 0, `${text}: Ali got nothing`);
+    }
+  }
 }));
 
 test("WhatsApp: the receiver lists, accepts and declines shared tasks by chat", { skip }, withFlag(async () => {
   const { me, ali } = await pair();
   await me.say("finish the group slides with Ali tomorrow at 5 pm, takes 2 hours");
+  await me.say("together");
   await me.say("ask Ali to book the lab tomorrow at 9 am");
+  await me.say("only for them");
 
   // WhatsApp has no push: the next reply there mentions what arrived, once.
   const first = await ali.say("show my tasks for today", "WHATSAPP");

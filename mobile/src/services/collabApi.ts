@@ -8,7 +8,8 @@ import { syncNow } from "./syncEngine";
 
 export type Person = { id: string; username: string | null; displayName: string | null; photoUrl: string | null };
 export type ConnectionState = "none" | "requested" | "incoming" | "connected";
-export type SearchResult = Person & { email: string; state: ConnectionState; connectionId: string | null };
+/** `email`: only when that exact address was searched; `photoUrl`: only for people already connected. */
+export type SearchResult = Person & { email: string | null; state: ConnectionState; connectionId: string | null };
 export type Connections = {
   connected: Array<{ connectionId: string; user: Person; since: string | null }>;
   incoming: Array<{ connectionId: string; user: Person; at: string }>;
@@ -149,6 +150,16 @@ export async function declineSharedTask(id: string): Promise<SharedTask> {
 
 export async function resendSharedTask(id: string, userId: string): Promise<SharedTask> {
   return (await apiPost<{ shared: SharedTask }>(`/collab/tasks/${id}/resend`, { userId })).shared;
+}
+
+/** The owner takes someone off the task. */
+export async function removeSharedMember(id: string, userId: string): Promise<SharedTask> {
+  return (await apiDelete<{ shared: SharedTask }>(`/collab/tasks/${id}/members/${userId}`)).shared;
+}
+
+/** A member leaves a shared task (their accepted copy stays theirs). */
+export async function leaveSharedTask(id: string): Promise<void> {
+  await apiPost(`/collab/tasks/${id}/leave`);
 }
 
 export async function cancelSharedTask(id: string): Promise<SharedTask> {

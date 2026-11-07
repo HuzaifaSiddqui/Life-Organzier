@@ -69,9 +69,19 @@ export function doneCount(states: ParticipantState[]): { done: number; total: nu
   return { done: counted.filter((s) => s === "done").length, total: counted.length };
 }
 
+/**
+ * Same rule as the server's search (collabRules.searchTerm): a whole email address, or a username prefix of 3+
+ * (a leading "@" allowed). Anything else isn't sent: names and partial emails are never searched.
+ */
+export function searchable(raw: string): boolean {
+  const text = raw.trim().toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return true;
+  return /^@?[a-z0-9_]{3,}$/.test(text);
+}
+
 /** Server error codes → copy keys (never the server's text). */
 export function collabErrorKey(code: string | null, offline: boolean): string {
   if (offline) return "collab.err.offline";
-  const known = ["USERNAME_TAKEN", "INVALID_USERNAME", "NOT_CONNECTED", "SHARED_TASK_CANCELLED", "ALREADY_ANSWERED", "OPEN_SHARED_TASKS", "TOO_MANY_MEMBERS"];
+  const known = ["USERNAME_TAKEN", "INVALID_USERNAME", "NOT_CONNECTED", "SHARED_TASK_CANCELLED", "ALREADY_ANSWERED", "OPEN_SHARED_TASKS", "TOO_MANY_MEMBERS", "RATE_LIMITED", "SHARED_TASK_NOT_FOUND"];
   return code && known.includes(code) ? `collab.err.${code}` : "collab.err.generic";
 }

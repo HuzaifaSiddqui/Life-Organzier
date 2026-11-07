@@ -1,18 +1,16 @@
 import { z } from "zod";
-import { prisma } from "../../../config/db.js";
 import { HttpError } from "../../../lib/http.js";
 import { fuzzySimilarity, truncate } from "../../../lib/text.js";
 import { collabOn, personLabel } from "../../collab/collabRules.js";
 import {
   acceptSharedTask,
-  cancelSharedTask,
   listConnections,
   listSharedTasks,
   rejectSharedTask,
   respondConnection,
+  unshareTask,
   type SharedTaskView,
 } from "../../collab/collabService.js";
-import { softDeleteTask } from "../../tasks/taskService.js";
 import { commandAction } from "../actions.js";
 import { focusOn, taskCard, type Turn } from "../dialogue.js";
 import { askChoice } from "./runtime.js";
@@ -176,15 +174,12 @@ const sharedCancel: Command = {
   async execute(turn, args) {
     const id = String(args.sharedTaskId);
     try {
-      const shared = await cancelSharedTask(turn.user, id);
-      const mine = await prisma.task.findFirst({ where: { sharedTaskId: id, userId: turn.user.id, status: { not: "DELETED" } } });
-      if (mine && !args.keepMine) await softDeleteTask(turn.task, mine.id);
+      const { shared, kept } = await unshareTask(turn.user, turn.tz, id, Boolean(args.keepMine), turn.task.deviceId);
+      // The share's undo step is used up by the button.
+      if (turn.state.undo?.kind === "share" && turn.state.undo.sharedTaskId === id) turn.state.undo = null;
       const answered = shared.participants.some((p) => p.role === "member" && p.state !== "waiting" && p.state !== "declined");
       const who = shared.participants.filter((p) => p.role === "member").map((p) => personLabel(p.user)).join(", ");
-      if (args.keepMine && mine) {
-        await prisma.task.update({ where: { id: mine.id }, data: { sharedTaskId: null } });
-        return { content: `Okay, "${shared.title}" is just yours now. ${who} won't get it${answered ? " (anyone who already accepted keeps their copy)" : ""}.`, intent: "shared_unshared" };
-      }
+      if (kept) return { content: `Okay, "${shared.title}" is just yours now. ${who} won't get it${answered ? " (anyone who already accepted keeps their copy)" : ""}.`, intent: "shared_unshared" };
       return { content: `Undone: "${shared.title}" was removed${answered ? ". Anyone who already accepted keeps their copy" : ` and ${who} won't get it`}.`, intent: "shared_cancelled" };
     } catch (error) {
       if (error instanceof HttpError) return { content: "That shared task was already cancelled.", intent: "shared_gone" };
