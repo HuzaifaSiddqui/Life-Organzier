@@ -7,7 +7,6 @@ import { backgroundSettled } from "../src/lib/background.js";
 import {
   changedAgreedFields,
   isUnsettled,
-  maskEmail,
   normalizeUsername,
   participantState,
   proposedChange,
@@ -18,11 +17,13 @@ import {
   cancelSharedTask,
   createSharedTask,
   getSharedTask,
+  leaveSharedTask,
   listConnections,
   listNotices,
   listSharedTasks,
   rejectSharedTask,
   removeConnection,
+  removeMember,
   requestConnection,
   resendSharedTask,
   respondConnection,
@@ -38,14 +39,18 @@ const skip = !dbAvailable && "no database";
 
 /* ------------------------------------------------------------------ pure */
 
-test("collab rules: usernames, masked emails, search text", () => {
+test("collab rules: usernames; search is a username prefix of 3+ or a whole email, nothing else", () => {
   assert.equal(normalizeUsername(" @Ali_Khan "), "ali_khan");
   assert.equal(normalizeUsername("ab"), null, "too short");
   assert.equal(normalizeUsername("ali khan"), null, "no spaces");
   assert.equal(normalizeUsername("a".repeat(21)), null, "too long");
-  assert.equal(maskEmail("ali.khan@gmail.com"), "a•••@gmail.com");
-  assert.deepEqual(searchTerm(" A "), { text: "a", usernameOnly: false }, "one letter is enough");
-  assert.deepEqual(searchTerm("@Ali"), { text: "ali", usernameOnly: true });
+  assert.equal(searchTerm("a"), null, "one letter searches nobody");
+  assert.equal(searchTerm("al"), null, "two letters neither");
+  assert.deepEqual(searchTerm(" Ali "), { kind: "username", prefix: "ali" });
+  assert.deepEqual(searchTerm("@Ali_K"), { kind: "username", prefix: "ali_k" });
+  assert.equal(searchTerm("ali khan"), null, "names aren't searched");
+  assert.equal(searchTerm("ali.khan@gm"), null, "a partial email isn't searched");
+  assert.deepEqual(searchTerm(" Ali.Khan@Gmail.com "), { kind: "email", email: "ali.khan@gmail.com" });
   assert.equal(searchTerm("  "), null);
   assert.equal(searchTerm("@"), null);
 });
@@ -101,26 +106,35 @@ test.before(() => {
   setPushProvider({ send: async (msgs) => (pushes.push(...msgs), msgs.map(() => ({ id: randomUUID() }))), receipts: async () => ({}) });
 });
 
-test("collab: usernames are unique; live search from the first letter, emails masked unless typed in full", { skip }, async () => {
+test("collab: usernames are unique; search by username prefix (3+) or exact email; no photo or email until connected", { skip }, async () => {
   const me = await person("srch");
   const sana = await person("sanaz", "Sana Zaidi");
+  await prisma.user.update({ where: { id: sana.id }, data: { photoUrl: "https://example.test/sana.png" } });
   const taken = sana.username!;
   await assert.rejects(setUsername(me.id, taken), /taken/);
   await assert.rejects(setUsername(me.id, "x"), /3–20/);
 
-  // One letter already searches (other test users share the letter, so only the shape is checked here).
-  const byLetter = await searchUsers(me.id, "s");
-  assert.ok(byLetter.length > 0 && byLetter.length <= 15, "one letter lists people, at most 15");
-  assert.ok(!byLetter.some((u) => u.id === me.id), "never myself");
-  assert.ok((await searchUsers(me.id, taken.slice(0, 6))).some((u) => u.id === sana.id), "a username prefix finds her");
-  const byName = await searchUsers(me.id, "zai");
-  assert.ok(byName.some((u) => u.id === sana.id), "any word of the name");
-  const hit = byName.find((u) => u.id === sana.id)!;
-  assert.equal(hit.email, maskEmail(sana.email));
+  assert.deepEqual(await searchUsers(me.id, "s"), [], "one letter lists nobody");
+  assert.deepEqual(await searchUsers(me.id, "sa"), [], "two letters neither");
+  const byPrefix = await searchUsers(me.id, taken.slice(0, 6));
+  const hit = byPrefix.find((u) => u.id === sana.id)!;
+  assert.ok(hit, "a username prefix finds her");
+  assert.equal(hit.displayName, "Sana Zaidi", "the display name is shown");
+  assert.equal(hit.photoUrl, null, "no photo before connecting");
+  assert.equal(hit.email, null, "no email (not even masked) for a username match");
   assert.equal(hit.state, "none");
-  const exact = (await searchUsers(me.id, sana.email)).find((u) => u.id === sana.id)!;
-  assert.equal(exact.email, sana.email, "the whole address typed: shown");
-  assert.ok(!(await searchUsers(me.id, "@zai")).some((u) => u.id === sana.id), "@ searches usernames only");
+  assert.ok(!(await searchUsers(me.id, "zai")).some((u) => u.id === sana.id), "names are not searched");
+  assert.ok(!(await searchUsers(me.id, sana.email.slice(0, 8))).some((u) => u.id === sana.id), "a partial email finds nothing");
+  const exact = (await searchUsers(me.id, sana.email.toUpperCase())).find((u) => u.id === sana.id)!;
+  assert.equal(exact.email, sana.email, "the whole address typed: found, and shown");
+  assert.ok(!(await searchUsers(me.id, me.username!)).some((u) => u.id === me.id), "never myself");
+
+  await connect(me, sana);
+  assert.equal((await searchUsers(me.id, taken)).find((u) => u.id === sana.id)?.photoUrl, "https://example.test/sana.png", "connected: photo shown");
+  const pendingFrom = await person("pndg");
+  await requestConnection(pendingFrom, me.id);
+  await prisma.user.update({ where: { id: pendingFrom.id }, data: { photoUrl: "https://example.test/p.png" } });
+  assert.equal((await listConnections(me.id)).incoming[0]?.user.photoUrl, null, "a request: no photo until accepted");
 });
 
 test("collab: a request, accepted; asking someone who already asked me connects us", { skip }, async () => {
@@ -250,7 +264,8 @@ test("collab: declined, sent again; the owner can delete their own copy or cance
   const { shared, ownerTask } = await createSharedTask(owner, TZ, { kind: SharedTaskKind.COLLAB, memberIds: [b.id, c.id], title: "Poster", priority: "LOW" });
   await rejectSharedTask(b, TZ, shared.id);
   assert.equal((await timeline(b)).length, 0, "declined: never created for b");
-  await assert.rejects(acceptSharedTask(b, TZ, shared.id), /already answered/);
+  await assert.rejects(acceptSharedTask(b, TZ, shared.id), /not found/, "declined: no access any more");
+  await assert.rejects(getSharedTask(b.id, shared.id), /not found/);
   await resendSharedTask(owner, shared.id, b.id);
   assert.equal((await listSharedTasks(b.id)).cards.length, 1, "b has the card again");
 
@@ -262,7 +277,10 @@ test("collab: declined, sent again; the owner can delete their own copy or cance
   assert.equal(cancelled.cancelled, true);
   assert.equal((await listSharedTasks(b.id)).cards.length, 0, "b's unanswered card is withdrawn");
   assert.equal((await timeline(c)).length, 1, "c keeps the copy they accepted");
-  await assert.rejects(acceptSharedTask(b, TZ, shared.id), /cancelled/);
+  assert.equal((await timeline(c))[0].sharedTaskId, null, "as an ordinary task");
+  await assert.rejects(acceptSharedTask(b, TZ, shared.id), /not found/, "cancelled: members lose access");
+  await assert.rejects(getSharedTask(c.id, shared.id), /not found/);
+  assert.equal((await getSharedTask(owner.id, shared.id)).cancelled, true, "the owner still sees it");
   await backgroundSettled();
   assert.ok((await kinds(c)).includes("TASK_CANCELLED"));
 });
@@ -314,4 +332,60 @@ test("collab routes: 404 while COLLAB_TASKS is off (the app hides the feature); 
     process.env.COLLAB_TASKS = before;
     server.close();
   }
+});
+
+test("collab: the owner removes a member, a member leaves; both lose access, copies stay theirs; pending members may view", { skip }, async () => {
+  const owner = await person("rmo");
+  const b = await person("rmb2");
+  const c = await person("rmc2");
+  await connect(owner, b);
+  await connect(owner, c);
+  const { shared } = await createSharedTask(owner, TZ, { kind: SharedTaskKind.COLLAB, memberIds: [b.id, c.id], title: "Lab report", priority: "MEDIUM" });
+  assert.equal((await getSharedTask(c.id, shared.id)).myStatus, "PENDING", "a pending member can view the card to answer it");
+
+  await acceptSharedTask(b, TZ, shared.id);
+  await assert.rejects(removeMember(b, shared.id, c.id), /not found/, "only the owner removes members");
+  const after = await removeMember(owner, shared.id, b.id);
+  assert.ok(!after.participants.some((p) => p.user.id === b.id));
+  await assert.rejects(getSharedTask(b.id, shared.id), /not found/, "removed: no access");
+  assert.equal((await listSharedTasks(b.id)).shared.length, 0);
+  const bCopy = (await timeline(b))[0];
+  assert.equal(bCopy?.sharedTaskId, null, "b keeps the copy as an ordinary task");
+  await assert.rejects(removeMember(owner, shared.id, b.id), /isn't on this task/);
+
+  await leaveSharedTask(c, shared.id);
+  await assert.rejects(getSharedTask(c.id, shared.id), /not found/, "left: no access");
+  await assert.rejects(leaveSharedTask(c, shared.id), /not found/);
+  await backgroundSettled();
+  assert.ok((await kinds(b)).includes("TASK_MEMBER_REMOVED"));
+  assert.ok((await kinds(owner)).includes("TASK_MEMBER_LEFT"));
+});
+
+test("collab: account deletion — nothing new is shared with an account being deleted; when it's purged, shared tasks are cleaned up", { skip }, async () => {
+  const owner = await person("delo");
+  const member = await person("delm");
+  await connect(owner, member);
+  const { shared } = await createSharedTask(owner, TZ, { kind: SharedTaskKind.COLLAB, memberIds: [member.id], title: "Group poster", priority: "LOW" });
+  await acceptSharedTask(member, TZ, shared.id);
+
+  await prisma.user.update({ where: { id: member.id }, data: { deletionRequestedAt: new Date() } });
+  await assert.rejects(createSharedTask(owner, TZ, { kind: SharedTaskKind.ASSIGN, memberIds: [member.id], title: "More", priority: "LOW" }), /being deleted/);
+  assert.ok(!(await searchUsers(owner.id, member.username!)).length, "not found by search");
+
+  // The member's account is purged (maintenance job: prisma.user.delete): their membership and copy go with it.
+  await prisma.user.delete({ where: { id: member.id } });
+  const view = await getSharedTask(owner.id, shared.id);
+  assert.ok(!view.participants.some((p) => p.role === "member"), "the owner's view no longer lists them");
+
+  // The owner's account is purged: the shared task goes; a member's accepted copy stays theirs, unlinked.
+  const owner2 = await person("delo2");
+  const keeper = await person("delk");
+  await connect(owner2, keeper);
+  const s2 = await createSharedTask(owner2, TZ, { kind: SharedTaskKind.ASSIGN, memberIds: [keeper.id], title: "Print handouts", priority: "LOW" });
+  await acceptSharedTask(keeper, TZ, s2.shared.id);
+  await prisma.user.delete({ where: { id: owner2.id } });
+  assert.equal(await prisma.sharedTask.count({ where: { id: s2.shared.id } }), 0);
+  const kept = await timeline(keeper);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].sharedTaskId, null);
 });

@@ -92,7 +92,7 @@ import { routeWithLlm } from "./commands/router.js";
 import { getAi } from "../../ai/llm.js";
 import { bankIndex } from "./commands/neighbours.js";
 import type { CommandArgs, ParseCtx } from "./commands/types.js";
-import { resolveCommandPending, runCommand } from "./commands/runtime.js";
+import { recordUndo, resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
@@ -764,8 +764,11 @@ export async function proceedWithDraft(
     };
   }
 
-  // Task collaboration: connected people were named, but it isn't clear the task is for them too (shareIntent.ts).
-  if (draft.share && draft.share.decided === null) return askShare(turn, draft, source);
+  // Task collaboration: connected people were named (shareIntent.ts). Nothing is shared until the user answers the
+  // preview; a "share" that didn't come from that answer is shown as the preview again.
+  if (draft.share && (draft.share.decided === null || (draft.share.decided === "share" && draft.share.via !== "user"))) {
+    return askShare(turn, { ...draft, share: { ...draft.share, decided: null } }, source);
+  }
   // Only for them: it never takes the user's time, so no capacity, conflict or slot checks for the user.
   const assignOnly = draft.share?.decided === "share" && draft.share.kind === "ASSIGN";
 
@@ -948,12 +951,13 @@ function askShare(turn: Turn, draft: TaskDraft, source: "CHAT" | "VOICE" | "WHAT
     };
   }
   const names = listJoin(s.people.map((p) => p.label));
-  const them = s.people.length > 1 ? "them" : names;
+  const kind = s.kind === "ASSIGN" ? SharedTaskKind.ASSIGN : SharedTaskKind.COLLAB;
   const together = answerAction("Together", "share_choice", "together", s.kind === "COLLAB" ? "primary" : undefined);
-  const only = answerAction(`Only for ${truncate(them, 20)}`, "share_choice", "only for them", s.kind === "ASSIGN" ? "primary" : undefined);
+  const only = answerAction("Only for them", "share_choice", "only for them", s.kind === "ASSIGN" ? "primary" : undefined);
+  const justMe = answerAction("Just me", "share_choice", "just me");
   return {
-    content: `Should I share "${truncate(draft.title ?? "", 50)}" with ${names}? Together (it goes on both your plans), only for ${them}, or just for you?`,
-    actions: s.kind === "ASSIGN" ? [only, together, answerAction("Just for me", "share_choice", "just me")] : [together, only, answerAction("Just for me", "share_choice", "just me")],
+    content: `Share "${truncate(titleForShare(draft.title ?? "", s.names, kind), 50)}" with ${names}?\nTogether: on both your plans. Only for them: on theirs, not yours. Nothing is sent until you choose.`,
+    actions: s.kind === "ASSIGN" ? [only, together, justMe] : [together, only, justMe],
     intent: "share_choice",
   };
 }
@@ -986,6 +990,8 @@ async function createSharedFromDraft(turn: Turn, draft: TaskDraft, taskSource: T
       ownerCopy: input,
     });
     turn.state.pending = null;
+    // Typing "undo" now cancels the share too (the same as the Undo button).
+    recordUndo(turn, { kind: "share", sharedTaskId: shared.id, label: `sharing "${truncate(title, 40)}" with ${names}` });
     const summary = draftSummary(d, turn.todayYmd);
     const cancel = (label: string, keepMine: boolean) => commandAction(label, "shared_cancel", { sharedTaskId: shared.id, keepMine }, { text: label });
     if (!ownerTask) {
@@ -1162,8 +1168,8 @@ async function resolveChoicePending(turn: Turn, text: string, u: Understanding):
       const picked = s.people.find((x) => lower.includes(x.label.toLowerCase()) || lower.includes(x.label.replace(/^@/, "").toLowerCase()));
       if (answer === "none" || (no && !picked)) return proceedWithDraft(turn, { ...p.draft, share: { ...s, decided: "none", via: "user" } }, p.source, { clarified: true });
       if (!picked) return askShare(turn, p.draft, p.source);
-      const one = { ...s, people: [picked], ambiguous: false, via: "user" as const };
-      return proceedWithDraft(turn, { ...p.draft, share: { ...one, decided: one.kind ? "share" : null } }, p.source, { clarified: true });
+      // Who it is is settled; whether to share is still asked (the preview), never assumed from the pick.
+      return askShare(turn, { ...p.draft, share: { ...s, people: [picked], ambiguous: false, decided: null } }, p.source);
     }
     const choice = yes && s.kind ? (s.kind === "COLLAB" ? "together" : "assign") : (answer ?? (no ? "none" : null));
     if (!choice) return askShare(turn, p.draft, p.source);

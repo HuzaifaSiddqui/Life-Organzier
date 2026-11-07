@@ -232,15 +232,17 @@ switched off with `WHATSAPP_AGENT=off`; connect and test need Pro (403 `PRO_REQU
 ### Task collaboration (`/api/collab`, `COLLAB_TASKS=on`; every route 404 while off)
 
 All routes need the Firebase token; every query is scoped by the caller. Error codes: `INVALID_USERNAME`,
-`USERNAME_TAKEN`, `NOT_CONNECTED`, `ALREADY_ANSWERED`, `SHARED_TASK_CANCELLED`, `TOO_MANY_MEMBERS`, `OPEN_SHARED_TASKS`.
+`USERNAME_TAKEN`, `NOT_CONNECTED`, `ALREADY_ANSWERED`, `SHARED_TASK_CANCELLED`, `SHARED_TASK_NOT_FOUND`, `MEMBER_NOT_FOUND`,
+`TOO_MANY_MEMBERS`, `OPEN_SHARED_TASKS`, `RATE_LIMITED` (429; per user: 30 searches a minute, 20 connection requests an hour).
 
 - **`GET /me`** → `{ username, requests, cards, unread }` (requests to me, cards waiting for my answer, unread notices).
   The app shows the feature only when this answers.
 - **`PUT /username`** `{ username }` → `{ username }`: 3–20 of a-z 0-9 `_`, stored lowercase, unique.
 - **`GET /users/search?q=`** → `{ users: [{ id, username, displayName, photoUrl, email, state, connectionId }] }`, at
-  most 15. From one letter: usernames, any word of the name and emails starting with `q`; `@q` searches usernames
-  only. `email` is masked (`a•••@gmail.com`) unless `q` is the whole address. `state`: `none · requested · incoming · connected`.
-- **`GET /connections`** → `{ connected, incoming, outgoing }`. **`POST /connections`** `{ userId }` sends a request
+  most 15. `q` is a username prefix of at least 3 characters (`@` allowed) or a whole email address (exact, any case);
+  anything else returns `[]`. `photoUrl` is null unless connected; `email` is null unless `q` was that address.
+  `state`: `none · requested · incoming · connected`. Rate-limited (above).
+- **`GET /connections`** → `{ connected, incoming, outgoing }` (`photoUrl` only for connected people). **`POST /connections`** `{ userId }` sends a request (rate-limited)
   (if they already asked me, it accepts theirs). **`POST /connections/:id/accept`**, **`/reject`** (a declined request
   is deleted and can be sent again). **`DELETE /connections/:id`**: cancel my request, or remove a connection; 409
   `OPEN_SHARED_TASKS` with `data.openTasks: [{ sharedTaskId, title, kind, ownerIsMe }]` while a shared task between us
@@ -249,9 +251,13 @@ All routes need the Firebase token; every query is scoped by the caller. Error c
   → 201 `{ shared, task }`. Members must be connected (403 `NOT_CONNECTED`), at most 10. COLLAB: `task` is the owner's
   own copy (on their timeline now); ASSIGN: `task: null` (nothing on the owner's timeline). Each member gets a card.
 - **`GET /tasks`** → `{ cards, shared }`: cards waiting for my answer (not cancelled), and the tasks I own or accepted.
-  **`GET /tasks/:id`** → `{ shared }` (owner or a member only; others 404). A shared task view: the details, `revision`,
+  **`GET /tasks/:id`** → `{ shared }`: the owner, or a member whose answer is pending or accepted while the task isn't
+  cancelled; anyone else (strangers, declined, removed, left, members of a cancelled task) gets 404. A shared task view: the details, `revision`,
   `cancelled`, `owner`, `isOwner`, `myStatus`, `reapproval`, `myTaskId` and `participants: [{ user, role, state, proposedChange, completedAt }]`
   with `state` `waiting · changed · accepted · in_progress · done · declined · removed`.
+- **`DELETE /tasks/:id/members/:userId`** (owner) → `{ shared }`: removes a member (404 `MEMBER_NOT_FOUND`); they lose
+  access, an accepted copy stays theirs unlinked, they get `TASK_MEMBER_REMOVED`. **`POST /tasks/:id/leave`** (a member
+  with access) → `{ ok }`: the same for oneself; the owner gets `TASK_MEMBER_LEFT`.
 - **`POST /tasks/:id/accept`** `{ dueDate?, dueTime? }` → `{ shared, task }`: creates my copy (`Task.sharedTaskId`), or
   updates it when I am accepting the owner's change. A different date/time is kept as `proposedChange` and the
   owner is told. **`POST /tasks/:id/reject`**: declining a change removes my copy (restorable for 24 h).
@@ -259,10 +265,10 @@ All routes need the Firebase token; every query is scoped by the caller. Error c
   duration bumps `revision` and puts every accepted member back to `PENDING` with `reapproval: true` (their copy is
   unchanged until they accept). Editing those fields on the owner's own COLLAB copy through `PUT/PATCH /api/tasks/:id`
   does the same. **`POST /tasks/:id/resend`** `{ userId }` (a declined member). **`DELETE /tasks/:id`** cancels for
-  everyone: unanswered cards are withdrawn, accepted copies stay.
+  everyone: unanswered cards are withdrawn, members lose access, accepted copies stay as ordinary (unlinked) tasks.
 - **`GET /notices`** → the last 50 `{ id, kind, sharedTaskId, payload, read, createdAt, actor }`; **`POST /notices/read`**.
   Each notice is also a push `{ type: "collab", kind, sharedTaskId }` (the phone syncs; a tap opens People & sharing).
-  Kinds: `CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED · TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED`.
+  Kinds: `CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED · TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED · TASK_MEMBER_REMOVED · TASK_MEMBER_LEFT`.
 - Tasks (`/api/tasks`, `/api/sync`) carry `sharedTaskId` (null for ordinary tasks).
 - Assistant (`POST /api/assistant/message`, voice, WhatsApp): new intents `share_choice` (question; answer payload
   `{ type: "answer", pending: "share_choice", text: "together" | "only for them" | "just me" | "@username" }`),

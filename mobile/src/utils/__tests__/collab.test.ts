@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMention, cleanUsername, collabErrorKey, doneCount, filterPeople, personLabel, withoutActiveMention } from "../collab";
+import { activeMention, cleanUsername, collabErrorKey, doneCount, filterPeople, personLabel, searchable, withoutActiveMention } from "../collab";
 
 const people = [
   { id: "1", username: "ali_khan", displayName: "Ali Khan" },
@@ -40,5 +40,16 @@ describe("task collaboration helpers", () => {
     expect(collabErrorKey("USERNAME_TAKEN", false)).toBe("collab.err.USERNAME_TAKEN");
     expect(collabErrorKey("WHATEVER", false)).toBe("collab.err.generic");
     expect(collabErrorKey(null, true)).toBe("collab.err.offline");
+    expect(collabErrorKey("RATE_LIMITED", false)).toBe("collab.err.RATE_LIMITED");
+  });
+
+  it("search runs only for a username prefix of 3+ or a whole email (as the server)", () => {
+    expect(searchable("a")).toBe(false);
+    expect(searchable("al")).toBe(false);
+    expect(searchable("ali")).toBe(true);
+    expect(searchable("@ali_k")).toBe(true);
+    expect(searchable("ali khan")).toBe(false);
+    expect(searchable("ali.khan@gm")).toBe(false);
+    expect(searchable(" Ali.Khan@Gmail.com ")).toBe(true);
   });
 });

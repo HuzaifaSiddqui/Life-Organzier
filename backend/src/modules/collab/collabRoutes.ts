@@ -5,19 +5,22 @@ import { handle, HttpError, parseBody, requireUser, type UserRequest } from "../
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendError, sendSuccess } from "../../utils/apiResponse.js";
 import { serializeTask } from "../tasks/taskService.js";
-import { collabOn } from "./collabRules.js";
+import { createRateLimiter } from "../../lib/rateLimit.js";
+import { collabOn, REQUESTS_PER_HOUR, SEARCH_PER_MINUTE } from "./collabRules.js";
 import {
   acceptSharedTask,
   cancelSharedTask,
   collabSummary,
   createSharedTask,
   getSharedTask,
+  leaveSharedTask,
   listConnections,
   listNotices,
   listSharedTasks,
   markNoticesRead,
   rejectSharedTask,
   removeConnection,
+  removeMember,
   requestConnection,
   resendSharedTask,
   respondConnection,
@@ -26,6 +29,10 @@ import {
   updateSharedTask,
   type SharedTaskInput,
 } from "./collabService.js";
+
+/** Per user, so search can't be used to walk the user list and requests can't flood people with pushes. */
+export const searchLimiter = createRateLimiter({ limit: SEARCH_PER_MINUTE, windowMs: 60_000, message: "Too many searches. Wait a minute and try again." });
+export const requestLimiter = createRateLimiter({ limit: REQUESTS_PER_HOUR, windowMs: 3_600_000, message: "Too many requests sent. Try again later." });
 
 /** Task collaboration (COLLAB_TASKS=on; otherwise every route is 404, so the app hides the feature). */
 export const collabRouter = Router();
@@ -84,6 +91,7 @@ collabRouter.get(
   "/users/search",
   handle(async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
+    searchLimiter.take(req.user.id);
     sendSuccess(res, { users: await searchUsers(req.user.id, q) });
   }),
 );
@@ -94,6 +102,7 @@ collabRouter.post(
   "/connections",
   handle(async (req, res) => {
     const { userId } = parseBody(z.object({ userId: z.string().uuid() }), req.body);
+    requestLimiter.take(req.user.id);
     sendSuccess(res, await requestConnection(req.user, userId));
   }),
 );
@@ -173,6 +182,21 @@ collabRouter.post(
   handle(async (req, res) => {
     const { userId } = parseBody(z.object({ userId: z.string().uuid() }), req.body);
     sendSuccess(res, { shared: await resendSharedTask(req.user, idParam(req), userId) });
+  }),
+);
+
+/** The owner takes someone off the task. */
+collabRouter.delete(
+  "/tasks/:id/members/:userId",
+  handle(async (req, res) => sendSuccess(res, { shared: await removeMember(req.user, idParam(req), idParam(req, "userId")) })),
+);
+
+/** A member leaves (a card or an accepted task). */
+collabRouter.post(
+  "/tasks/:id/leave",
+  handle(async (req, res) => {
+    await leaveSharedTask(req.user, idParam(req));
+    sendSuccess(res, { ok: true });
   }),
 );
 
