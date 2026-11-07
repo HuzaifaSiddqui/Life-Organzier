@@ -26,6 +26,15 @@ and Samsung calendars that already sync to the phone are read where they are.
 | Completed task or routine occurrence | Kept, title starts with "✓ " (reopening removes the mark) |
 | Deleted or archived task | Event deleted; restoring the task (Undo, within 24 h) creates it again |
 
+**Shared tasks (`COLLAB_TASKS`).** The calendar follows each person's own tasks, so:
+- "Only for them": no event for the owner (the owner has no copy); "Together": the owner's copy has an event.
+- The recipient gets an event once they accept (their copy is a task like any other), if their switch is on.
+- Removed, left or cancelled: their copy stays an ordinary task (owner's decision), so its event stays; deleting the
+  task, or declining an owner's change (which deletes the copy), removes the event on the next sync.
+- Shared tasks created from chat get no clash card (they already had the share preview and a confirmation).
+- Tests: `backend/tests/collabCalendar.test.ts` (what each person's sync holds) and
+  `mobile/src/utils/__tests__/calendarCollab.test.ts` (events, mocked expo-calendar).
+
 **Sync (eventId map).** The phone keeps a map `t:<taskId>` / `r:<occurrenceId>` → `{ eventId, hash, start }` in
 AsyncStorage (per user). Each sync compares what should be in the calendar with the map
 (`mobile/src/utils/calendarSync.ts`: `desiredEvents` → `planOps` → `applyOps`): new → create, changed → update, gone →
