@@ -70,7 +70,19 @@ export type CreateTaskInput = TaskChanges & {
   confidence?: number | null;
   clientId?: string | null;
   documentId?: string | null;
+  /** Task collaboration: this task is the user's copy of a shared task. */
+  sharedTaskId?: string | null;
 };
+
+/**
+ * Task collaboration hooks (registered by the collab module so this module doesn't import it): a shared task's
+ * copy was completed, or its owner changed a detail members agreed to on their own copy.
+ */
+type SharedTaskHooks = { completed?: (task: Task) => Promise<void>; edited?: (task: Task, prev: Task) => Promise<void> };
+let sharedTaskHooks: SharedTaskHooks = {};
+export function setSharedTaskHooks(hooks: SharedTaskHooks): void {
+  sharedTaskHooks = hooks;
+}
 
 export type SerializedTask = Task & { isOverdue: boolean; subtaskCount?: number };
 
@@ -210,6 +222,7 @@ export async function createTask(ctx: TaskContext, input: CreateTaskInput): Prom
         deviceId: ctx.deviceId ?? null,
         clientId: input.clientId ?? null,
         documentId: input.documentId ?? null,
+        sharedTaskId: input.sharedTaskId ?? null,
       },
     });
   } catch (error) {
@@ -236,7 +249,15 @@ export async function updateTask(
   taskId: string,
   changes: TaskChanges,
   /** startedAt / completedAt: when it really happened (e.g. a check-in tap delivered late); default now. */
-  opts: { clientModifiedAt?: Date; skipChildren?: boolean; startedAt?: Date; completedAt?: Date; completedVia?: "CHECKIN" | "MANUAL" } = {},
+  opts: {
+    clientModifiedAt?: Date;
+    skipChildren?: boolean;
+    startedAt?: Date;
+    completedAt?: Date;
+    completedVia?: "CHECKIN" | "MANUAL";
+    /** The change came from the shared task itself (don't hand it back to the collab hooks). */
+    fromSharedTask?: boolean;
+  } = {},
 ): Promise<Task | null> {
   const existing = await prisma.task.findFirst({ where: { id: taskId, userId: ctx.userId, status: { not: TaskStatus.DELETED } } });
   if (!existing) return null;
@@ -320,6 +341,10 @@ export async function updateTask(
   if (existing.parentTaskId && existing.parentTaskId !== updated.parentTaskId) await updateParentProgress(existing.parentTaskId);
   if (updated.parentTaskId && (c.status !== undefined || c.progress !== undefined || c.parentTaskId !== undefined)) {
     await updateParentProgress(updated.parentTaskId);
+  }
+  if (updated.sharedTaskId && !opts.fromSharedTask) {
+    if (updated.status === TaskStatus.COMPLETED && existing.status !== TaskStatus.COMPLETED) await sharedTaskHooks.completed?.(updated);
+    await sharedTaskHooks.edited?.(updated, existing);
   }
   return updated;
 }

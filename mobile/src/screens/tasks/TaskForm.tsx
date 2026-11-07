@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
 import { Button, Card, Chip, ui } from "../../components/ui";
@@ -159,6 +159,7 @@ export function TaskForm({
   taskId,
   initialLocations,
   onPendingPlaces,
+  extra,
 }: {
   initial: TaskFormValues;
   submitLabel: string;
@@ -169,6 +170,8 @@ export function TaskForm({
   initialLocations?: TaskLocation[];
   /** New task: places chosen in the form, attached by the caller after the task is created. */
   onPendingPlaces?: (places: SavedLocation[]) => void;
+  /** Shown under the form, above the button (the new-task screen's "Share with"). */
+  extra?: ReactNode;
 }) {
   const { categories, settings, isPro } = usePreferences();
   const [v, setV] = useState<TaskFormValues>(initial);
@@ -477,6 +480,7 @@ export function TaskForm({
           ) : null}
         </Card>
 
+        {extra ? <Card>{extra}</Card> : null}
         {error ? <Text style={ui.error}>{error}</Text> : null}
         <Button title={submitLabel} onPress={() => void submit()} loading={busy} />
       </ScrollView>

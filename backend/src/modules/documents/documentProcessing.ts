@@ -10,6 +10,7 @@ import { createTask, serializeTask } from "../tasks/taskService.js";
 import { aiDeadlines, chunkText, cleanDocumentText, extractCourseInfo, extractDeadlines, extractSchedules, llmActionItems, llmTopics, maskPersonalNumbers, mergeDeadlines, type CourseInfo, type ExtractedDeadline, type ExtractedSchedule } from "./extraction.js";
 import { AGREE_MAX_CALLS, agreeOnAiItems, classifyDocument, docFlag, documentPriority, kindByRules, routeItems, verifyEvidence, type DocKind, type KindResult } from "./routing.js";
 import { gridSchedulesFromImage, gridSchedulesFromPdf, hasClockGrid, layoutRows } from "./gridTimetable.js";
+import { ruledGridSchedulesFromImage } from "./ruledGrid.js";
 import { extractText } from "./textExtraction.js";
 import { applyInstruction, docInstructionsOn, enrichItems, modelInstruction, peopleIn, readInstruction, withModel, type FilterResult, type ItemMeta } from "./instructions.js";
 
@@ -75,9 +76,10 @@ type InstructionFields = { meta?: ItemMeta; filteredOut?: boolean };
 
 /**
  * Bump when the readers change what a document yields (new formats, new rules): a re-upload within the reuse
- * window is then read again instead of replaying the old result. 2 = grid timetables from images.
+ * window is then read again instead of replaying the old result. 2 = grid timetables from images; 3 = ruled grid
+ * timetables (white cells, corner markers) from images.
  */
-export const EXTRACTOR_VERSION = 2;
+export const EXTRACTOR_VERSION = 3;
 
 export type AnalyzeInput = {
   buffer?: Buffer;
@@ -152,10 +154,18 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
     }
   } else if (input.docType !== "NOTES" && input.buffer && /^image\//i.test(input.mimeType) && hasClockGrid(raw.text)) {
     // A photo or screenshot of a grid timetable: plain OCR text loses which class sits in which day and slot.
-    const fromGrid = await gridSchedulesFromImage(input.buffer, input.language, started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS)).catch((error) => {
+    const deadline = started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS);
+    let fromGrid = await gridSchedulesFromImage(input.buffer, input.language, deadline).catch((error) => {
       console.warn("Grid timetable image parse failed", error instanceof Error ? error.message : error);
       return [];
     });
+    // Not coloured blocks with course codes: a ruled table of white cells (generator exports, "My Version").
+    if (fromGrid.length < 2) {
+      fromGrid = await ruledGridSchedulesFromImage(input.buffer, input.language, deadline).catch((error) => {
+        console.warn("Ruled grid timetable image parse failed", error instanceof Error ? error.message : error);
+        return [];
+      });
+    }
     if (fromGrid.length >= 2) {
       schedules = fromGrid;
       grid = true;

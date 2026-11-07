@@ -58,6 +58,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Offline sync
 
+- **Start-up never waits for the server.** The app opens on the dashboard as soon as Firebase restores the
+  session, using the profile cached from the last successful sync. Finding the server (all candidate addresses
+  probed at once, 4 s) and the profile sync run in the background and retry on reconnect and when the app returns
+  to the foreground. Exception: the first sign-in on a device has no cached profile, so it waits for that one
+  sync (the server must create the account first); if the server can't be reached, the app opens anyway and
+  server-backed screens fill in once it can.
 - **Only tasks sync offline.** Routines, mood logs, memories, documents and settings call the API directly and
   need a connection.
 - **Conflicts compare device clocks.** A true conflict (both sides changed the same field) is resolved by the newer
@@ -194,18 +200,30 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   that row has the same number of cells; otherwise the rows are skipped rather than guessed.
 - **Grid timetables** (days down the side, 30-minute slots across, classes as boxes) are read by position:
   from the PDF text layer, or from a photo/screenshot (ruling lines removed for the day and time headers;
-  class blocks found by their colour fill and read one by one). An image starts the grid reader when its
+  class blocks found by their colour fill, or the cells of a ruled table, read one by one). An image starts the grid reader when its
   OCR text has 6+ different "hh:mm" times, and the reader stops after its first header read unless it sees
   3+ different weekday labels (English, Roman Urdu, Urdu) as well. Image classes are capped at 85 % so they
   go to review, never auto-created: a section's timetable lists every group (G1, G2, G3) and the student
   ticks theirs. About 4–6 s extra.
-- **Grid timetables: COMSATS-style course codes only.** A class block is recognised by a code of 2–5 capital
-  letters and 3 digits, optionally a letter and a group ("CSC461", "MGT350", "CSC461 - G1", "CS-101L").
-  Codes like "MATH 1A", "EE2020" (4 digits), "BIO-1101" or blocks with only a course name are not
-  recognised, so those classes are missed.
-- **Grid timetables: light-coloured block fills only.** Blocks must be a light fill (grey, blue, orange, …)
-  on a white page; dark or saturated fills, outline-only boxes, dark-mode screenshots, handwritten or
-  skewed photos are not read as a grid and fall back to the line-based rules.
+- **Grid timetables: COMSATS-style course codes only (coloured-block reader).** A class block is recognised by a
+  code of 2–5 capital letters and 3 digits, optionally a letter and a group ("CSC461", "MGT350", "CSC461 - G1",
+  "CS-101L"). Codes like "MATH 1A", "EE2020" (4 digits) or "BIO-1101" are not recognised there; a ruled grid
+  with course names is read by the ruled-grid reader below.
+- **Grid timetables: light-coloured block fills or a ruled table.** The first reader needs blocks with a light
+  fill (grey, blue, orange, …) on a white page. When it finds fewer than 2 classes, a second reader
+  (`documents/ruledGrid.ts`) looks for a **ruled table**: a header row of one start time per slot column
+  ("1 / 8:30 AM"), day labels down the side, and classes as white merged cells with no column line inside,
+  each starting at a column line or a corner marker (a coloured or black triangle, as in timetable-generator
+  "My Version" exports). Any text is a title (course names, no code needed); the next line is the teacher (a
+  section code like "sp23-bcs-b" is dropped) and the last line, if it looks like one, the room. Each header,
+  day and class cell is read on its own (about 3–4 s). Limits: the table must be upright and fully ruled
+  (header column lines through the whole header row, a line under each day row); dark-mode screenshots,
+  handwritten or skewed photos and outline-free layouts still fall back to the line-based rules. Text drawn
+  over a **black** corner triangle loses the letters inside it ("tro to Psych"); a title that is another class's
+  title minus its first 1–5 letters takes that full title, otherwise it stays clipped for the student to fix in
+  review. Small print in a compressed WhatsApp JPEG can still be misread ("Autoniated Software Testing"). On
+  the real "My Version" screenshot: 13/13 classes with the right day, start, length and room (PNG); the
+  WhatsApp JPEG of it had 13/13 slots right with 3 titles and 1 room misread.
 - **Grid timetables: rooms are the weak part.** Rooms read from an image get their hyphen back ("D118" →
   "D-118"); one that doesn't look like a room code (capital-hyphen-digits, or a named lab with a code) keeps
   its text as read and the review row says "Check the room" (characters are never guessed). A misread that
@@ -229,6 +247,54 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   [design.md](design.md) for the checklist before turning them on.
 - Speech recognition is on-device (no Whisper); quality depends on the phone's speech service.
 - WhatsApp needs Twilio credentials; without them the webhook only works with `WHATSAPP_ALLOW_UNSIGNED=true` (local testing).
+
+## Task collaboration (COLLAB_TASKS, off by default)
+
+- **Server flag, off by default.** With `COLLAB_TASKS` off every `/api/collab` route is 404 and the app hides People
+  & sharing and the task form's "Share with".
+- **Sharing needs a connection.** Requests, cards and answers are online only; nothing is queued offline. A member's
+  copy is an ordinary task once accepted, so it then syncs and reminds offline like any other.
+- **Each person has their own copy.** Completing, rescheduling or deleting a copy changes only that person's copy.
+  Only the owner's changes to title, notes, due date/time or length go to the others, and only after they accept
+  them again; until then their copy keeps the old details. Priority, category and planned start stay personal.
+- **Search finds people by username prefix (3+ characters) or a whole email address only.** Names and partial emails
+  are never matched, so typing letters can't list people. Results show username and display name; the photo only once
+  connected (requests show no photo either), the email only when that exact address was typed. Typing a full address
+  still confirms that an account with it exists. 15 results at most; accounts being deleted are left out. There is no
+  blocking or hiding from search yet.
+- **Rate limits are per server process** (`lib/rateLimit.ts`): 30 searches a minute and 20 connection requests an hour
+  per user (429 `RATE_LIMITED`). They reset on restart, and several backend instances would each count separately.
+- **Sharing from chat, voice and WhatsApp reads the wording, but only proposes.** Only people the user is connected
+  to are candidates ("@username", their username, or a word of their name; a name that is also a common word, like
+  "Will", counts only with a capital or "@"). Rules read clear wording: "ask Ali to …", "assign it to Ali", "Ali should
+  …" (only for them); "with Ali", "Ali and I", "we" (together); "call / text / pay / visit Ali", "Ali's …", "a gift for
+  Ali", "from Ali" (just a name). Anything else goes to the model (a narrow, schema-checked choice). "Just a name" (by
+  the rules, or the model at 70 % or more) makes an ordinary task. **Nothing is ever shared without the user's
+  answer**: every other case, however sure the rules or the model are, is the preview "Share '…' with @ali? Together /
+  Only for them / Just me" (the proposal first), and no notice or push reaches anyone before the user picks Together
+  or Only for them. One name that fits two connections asks which one first, then shows the preview. The rules are
+  English only (Roman Urdu wording goes to the model or the preview; no new Roman Urdu rules before 10 Nov 2026).
+  Shared from chat, the reply has Undo (cancel for everyone) and "Just for me" (keep my copy, withdraw the cards);
+  typing "undo" within 15 minutes cancels it too. A multi-task message ("add A and B") is never shared.
+- **Answering on WhatsApp.** "Show shared tasks" / "what did people share with me" lists cards and requests with
+  numbered Accept / Decline; "accept the slides task", "decline Sana's task" answer by name. Accepting on WhatsApp
+  uses the card's date and time (another time: in the app). There is no proactive WhatsApp message when something is
+  shared: the next WhatsApp reply adds one line ("Also: Sana shared "Slides" with you …"), once, for cards and
+  requests still waiting. Sending a connection request needs the app.
+- **Members can be removed, not added.** The owner can remove a member and a member can leave; they lose access at
+  once, and a copy they accepted stays theirs as an ordinary task (unlinked). Declined members and, after a cancel,
+  every member lose access too (the owner keeps it); a pending member may view the card to answer it. Adding people
+  to an existing shared task isn't possible (share a new one). A connection can't be removed while a shared task
+  between the two is unanswered or not done.
+- **Account deletion.** An account that asked to be deleted can't be shared with (or found) during its 30 days. When it
+  is purged, tasks it owned are deleted for everyone except accepted copies, which stay with their members as ordinary
+  tasks; as a member, its membership and copies go and the owner's view no longer lists it. Recovering within the 30
+  days restores everything.
+- **The task form's "Share with" shares on Add.** Picking people in the form and tapping Add is the confirmation there
+  (no second preview).
+- **Notices rely on push.** Each event is a push plus an in-app notice under Requests → Activity. Without a push
+  token (no permission, emulator) only the in-app list shows it.
+- **Copy is English only** until after 10 Nov 2026 (`collab.*` keys; Urdu shows English).
 
 ## WhatsApp (FR-WA)
 

@@ -25,7 +25,15 @@ export function initFirebase(): void {
   initialized = true;
 }
 
+/** Route tests only: a token checker in place of Firebase. Refused unless NODE_ENV is "test". */
+let testAuth: Pick<Auth, "verifyIdToken"> | null = null;
+export function useTestAuth(auth: Pick<Auth, "verifyIdToken"> | null): void {
+  if (process.env.NODE_ENV !== "test") throw new Error("useTestAuth is for tests only");
+  testAuth = auth;
+}
+
 export function getFirebaseAuth(): Auth {
+  if (testAuth && process.env.NODE_ENV === "test") return testAuth as Auth;
   if (!initialized) initFirebase();
   return admin.auth();
 }

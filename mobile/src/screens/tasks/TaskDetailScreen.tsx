@@ -5,7 +5,10 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { TaskLocationsField } from "../../components/TaskLocationsField";
 import { usePreferences } from "../../context/PreferencesContext";
-import { Button, Card, Chip, ProgressBar, Snackbar, ui } from "../../components/ui";
+import { Icon } from "../../components/icons/Icon";
+import { Button, Card, Chip, ListItem, ProgressBar, Snackbar, ui } from "../../components/ui";
+import { useLocale } from "../../i18n/LocaleProvider";
+import { useTheme } from "../../theme/ThemeProvider";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -129,6 +132,9 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           {task.source !== "MANUAL" ? <Text style={styles.meta}>Added via {task.source.toLowerCase()}</Text> : null}
           {isPro && !isLocalId(task.id) ? <TaskLocationsField key={task.updatedAt} taskId={task.id} initial={task.locations ?? []} showDistance /> : null}
         </Card>
+        {task.sharedTaskId ? (
+          <SharedTaskLink onPress={() => navigation.navigate("Collab", { tab: "shared" })} />
+        ) : null}
 
         {overdue ? (
           <Card tone="danger" style={{ gap: 10 }}>
@@ -299,3 +305,18 @@ const styles = StyleSheet.create({
   check: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: palette.success, alignItems: "center", justifyContent: "center" },
   checkDone: { backgroundColor: palette.success },
 });
+
+/** Task collaboration: this task is my copy of a shared one; everyone's progress is under People & sharing. */
+function SharedTaskLink({ onPress }: { onPress: () => void }) {
+  const { t } = useLocale();
+  const theme = useTheme();
+  return (
+    <ListItem
+      title={t("collab.detail.shared")}
+      subtitle={t("collab.detail.see")}
+      leading={<Icon name="people" color={theme.colors.accent} />}
+      trailing={<Icon name="chevron" color={theme.colors.textTertiary} />}
+      onPress={onPress}
+    />
+  );
+}

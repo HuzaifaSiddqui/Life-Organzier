@@ -1,4 +1,5 @@
 import { isWhatsapp } from "./channel.js";
+import { detectShare } from "./shareIntent.js";
 import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
 import { answerAction, commandAction, sayAction } from "./actions.js";
 import { prisma } from "../../config/db.js";
@@ -186,7 +187,9 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   switch (u.intent) {
     case "create_task": {
       if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && TASK_CUE.test(text))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
-      const out = await proceedWithDraft(turn, startTaskDraft(turn, u, text), turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
+      // Task collaboration: connected people named in the message, and whether it's for them too (shareIntent.ts).
+      const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text) };
+      const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
       const note = cantDoNote(text);
       if (note && (out.intent === "task_created" || out.intent === "clarify")) out.content = `${note}\n${out.content}`;
       if (u.mood?.explicit && out.intent === "task_created") {

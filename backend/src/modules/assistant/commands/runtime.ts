@@ -4,6 +4,7 @@ import { prisma } from "../../../config/db.js";
 import { fuzzySimilarity, truncate } from "../../../lib/text.js";
 import { generateRoutineOccurrences, updateRoutine } from "../../routines/routineService.js";
 import type { Task } from "@prisma/client";
+import { unshareTask } from "../../collab/collabService.js";
 import { changesFromSnapshot, getTaskForUser, restoreTask, snapshotOf, softDeleteTask, undoLastEdit, updateTask } from "../../tasks/taskService.js";
 import type { Out, Turn } from "../dialogue.js";
 import type { Understanding } from "../nlu.js";
@@ -212,6 +213,12 @@ export async function applyCommandUndo(turn: Turn): Promise<Out | null> {
         else if (rec.op === "delete") await restoreTask(turn.task, id);
         else await softDeleteTask(turn.task, id);
       }
+      break;
+    }
+    case "share": {
+      // Already cancelled (the Undo button was used): nothing left to undo.
+      const done = await unshareTask(turn.user, turn.tz, rec.sharedTaskId, false, turn.task.deviceId).then(() => true, () => false);
+      if (!done) return { content: "That share was already undone.", intent: "undo_none" };
       break;
     }
   }

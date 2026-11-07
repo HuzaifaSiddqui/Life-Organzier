@@ -7,6 +7,7 @@ import {
   Prisma,
   RoutineFrequency,
   RoutinePriority,
+  SharedTaskKind,
   TaskSource,
   TaskStatus,
   TaskType,
@@ -80,6 +81,9 @@ import {
 import { extractEntities, extractInterval, isHabitLike, isVagueTitle, saysDoneToday, saysNoReminder, withoutNoReminder, titleWithoutPlace, withoutDoneToday, withoutInterval, type ExtractOptions } from "./entities.js";
 import { rulesUnderstand, understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
+import { shareAnswer, titleForShare } from "./shareIntent.js";
+import { createSharedTask, whatsappCollabLine } from "../collab/collabService.js";
+import { HttpError } from "../../lib/http.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
@@ -88,7 +92,7 @@ import { routeWithLlm } from "./commands/router.js";
 import { getAi } from "../../ai/llm.js";
 import { bankIndex } from "./commands/neighbours.js";
 import type { CommandArgs, ParseCtx } from "./commands/types.js";
-import { resolveCommandPending, runCommand } from "./commands/runtime.js";
+import { recordUndo, resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
@@ -234,6 +238,8 @@ export async function handleAssistantMessage(input: {
     out = { content: "Sorry — something went wrong on my side. Could you try that again?", intent: "error" };
   }
   if (turn.calendarNote) out = { ...out, content: `${out.content}\n${CALENDAR_SETTINGS_LINE}` };
+  // Task collaboration: WhatsApp gets no push, so its next reply mentions new shared tasks and requests (once).
+  if (isWhatsapp(turn.channel) && out.intent !== "shared_requests" && out.intent !== "error") out = { ...out, content: out.content + (await whatsappCollabLine(turn.user.id).catch(() => "")) };
 
   turn.state.turn += 1;
   await saveState(conversation.id, turn.state);
@@ -614,7 +620,8 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
     case "past_date":
     case "typo":
     case "capacity":
-    case "conflict": {
+    case "conflict":
+    case "share_choice": {
       const r = await resolveChoicePending(turn, text, u);
       if (r) return r;
       break;
@@ -771,6 +778,14 @@ export async function proceedWithDraft(
     };
   }
 
+  // Task collaboration: connected people were named (shareIntent.ts). Nothing is shared until the user answers the
+  // preview; a "share" that didn't come from that answer is shown as the preview again.
+  if (draft.share && (draft.share.decided === null || (draft.share.decided === "share" && draft.share.via !== "user"))) {
+    return askShare(turn, { ...draft, share: { ...draft.share, decided: null } }, source);
+  }
+  // Only for them: it never takes the user's time, so no capacity, conflict or slot checks for the user.
+  const assignOnly = draft.share?.decided === "share" && draft.share.kind === "ASSIGN";
+
   // Typo suggestion (FR-EH-003 §4) — asked once per draft.
   if (draft.title && !opts.reviewed && !draft.prereqChecked) {
     const corrected = await detectTypo(turn.user.id, draft.title);
@@ -822,7 +837,7 @@ export async function proceedWithDraft(
   const ctx = await loadScheduleContext(turn.user.id, turn.settings, 14);
 
   // Overload prevention (FR-TM-006 §4).
-  if (draft.dueYmd && draft.durationMinutes && !draft.overrideCapacity && draft.taskType !== TaskType.FIXED) {
+  if (!assignOnly && draft.dueYmd && draft.durationMinutes && !draft.overrideCapacity && draft.taskType !== TaskType.FIXED) {
     const load = dayLoad(ctx, draft.dueYmd);
     if (load.minutes + draft.durationMinutes > load.capacity) {
       const movable = movableTasksOn(ctx, draft.dueYmd).slice(0, 3);
@@ -842,7 +857,7 @@ export async function proceedWithDraft(
   }
 
   // Mandatory routine conflict (FR-RM-002 §3).
-  if (draft.dueYmd && draft.dueTime && !draft.overrideConflict && (draft.taskType === TaskType.FIXED || draft.durationMinutes)) {
+  if (!assignOnly && draft.dueYmd && draft.dueTime && !draft.overrideConflict && (draft.taskType === TaskType.FIXED || draft.durationMinutes)) {
     const c = parseClock(draft.dueTime);
     if (c) {
       const start = zonedTimeToUtc(draft.dueYmd, c.h, c.m, turn.tz);
@@ -869,7 +884,7 @@ export async function proceedWithDraft(
   // Auto-schedule duration work into a free slot (FR-TM-006); DEADLINE tasks only if it ends before the deadline.
   let scheduleNote = "";
   let noSlot = false;
-  if (draft.durationMinutes && !draft.scheduledStart) {
+  if (!assignOnly && draft.durationMinutes && !draft.scheduledStart) {
     const dueClock = parseClock(draft.dueTime);
     const deadline = draft.dueYmd
       ? dueClock
@@ -888,12 +903,19 @@ export async function proceedWithDraft(
   }
 
   const taskSource = source === "WHATSAPP" ? TaskSource.WHATSAPP : source === "VOICE" ? TaskSource.VOICE : TaskSource.CHAT;
+  let shareNote = "";
+  if (draft.share?.decided === "share" && draft.share.kind) {
+    const shared = await createSharedFromDraft(turn, draft, taskSource, confidence, scheduleNote);
+    if ("out" in shared) return shared.out;
+    shareNote = shared.note;
+  }
   const task = await createTask(turn.task, draftToCreateInput(draft, turn.tz, taskSource, confidence));
   if (isWhatsapp(turn.channel)) notifyAddedFromWhatsapp(turn.user.id, [task.title]); // P2: shows up on the phone now
   turn.state.pending = null;
   focusOn(turn, task.id);
 
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
+  if (shareNote) lines.unshift(shareNote);
   if (draft.assumedEndOfDay && !draft.dueTime) lines.push("11:59 PM assumed. Say 'change time' to set another.");
   if (scheduleNote) lines.push(scheduleNote);
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
@@ -927,6 +949,90 @@ export async function proceedWithDraft(
     actions.push({ label: "Move to tomorrow", payload: { type: "postpone_task", taskId: task.id, days: 1 } });
   }
   return { content: lines.join("\n"), cards: [taskCard(shown, undefined, true), ...(setup?.card ? [setup.card] : [])], actions, intent: "task_created" };
+}
+
+/* ------------------------------------------------------------------ task collaboration in chat */
+
+/** "Share this with @ali?": together, only for them, or just me; or, when one name fits two people, which one. */
+function askShare(turn: Turn, draft: TaskDraft, source: "CHAT" | "VOICE" | "WHATSAPP"): Out {
+  const s = draft.share!;
+  turn.state.pending = { kind: "share_choice", draft, source };
+  if (s.ambiguous) {
+    return {
+      content: `Who do you mean: ${s.people.map((p) => p.label).join(" or ")}? Or is "${truncate(draft.title ?? "", 40)}" just for you?`,
+      actions: [...s.people.slice(0, 4).map((p) => answerAction(p.label, "share_choice", p.label)), answerAction("Just for me", "share_choice", "just me")],
+      intent: "share_choice",
+    };
+  }
+  const names = listJoin(s.people.map((p) => p.label));
+  const kind = s.kind === "ASSIGN" ? SharedTaskKind.ASSIGN : SharedTaskKind.COLLAB;
+  const together = answerAction("Together", "share_choice", "together", s.kind === "COLLAB" ? "primary" : undefined);
+  const only = answerAction("Only for them", "share_choice", "only for them", s.kind === "ASSIGN" ? "primary" : undefined);
+  const justMe = answerAction("Just me", "share_choice", "just me");
+  return {
+    content: `Share "${truncate(titleForShare(draft.title ?? "", s.names, kind), 50)}" with ${names}?\nTogether: on both your plans. Only for them: on theirs, not yours. Nothing is sent until you choose.`,
+    actions: s.kind === "ASSIGN" ? [only, together, justMe] : [together, only, justMe],
+    intent: "share_choice",
+  };
+}
+
+/**
+ * Creates the shared task for a decided draft. Together: the user's copy (already slotted) plus a card for each
+ * person; only for them: a card each and nothing on the user's timeline. If sharing isn't possible any more (the
+ * connection was removed), the caller creates an ordinary task with the returned note.
+ */
+async function createSharedFromDraft(turn: Turn, draft: TaskDraft, taskSource: TaskSource, confidence: number, scheduleNote: string): Promise<{ out: Out } | { note: string }> {
+  const s = draft.share!;
+  const kind = s.kind === "ASSIGN" ? SharedTaskKind.ASSIGN : SharedTaskKind.COLLAB;
+  const title = titleForShare(draft.title ?? "", s.names, kind);
+  const d: TaskDraft = { ...draft, title };
+  const input = draftToCreateInput(d, turn.tz, taskSource, confidence);
+  const names = listJoin(s.people.map((p) => p.label));
+  try {
+    const { shared, ownerTask } = await createSharedTask(turn.user, turn.tz, {
+      title: input.title,
+      description: input.description,
+      dueDate: input.dueDate,
+      dueTime: input.dueTime,
+      priority: input.priority,
+      category: input.category,
+      durationMinutes: input.durationMinutes,
+      taskType: input.taskType,
+      kind,
+      memberIds: s.people.map((p) => p.id),
+      deviceId: turn.task.deviceId,
+      ownerCopy: input,
+    });
+    turn.state.pending = null;
+    // Typing "undo" now cancels the share too (the same as the Undo button).
+    recordUndo(turn, { kind: "share", sharedTaskId: shared.id, label: `sharing "${truncate(title, 40)}" with ${names}` });
+    const summary = draftSummary(d, turn.todayYmd);
+    const cancel = (label: string, keepMine: boolean) => commandAction(label, "shared_cancel", { sharedTaskId: shared.id, keepMine }, { text: label });
+    if (!ownerTask) {
+      return {
+        out: {
+          content: `Sent to ${names}: ${summary}. It isn't on your timeline; I'll tell you when they answer.`,
+          actions: [cancel("Undo", false), { label: "People & sharing", payload: { type: "navigate", screen: "Collab" } }],
+          intent: "task_shared",
+        },
+      };
+    }
+    if (isWhatsapp(turn.channel)) notifyAddedFromWhatsapp(turn.user.id, [ownerTask.title]);
+    focusOn(turn, ownerTask.id);
+    const lines = [`Added and shared with ${names}: ${summary}. It joins their plan when they accept.`];
+    if (scheduleNote) lines.push(scheduleNote);
+    return {
+      out: {
+        content: lines.join("\n"),
+        cards: [taskCard(ownerTask)],
+        actions: [cancel("Undo", false), cancel("Just for me", true), { label: "View task", payload: { type: "open_task", taskId: ownerTask.id } }],
+        intent: "task_shared",
+      },
+    };
+  } catch (error) {
+    if (!(error instanceof HttpError)) throw error;
+    return { note: `I couldn't share it with ${names} (you're no longer connected), so it's just yours.` };
+  }
 }
 
 /** The Free-user invitation to Pro shows at most once per (local) day per user, across conversations. */
@@ -1068,6 +1174,22 @@ async function resolveChoicePending(turn: Turn, text: string, u: Understanding):
   const yes = u.intent === "confirm";
   const no = u.intent === "deny";
   const lower = text.toLowerCase();
+
+  if (p.kind === "share_choice" && p.draft.share) {
+    const s = p.draft.share;
+    const answer = shareAnswer(text);
+    if (s.ambiguous) {
+      const picked = s.people.find((x) => lower.includes(x.label.toLowerCase()) || lower.includes(x.label.replace(/^@/, "").toLowerCase()));
+      if (answer === "none" || (no && !picked)) return proceedWithDraft(turn, { ...p.draft, share: { ...s, decided: "none", via: "user" } }, p.source, { clarified: true });
+      if (!picked) return askShare(turn, p.draft, p.source);
+      // Who it is is settled; whether to share is still asked (the preview), never assumed from the pick.
+      return askShare(turn, { ...p.draft, share: { ...s, people: [picked], ambiguous: false, decided: null } }, p.source);
+    }
+    const choice = yes && s.kind ? (s.kind === "COLLAB" ? "together" : "assign") : (answer ?? (no ? "none" : null));
+    if (!choice) return askShare(turn, p.draft, p.source);
+    const share = choice === "none" ? { ...s, decided: "none" as const, via: "user" as const } : { ...s, decided: "share" as const, kind: choice === "together" ? ("COLLAB" as const) : ("ASSIGN" as const), via: "user" as const };
+    return proceedWithDraft(turn, { ...p.draft, share }, p.source, { clarified: true });
+  }
 
   if (p.kind === "typo") {
     if (yes) {

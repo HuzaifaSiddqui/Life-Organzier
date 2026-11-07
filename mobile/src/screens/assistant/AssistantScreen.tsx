@@ -50,6 +50,7 @@ const CLIENT_SCREENS: Record<string, keyof MainStackParamList> = {
   Documents: "Documents",
   Settings: "Settings",
   Mood: "Mood",
+  Collab: "Collab",
 };
 
 export function AssistantScreen({ navigation, route }: Props) {
