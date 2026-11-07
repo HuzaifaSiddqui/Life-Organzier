@@ -28,6 +28,7 @@ import {
 } from "../../services/settingsApi";
 import { resetLocalData, syncNow } from "../../services/syncEngine";
 import { LocationOnboardingSheet } from "../../components/LocationOnboardingSheet";
+import { CalendarSettingsCard } from "../../components/CalendarSettingsCard";
 import { WhatsappAgentCard } from "../../components/WhatsappAgentCard";
 import { WhatsappLinkCard } from "../../components/WhatsappLinkCard";
 import { isLocationRemindersEnabled, setLocationRemindersEnabled, takeLocationOnboarding } from "../../services/locationReminders";
@@ -59,6 +60,7 @@ export function SettingsScreen({ navigation }: Props) {
   const { settings, update, categories, setCategories, reload } = usePreferences();
   const { t } = useLocale();
   const [toast, setToast] = useState<string | null>(null);
+  const [toastAction, setToastAction] = useState<{ label: string; onPress: () => void } | undefined>(undefined);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [name, setName] = useState("");
   const [newContext, setNewContext] = useState("");
@@ -386,6 +388,13 @@ export function SettingsScreen({ navigation }: Props) {
         <WhatsappLinkCard />
         <WhatsappAgentCard />
 
+        <CalendarSettingsCard
+          onToast={(text, action) => {
+            setToastAction(action);
+            setToast(text);
+          }}
+        />
+
         <SectionTitle title="Help & tutorials" />
         <Card style={{ gap: 8 }}>
           <View style={styles.rowBetween}>
@@ -487,7 +496,14 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.meta}>Privacy: your data is stored in your Life Organizer database and the AI runs on your own server — nothing is sold or shared.</Text>
         </Card>
       </ScrollView>
-      <Snackbar text={toast} onHide={() => setToast(null)} />
+      <Snackbar
+        text={toast}
+        action={toastAction}
+        onHide={() => {
+          setToast(null);
+          setToastAction(undefined);
+        }}
+      />
       <LocationOnboardingSheet
         visible={onboarding}
         onDismiss={() => {

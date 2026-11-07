@@ -96,6 +96,33 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   re-sync until it fires (before, a re-sync within the 15 minutes dropped it). It is dropped when the task is done
   or deleted on the phone's task list; another phone doesn't know about it.
 
+## Phone calendar (`CALENDAR_SYNC`, off)
+
+- **Needs a new development build** (`expo-calendar` is native). Older dev clients run normally; calendar actions say
+  "The calendar needs the latest version of the app".
+- **One way.** Edits made to Life Organizer events in the calendar app are not read back; the next change to the task
+  overwrites them. An event deleted there is created again on the task's next change.
+- **Routines: 14 days ahead.** Later occurrences are added as the window moves (on the next re-plan). Past routine events
+  stay in the calendar and are no longer updated; "Remove all" deletes them, and Undo doesn't bring them back.
+- **Busy time is what the phone has.** Google / Outlook events count only once they have synced to the phone's calendar.
+  Free time uses fixed day hours, 8 AM – 10 PM, not quiet hours or the plan's free slots.
+- **Chat clash warning comes after the task is created** (Keep / Undo), because the server creates a clear task at once
+  and never sees the phone's calendar. The task form warns before saving. Dashboard suggestions don't check clashes.
+- **All-day events on Android** are stored at UTC midnight (Android's rule); a calendar app in an unusual timezone
+  setup may show them a day off (phone checklist step 4).
+- **A task created offline** gets its event at once; when it reaches the server it gets a new id, so the event is
+  deleted and created again (it may flicker in an open calendar app).
+- **Per phone.** The switch and the event map are kept on each phone; two phones with the switch on each make their own
+  "Life Organizer" calendar, and if both sync to the same Google account the user sees two copies. Signing out leaves
+  the events; another account signed in on the same phone writes into the same "Life Organizer" calendar.
+- **English only** for the Settings line, chat cards and clash messages until after 10 Nov (Urdu falls back to English).
+- **The switch off stops updates only**; events already written stay until "Remove all".
+- **A second calendar after a reinstall.** If the app's storage is lost and its old "Life Organizer" calendar holds
+  any event without the app's marker (the user added one), the old calendar is left alone and a new "Life Organizer
+  (2)" is made, so the old calendar's events show as well until the user deletes that calendar.
+- **"Am I free …" needs the switch.** With the switch off (or an older app that doesn't send it) the question gets the
+  task-list answer plus a line about Settings, never the calendar.
+
 ## Documents and OCR
 
 - **Requests on documents (`DOC_INSTRUCTIONS`, off).** A teacher is found only when the document names one: a grid
