@@ -23,6 +23,7 @@ import { useDeviceSpeechRecognition } from "../../hooks/useDeviceSpeechRecogniti
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage, isNetworkError } from "../../services/api";
 import { loadCurrentConversation, sendToAssistant, startNewConversation } from "../../services/assistantApi";
+import { clashCardFor } from "../../services/calendar";
 import { speak, stopSpeaking } from "../../services/speech";
 import { readTasks } from "../../services/syncEngine";
 import { normalizeSpelled, VOICE_MIN_RUN } from "../../utils/spelled";
@@ -116,6 +117,13 @@ export function AssistantScreen({ navigation, route }: Props) {
     };
   }, [scrollToEnd]);
 
+  /** CALENDAR_SYNC: a task chat just added overlaps an event on the phone's other calendars → Keep / Undo card. */
+  const addClashCard = useCallback(async (message: ChatMessage) => {
+    const task = message.cards?.find((c) => c.type === "task")?.task;
+    const card = task ? await clashCardFor(task) : null;
+    if (card) setMessages((m) => m.map((x) => (x.id === message.id ? { ...x, cards: [...(x.cards ?? []), card] } : x)));
+  }, []);
+
   const send = useCallback(
     async (input: { text?: string; payload?: ActionPayload; label?: string; voice?: boolean }) => {
       const shown = input.text ?? input.label ?? "";
@@ -134,6 +142,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           ...m.map((x) => (x.id === tempId && reply.userMessage ? { ...x, id: reply.userMessage.id, pending: false } : x)),
           reply.message,
         ]);
+        if (reply.message.intent === "task_created") void addClashCard(reply.message);
         // Settings changed (or undone) from chat: refresh what the app shows and plans with.
         if (/^(?:settings_|checkin|undone)/.test(reply.message.intent ?? "")) void reload();
         const shouldSpeak = speakReplies || input.voice || reply.message.intent === "read_back";
@@ -147,7 +156,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         scrollToEnd();
       }
     },
-    [busy, conversationId, reload, scrollToEnd, settings?.language, settings?.ttsRate, speakReplies],
+    [addClashCard, busy, conversationId, reload, scrollToEnd, settings?.language, settings?.ttsRate, speakReplies],
   );
 
   const { start, stop, listening, speechSupported } = useDeviceSpeechRecognition({

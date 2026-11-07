@@ -100,6 +100,8 @@ import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, R
 export type { Channel } from "./channel.js";
 import type { Channel } from "./channel.js";
 
+const CALENDAR_SETTINGS_LINE = "To include your phone calendar, turn on Phone calendar in Settings.";
+
 export type Turn = {
   user: User;
   settings: UserSettings;
@@ -118,6 +120,10 @@ export type Turn = {
   placeNames?: string[];
   /** The phone's Location reminders toggle + permission (app only; unknown on WhatsApp). */
   locationReminders?: boolean;
+  /** CALENDAR_SYNC: the phone's calendar switch (app only; unknown on WhatsApp). */
+  calendarOn?: boolean;
+  /** "Am I free …" answered from tasks because the calendar is off: the reply gets one line about Settings. */
+  calendarNote?: boolean;
 };
 
 export type Out = {
@@ -181,6 +187,8 @@ export async function handleAssistantMessage(input: {
   now?: Date;
   /** Sent by the app: false when its Location reminders toggle is off or access is refused. */
   locationReminders?: boolean;
+  /** Sent by the app: its calendar switch is on (CALENDAR_SYNC). */
+  calendarOn?: boolean;
   /** Recent turns to use instead of the stored ones (the WhatsApp Agent passes its trimmed, masked context window). */
   history?: ChatMessage[];
 }): Promise<AssistantReply> {
@@ -203,6 +211,7 @@ export async function handleAssistantMessage(input: {
     memoriesUsed: 0,
     placeNames: isPro(input.settings) ? (await prisma.savedLocation.findMany({ where: { userId: input.user.id }, select: { name: true } })).map((p) => p.name) : [],
     locationReminders: input.locationReminders,
+    calendarOn: input.calendarOn,
   };
   // CHAT_FIXES_V2: an open question left unanswered for 30 quiet minutes is dropped (as on WhatsApp), so a later
   // message ("How are you today?") is never read as its answer. A tapped button still answers its own question.
@@ -228,6 +237,7 @@ export async function handleAssistantMessage(input: {
     console.error("Assistant turn failed", error);
     out = { content: "Sorry — something went wrong on my side. Could you try that again?", intent: "error" };
   }
+  if (turn.calendarNote) out = { ...out, content: `${out.content}\n${CALENDAR_SETTINGS_LINE}` };
   // Task collaboration: WhatsApp gets no push, so its next reply mentions new shared tasks and requests (once).
   if (isWhatsapp(turn.channel) && out.intent !== "shared_requests" && out.intent !== "error") out = { ...out, content: out.content + (await whatsappCollabLine(turn.user.id).catch(() => "")) };
 
@@ -343,7 +353,11 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
       turn.state.pending = null;
       return runMulti(turn, parts);
     }
-    const hit = matchCommand(text, ctx);
+    const matched = matchCommand(text, ctx);
+    // CALENDAR_SYNC: "am I free …" reads the phone's calendar only when the user's switch is on too; otherwise the
+    // message goes on as before (the task list) and the reply says where to turn the calendar on.
+    const hit = matched?.command.name === "calendar_free" && !turn.calendarOn ? null : matched;
+    if (matched && !hit) turn.calendarNote = turn.channel === "APP" || turn.channel === "VOICE";
     if (hit) {
       turn.state.pending = null;
       // Sure rules; only a strong disagreement of the meaning-based router asks first (commands/meaning.ts).

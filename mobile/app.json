@@ -61,6 +61,12 @@
         }
       ],
       "@react-native-community/datetimepicker",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Life Organizer adds your tasks and routines to its own calendar, and reads your other calendars on this phone to warn about clashes and find free time. Calendar details stay on your phone."
+        }
+      ],
       "expo-status-bar",
       "./plugins/withLongPathCMake",
       "expo-font",

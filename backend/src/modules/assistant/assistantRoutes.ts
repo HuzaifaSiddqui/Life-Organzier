@@ -24,6 +24,8 @@ const messageSchema = z
     channel: z.enum(["APP", "VOICE"]).optional(),
     /** The phone's Location reminders toggle (and permission); the server can't see it otherwise. */
     locationReminders: z.boolean().optional(),
+    /** CALENDAR_SYNC: the phone's calendar switch is on (and access granted); "am I free …" uses the calendar only then. */
+    calendar: z.boolean().optional(),
   })
   .refine((v) => Boolean(v.text?.trim()) || Boolean(v.payload), "text or payload is required");
 
@@ -41,6 +43,7 @@ assistantRouter.post(
       conversationId: body.conversationId ?? null,
       channel: body.channel ?? "APP",
       locationReminders: body.locationReminders,
+      calendarOn: body.calendar,
     });
     sendSuccess(res, reply);
   }),
