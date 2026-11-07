@@ -25,6 +25,7 @@ import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
 import { subscribeTasks } from "../../services/syncEngine";
 import { deleteTask, getCachedTasks, getTasks, restoreTask, updateTask } from "../../services/tasksApi";
+import { cancelSharedTask } from "../../services/collabApi";
 import type { Task, TaskStatus } from "../../types/models";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { isOverdue } from "../../utils/format";
@@ -108,7 +109,7 @@ export function TaskListScreen({ navigation, route }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const [useContext, setUseContext] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [toast, setToast] = useState<{ text: string; undoId?: string } | null>(null);
+  const [toast, setToast] = useState<{ text: string; undoId?: string; undoShare?: { id: string; taskId: string | null } } | null>(null);
 
   const load = useCallback(async (fromServer = true) => {
     try {
@@ -127,8 +128,8 @@ export function TaskListScreen({ navigation, route }: Props) {
   );
   useEffect(() => subscribeTasks(() => void load(false)), [load]);
   useEffect(() => {
-    if (route.params?.toast) setToast({ text: route.params.toast });
-  }, [route.params?.toast]);
+    if (route.params?.toast) setToast({ text: route.params.toast, undoShare: route.params.undoShare });
+  }, [route.params?.toast, route.params?.undoShare]);
 
   const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => (Array.isArray(t.tags) ? t.tags : [])))].sort(), [tasks]);
   const childrenOf = useMemo(() => {
@@ -373,7 +374,24 @@ export function TaskListScreen({ navigation, route }: Props) {
         text={toast?.text ?? null}
         onHide={() => setToast(null)}
         action={
-          toast?.undoId
+          toast?.undoShare
+            ? {
+                label: "Undo",
+                // The same as chat's Undo: cancelled for everyone (cards withdrawn) and my copy removed.
+                onPress: async () => {
+                  const s = toast.undoShare as { id: string; taskId: string | null };
+                  setToast(null);
+                  try {
+                    await cancelSharedTask(s.id);
+                    if (s.taskId) await deleteTask(s.taskId);
+                    setToast({ text: tr("collab.share.undone") });
+                    void load(true);
+                  } catch (e) {
+                    setToast({ text: getApiErrorMessage(e) });
+                  }
+                },
+              }
+            : toast?.undoId
             ? {
                 label: "Undo",
                 onPress: async () => {
