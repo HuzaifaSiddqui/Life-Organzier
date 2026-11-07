@@ -54,8 +54,11 @@ export function AddTaskScreen({ navigation, route }: Props) {
           if (sharing) {
             try {
               const { title, description, dueDate, dueTime, priority, category, durationMinutes, taskType } = payload;
-              await shareTask({ title, description, dueDate, dueTime, priority, category, durationMinutes, taskType }, share.kind, share.people.map((p) => p.id));
-              navigation.replace("TaskList", { toast: t("collab.share.sent", { names: share.people.map(personLabel).join(", ") }) });
+              const shared = await shareTask({ title, description, dueDate, dueTime, priority, category, durationMinutes, taskType }, share.kind, share.people.map((p) => p.id));
+              navigation.replace("TaskList", {
+                toast: t("collab.share.sent", { names: share.people.map(personLabel).join(", ") }),
+                undoShare: { id: shared.id, taskId: shared.myTaskId },
+              });
               return null;
             } catch (e) {
               return t(collabErrorKey(apiErrorCode(e), isNetworkError(e)) as StringKey);

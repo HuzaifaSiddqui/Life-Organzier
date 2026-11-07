@@ -102,6 +102,10 @@ export function ShareWithField({ value, onChange, onManage }: { value: ShareValu
       ) : null}
       {value.people.length ? (
         <View style={{ gap: spacing.xs }}>
+          {/* Add is the confirmation here, so what will happen is stated before it. */}
+          <Text variant="callout" color="accent" accessibilityLiveRegion="polite">
+            {t("collab.share.willShare", { names: value.people.map(personLabel).join(", "), how: t(value.kind === "COLLAB" ? "collab.share.howTogether" : "collab.share.howAssign") })}
+          </Text>
           <View style={[styles.wrap, { gap: spacing.xs }]}>
             <Chip label={t("collab.share.together")} selected={value.kind === "COLLAB"} onPress={() => onChange({ ...value, kind: "COLLAB" })} />
             <Chip label={t("collab.share.assign")} selected={value.kind === "ASSIGN"} onPress={() => onChange({ ...value, kind: "ASSIGN" })} />

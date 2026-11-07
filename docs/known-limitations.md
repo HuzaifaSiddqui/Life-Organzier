@@ -264,7 +264,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   tasks; as a member, its membership and copies go and the owner's view no longer lists it. Recovering within the 30
   days restores everything.
 - **The task form's "Share with" shares on Add.** Picking people in the form and tapping Add is the confirmation there
-  (no second preview).
+  (no second preview); the line "Will be shared with @x: together" under the field says what Add will do, and the
+  success toast has Undo (cancelled for everyone, my copy removed, as chat's Undo).
 - **Notices rely on push.** Each event is a push plus an in-app notice under Requests → Activity. Without a push
   token (no permission, emulator) only the in-app list shows it.
 - **Copy is English only** until after 10 Nov 2026 (`collab.*` keys; Urdu shows English).
