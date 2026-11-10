@@ -162,8 +162,8 @@ test("chat: unclear wording asks too; 'Just me' shares nothing; typing 'undo' ca
   assert.equal((await cardsFor(ali.user)).length, 0);
   assert.equal(await noticesFor(ali.user), 0);
 
-  // Confirmed, then undone by typing.
-  await me.say("meeting with Ali on monday at 11 am for 1 hour");
+  // Confirmed, then undone by typing. Relative days only: a weekday could be today and already past when the test runs.
+  await me.say("meeting with Ali tomorrow at 11 am for 1 hour");
   const shared = await me.say("together");
   assert.equal(shared.message.intent, "task_shared", shared.message.content);
   assert.equal((await cardsFor(ali.user)).length, 1);
@@ -174,7 +174,7 @@ test("chat: unclear wording asks too; 'Just me' shares nothing; typing 'undo' ca
   assert.ok(!(await tasksOf(me.user)).some((t) => t.dueTime === "11 AM"), "my copy is removed");
 
   // "Just for me" button after a share: the card is withdrawn, my copy stays (and is no longer shared).
-  await me.say("meeting with Ali on tuesday at 10 am for 1 hour");
+  await me.say("meeting with Ali tomorrow at 10 am for 1 hour");
   const again = await me.say("together");
   const justMe = again.message.actions!.find((a) => a.label === "Just for me")!;
   const unshared = await me.tap(justMe.payload);
