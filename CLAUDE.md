@@ -93,9 +93,6 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 
 ## Out of scope (future work — do not implement)
 
-- Calendar integration (Google/Outlook)
-- FR-OB-003 guest mode
-- Payments / subscriptions (the Pro tier is a settings flag, no billing)
 - Desktop app
 
 ## Rules for changes
