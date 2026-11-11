@@ -65,6 +65,16 @@ test("DOC_EVIDENCE: the line must be in the text and give the date (and time)", 
   assert.equal(verifyEvidence(d({ date: "2026-11-14", time: "3:00 PM", source: "Quiz 2 on 14 November 2026 at 10:00 AM" }), text).verified, false, "nor that time");
 });
 
+test("DOC_EVIDENCE: a quote that spans lines (OCR) is checked with its lines joined; an invented one still fails", () => {
+  // An OCR'd notice: the date and time sit on separate lines, and the model quotes both.
+  const text = "Department of Physics\n\nMidterm exam\n\nDate: 15 Nov 2026\n\nTime 10 AM\n\nVenue: Hall B";
+  const quoted = verifyEvidence(d({ date: "2026-11-15", time: "10 AM", source: "Date: 15 Nov 2026\nTime 10 AM" }), text);
+  assert.equal(quoted.verified, true);
+  assert.equal(quoted.evidence, "Date: 15 Nov 2026 Time 10 AM");
+  assert.equal(verifyEvidence(d({ date: "2026-11-15", source: "Lab viva on\n15 Nov 2026" }), text).verified, false, "lines that are not in the document");
+  assert.equal(verifyEvidence(d({ date: "2026-11-16", source: "Date: 15 Nov 2026\nTime 10 AM" }), text).verified, false, "joined lines that don't give that date");
+});
+
 test("DOC_EVIDENCE end to end: an unverified AI item adds no agreement bonus, so it can't push an item over the gate", async () => {
   // The rules read this ticket line as a reviewed item (90); a verified model reading would raise it, an invented one must not.
   setAi(new AiService([{ name: "fake", chat: async () => JSON.stringify({ items: [{ kind: "travel", title: "Train 1-UP departure", date: "2026-11-07", time: "", evidence: "made-up line about a train" }] }) }]));

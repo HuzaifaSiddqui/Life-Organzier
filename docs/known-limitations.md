@@ -150,6 +150,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   numbered lines with code lookup), stopped with "OCR is busy": an OCR job waited past its document's time budget in
   the queue. All 3 baseline runs over the same hours completed. The one valid v2 run read 154/154 (p95 per
   document 56.1 s, against 37.6–48.0 s for the baseline). Not investigated; neither flag is turned on.
+- **Date sheets with dashed dates gave no items** (flag `DOC_DATESHEET`, off). "4-Nov" / "04-Nov-2026" were not dates
+  to the rules, and the AI's correct dates were rejected because the date check could not find them in the text;
+  rows under a "Date Sheet" heading were also skipped unless each said "exam". Reported on the phone (a mid-term
+  date sheet photo: 0 items). With the flag on, made-up sheets of that shape give every exam
+  (`tests/dateSheet.test.ts`); a phone screenshot with a black border lost most of its text to OCR (125 characters; 471 with the border cut),
+  and a sheet with no heading at all (only rows of course, date and time range) gave nothing. With the flag on, such a
+  sheet gives one reviewed exam per row; a badly OCR'd ruled table can still give rough titles.
 - **The AI pass loses a dense chunk's items** (flag `DOC_AI_SPLIT`, off). A chunk with many dates (a date sheet)
   needs a longer reply than the 500-token / 10-item cap, so the reply is cut mid-JSON and that chunk's AI items are
   dropped (the rules' items stay). `DOC_AI_SPLIT=on` reads such a chunk in pieces of at most 8 dated lines and halves a

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getAi, type AiService } from "../../ai/llm.js";
 import { formatClock } from "../../lib/time.js";
 import { fuzzySimilarity } from "../../lib/text.js";
-import { cleanTitle, extractEntities } from "../assistant/entities.js";
+import { cleanTitle, dateSheetOn, extractEntities } from "../assistant/entities.js";
 import { documentYear, isHeaderRow, joinRecords, normalizeDocumentText, rangeToEnd, readTables, semesterStart, urduActivityHint, urduWeekdayStart, WEEK_RE, weekToDate, withDocumentYear } from "./dateRules.js";
 
 export type ExtractedDeadline = {
@@ -21,12 +21,16 @@ export type ExtractedDeadline = {
   rangeStart?: string | null;
   /** The year came from the document ("Fall 2026", its other dates), not from the date itself. */
   yearInferred?: boolean;
+  /** DOC_DATESHEET: an OCR slip in the year was corrected to the sheet's year (always reviewed, shown in the row). */
+  yearCorrected?: { from: number; to: number };
   /** Always confirmed by the user, even when the model agrees (tickets, bills, dates from week numbers). */
   review?: boolean;
   /** The AI pass found the same item (same date, similar title). */
   aiAgrees?: boolean;
   /** Found only by the AI pass: shown for review, never created automatically. */
   aiOnly?: boolean;
+  /** DOC_EVIDENCE_V2: the line the model pointed to was found and gives the item's date (and time). */
+  lineVerified?: boolean;
 };
 
 export type ExtractedSchedule = {
@@ -111,6 +115,57 @@ function labelledTime(line: string, now: Date, tz: string): string | null {
 const WEAK_TITLE = /^(?:date|due|due date|deadline|departure|time|last date|on|by|at|-|—)?$/i;
 const TIMETABLE_ROW = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b[:\s|,-]*.*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|to)\s*\d{1,2}/i;
 
+/** A date sheet / exam schedule heading: its dated rows are exams even without "exam" on each row (DOC_DATESHEET). */
+const DATE_SHEET_RE = /\b(?:date\s*sheet|exam(?:ination)?s?\s+(?:schedule|time\s*table|timetable)|(?:mid|final)[-\s]?(?:term)?s?\s+(?:exam(?:ination)?s?\s+)?(?:schedule|date\s*sheet|time\s*table|timetable))\b/i;
+
+/** OCR of a ruled table: borders read as "_" and a cell glued to the next ("Wed_Data04-Nov-S_…"). */
+function unglueDates(text: string): string {
+  return text.replace(/_/g, " ").replace(/([A-Za-z])(\d{1,2}\s*-\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))/gi, "$1 $2").replace(/((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)-(?=[A-Za-z])/gi, "$1 ");
+}
+
+const SHEET_DATE = /\b\d{1,2}\s*-\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*-\s*\d{4}\b/i;
+const SHEET_RANGE = /\b\d{1,2}:\d{2}\s*-\s*\d{1,2}:?\d{2}\b/;
+
+/**
+ * A date sheet with no heading ("course_class_teacher  03-Jun-2026  13:00-16:00"): each row with a full date and a
+ * time range becomes "course date time". The course is the text before the first "_", with the line above joined
+ * when the name wrapped, and leading paper / room codes dropped.
+ */
+function sheetRows(text: string): { text: string; rows: number; corrections: Array<{ text: string; from: number; to: number }> } {
+  const out: string[] = [];
+  let rows = 0;
+  for (const line of text.split("\n")) {
+    const date = line.match(SHEET_DATE);
+    const time = line.match(SHEET_RANGE);
+    if (!date || !time) {
+      out.push(line);
+      continue;
+    }
+    let row = line.slice(0, date.index);
+    const prev = out.at(-1)?.trim() ?? "";
+    if (prev && !SHEET_DATE.test(prev) && !/^class\s*:/i.test(prev) && !/^\d{3,}\s/.test(row.trim())) {
+      out.pop();
+      row = `${prev.replace(/(?:\s+(?:[^\s\w]+|\w))+\s*$/, "")} ${row}`;
+    }
+    const course = row.replace(/^\s*(?:\d{3,}\s+)+/, "").split("_")[0].replace(/\s{2,}/g, " ").trim();
+    out.push(`${course} ${date[0]} ${time[0].split("-")[0].trim()}`);
+    rows++;
+  }
+  // An OCR slip in one row's year ("2029" among "2026"s): use the sheet's year when it is more than a year off.
+  const years = out.flatMap((l) => l.match(SHEET_DATE)?.[0].match(/\d{4}$/) ?? []).map(Number);
+  const common = years.sort((a, b) => years.filter((y) => y === b).length - years.filter((y) => y === a).length)[0];
+  const corrections: Array<{ text: string; from: number; to: number }> = [];
+  const fixed = out.map((l) =>
+    l.replace(SHEET_DATE, (d) => {
+      if (rows < 3 || Math.abs(Number(d.slice(-4)) - common) <= 1) return d;
+      const to = `${d.slice(0, -4)}${common}`;
+      corrections.push({ text: to, from: Number(d.slice(-4)), to: common });
+      return to;
+    }),
+  );
+  return { text: fixed.join("\n"), rows, corrections };
+}
+
 type Candidate = { text: string; source: string; title?: string; activity?: string; fromTable?: boolean };
 
 /**
@@ -119,7 +174,8 @@ type Candidate = { text: string; source: string; title?: string; activity?: stri
  * document's year, semester start and ranges are applied here.
  */
 export function extractDeadlines(text: string, now: Date, tz: string): ExtractedDeadline[] {
-  const prepared = normalizeDocumentText(text);
+  const sheet = dateSheetOn() ? sheetRows(normalizeDocumentText(text)) : null;
+  const prepared = sheet ? unglueDates(sheet.text) : normalizeDocumentText(text);
   const lines = prepared.split("\n");
   const year = documentYear(prepared, now, tz);
   const start = semesterStart(prepared, now, tz, year);
@@ -132,6 +188,10 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     activity: r.examTable ? "exam" : (r.title.match(ACTIVITY_RE)?.[1] ?? "deadline"),
     fromTable: true,
   }));
+  // A heading says it is a date sheet; two or more dated rows with a time range look like one (reviewed, not auto-created).
+  const sheetByHeading = Boolean(sheet) && DATE_SHEET_RE.test(prepared);
+  const sheetByShape = Boolean(sheet) && !sheetByHeading && (sheet?.rows ?? 0) >= 2;
+  const sheetActivity = sheetByHeading || sheetByShape ? "exam" : null;
   const hasDate = (l: string) => Boolean(extractEntities(l, { now, tz }).date) || WEEK_RE.test(l);
   const isHead = (l: string) => ACTIVITY_RE.test(l) || EVENT_RE.test(l) || Boolean(urduActivityHint(l));
   const rest = lines.map((l, i) => (tables.used.has(i) ? "" : l));
@@ -147,7 +207,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
   for (const c of candidates) {
     if (!c.fromTable && TIMETABLE_ROW.test(c.text)) continue; // a class, not a deadline
     const hint = urduActivityHint(c.text);
-    const activity = c.activity ?? c.text.match(ACTIVITY_RE)?.[1] ?? hint;
+    const activity = c.activity ?? c.text.match(ACTIVITY_RE)?.[1] ?? hint ?? sheetActivity;
     const event = !activity ? c.text.match(EVENT_RE)?.[1] : undefined;
     if (!activity && !event && !c.fromTable) continue;
     const range = rangeToEnd(c.text);
@@ -177,6 +237,7 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     if (WEAK_TITLE.test(title.replace(/[^\p{L}\p{N}\s]/gu, "").trim()) || title.length < 3) {
       title = event && heading ? `${event.charAt(0).toUpperCase()}${event.slice(1)}: ${heading}` : activity ? activity.charAt(0).toUpperCase() + activity.slice(1) : (heading ?? "Deadline");
     }
+    if (sheetActivity) title = title.replace(/^(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+(?=\S{3})/i, "");
     if (title.length > 80) title = `${title.slice(0, 77).replace(/\s+\S*$/, "")}…`;
 
     let confidence = 60;
@@ -191,6 +252,9 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
     if (assumedTime) confidence = Math.min(confidence, 90);
     if (week && date) confidence = Math.min(confidence, 85); // computed from the semester start: confirm first
     if (event) confidence = Math.min(confidence, 90); // tickets, bills, notices: always reviewed
+    if (sheetByShape && !c.text.match(ACTIVITY_RE)) confidence = Math.min(confidence, 75); // exam inferred from layout only
+    const corrected = sheet?.corrections.find((x) => c.source.includes(x.text));
+    if (corrected) confidence = Math.min(confidence, 75); // a guessed year: the user confirms it
     if (vague) confidence = Math.min(confidence, needsSemesterStart ? 40 : 45);
     confidence = Math.max(5, Math.min(99, confidence));
 
@@ -209,7 +273,8 @@ export function extractDeadlines(text: string, now: Date, tz: string): Extracted
       ...(needsSemesterStart ? { needsSemesterStart: true } : {}),
       ...(range.start ? { rangeStart: range.start } : {}),
       ...(yearInferred ? { yearInferred: true } : {}),
-      ...(event || (week && date) ? { review: true } : {}),
+      ...(corrected ? { yearCorrected: { from: corrected.from, to: corrected.to }, review: true } : {}),
+      ...(event || (week && date) || (sheetByShape && !c.text.match(ACTIVITY_RE)) ? { review: true } : {}),
     });
   }
   return out.slice(0, 60);
@@ -407,7 +472,8 @@ export function dateGrounded(ymd: string, text: string): boolean {
   const numeric = [`${dd}-${mm}`, `${dd}/${mm}`, `${dd}.${mm}`, `${mm}-${dd}`, `${mm}/${dd}`, `${y}-${mm}-${dd}`, `${day}-${m}-`, `${day}/${m}/`, `${m}/${day}/`];
   if (numeric.some((s) => t.includes(s))) return true;
   const mon = MONTHS[m - 1];
-  return new RegExp(`\\b0?${day}(?:st|nd|rd|th)?\\s+${mon}|\\b${mon}[a-z]*\\.?\\s+0?${day}\\b`).test(t);
+  const sep = dateSheetOn() ? "(?:\\s+|\\s*-\\s*)" : "\\s+";
+  return new RegExp(`\\b0?${day}(?:st|nd|rd|th)?${sep}${mon}|\\b${mon}[a-z]*\\.?${sep}0?${day}\\b`).test(t);
 }
 
 /**
@@ -424,6 +490,7 @@ export async function llmActionItems(text: string, todayYmd: string, tz: string,
 /** llmActionItems, but null when the model's reply failed (unparseable, e.g. cut mid-JSON, or invalid) instead of []. */
 async function llmActionItemsOrNull(text: string, todayYmd: string, tz: string, timeoutMs: number, ai: AiService = getAi()): Promise<ExtractedDeadline[] | null> {
   if (text.replace(/\s+/g, "").length < 30) return [];
+  if (process.env.DOC_EVIDENCE_V2?.toLowerCase() === "on") return lineActionItems(text, todayYmd, tz, timeoutMs, ai);
   const result = await ai.json(
     [
       {
@@ -471,6 +538,85 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
       assumedTime: false,
       confidence: 85,
       source: item.evidence.slice(0, 200) || "AI reading",
+    });
+  }
+  return out;
+}
+
+/** DOC_EVIDENCE_V2 reply: a line number instead of a quote; the snippet is only shown. */
+const lineSchema = z.object({
+  items: z.array(z.object({ kind: z.string(), title: z.string().min(2).max(100), date: z.string(), time: z.string(), line: z.number().int(), snippet: z.string().default("") })).max(10),
+});
+
+/**
+ * The line an item cites, checked by lookup: the line itself, or joined with its neighbour (a row that wrapped), must
+ * give the item's date, and its time when it has one. Null = not verified.
+ */
+export function citedLine(lines: string[], n: number, ymd: string, time: string | null): string | null {
+  const at = (i: number) => (i >= 0 && i < lines.length ? lines[i].trim() : "");
+  const hour = time?.match(/^(\d{1,2})/)?.[1];
+  const timeOk = (l: string) => !hour || new RegExp(`\\b0?${hour}(?::|\\s*(?:am|pm)|\\.|\\b)`, "i").test(l);
+  for (const l of [at(n - 1), `${at(n - 2)} ${at(n - 1)}`.trim(), `${at(n - 1)} ${at(n)}`.trim()]) {
+    if (at(n - 1) && dateGrounded(ymd, l) && timeOk(l)) return l;
+  }
+  return null;
+}
+
+/** DOC_EVIDENCE_V2: the model reads numbered lines and names the line of each item's date; code verifies it. */
+async function lineActionItems(text: string, todayYmd: string, tz: string, timeoutMs: number, ai: AiService): Promise<ExtractedDeadline[] | null> {
+  const lines = text.slice(0, 3000).split("\n");
+  const numbered = lines.map((l, i) => `L${i + 1}: ${l}`).join("\n");
+  const result = await ai.json(
+    [
+      {
+        role: "system",
+        content: `You read documents (tickets, receipts, invitations, bills, notices, letters, schedules) and find things the reader must do or attend: travel departures, appointments, events, payments due, submissions, exams.
+Each line of the document starts with its number (L1:, L2:, …).
+Return JSON {"items": [...]}; each item: kind (travel|appointment|event|payment|deadline|exam|task), title (short and specific, e.g. "Flight Karachi → Islamabad (PK-301)", "Dentist appointment"), date as YYYY-MM-DD, time as 24h HH:MM or "", line (the number of the line that contains the date), snippet (at most 6 words of that line).
+Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-month-year unless clearly not. Only include items with a date written in the document. Ignore prices, IDs, phone numbers and fine print. If there is nothing to do, return {"items": []}.`,
+      },
+      { role: "user", content: numbered },
+    ],
+    lineSchema,
+    {
+      json: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            maxItems: 10,
+            items: {
+              type: "object",
+              properties: { kind: { type: "string" }, title: { type: "string" }, date: { type: "string" }, time: { type: "string" }, line: { type: "integer" }, snippet: { type: "string" } },
+              required: ["kind", "title", "date", "time", "line"],
+            },
+          },
+        },
+        required: ["items"],
+      },
+      maxTokens: 500,
+      timeoutMs,
+      job: "docs",
+    },
+  );
+  if (!result) return null;
+  const out: ExtractedDeadline[] = [];
+  for (const item of result.items) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date) || Number.isNaN(Date.parse(item.date))) continue;
+    if (!dateGrounded(item.date, text)) continue; // hallucinated or misread date
+    const clock = item.time.match(/^(\d{1,2}):(\d{2})$/);
+    const time = clock && Number(clock[1]) < 24 ? formatClock(Number(clock[1]), Number(clock[2])) : null;
+    const line = citedLine(lines, item.line, item.date, time);
+    out.push({
+      index: out.length,
+      title: cleanTitle(item.title) || item.title,
+      activity: item.kind.toLowerCase(),
+      date: item.date,
+      time,
+      assumedTime: false,
+      confidence: 85,
+      source: (line ?? item.snippet ?? "").slice(0, 200) || "AI reading",
+      lineVerified: Boolean(line),
     });
   }
   return out;
