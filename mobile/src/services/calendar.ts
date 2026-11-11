@@ -108,7 +108,28 @@ async function adoptable(cal: ExpoCalendar) {
 }
 
 /**
- * Our calendar and the state that goes with it. The stored id first. When it's gone (e.g. a reinstall cleared the
+ * The Google calendar of the account the user signed up with (matched by email), when that account is on this phone:
+ * its primary, writable calendar. Android doesn't let an app create a calendar inside a Google account, so the app
+ * writes its events into this one (they show in Google Calendar and sync to Google) and touches only its own events.
+ */
+function googleTarget(calendars: ExpoCalendar[]): ExpoCalendar | undefined {
+  const email = auth.currentUser?.email?.trim().toLowerCase();
+  if (!email) return undefined;
+  const mine = calendars.filter((c) => c.allowsModifications && !c.source?.isLocalAccount && (c.source?.name ?? "").toLowerCase() === email);
+  return mine.find((c) => c.isPrimary) ?? mine.find((c) => (c.ownerAccount ?? "").toLowerCase() === email);
+}
+
+/** Deletes what the app wrote to a calendar: the whole calendar if the app created it, else only its own (marked) events. */
+async function removeOurs(Cal: ExpoCalendarModule, cal: ExpoCalendar, s: State): Promise<void> {
+  if (s.owned) return cal.delete();
+  for (const { eventId } of Object.values(s.map)) await Cal.ExpoCalendarEvent.get(eventId).then((e) => e.delete()).catch(() => undefined);
+  for (const e of await everyEvent(cal)) if (isOurEvent(e.notes)) await e.delete().catch(() => undefined);
+}
+
+/**
+ * Our calendar and the state that goes with it. The Google calendar of the signed-up account comes first (see
+ * googleTarget): moving there removes what the app wrote to its previous calendar, and any marked events already in the
+ * Google calendar (a reinstall lost the map), then rebuilds. Without that account, the stored id first. When it's gone (e.g. a reinstall cleared the
  * app's storage), a "Life Organizer" calendar whose events all carry our marker is adopted: those events are deleted,
  * since without the map they can't be matched and rebuilding next to them would duplicate everything. A calendar with
  * any unmarked event (the user's own) is never adopted or touched; a new one is created, "Life Organizer (2)" if the
@@ -117,6 +138,13 @@ async function adoptable(cal: ExpoCalendar) {
 async function resolveCalendar(Cal: ExpoCalendarModule, s: State): Promise<{ cal: ExpoCalendar; state: State }> {
   const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
   const stored = s.calendarId ? calendars.find((c) => c.id === s.calendarId) : undefined;
+  const google = googleTarget(calendars);
+  if (google) {
+    if (stored?.id === google.id) return { cal: google, state: s };
+    if (stored) await removeOurs(Cal, stored, s);
+    for (const e of await everyEvent(google)) if (isOurEvent(e.notes)) await e.delete().catch(() => undefined);
+    return { cal: google, state: { ...s, calendarId: google.id, owned: false, map: {} } };
+  }
   if (stored) return { cal: stored, state: s };
   for (const c of calendars) {
     const events = await adoptable(c);
@@ -170,8 +198,8 @@ export async function ourEventCount(): Promise<number> {
 
 /**
  * "Remove all Life Organizer events": only the stored calendar is touched. One this app created is deleted with all its
- * events; an adopted one (found by title, maybe not ours) keeps the calendar and loses only the events in the map.
- * The switch goes off. Undo = turn it on again, which re-creates the current tasks and routine occurrences.
+ * events; any other (the user's Google calendar, or one adopted by title) keeps the calendar and every event the user
+ * made, and loses only the app's own events. The switch goes off. Undo = turn it on again, which re-creates the current tasks and routine occurrences.
  */
 export async function removeAllCalendarEvents(): Promise<boolean> {
   const Cal = await loadModule();
@@ -179,8 +207,7 @@ export async function removeAllCalendarEvents(): Promise<boolean> {
   if (!Cal) return false;
   try {
     const cal = s.calendarId ? (await Cal.getCalendars(Cal.EntityTypes.EVENT)).find((c) => c.id === s.calendarId) : undefined;
-    if (cal && s.owned) await cal.delete();
-    else if (cal) for (const { eventId } of Object.values(s.map)) await Cal.ExpoCalendarEvent.get(eventId).then((e) => e.delete()).catch(() => undefined);
+    if (cal) await removeOurs(Cal, cal, s);
   } catch (error) {
     console.warn("Could not remove the Life Organizer events", error);
     return false;
@@ -243,7 +270,7 @@ export function scheduleCalendarSync(delayMs = 2000): void {
 /* ------------------------------------------------------------------ reading (stays on the phone) */
 
 /**
- * Events between two instants. `others`: the phone's other calendars only (clash warnings); otherwise ours too
+ * Events between two instants. `others`: everything except the app's own events (clash warnings); otherwise those too
  * (agenda, free time). Null when calendar sync isn't active or access was taken away.
  */
 export async function readEvents(from: number, to: number, opts: { others?: boolean } = {}): Promise<BusyEvent[] | null> {
@@ -252,10 +279,10 @@ export async function readEvents(from: number, to: number, opts: { others?: bool
   if (!Cal) return null;
   try {
     if (!(await Cal.getCalendarPermissions()).granted) return null;
-    const s = await readState();
-    const calendars = (await Cal.getCalendars(Cal.EntityTypes.EVENT)).filter((c) => !opts.others || c.id !== s.calendarId);
+    const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
     if (!calendars.length) return [];
-    const events = await Cal.listEvents(calendars, new Date(from), new Date(to));
+    // `others`: leave out the app's own events by their marker, not by calendar (the Google calendar holds both).
+    const events = (await Cal.listEvents(calendars, new Date(from), new Date(to))).filter((e) => !opts.others || !isOurEvent(e.notes));
     return events.map((e) => ({
       title: e.title || "Busy",
       start: new Date(e.startDate).getTime(),

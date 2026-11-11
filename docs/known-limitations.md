@@ -98,6 +98,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Phone calendar (`CALENDAR_SYNC`, off)
 
+- **Events go into the Google calendar of the signed-up account** when that account is on the phone, mixed with the
+  user's own events, and Google syncs them to its servers (titles and times of tasks and routines). Only the app's own
+  events (marked "Created by Life Organizer" in their notes) are ever changed or deleted. Android doesn't allow an app
+  to create a separate calendar inside a Google account; a real separate Google calendar would need Google sign-in and
+  the Calendar API.
+- **Another Google account, or none, on the phone:** the separate local "Life Organizer" calendar is used. Google
+  Calendar may not list local calendars at all; widgets and other calendar apps show them.
+
 - **Needs a new development build** (`expo-calendar` is native). Older dev clients run normally; calendar actions say
   "The calendar needs the latest version of the app".
 - **One way.** Edits made to Life Organizer events in the calendar app are not read back; the next change to the task
