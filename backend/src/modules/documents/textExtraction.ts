@@ -2,6 +2,7 @@ import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
 import sharp from "sharp";
 import { createWorker, PSM, type Worker } from "tesseract.js";
+import { dateSheetOn } from "../assistant/entities.js";
 
 export type TextResult = {
   text: string;
@@ -244,6 +245,15 @@ async function ocrScannedPdf(buffer: Buffer, language: string, deadline = Infini
 }
 
 /** `deadline` (epoch ms): the document's time limit; OCR doesn't start a job that would run past it. */
+/** Cuts a near-black border around the page (screenshots of a document on a dark screen); unchanged if none. */
+export async function trimDarkBorder(buffer: Buffer): Promise<Buffer> {
+  try {
+    return await sharp(buffer, { failOn: "none" }).trim({ background: "#000000", threshold: 40 }).png().toBuffer();
+  } catch {
+    return buffer;
+  }
+}
+
 export async function extractText(buffer: Buffer, mimeType: string, fileName: string, language = "eng", deadline = Infinity): Promise<TextResult> {
   const lower = fileName.toLowerCase();
   if (mimeType === "application/pdf" || lower.endsWith(".pdf")) {
@@ -265,8 +275,10 @@ export async function extractText(buffer: Buffer, mimeType: string, fileName: st
   if (mimeType.startsWith("text/") || lower.endsWith(".txt")) {
     return { text: buffer.toString("utf8"), confidence: 100, method: "text", warning: null, needsLanguage: false };
   }
-  // Images → Tesseract OCR (FR-DP-001 §3)
-  const pass = await ocrImage(buffer, language, IMAGE_BUDGET_MS, deadline);
+  // Images → Tesseract OCR (FR-DP-001 §3). DOC_DATESHEET: a phone screenshot's dark border is cut first (it
+  // swamps the contrast stretch and the page-layout guess).
+  const image = dateSheetOn() ? await trimDarkBorder(buffer) : buffer;
+  const pass = await ocrImage(image, language, IMAGE_BUDGET_MS, deadline);
   return { ...ocrResult(pass.text, pass.confidence, language, "ocr"), ...(pass.words ? { words: pass.words } : {}) };
 }
 
