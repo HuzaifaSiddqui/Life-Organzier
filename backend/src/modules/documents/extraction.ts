@@ -27,6 +27,8 @@ export type ExtractedDeadline = {
   aiAgrees?: boolean;
   /** Found only by the AI pass: shown for review, never created automatically. */
   aiOnly?: boolean;
+  /** DOC_EVIDENCE_V2: the line the model pointed to was found and gives the item's date (and time). */
+  lineVerified?: boolean;
 };
 
 export type ExtractedSchedule = {
@@ -424,6 +426,7 @@ export async function llmActionItems(text: string, todayYmd: string, tz: string,
 /** llmActionItems, but null when the model's reply failed (unparseable, e.g. cut mid-JSON, or invalid) instead of []. */
 async function llmActionItemsOrNull(text: string, todayYmd: string, tz: string, timeoutMs: number, ai: AiService = getAi()): Promise<ExtractedDeadline[] | null> {
   if (text.replace(/\s+/g, "").length < 30) return [];
+  if (process.env.DOC_EVIDENCE_V2?.toLowerCase() === "on") return lineActionItems(text, todayYmd, tz, timeoutMs, ai);
   const result = await ai.json(
     [
       {
@@ -471,6 +474,85 @@ Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-mon
       assumedTime: false,
       confidence: 85,
       source: item.evidence.slice(0, 200) || "AI reading",
+    });
+  }
+  return out;
+}
+
+/** DOC_EVIDENCE_V2 reply: a line number instead of a quote; the snippet is only shown. */
+const lineSchema = z.object({
+  items: z.array(z.object({ kind: z.string(), title: z.string().min(2).max(100), date: z.string(), time: z.string(), line: z.number().int(), snippet: z.string().default("") })).max(10),
+});
+
+/**
+ * The line an item cites, checked by lookup: the line itself, or joined with its neighbour (a row that wrapped), must
+ * give the item's date, and its time when it has one. Null = not verified.
+ */
+export function citedLine(lines: string[], n: number, ymd: string, time: string | null): string | null {
+  const at = (i: number) => (i >= 0 && i < lines.length ? lines[i].trim() : "");
+  const hour = time?.match(/^(\d{1,2})/)?.[1];
+  const timeOk = (l: string) => !hour || new RegExp(`\\b0?${hour}(?::|\\s*(?:am|pm)|\\.|\\b)`, "i").test(l);
+  for (const l of [at(n - 1), `${at(n - 2)} ${at(n - 1)}`.trim(), `${at(n - 1)} ${at(n)}`.trim()]) {
+    if (at(n - 1) && dateGrounded(ymd, l) && timeOk(l)) return l;
+  }
+  return null;
+}
+
+/** DOC_EVIDENCE_V2: the model reads numbered lines and names the line of each item's date; code verifies it. */
+async function lineActionItems(text: string, todayYmd: string, tz: string, timeoutMs: number, ai: AiService): Promise<ExtractedDeadline[] | null> {
+  const lines = text.slice(0, 3000).split("\n");
+  const numbered = lines.map((l, i) => `L${i + 1}: ${l}`).join("\n");
+  const result = await ai.json(
+    [
+      {
+        role: "system",
+        content: `You read documents (tickets, receipts, invitations, bills, notices, letters, schedules) and find things the reader must do or attend: travel departures, appointments, events, payments due, submissions, exams.
+Each line of the document starts with its number (L1:, L2:, …).
+Return JSON {"items": [...]}; each item: kind (travel|appointment|event|payment|deadline|exam|task), title (short and specific, e.g. "Flight Karachi → Islamabad (PK-301)", "Dentist appointment"), date as YYYY-MM-DD, time as 24h HH:MM or "", line (the number of the line that contains the date), snippet (at most 6 words of that line).
+Today is ${todayYmd} (timezone ${tz}). Numeric dates like 07-09-2026 are day-month-year unless clearly not. Only include items with a date written in the document. Ignore prices, IDs, phone numbers and fine print. If there is nothing to do, return {"items": []}.`,
+      },
+      { role: "user", content: numbered },
+    ],
+    lineSchema,
+    {
+      json: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            maxItems: 10,
+            items: {
+              type: "object",
+              properties: { kind: { type: "string" }, title: { type: "string" }, date: { type: "string" }, time: { type: "string" }, line: { type: "integer" }, snippet: { type: "string" } },
+              required: ["kind", "title", "date", "time", "line"],
+            },
+          },
+        },
+        required: ["items"],
+      },
+      maxTokens: 500,
+      timeoutMs,
+      job: "docs",
+    },
+  );
+  if (!result) return null;
+  const out: ExtractedDeadline[] = [];
+  for (const item of result.items) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date) || Number.isNaN(Date.parse(item.date))) continue;
+    if (!dateGrounded(item.date, text)) continue; // hallucinated or misread date
+    const clock = item.time.match(/^(\d{1,2}):(\d{2})$/);
+    const time = clock && Number(clock[1]) < 24 ? formatClock(Number(clock[1]), Number(clock[2])) : null;
+    const line = citedLine(lines, item.line, item.date, time);
+    out.push({
+      index: out.length,
+      title: cleanTitle(item.title) || item.title,
+      activity: item.kind.toLowerCase(),
+      date: item.date,
+      time,
+      assumedTime: false,
+      confidence: 85,
+      source: (line ?? item.snippet ?? "").slice(0, 200) || "AI reading",
+      lineVerified: Boolean(line),
     });
   }
   return out;
