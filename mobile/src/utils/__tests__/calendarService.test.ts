@@ -7,18 +7,19 @@ const log: string[] = [];
 const apiGet = vi.fn(async () => (server.enabled ? { enabled: true, windowStart: "2026-11-03T19:00:00.000Z", windowEnd: "2026-11-17T19:00:00.000Z", occurrences: [] } : { enabled: false }));
 
 type FakeEvent = { title: string; notes?: string };
-type FakeCalendar = { id: string; title: string; allowsModifications: boolean; events: Map<string, FakeEvent>; createEvent: ReturnType<typeof vi.fn>; listEvents: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+type FakeCalendar = { id: string; title: string; allowsModifications: boolean; source?: { name: string; type: string; isLocalAccount?: boolean }; isPrimary?: boolean; ownerAccount?: string; events: Map<string, FakeEvent>; createEvent: ReturnType<typeof vi.fn>; listEvents: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
 let calendars: FakeCalendar[] = [];
 const allEvents = new Map<string, FakeEvent & { cal: FakeCalendar }>();
 const MARK = "Created by Life Organizer";
 let n = 0;
 
 /** `existing`: events already in the calendar; "mine:<title>" carries our marker, plain titles are the user's own. */
-function fakeCalendar(id: string, title = "Life Organizer", existing: string[] = []): FakeCalendar {
+function fakeCalendar(id: string, title = "Life Organizer", existing: string[] = [], extra: Partial<FakeCalendar> = {}): FakeCalendar {
   const cal: FakeCalendar = {
     id,
     title,
     allowsModifications: true,
+    ...extra,
     events: new Map(),
     createEvent: vi.fn(async (d: FakeEvent) => {
       const eid = `ev${++n}`;
@@ -78,7 +79,8 @@ vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: { getItem: async (k: string) => store.get(k) ?? null, setItem: async (k: string, v: string) => void store.set(k, v) },
 }));
-vi.mock("../../lib/firebase", () => ({ auth: { currentUser: { uid: "u1" } } }));
+const authState: { currentUser: { uid: string; email?: string } } = { currentUser: { uid: "u1" } };
+vi.mock("../../lib/firebase", () => ({ auth: authState }));
 vi.mock("../../services/api", () => ({ apiGet }));
 vi.mock("../../services/syncEngine", () => ({
   readTasks: async () => [{ id: "t1", title: "Physics report", status: "PENDING", dueDate: "2026-11-06T00:00:00.000Z", dueTime: "3 PM", dueAt: "2026-11-06T10:00:00.000Z" }],
@@ -94,6 +96,7 @@ const load = async () => {
 };
 
 beforeEach(() => {
+  authState.currentUser = { uid: "u1" };
   store.clear();
   log.length = 0;
   allEvents.clear();
@@ -219,5 +222,74 @@ describe("calendar service: adopting and removing", () => {
     expect(await cal.removeAllCalendarEvents()).toBe(true);
     expect(lookalike.delete).not.toHaveBeenCalled();
     expect(lookalike.events.size).toBe(1);
+  });
+});
+
+describe("calendar service: the Google calendar of the signed-up account", () => {
+  const ME = "huzaifa@example.com";
+  const google = (events: string[] = []) => fakeCalendar("g1", ME, events, { source: { name: ME, type: "com.google" }, isPrimary: true, ownerAccount: ME });
+
+  it("events go into the signed-up account's primary Google calendar; nothing new is created; the user's own events stay", async () => {
+    server.enabled = true;
+    authState.currentUser = { uid: "u1", email: ME };
+    const mine = google(["Dentist"]);
+    const other = fakeCalendar("g2", "other@example.com", ["Their meeting"], { source: { name: "other@example.com", type: "com.google" }, isPrimary: true, ownerAccount: "other@example.com" });
+    calendars = [other, mine];
+    const cal = await load();
+    expect(await cal.enableCalendarSync()).toBe("on");
+    expect(calendarApi.createCalendar).not.toHaveBeenCalled();
+    expect([...mine.events.values()].map((e) => e.title).sort()).toEqual(["Dentist", "Physics report"]);
+    expect(other.events.size).toBe(1);
+    expect(state()).toMatchObject({ on: true, calendarId: "g1", owned: false });
+  });
+
+  it("moving from the local Life Organizer calendar: the app's calendar is deleted, events rebuilt in Google once", async () => {
+    server.enabled = true;
+    authState.currentUser = { uid: "u1", email: ME };
+    const local = fakeCalendar("local1", "Life Organizer", ["mine:Physics report"]);
+    const mine = google(["Dentist", "mine:Old copy"]); // a marked leftover from an earlier install
+    calendars = [local, mine];
+    setState({ on: true, calendarId: "local1", owned: true, map: {} });
+    const cal = await load();
+    await cal.syncCalendar();
+    await cal.syncCalendar();
+    expect(local.delete).toHaveBeenCalledTimes(1);
+    expect([...mine.events.values()].map((e) => e.title).sort()).toEqual(["Dentist", "Physics report"]);
+  });
+
+  it("Remove all in the Google calendar deletes only the app's events, never the calendar or the user's events", async () => {
+    server.enabled = true;
+    authState.currentUser = { uid: "u1", email: ME };
+    const mine = google(["Dentist"]);
+    calendars = [mine];
+    const cal = await load();
+    await cal.enableCalendarSync();
+    expect(await cal.removeAllCalendarEvents()).toBe(true);
+    expect(mine.delete).not.toHaveBeenCalled();
+    expect([...mine.events.values()].map((e) => e.title)).toEqual(["Dentist"]);
+  });
+
+  it("clash check: the user's own events in the Google calendar count as busy; the app's own events don't", async () => {
+    server.enabled = true;
+    authState.currentUser = { uid: "u1", email: ME };
+    calendars = [google()];
+    const at3 = { startDate: new Date("2026-11-06T10:00:00.000Z"), endDate: new Date("2026-11-06T11:00:00.000Z"), allDay: false, availability: "busy" };
+    calendarApi.listEvents.mockResolvedValue([
+      { ...at3, title: "Lecture", notes: "" },
+      { ...at3, title: "Physics report", notes: "Created by Life Organizer" },
+    ] as never);
+    const cal = await load();
+    await cal.enableCalendarSync();
+    const hits = await cal.clashesForTask({ dueDate: "2026-11-06T00:00:00.000Z", dueTime: "3 PM", dueAt: "2026-11-06T10:00:00.000Z", scheduledStart: null, scheduledEnd: null, durationMinutes: null });
+    expect(hits.map((h) => h.title)).toEqual(["Lecture"]);
+  });
+
+  it("no such account on the phone: the separate local calendar, as before", async () => {
+    server.enabled = true;
+    authState.currentUser = { uid: "u1", email: "someone-else@example.com" };
+    calendars = [google(["Dentist"])];
+    const cal = await load();
+    await cal.enableCalendarSync();
+    expect(calendarApi.createCalendar).toHaveBeenCalledWith(expect.objectContaining({ title: "Life Organizer" }));
   });
 });

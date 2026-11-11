@@ -9,7 +9,7 @@ and Samsung calendars that already sync to the phone are read where they are.
 
 | Part | Behaviour |
 |---|---|
-| Write (one way) | The app keeps a separate **"Life Organizer"** calendar on the phone and writes every dated task and every routine occurrence of the next 14 days into it. No other calendar is ever written to. |
+| Write (one way) | Every dated task and every routine occurrence of the next 14 days is written to **the Google calendar of the account the user signed up with**, when that account is on the phone (its primary calendar, matched by email), so the events show in Google Calendar and sync to Google. Without that account, to a separate **"Life Organizer"** calendar on the phone. Only events the app wrote (marked in their notes) are ever changed or deleted; the user's own events are never touched. |
 | Read (busy time) | The phone's other calendars are read **on the phone only**: the clash warning, "what's on my calendar tomorrow" and "when am I free tomorrow". Event titles and times never go to the backend or any model. |
 | Settings | Switch "Add tasks and routines to my calendar" (asks for calendar access the first time), the note "Turning this off keeps the events already added until you use Remove all", and "Remove all Life Organizer events" (count shown, confirm, then Undo). |
 | Chat (app and voice) | "add this to my calendar", "what's on my calendar tomorrow", "when am I free tomorrow". "Am I free …" / "when am I free …" use the calendar only when the flag **and** the user's switch are on (the app sends its switch state with each message); otherwise they get the usual task-list answer plus "To include your phone calendar, turn on Phone calendar in Settings." "Add X to my calendar" with no task called X creates X as a new task, with Keep / Undo. On WhatsApp the agenda and "add" answer "ask me in the app" (WhatsApp can't see the phone); "am I free" gets the task-list answer. |
@@ -60,7 +60,14 @@ all-day events and events marked "free" never clash). Free time: gaps of 30 minu
 
 **Marker.** Every event the app writes has "Created by Life Organizer" in its notes (kept on every update).
 
-**Which calendar.** The phone stores the id of its calendar and whether this app created it. When that id is gone
+**Google calendar first.** Android doesn't let an app create a calendar inside a Google account, so the app writes into
+that account's primary calendar instead (owner's decision, 11 Nov 2026). When it finds that calendar and the stored one
+is different (e.g. the earlier local "Life Organizer" calendar), it removes what it wrote there (the whole calendar if
+the app made it), deletes any events carrying its marker already in the Google calendar (a reinstall lost the map),
+and rebuilds there. Clash checks leave out the app's own events by the marker, so the user's own events in the same
+Google calendar still count as busy.
+
+**Which calendar (no Google account on the phone).** The phone stores the id of its calendar and whether this app created it. When that id is gone
 (e.g. a reinstall cleared the app's storage), a calendar titled "Life Organizer" (or "Life Organizer (2)", …) is
 adopted only if **every** event in it carries the marker, searched over its whole span (1970–2100 in 3-year queries,
 since iOS caps one query at 4 years). Its marked events are deleted and the calendar is rebuilt, so nothing is
