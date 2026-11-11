@@ -1,5 +1,5 @@
 import type { NextFunction, Response } from "express";
-import type { User, UserSettings } from "@prisma/client";
+import { Prisma, type User, type UserSettings } from "@prisma/client";
 import { ZodError, type ZodTypeAny, type z } from "zod";
 import { prisma } from "../config/db.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
@@ -38,8 +38,19 @@ export function setTimezoneChangeHandler(fn: (userId: string, tz: string) => voi
   onTimezoneChanged = fn;
 }
 
+/**
+ * The user's settings row, created on first use. A new account's first screen sends several requests at once, and each
+ * upsert can try to create the row: the losers hit the unique constraint (P2002) and read the row the winner made.
+ */
 export async function ensureSettings(userId: string): Promise<UserSettings> {
-  return prisma.userSettings.upsert({ where: { userId }, create: { userId }, update: {} });
+  try {
+    return await prisma.userSettings.upsert({ where: { userId }, create: { userId }, update: {} });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return prisma.userSettings.findUniqueOrThrow({ where: { userId } });
+    }
+    throw error;
+  }
 }
 
 /**
