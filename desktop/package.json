@@ -1,0 +1,54 @@
+{
+  "name": "life-organizer-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Life Organizer for Windows: the app's web build in an Electron shell (tray, reminders, start with Windows).",
+  "main": "dist/src/main.js",
+  "scripts": {
+    "build:ts": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "tsc -p . && node --test dist/test/*.test.js",
+    "web": "cd ../mobile && npx expo export -p web",
+    "start": "npm run build:ts && electron .",
+    "dev": "npm run build:ts && cross-env LO_DEV_URL=http://localhost:8081 electron .",
+    "dist": "npm run web && npm run build:ts && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.lifeorganizer.desktop",
+    "productName": "Life Organizer",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/src/**",
+      "build/icon.png",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../mobile/dist",
+        "to": "web"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "LifeOrganizer-Setup-${version}.${ext}",
+      "shortcutName": "Life Organizer"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "cross-env": "^10.1.0",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
+    "typescript": "~6.0.3"
+  }
+}
