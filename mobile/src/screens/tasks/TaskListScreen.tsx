@@ -35,6 +35,7 @@ import type { StringKey } from "../../i18n/strings";
 import { Icon } from "../../components/icons/Icon";
 import { startTaskNow } from "../../services/assistantApi";
 import { inRange, type RangeFilter } from "../../utils/taskRange";
+import { undoStatusChanges } from "../../utils/taskUndo";
 import { isOverdue } from "../../utils/format";
 import { PRIORITY_RANK } from "../../utils/priorityColors";
 
@@ -209,7 +210,8 @@ export function TaskListScreen({ navigation, route }: Props) {
       if (t.status !== "COMPLETED") hapticDone();
       setToast({
         text: tr(t.status === "COMPLETED" ? "tasks.toast.reopened" : "tasks.toast.done", { title: t.title }),
-        undo: () => updateTask(t.id, { status: t.status }),
+        // Exactly as before: status AND progress (status alone left a reopened task at 75 %).
+        undo: () => updateTask(t.id, undoStatusChanges(t)),
       });
     } catch (e) {
       setToast({ text: getApiErrorMessage(e) });

@@ -1,3 +1,4 @@
+import { mergeStatusProgress } from "../utils/taskUndo";
 import type { Priority, ReminderMode, Task, TaskSource, TaskStatus, TaskType } from "../types/models";
 import { apiGet, apiPost, getApiErrorMessage } from "./api";
 import { enqueue, isLocalId, newId, readTasks, serverIdFor, syncNow, writeTasks } from "./syncEngine";
@@ -137,8 +138,7 @@ export async function updateTask(id: string, changes: TaskChanges): Promise<Task
     ...existing,
     ...(normalized as Partial<Task>),
     dueAt: "dueDate" in changes || "dueTime" in changes ? localDueAt(normalized.dueDate as string | null, (normalized.dueTime as string | null) ?? existing.dueTime) : existing.dueAt,
-    progress: changes.status === "COMPLETED" ? 100 : (changes.progress ?? existing.progress),
-    status: changes.progress === 100 ? "COMPLETED" : (changes.status ?? existing.status),
+    ...mergeStatusProgress(existing, changes),
     updatedAt: new Date().toISOString(),
     pendingSync: true,
   };
