@@ -8,6 +8,9 @@
  *   Agent API, is never called: its tests use tests/fakes/fakeAgentServer.ts) (blank, not deleted, so
  *   Prisma's own .env loading can't fill them back in), any request to their hosts throws, and pushes go
  *   to a fake provider.
+ * - Every feature flag starts at its default (FEATURE_FLAGS below): Prisma Client loads the backend/.env next to its
+ *   node_modules by itself, so a developer's flags (CHAT_FIXES_V2=on, …) used to leak in and fail tests written for
+ *   the defaults. A test that needs a flag sets it and puts it back.
  * - No real model: AI is switched off (AI_ENABLED=false, as in CI) and GEMINI_API_KEY is blanked, so the
  *   provider chain is empty and replies come from the rules. Requests to Gemini or Ollama throw too. A test
  *   that needs a model injects a fake one with setAi(new AiService([...])).
@@ -34,6 +37,42 @@ process.env.DATABASE_URL = testUrl;
 for (const key of new Set([...Object.keys(process.env), ...Object.keys(fromFile)])) {
   if (/^(?:TWILIO_|EXPO_)/.test(key)) process.env[key] = "";
 }
+/**
+ * Feature flags every test starts with at their default (blanked below). A test that needs one sets it
+ * itself and puts it back. Blank, not deleted: Prisma Client loads the .env next to its own node_modules when it
+ * starts, and fills in variables that are missing, so a developer's .env (flags on) would leak into the suite.
+ * Blank means the default for both kinds: `=== "on"` flags are off, `!== "off"` flags (WhatsApp Agent) stay on.
+ */
+export const FEATURE_FLAGS = [
+  "CALENDAR_SYNC",
+  "CHAT_FIXES_V2",
+  "CLOUD_FALLBACK",
+  "COLLAB_TASKS",
+  "DOC_AGREE",
+  "DOC_AI_SPLIT",
+  "DOC_DATESHEET",
+  "DOC_EVIDENCE",
+  "DOC_EVIDENCE_V2",
+  "DOC_FALLBACK_UI",
+  "DOC_INSTRUCTIONS",
+  "DOC_LAYOUT",
+  "DOC_PRIORITY_V2",
+  "DOC_ROUTING",
+  "MEANING_ROUTER",
+  "OOS_CONFIRM",
+  "OOS_NOTE",
+  "GEMINI_FALLBACK",
+  "BEDROCK_ENABLED",
+  "WHATSAPP_AGENT",
+  "WHATSAPP_AGENT_REMINDERS",
+  "WHATSAPP_VOICE",
+] as const;
+
+/** On/off settings in .env.example that are not feature flags (set below where needed). */
+export const NOT_FLAGS = ["AI_ENABLED", "EMBEDDINGS_ENABLED", "DISABLE_JOBS", "LLM_LOG", "UNKNOWN_LOG", "SMTP_SECURE"] as const;
+
+// Every feature flag at its default (blank, so Prisma's own .env loading can't fill a developer's "on" back in).
+for (const flag of FEATURE_FLAGS) process.env[flag] = "";
 process.env.AI_ENABLED = "false";
 // No real speech-to-text (the default is a local whisper.cpp server); a voice test installs a fake with setStt().
 process.env.STT_PROVIDER = "none";
