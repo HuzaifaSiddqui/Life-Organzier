@@ -96,6 +96,9 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
           <Text variant="caption" color="secondary">
             {t("calendar.offNote")}
           </Text>
+          <Text variant="caption" color="secondary">
+            {t("calendar.twoWayHint")}
+          </Text>
           {problem ? (
             <Text variant="caption" color="danger">
               {t(problem === "denied" ? "calendar.denied" : "calendar.unavailable")}

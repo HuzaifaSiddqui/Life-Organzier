@@ -218,11 +218,29 @@ export function validateDueDateNotPast(dueDateIso: string | null, dueTime: strin
   return null;
 }
 
-/**
- * The planned start is half filled and would be saved: block the save. It is only shown and saved with a
- * duration, so after the duration is cleared, leftover values are ignored (and kept if it is picked again).
- */
-export function plannedStartIncomplete(v: { durationMinutes: number | null; plannedYmd: string; plannedTime: string }): boolean {
-  if (!v.durationMinutes || (!v.plannedYmd && !v.plannedTime.trim())) return false;
+/** The planned start is half filled or unreadable: block the save. Both or neither is fine. */
+export function plannedStartIncomplete(v: { plannedYmd: string; plannedTime: string }): boolean {
+  if (!v.plannedYmd && !v.plannedTime.trim()) return false;
   return !(v.plannedYmd && v.plannedTime.trim() && parseDueTimeToHoursMinutes(v.plannedTime));
+}
+
+/** Planned block length when the task has no duration: the old block's length, else 30 min. */
+export const DEFAULT_PLANNED_MINUTES = 30;
+
+/**
+ * The user's own planned time, saved as the task's slot (it overrides any scheduler suggestion: the planner treats a
+ * set slot as fixed and never suggests over it). null = no planned time (or incomplete).
+ */
+export function plannedSlot(v: { plannedYmd: string; plannedTime: string; durationMinutes: number | null; plannedMinutes?: number | null }): { start: Date; end: Date } | null {
+  if (plannedStartIncomplete(v) || !v.plannedYmd) return null;
+  const start = combineYmdAndTimeStrings(v.plannedYmd, v.plannedTime);
+  if (!start) return null;
+  const minutes = v.durationMinutes || v.plannedMinutes || DEFAULT_PLANNED_MINUTES;
+  return { start, end: new Date(start.getTime() + minutes * 60000) };
+}
+
+/** Same words the server uses (entities.ts FIXED_RE): a title like this is a fixed-time event the planner never moves. */
+const FIXED_WORDS = /\b(class|lecture|meeting|appointment|interview|seminar|lab session|tutorial|call with|flight|train|bus|exam|quiz|standup|stand-up|doctor|dentist)\b/i;
+export function looksFixedTime(title: string): boolean {
+  return FIXED_WORDS.test(title);
 }

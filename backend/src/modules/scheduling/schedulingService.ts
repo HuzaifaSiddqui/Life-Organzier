@@ -294,7 +294,7 @@ export async function dayPlan(userId: string, settings: UserSettings, ymd: strin
   const notes: string[] = [];
   const dayEnd = zonedTimeToUtc(addDaysYmd(ymd, 1), 0, 0, tz);
   const unscheduledTasks = ctx.tasks
-    .filter((t) => !taskBlock(t) && t.parentTaskId === null && (!t.dueAt || t.dueAt <= new Date(dayEnd.getTime() + 2 * 86400000)))
+    .filter((t) => !taskBlock(t) && t.taskType !== TaskType.FIXED && t.parentTaskId === null && (!t.dueAt || t.dueAt <= new Date(dayEnd.getTime() + 2 * 86400000)))
     .sort((a, b) => (a.dueAt?.getTime() ?? Infinity) - (b.dueAt?.getTime() ?? Infinity))
     .slice(0, 8);
 

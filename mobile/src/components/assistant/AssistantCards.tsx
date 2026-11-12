@@ -14,6 +14,7 @@ const MISSING_LABEL: Record<string, string> = { title: "what to do", date: "date
 
 type Handlers = {
   onOpenTask: (taskId: string) => void;
+  onOpenRoutine?: (routineId: string) => void;
   onAction: (payload: ActionPayload, label: string) => void;
 };
 
@@ -78,7 +79,7 @@ function PlanTimeline({ plan }: { plan: DayPlan }) {
   );
 }
 
-export function AssistantCards({ cards, onOpenTask, onAction }: { cards: AssistantCard[] } & Handlers) {
+export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction }: { cards: AssistantCard[] } & Handlers) {
   return (
     <View style={{ gap: 8 }}>
       {cards.map((card, i) => {
@@ -134,7 +135,14 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
           }
           case "routine":
             return (
-              <View key={i} style={styles.panel}>
+              <Pressable
+                key={i}
+                style={({ pressed }) => [styles.panel, pressed && { opacity: 0.8 }]}
+                disabled={!onOpenRoutine}
+                onPress={() => onOpenRoutine?.(card.routine.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open routine ${card.routine.title}`}
+              >
                 <Text style={styles.panelTitle}>
                   {card.routine.title}
                 </Text>
@@ -145,7 +153,7 @@ export function AssistantCards({ cards, onOpenTask, onAction }: { cards: Assista
                   {card.routine.durationMinutes ? ` · ${formatDuration(card.routine.durationMinutes)}` : ""}
                   {card.routine.timeLocked ? " · time-locked" : ""}
                 </Text>
-              </View>
+              </Pressable>
             );
           case "mood_support": {
             const r = card.recommendation;

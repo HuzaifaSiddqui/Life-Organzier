@@ -155,7 +155,7 @@ export type ActionPayload =
   | { type: "break_down"; taskId: string }
   | { type: "set_context"; context: string }
   | { type: "open_task"; taskId: string }
-  | { type: "navigate"; screen: string }
+  | { type: "navigate"; screen: string; routineId?: string }
   | { type: "breathing"; minutes: number }
   /** Run this registry command (or wrapped intent) with these arguments; never re-parsed as a sentence. */
   | { type: "command"; command: string; args?: Record<string, unknown> }

@@ -9,7 +9,8 @@ and Samsung calendars that already sync to the phone are read where they are.
 
 | Part | Behaviour |
 |---|---|
-| Write (one way) | Every dated task and every routine occurrence of the next 14 days is written to **the Google calendar of the account the user signed up with**, when that account is on the phone (its primary calendar, matched by email), so the events show in Google Calendar and sync to Google. Without that account, to a separate **"Life Organizer"** calendar on the phone. Only events the app wrote (marked in their notes) are ever changed or deleted; the user's own events are never touched. |
+| Write | Every dated task and every routine occurrence of the next 14 days is written to **the Google calendar of the account the user signed up with**, when that account is on the phone (its primary calendar, matched by email), so the events show in Google Calendar and sync to Google. Without that account, to a separate **"Life Organizer"** calendar on the phone. Only events the app wrote (marked in their notes) are ever changed or deleted; the user's own events are never touched. |
+| Two-way (the app's own task events) | Edits the user makes to the app's **task** events in the calendar app come back to the task: a moved time, a changed title, a "✓" added in front (marks it done; removing it reopens it) and a deleted event. They are found when the app opens or comes to the foreground, and every 15 minutes while it is open, **not instantly**; a short note says what changed ("\"Physics report\" moved from your calendar · Open"). Routine events stay one-way. Events in other calendars are never imported (see "Importing from other calendars" below). |
 | Read (busy time) | The phone's other calendars are read **on the phone only**: the clash warning, "what's on my calendar tomorrow" and "when am I free tomorrow". Event titles and times never go to the backend or any model. |
 | Settings | Switch "Add tasks and routines to my calendar" (asks for calendar access the first time), the note "Turning this off keeps the events already added until you use Remove all", and "Remove all Life Organizer events" (count shown, confirm, then Undo). |
 | Chat (app and voice) | "add this to my calendar", "what's on my calendar tomorrow", "when am I free tomorrow". "Am I free …" / "when am I free …" use the calendar only when the flag **and** the user's switch are on (the app sends its switch state with each message); otherwise they get the usual task-list answer plus "To include your phone calendar, turn on Phone calendar in Settings." "Add X to my calendar" with no task called X creates X as a new task, with Keep / Undo. On WhatsApp the agenda and "add" answer "ask me in the app" (WhatsApp can't see the phone); "am I free" gets the task-list answer. |
@@ -41,12 +42,42 @@ AsyncStorage (per user). Each sync compares what should be in the calendar with 
 delete. Every change path (form, chat, notification buttons, WhatsApp via push, undo) ends in the same reminder re-plan,
 which also schedules a calendar sync (2 s debounce, one at a time), so an item can't get a second event.
 
-- An event the user deleted in the calendar app is created again the next time its item changes.
+- An event the user deleted in the calendar app is kept deleted (detached) until its task changes; see Two-way.
 - Routine occurrences come from `GET /api/calendar/feed` (window: today + 14 days). One missing from the feed is deleted
   only inside the window (routine deleted, paused or moved). Past ones stay in the calendar and are no longer tracked.
 - Offline: tasks still sync (they live on the phone); routine events are left as they are until the feed answers.
 - Tasks are read from the phone's task store, so tasks created offline get events at once. When such a task reaches the
   server it gets a new id: its event is deleted and created again under the new id (no duplicate).
+
+**Two-way (task events only).** Each sync first reads back every task event in the map
+(`readEvent` → `readBack`, same shape as what was written) and runs `pullChanges` before `planOps`:
+
+- Read-back hash equals the stored hash: the user didn't touch it.
+- Different: the user edited it. Title (without the "✓") → task title; "✓" added → completed, removed → reopened;
+  a work block moved → `scheduledStart`/`scheduledEnd`; an event at the due time (or an all-day deadline) moved → the
+  due date / time. The change goes through `tasksApi.updateTask` (offline queue, undo, server sync as usual).
+- **No loop:** the map then stores the read-back hash, so the task change the app just made produces the same event
+  and nothing is written back.
+- **Conflict** (the task also changed since the last sync, e.g. from WhatsApp or another phone): the newer side wins.
+  iOS gives the event's last-modified time; Android doesn't, so there the calendar edit (just found) counts as newer.
+  When the app's change wins, the note says "changed in the app too; the newer app version was kept" and the app's
+  version is written to the calendar.
+- **Deleted event: the task is never deleted.** The map entry is marked detached, the user is told "deleted from your
+  calendar. The task is still in the app; change it to add it back", and no event is made again until the task itself
+  changes (then it is added back). Deleting the task then just forgets the entry. This is the safest choice: a calendar
+  delete may be a slip or a different device's cleanup, and a lost task can't be recovered by the user, while a
+  missing event can.
+- An event that can't be read (no times) is skipped, never treated as deleted.
+- A due-time event stretched or shortened in the calendar keeps the task's deadline; the next sync puts its length
+  back to 30 minutes.
+
+**Importing from other calendars (not built; design only).** Reading events from the user's other calendars into the
+app as tasks would need: (1) an explicit opt-in per calendar in Settings (a list of the phone's calendars with a
+switch each, all off by default); (2) only after that opt-in may an event's title and time go to the server, as a task
+draft the user reviews (never auto-created, same as document items); (3) a separate `i:<calendarId>:<eventId>` map so
+an imported event is never written back, and recurring events expanded to their next occurrence only; (4) privacy text
+in the permission flow. Effort: about 2–3 days (settings list + per-calendar state ~0.5 d, import + review screen ~1 d,
+dedupe / recurring rules + tests ~1 d, docs + phone checklist ~0.5 d).
 
 **Busy time.** Clashes: timed events on the phone's other calendars that overlap the task (touching isn't a clash;
 all-day events and events marked "free" never clash). Free time: gaps of 30 minutes or more between 8 AM and 10 PM
@@ -133,3 +164,26 @@ the audit build order) is an Expo SDK 57 module too and can go into the same dev
    app works.
 11. Airplane mode: edit a dated task → its event updates; routines unchanged until online.
 12. iPhone (if available): repeat 2–5; check the reason text in the permission dialog.
+
+### Two-way and tasks (PR B)
+
+13. In Google Calendar move the "Physics report" event to 5 PM. Open the app (or bring it to the front) → within a
+    few seconds a note "\"Physics report\" moved from your calendar · Open"; the task's due time is 5 PM. Nothing
+    flickers in the calendar afterwards (no loop). Leave the app open 15 minutes after another move → it comes through
+    without reopening.
+14. Rename the event to "Physics report v2" → the task is renamed. Put "✓" in front of the title → the task is done.
+    Remove the "✓" → it is open again.
+15. Give a task a planned time (form → Planned start), then drag its event to another hour → the planned time moves;
+    the deadline doesn't.
+16. Delete a task's event in the calendar → note "deleted from your calendar. The task is still in the app"; the
+    task is still there; no event comes back on the next sync. Change the task's time → the event is added back.
+17. Conflict: in the calendar rename an event, and before opening the phone app change the same task on WhatsApp →
+    open the app → on Android the calendar title wins (the note says what changed); on iPhone the newer edit wins.
+18. Routine events: move one in the calendar → nothing changes in the app (routines stay one-way).
+19. Task form: a new task "Physics class" picks **Fixed time** by itself; pick a planned start with no duration →
+    saved, and "Plan my day" never moves it. Edit the planned time after "Find time" → your time is kept.
+20. Tap **Start** on any task — before its slot, after it, or a fixed-time class — and from a check-in for a slot that
+    has since moved → it just starts ("▶ Started …"); never "rescheduled for another time". Its planned slot is
+    unchanged.
+21. Routines: **Add routine** is the first thing on the screen, no scrolling. In chat say "Daily meditation at 6 AM"
+    → tap the routine card (or "Open routine") → that routine opens.

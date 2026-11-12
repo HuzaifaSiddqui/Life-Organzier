@@ -187,6 +187,41 @@ test("task commands: start, reopen, and a new task when the name matches nothing
   });
 });
 
+test("task commands: start always starts — early, late or fixed-time — and never moves the plan", { skip }, async () => {
+  await withChatUser("FREE", async (say, _tap, user) => {
+    await say("Physics class tomorrow at 9 AM");
+    const cls = await taskNamed(user.id, "Physics class");
+    assert.equal(cls.taskType, "FIXED", "class + time is inferred as fixed-time");
+    const early = await say("start the physics class");
+    assert.equal(early.message.intent, "task_started");
+    assert.doesNotMatch(early.message.content, /reschedul|another time/i);
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: cls.id } });
+    assert.equal(after.status, "IN_PROGRESS");
+    assert.equal(after.dueAt?.getTime(), cls.dueAt?.getTime(), "fixed time unchanged");
+    assert.equal(after.scheduledStart?.getTime() ?? null, cls.scheduledStart?.getTime() ?? null);
+
+    // A planned slot later today: starting now keeps the plan, records the actual start.
+    const planned = new Date(Date.now() + 3 * 3600000);
+    const essay = await prisma.task.create({ data: { userId: user.id, title: "Write the essay", durationMinutes: 60, scheduledStart: planned, scheduledEnd: new Date(planned.getTime() + 3600000) } });
+    assert.equal((await say("start the essay")).message.intent, "task_started");
+    const e2 = await prisma.task.findUniqueOrThrow({ where: { id: essay.id } });
+    assert.equal(e2.status, "IN_PROGRESS");
+    assert.ok(e2.startedAt, "actual start recorded");
+    assert.equal(e2.scheduledStart?.getTime(), planned.getTime(), "planned slot kept");
+  });
+});
+
+test("routine created in chat: its card and link open that routine", { skip }, async () => {
+  await withChatUser("FREE", async (say) => {
+    const r = await say("Daily meditation at 6 AM for 10 minutes");
+    assert.equal(r.message.intent, "routine_created");
+    const card = r.message.cards?.find((c) => c.type === "routine") as { routine: { id: string } } | undefined;
+    assert.ok(card?.routine.id);
+    const open = r.message.actions?.find((a) => a.payload && (a.payload as { type: string }).type === "navigate");
+    assert.deepEqual(open?.payload, { type: "navigate", screen: "Routines", routineId: card.routine.id });
+  });
+});
+
 test("task commands: add, list and complete subtasks; undo removes the added ones", { skip }, async () => {
   await withChatUser("FREE", async (say, tap, user) => {
     await say("Finish the project by tomorrow 5 PM");

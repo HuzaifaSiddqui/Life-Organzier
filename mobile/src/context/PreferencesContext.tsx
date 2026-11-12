@@ -6,6 +6,7 @@ import type { Category, UserSettings } from "../types/models";
 import { getCategories, getSettings, saveSettings, type WhatsappLink } from "../services/settingsApi";
 import { startSyncEngine, syncNow } from "../services/syncEngine";
 import { startCheckinQueue } from "../services/checkins";
+import { startCalendarWatch } from "../services/calendar";
 import { startLocationReminders } from "../services/locationReminders";
 import { configureReminders, startReminderResponses, syncReminders } from "../services/reminders";
 import { openAppScreen } from "../navigation/navigationRef";
@@ -80,8 +81,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const stopCheckins = startCheckinQueue(() => void syncReminders());
     // P2: tasks added on WhatsApp arrive by push and trigger a sync.
     const stopPush = startPushListeners();
+    // CALENDAR_SYNC: calendar edits come back on foreground and every 15 min (nothing while it's off).
+    const stopCalendar = startCalendarWatch();
     return () => {
       stop();
+      stopCalendar();
       stopResponses();
       stopCheckins();
       stopPush();

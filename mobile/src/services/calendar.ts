@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { auth } from "../lib/firebase";
 import { palettes } from "../theme/tokens";
 import {
@@ -14,7 +14,10 @@ import {
   expoPort,
   freeSlots,
   planOps,
+  pullChanges,
   taskSpan,
+  type Pulled,
+  type ReadEvent,
   type BusyEvent,
   type EventMap,
   type Feed,
@@ -27,6 +30,8 @@ import { readTasks } from "./syncEngine";
  * CALENDAR_SYNC (server flag, off by default; docs/calendar.md). Writes tasks and routine occurrences into the phone's
  * own "Life Organizer" calendar and reads busy time from the phone's other calendars. Other calendars are only read,
  * never written, and nothing read from them is sent anywhere.
+ * Two-way for the app's own task events: edits made in the calendar app (time, title, "✓", delete) are found when the
+ * app opens or comes to the foreground, and every 15 minutes while it's open, not instantly.
  *
  * expo-calendar is loaded lazily: a dev client built before this module existed has no native calendar, and the
  * import must not break the app there (the feature then reports itself unavailable).
@@ -216,6 +221,29 @@ export async function removeAllCalendarEvents(): Promise<boolean> {
   return true;
 }
 
+const changeListeners = new Set<(pulled: Pulled[]) => void>();
+/** Edits found in the calendar (shown to the user as a short note). */
+export function subscribeCalendarChanges(listener: (pulled: Pulled[]) => void): () => void {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
+/** Sync when the app comes to the foreground, and every 15 minutes while it is open. */
+export const CALENDAR_POLL_MS = 15 * 60000;
+export function startCalendarWatch(): () => void {
+  scheduleCalendarSync(1000);
+  const app = AppState.addEventListener("change", (state) => {
+    if (state === "active") scheduleCalendarSync(500);
+  });
+  const periodic = setInterval(() => {
+    if (AppState.currentState === "active") scheduleCalendarSync(0);
+  }, CALENDAR_POLL_MS);
+  return () => {
+    app.remove();
+    clearInterval(periodic);
+  };
+}
+
 async function runSync(): Promise<void> {
   const s = await readState();
   if (!s.on || !auth.currentUser || !(await calendarFeatureOn())) return;
@@ -232,10 +260,26 @@ async function runSync(): Promise<void> {
       feed = null; // offline: tasks still sync, routine events stay as they are
     }
     const { cal, state } = await resolveCalendar(Cal, s);
-    const ops = planOps(desiredEvents(await readTasks(), feed), state.map, feed);
-    if (!ops.length && state === s) return;
     const port = expoPort(cal, (id) => Cal.ExpoCalendarEvent.get(id), { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, allDayUtc: Platform.OS === "android" });
-    const { map } = await applyOps(port, ops, state.map);
+    // Two-way: read the app's task events back and bring the user's calendar edits to the tasks first.
+    let tasks = await readTasks();
+    const read = new Map<string, ReadEvent | null>();
+    for (const [key, e] of Object.entries(state.map)) {
+      if (!key.startsWith("t:") || e.detached) continue;
+      const ev = await port.readEvent(e.eventId);
+      if (ev !== undefined) read.set(key, ev);
+    }
+    const pulled = pullChanges(state.map, read, tasks);
+    const applied = pulled.pulled.filter((p) => p.kind === "apply");
+    if (applied.length) {
+      const { updateTask } = await import("./tasksApi"); // lazy: tasksApi → reminders → calendar
+      for (const p of applied) await updateTask(p.taskId, p.changes).catch((error) => console.warn("Calendar change not applied", error));
+      tasks = await readTasks();
+    }
+    if (pulled.pulled.length) changeListeners.forEach((l) => l(pulled.pulled));
+    const ops = planOps(desiredEvents(tasks, feed), pulled.map, feed);
+    if (!ops.length && state === s && JSON.stringify(pulled.map) === JSON.stringify(state.map)) return;
+    const { map } = await applyOps(port, ops, pulled.map);
     await writeState({ ...state, on: true, map });
   } catch (error) {
     console.warn("Calendar sync failed", error);

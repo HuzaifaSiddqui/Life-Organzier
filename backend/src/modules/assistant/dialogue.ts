@@ -887,7 +887,8 @@ export async function proceedWithDraft(
   // Auto-schedule duration work into a free slot (FR-TM-006); DEADLINE tasks only if it ends before the deadline.
   let scheduleNote = "";
   let noSlot = false;
-  if (!assignOnly && draft.durationMinutes && !draft.scheduledStart) {
+  // A fixed-time task (class, meeting, exam …) keeps its own time: never auto-scheduled into another slot.
+  if (!assignOnly && draft.durationMinutes && !draft.scheduledStart && draft.taskType !== TaskType.FIXED) {
     const dueClock = parseClock(draft.dueTime);
     const deadline = draft.dueYmd
       ? dueClock
@@ -1462,7 +1463,7 @@ export async function proceedWithRoutine(turn: Turn, draft: RoutineDraft): Promi
   if (learnedNote) lines.push(learnedNote);
   const actions: QuickAction[] = askTime
     ? [...["Morning", "Evening"].map((label) => answerAction(label, "routine_time", label.toLowerCase())), answerAction("No reminder", "routine_time", "no reminder")]
-    : [{ label: "View routines", payload: { type: "navigate", screen: "Routines" } }];
+    : [{ label: "Open routine", payload: { type: "navigate", screen: "Routines", routineId: routine.id } }];
   // The routine's id, not its title: a button never depends on how its text would be read.
   if (!askTime && draft.priority !== RoutinePriority.MANDATORY) actions.push(commandAction("Make it mandatory", "routine_update", { routineId: routine.id, priority: "MANDATORY" }, { text: `Make my ${draft.title} routine mandatory` }));
   return { content: lines.join("\n"), cards: [{ type: "routine", routine: routine as unknown as Record<string, unknown> }], actions, intent: "routine_created" };

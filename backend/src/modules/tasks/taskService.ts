@@ -336,7 +336,10 @@ export async function updateTask(
   } else if (updated.status === TaskStatus.SKIPPED && existing.status !== TaskStatus.SKIPPED) {
     logEvent(ctx.userId, "TASK_SKIPPED", updated.id, { category: updated.category });
   } else {
-    logEvent(ctx.userId, "TASK_UPDATED", updated.id, { fields: Object.keys(c) });
+    // Started: actual vs planned start (minutes; negative = early), so patterns can learn from it.
+    const started = updated.status === TaskStatus.IN_PROGRESS && existing.status !== TaskStatus.IN_PROGRESS && updated.startedAt;
+    const vsPlan = started && updated.scheduledStart ? Math.round((updated.startedAt!.getTime() - updated.scheduledStart.getTime()) / 60000) : undefined;
+    logEvent(ctx.userId, "TASK_UPDATED", updated.id, { fields: Object.keys(c), ...(started ? { started: true, startedVsPlanMinutes: vsPlan ?? null } : {}) });
   }
 
   if (!opts.skipChildren && c.dueDate !== undefined && existing.dueDate && updated.dueDate) {
