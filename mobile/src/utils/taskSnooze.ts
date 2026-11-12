@@ -5,6 +5,8 @@
  * they fire, or the task is no longer open.
  */
 export const TASK_SNOOZE_MINUTES = 15;
+/** Home's "Next up" card: "Snooze 1 h" (UI v2) — a reminder for the task in an hour, kept the same way. */
+export const NEXT_UP_SNOOZE_MINUTES = 60;
 
 export type TaskSnooze = {
   /** Notification identifier: the same one on every re-sync, so a copy replaces itself. */
@@ -17,8 +19,8 @@ export type TaskSnooze = {
   categoryIdentifier: string | null;
 };
 
-export function addTaskSnooze(list: TaskSnooze[], s: Omit<TaskSnooze, "identifier" | "fireAt">, now: number): TaskSnooze[] {
-  const fireAt = new Date(now + TASK_SNOOZE_MINUTES * 60000).toISOString();
+export function addTaskSnooze(list: TaskSnooze[], s: Omit<TaskSnooze, "identifier" | "fireAt">, now: number, minutes = TASK_SNOOZE_MINUTES): TaskSnooze[] {
+  const fireAt = new Date(now + minutes * 60000).toISOString();
   // One snooze per task: snoozing again replaces the earlier one.
   return [...list.filter((x) => x.taskId !== s.taskId), { ...s, identifier: `snooze:t:${s.taskId}`, fireAt }];
 }

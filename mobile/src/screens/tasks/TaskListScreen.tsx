@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
+import { FloatingAddButton } from "../../components/FloatingAddButton";
 import { TaskCard } from "../../components/TaskCard";
 import { Chip, EmptyState, HelpButton, SyncBadge, Snackbar, TutorialTip } from "../../components/ui";
 import { colors, palette, radii } from "../../constants/theme";
@@ -264,7 +265,7 @@ export function TaskListScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 160 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} />}
       >
@@ -370,6 +371,7 @@ export function TaskListScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
 
+      {toast ? null : <FloatingAddButton onPress={() => navigation.navigate("AddTask")} />}
       <Snackbar
         text={toast?.text ?? null}
         onHide={() => setToast(null)}

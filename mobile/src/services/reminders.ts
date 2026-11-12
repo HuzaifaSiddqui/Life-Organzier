@@ -366,6 +366,30 @@ export function scheduleReminderSync(delayMs = 1500): void {
   }, delayMs);
 }
 
+/**
+ * Home's "Snooze 1 h" (UI v2): one reminder for the task in `minutes`, kept like a notification snooze (re-syncs
+ * schedule it again until it fires or the task is done). Returns when it fires, or null when it couldn't be
+ * scheduled (notifications off). Snoozing again replaces it.
+ */
+export async function snoozeTaskReminder(task: { id: string; title: string }, minutes: number): Promise<Date | null> {
+  const list = addTaskSnooze(
+    await readTaskSnoozes(),
+    { taskId: task.id, title: "Reminder", body: task.title, data: { taskId: task.id, routineOccurrenceId: null, level: "normal", kind: "lo-reminder" }, categoryIdentifier: CATEGORY_TASK },
+    Date.now(),
+    minutes,
+  );
+  const s = list.find((x) => x.taskId === task.id);
+  if (!s || !(await scheduleTaskSnooze(s))) return null;
+  await writeTaskSnoozes(list);
+  return new Date(s.fireAt);
+}
+
+/** Undo for snoozeTaskReminder: drops the kept snooze and its scheduled notification. */
+export async function cancelTaskSnooze(taskId: string): Promise<void> {
+  await writeTaskSnoozes(withoutTask(await readTaskSnoozes(), taskId));
+  await Notifications.cancelScheduledNotificationAsync(`${PREFIX}snooze:t:${taskId}`).catch(() => undefined);
+}
+
 export type ReminderOpenTarget = { taskId: string | null; routineOccurrenceId: string | null; taskIds?: string[] };
 
 /**

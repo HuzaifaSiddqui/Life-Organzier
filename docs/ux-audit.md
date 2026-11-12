@@ -31,6 +31,21 @@ built-in-browser, computer-use; plugins ponytail and headroom). Replacements, as
 | 8 | Answer a shared-task invitation | Push → Accept; Home "Shared with you" → Open → Accept; or bell → notice → Accept | 2 / 2 / 3 | Good (built in PR A). Decline needs a reason (by design) |
 | 9 | Find tomorrow's tasks | Tasks tab → "Filters & sort" → Date range: Today / This week / This month (**no Tomorrow**) → scan; or chat "what do I have tomorrow" | 3 + scanning, or typing | **No one-tap Tomorrow** anywhere; filters are hidden behind a text link |
 
+### After PR 2 (Home), taps from Home
+
+| # | Flow | Before | After PR 2 |
+|---|---|---|---|
+| 1a | Open the task form | 2 (Tasks tab → New task) | **1** (floating "+" or "Task" under the ask bar) |
+| 4 | Open Routines | 1 + a full scroll to "Organize" | **1**, no scroll (tile, shows "2 left today") |
+| 5 | Open Documents / start an upload | 1 + a full scroll | **1**, no scroll ("Upload" or the tile) |
+| 6 | Log a mood when no check-in is due | 1 + scroll, then pick + Log | **1** to Mood (tile, shows "Check in" / "Feeling calm"), then pick + Log |
+| 2 / 3 | Start or finish the next task | 1 (Up next) | 1 (Next up), plus "then: …" shows what follows |
+| — | Snooze the next task an hour | not possible in the app | **1** (Snooze 1 h, with Undo) |
+| 8 | Shared-task invitation, bell | 2 / 3 | unchanged (both above the fold) |
+| 9 | Tomorrow's tasks | 3 + scan | unchanged (PR 3) |
+
+To confirm on the phone (counts from the layout; the fold is about 720 dp on a mid-range Android).
+
 ## 3. Problems ranked by impact on the 5-minute demo
 
 Demo path assumed: Home first impression → add a task by chat and by form → start / complete it → tomorrow's plan →
