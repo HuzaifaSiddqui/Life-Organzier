@@ -324,6 +324,12 @@ export async function respondToCheckin(
     task = (await updateTask(ctx, task.id, { status: TaskStatus.COMPLETED }, { completedAt: at, completedVia: "CHECKIN" })) ?? task;
     return { ...base, checkin: answered, task: serializeTask(task, now), message: renderAck("DONE", lang, task) };
   }
+  // "Started" always starts the task, even from a check-in whose slot has moved since (it used to answer "… was
+  // rescheduled" and do nothing). No completion check-in is planned for the old slot.
+  if (row.status === "CANCELLED" && response === "STARTED") {
+    if (task.status !== TaskStatus.IN_PROGRESS) task = (await updateTask(ctx, task.id, { status: TaskStatus.IN_PROGRESS }, { startedAt: at })) ?? task;
+    return { ...base, checkin: answered, task: serializeTask(task, now), message: responseText(lang, "STARTED", task) };
+  }
   if (row.status === "CANCELLED") {
     return { ...base, checkin: answered, task: serializeTask(task, now), message: responseText(lang, "STALE", task) };
   }

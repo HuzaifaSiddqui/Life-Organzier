@@ -310,15 +310,27 @@ test("respond: answering an old check-in for a task already completed in the app
   });
 });
 
-test("respond: answering a cancelled (rescheduled) check-in changes nothing", { skip }, async () => {
+test("respond: STARTED on a cancelled (rescheduled) check-in still starts the task", { skip }, async () => {
   setAi(new AiService([]));
   await withUser(async (ctx, settings) => {
     const start = minute(new Date(Date.now() - 30 * 60000));
     const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
     const row = await startRow(ctx.userId, t.id, start, { status: "CANCELLED" });
     const r = await respondToCheckin(ctx.userId, settings, ctx, row.id, "STARTED");
+    assert.equal(r.task?.status, TaskStatus.IN_PROGRESS);
+    assert.equal(r.next, null, "no completion check-in for the old slot");
+    assert.doesNotMatch(r.message ?? "", /rescheduled|no longer current/);
+  });
+});
+
+test("respond: other answers on a cancelled check-in change nothing", { skip }, async () => {
+  setAi(new AiService([]));
+  await withUser(async (ctx, settings) => {
+    const start = minute(new Date(Date.now() - 30 * 60000));
+    const t = await createTask(ctx, { title: "Physics assignment", priority: Priority.MEDIUM, source: TaskSource.CHAT, taskType: TaskType.FLEXIBLE, durationMinutes: 120, scheduledStart: start });
+    const row = await startRow(ctx.userId, t.id, start, { status: "CANCELLED" });
+    const r = await respondToCheckin(ctx.userId, settings, ctx, row.id, "NOT_TODAY");
     assert.equal(r.task?.status, TaskStatus.PENDING);
-    assert.equal(r.next, null);
     assert.match(r.message ?? "", /no longer current/);
   });
 });

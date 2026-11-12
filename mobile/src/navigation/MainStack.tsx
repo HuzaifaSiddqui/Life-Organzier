@@ -37,7 +37,8 @@ export type MainStackParamList = {
   TaskDetail: { taskId: string };
   AddTask: { prefill?: TaskFormPrefill } | undefined;
   EditTask: { taskId: string };
-  Routines: undefined;
+  /** routineId: open that routine (e.g. tapped in chat). */
+  Routines: { routineId?: string } | undefined;
   Insights: undefined;
   Memory: undefined;
   Mood: undefined;

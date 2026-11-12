@@ -152,6 +152,14 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 
 **Create body (Zod):** `title`, `priority`, `source` required; `description`, `dueDate`, `dueTime`, `category`, `status`, `confidence` optional. `dueDate` is an ISO string parsed to `Date` on the server.
 
+**Planned time and fixed time.** `scheduledStart` / `scheduledEnd` (ISO or null) are the user's planned slot. The task
+form now sends them whenever a planned start is set, with or without a duration (end = start + duration, else the
+old block's length, else 30 min); `null` clears it. A set slot is never replaced by a scheduler suggestion. A task with
+`taskType: "FIXED"` is never moved by the planner, auto-scheduling, "move to make room" or "do it now".
+Starting a task (`status: "IN_PROGRESS"`) keeps its planned slot and records `startedAt`; the `TASK_UPDATED` activity
+event then carries `started: true, startedVsPlanMinutes` (actual minus planned start, negative = early; null without a
+plan).
+
 ---
 
 ### Parser — `POST /api/parser/task`
@@ -278,6 +286,8 @@ All routes need the Firebase token; every query is scoped by the caller. Error c
   `task_shared`, `shared_requests`, `shared_accepted`, `shared_declined`, `shared_unshared`, `shared_cancelled`;
   commands `shared_accept` / `shared_decline` `{ ref?, sharedTaskId? }`, buttons `shared_cancel` `{ sharedTaskId, keepMine }`
   and `connection_answer` `{ connectionId, accept }`; `navigate` screen `Collab`.
+- Assistant `navigate` action: `{ type: "navigate", screen, routineId? }`. A routine created in chat answers with
+  "Open routine" → `{ screen: "Routines", routineId }`; the app opens that routine (its card in the reply opens it too).
 
 ### Routine reminders (phase 1)
 
@@ -315,7 +325,7 @@ are marked `CANCELLED`; the phone should cancel any scheduled notification whose
 Response `data`: `{ checkin, task, message, next, suggestion, remainingMinutes, deadlineWarning, refused, alreadyAnswered }`.
 `next` is the check-in to schedule immediately (completion after `STARTED`, or the extra-time check-in);
 `suggestion` is a reschedule / plan-the-rest slot the user may accept; `refused` (`limit | quiet_hours | dnd`)
-comes with a user-facing `message`. Answers are claimed atomically: answering twice (or concurrently) returns `alreadyAnswered: true` and changes nothing. Answers to a `CANCELLED` check-in, or for a task already `COMPLETED`/`SKIPPED`, are recorded but don't change the task (short message, no `next`).
+comes with a user-facing `message`. Answers are claimed atomically: answering twice (or concurrently) returns `alreadyAnswered: true` and changes nothing. Answers for a task already `COMPLETED`/`SKIPPED` are recorded but don't change the task (short message, no `next`). On a `CANCELLED` check-in (the slot moved): `STARTED` still starts the task (status `IN_PROGRESS`, `startedAt` = tap time, message "▶ …", no `next` for the old slot), `DONE` completes it, anything else is recorded only ("no longer current").
 CheckinLog `copySource`: `GEMINI | OLLAMA | LIBRARY | NONE | WITHHELD` (research mode omitted an existing first step).
 Errors: 400 `INVALID_RESPONSE`, 404 `CHECKIN_NOT_FOUND`.
 

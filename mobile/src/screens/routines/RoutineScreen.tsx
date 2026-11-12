@@ -54,6 +54,10 @@ const EMPTY: FormState = {
   noReminder: false,
 };
 
+function formFor(r: Routine): FormState {
+  return { ...EMPTY, ...r, id: r.id, daysOfWeek: r.daysOfWeek ?? [], dayOfMonth: r.dayOfMonth ?? 1, noReminder: !r.dueTime };
+}
+
 function freqLabel(r: Routine): string {
   if (r.intervalDays && r.anchorDate) return intervalRepeatLabel(r.intervalDays, r.anchorDate);
   if (r.frequency === "DAILY") return "Every day";
@@ -69,7 +73,7 @@ function adherence(r: Routine): { pct: number; total: number } | null {
   return { pct: Math.round((past.filter((o) => o.status === "COMPLETED").length / past.length) * 100), total: past.length };
 }
 
-export function RoutineScreen({ navigation }: Props) {
+export function RoutineScreen({ navigation, route }: Props) {
   const { settings } = usePreferences();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [today, setToday] = useState<Array<RoutineOccurrence & { routine: Routine }>>([]);
@@ -84,10 +88,19 @@ export function RoutineScreen({ navigation }: Props) {
       const [r, t] = await Promise.all([getRoutines(showAll), getTodayOccurrences()]);
       setRoutines(r.routines);
       setToday(t);
+      // Opened for one routine (tapped in chat): show it, once.
+      const openId = route.params?.routineId;
+      if (openId) {
+        navigation.setParams({ routineId: undefined });
+        const r1 = r.routines.find((x) => x.id === openId) ?? (showAll ? undefined : (await getRoutines(true)).routines.find((x) => x.id === openId));
+        if (r1) setForm(formFor(r1));
+        else setToast("That routine no longer exists");
+      }
     } catch (e) {
       setToast(getApiErrorMessage(e));
     }
-  }, [showAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAll, route.params?.routineId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -164,7 +177,8 @@ export function RoutineScreen({ navigation }: Props) {
         right={<HelpButton title="Routines" text="Recurring activities. Time-locked routines (prayer, morning walk) are never moved — if missed, the next one is ready. Flexible ones (dentist, bills) can be rescheduled. Mandatory routines are scheduled first." example={'Tell the assistant: "Mandatory daily prayer at 5 AM"'} />}
       />
       <ScrollView contentContainerStyle={ui.content}>
-        <TutorialTip id="routines" title="Create recurring activities here" text="Try “Daily meditation at 6 AM for 10 minutes” in the assistant, or tap New routine." />
+        <Button title="Add routine" onPress={() => setForm({ ...EMPTY })} accessibilityLabel="Add routine" />
+        <TutorialTip id="routines" title="Create recurring activities here" text="Try “Daily meditation at 6 AM for 10 minutes” in the assistant, or tap Add routine." />
         <SectionTitle title="Today" right={settings?.currentContext ? <Text style={styles.meta}>{settings.currentContext}</Text> : undefined} />
         {today.length ? (
           today.map((o) => (
@@ -205,7 +219,7 @@ export function RoutineScreen({ navigation }: Props) {
             return (
               <Pressable
                 key={r.id}
-                onPress={() => setForm({ ...EMPTY, ...r, id: r.id, daysOfWeek: r.daysOfWeek ?? [], dayOfMonth: r.dayOfMonth ?? 1, noReminder: !r.dueTime })}
+                onPress={() => setForm(formFor(r))}
               >
                 <Card style={{ gap: 6, opacity: r.active ? 1 : 0.55 }}>
                   <View style={styles.rowBetween}>
@@ -234,7 +248,6 @@ export function RoutineScreen({ navigation }: Props) {
             );
           })
         )}
-        <Button title="＋ New routine" onPress={() => setForm({ ...EMPTY })} />
       </ScrollView>
 
       <Modal visible={Boolean(form)} animationType="slide" onRequestClose={() => setForm(null)}>

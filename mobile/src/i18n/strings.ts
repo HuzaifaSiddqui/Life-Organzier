@@ -446,6 +446,16 @@ const en = {
   "calendar.clashChatMore": "You have {title} and {count} more at {time}. Keep it?",
   "calendar.keep": "Keep",
   "calendar.kept": "Kept.",
+  "calendar.pulled.moved": "\"{title}\" moved from your calendar.",
+  "calendar.pulled.renamed": "\"{title}\" renamed from your calendar.",
+  "calendar.pulled.done": "\"{title}\" marked done from your calendar.",
+  "calendar.pulled.reopened": "\"{title}\" reopened from your calendar.",
+  "calendar.pulled.changed": "\"{title}\" updated from your calendar.",
+  "calendar.pulled.many": "{count} tasks updated from your calendar.",
+  "calendar.pulled.removed": "\"{title}\" was deleted from your calendar. The task is still in the app; change it to add it back.",
+  "calendar.pulled.kept": "\"{title}\" changed in the app too; the newer app version was kept.",
+  "calendar.pulled.open": "Open",
+  "calendar.twoWayHint": "Changes you make to these events in your calendar (time, title, ✓ in front, delete) come back to the app when it opens or every 15 minutes, not instantly.",
 } as const;
 
 export type StringKey = keyof typeof en;

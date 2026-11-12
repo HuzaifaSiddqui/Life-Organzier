@@ -210,7 +210,8 @@ export function AssistantScreen({ navigation, route }: Props) {
       }
       if (payload?.type === "navigate" && typeof payload.screen === "string") {
         const screen = CLIENT_SCREENS[payload.screen];
-        if (screen) navigation.navigate(screen as never);
+        if (screen === "Routines") navigation.navigate("Routines", typeof payload.routineId === "string" ? { routineId: payload.routineId } : undefined);
+        else if (screen) navigation.navigate(screen as never);
         return;
       }
       if (payload) void send({ payload, label: action.label });
@@ -295,6 +296,7 @@ export function AssistantScreen({ navigation, route }: Props) {
                   <AssistantCards
                     cards={m.cards}
                     onOpenTask={(taskId) => navigation.navigate("TaskDetail", { taskId })}
+                    onOpenRoutine={(routineId) => navigation.navigate("Routines", { routineId })}
                     onAction={(payload, label) => onAction({ payload, label })}
                   />
                 </View>

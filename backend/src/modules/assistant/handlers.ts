@@ -1,6 +1,6 @@
 import { isWhatsapp } from "./channel.js";
 import { detectShare } from "./shareIntent.js";
-import { Priority, RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
+import { Priority, RoutineOccurrenceStatus, TaskStatus, TaskType, type Task } from "@prisma/client";
 import { answerAction, commandAction, sayAction } from "./actions.js";
 import { prisma } from "../../config/db.js";
 import { HttpError } from "../../lib/http.js";
@@ -1037,18 +1037,20 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
     case "start_task": {
       const task = await getTaskForUser(turn.user.id, payload.taskId);
       if (!task) return { content: "That task no longer exists.", intent: "not_found" };
+      // Starting always works, before or after the planned slot: it just starts (startedAt is the actual start). A
+      // planned slot is kept as the plan (fixed-time tasks are never moved); only a task with no plan gets a focus block.
       const minutes = task.durationMinutes ? Math.max(15, Math.round(task.durationMinutes * (1 - task.progress / 100))) : 45;
       const start = turn.now;
-      const end = new Date(start.getTime() + Math.min(minutes, 90) * 60000);
+      const end = task.scheduledStart && task.scheduledEnd ? task.scheduledEnd : task.taskType === TaskType.FIXED ? start : new Date(start.getTime() + Math.min(minutes, 90) * 60000);
       const updated = await updateTask(turn.task, task.id, {
         status: TaskStatus.IN_PROGRESS,
         progress: Math.max(task.progress, 5),
-        scheduledStart: start,
-        scheduledEnd: end,
+        ...(task.scheduledStart || task.taskType === TaskType.FIXED ? {} : { scheduledStart: start, scheduledEnd: end }),
       });
       focusOn(turn, task.id);
       const p = localParts(end, turn.tz);
-      return { content: `▶ Focus on "${task.title}" until ${formatClock(p.h, p.mi)}. Tell me how far you get!`, cards: updated ? [taskCard(updated)] : [], intent: "task_started" };
+      const until = end.getTime() > start.getTime() ? ` until ${formatClock(p.h, p.mi)}` : "";
+      return { content: `▶ Started "${task.title}"${until}. Tell me how far you get!`, cards: updated ? [taskCard(updated)] : [], intent: "task_started" };
     }
     case "set_context":
       return setContext(turn, payload.context);
@@ -1146,6 +1148,11 @@ async function overdueAction(turn: Turn, taskId: string, choice: "complete_now" 
       actions: [sayAction("Remind me today 5 PM", "create_task", `Remind me to ask for an extension on ${task.title} today at 5 PM`, "primary")],
       intent: "overdue_extension",
     };
+  }
+  // A fixed-time task keeps its time: "do it now" just starts it.
+  if (choice === "complete_now" && task.taskType === TaskType.FIXED) {
+    const updated = await updateTask(turn.task, task.id, { status: TaskStatus.IN_PROGRESS });
+    return { content: `▶ Started "${task.title}". You've got this!`, cards: updated ? [taskCard(updated)] : [], intent: "overdue_now" };
   }
   const remaining = Math.max(15, Math.round((task.durationMinutes ?? 60) * (1 - task.progress / 100)));
   const ctx = await loadScheduleContext(turn.user.id, turn.settings, 7);

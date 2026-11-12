@@ -78,6 +78,9 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   concurrent or repeated taps apply once), then updates the task. If the task update fails (e.g. the database drops
   mid-request), a retry returns `alreadyAnswered` and that answer is lost; the user would change the task by hand.
 
+- **Answers other than "Started" on a check-in whose slot moved** still change nothing ("That check-in is no longer
+  current"), except "Done", which completes the task.
+
 ## Notification actions
 
 - **Every notification button opens the app.** There is no background task handler (`expo-task-manager` isn't
@@ -108,8 +111,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 - **Needs a new development build** (`expo-calendar` is native). Older dev clients run normally; calendar actions say
   "The calendar needs the latest version of the app".
-- **One way.** Edits made to Life Organizer events in the calendar app are not read back; the next change to the task
-  overwrites them. An event deleted there is created again on the task's next change.
+- **Two-way for task events only, and not instant.** Calendar edits (time, title, "✓", delete) come back when the app
+  opens, comes to the foreground, or every 15 minutes while it's open; never in the background. Routine events stay
+  one-way: edits there are overwritten on the routine's next change. A due-time event's length can't be changed from
+  the calendar (it goes back to 30 min). Conflicts on Android go to the calendar edit (Android gives no last-modified
+  time). A deleted event never deletes its task; the event stays gone until the task changes. Events in other
+  calendars are never imported (design and estimate in docs/calendar.md).
 - **Routines: 14 days ahead.** Later occurrences are added as the window moves (on the next re-plan). Past routine events
   stay in the calendar and are no longer updated; "Remove all" deletes them, and Undo doesn't bring them back.
 - **Busy time is what the phone has.** Google / Outlook events count only once they have synced to the phone's calendar.
@@ -260,6 +267,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   DEADLINE before looking at duration. In chat, a DEADLINE task with a duration is auto-scheduled only when a free
   slot ends before its deadline; otherwise it is created without a work block (no check-ins) and the reply offers
   "Find time for it". Tasks added through the task form get a work block only if the user sets a planned start.
+- **Fixed time is a word list.** The task form picks "Fixed time" for a new task whose title has a class / meeting /
+  appointment / exam word (same list as `FIXED_RE`), until the user picks a type; chat needs the word and a time. The
+  planner, auto-scheduling, "move tasks to make room" and "do it now" never move a fixed-time task; the user still can.
+- **Start always starts.** "Start" (chat, check-in, also a check-in whose slot has since moved) only starts the task:
+  the planned slot stays, the actual start time is recorded (`startedAt`, and the minutes early / late in the
+  `TASK_UPDATED` event). A check-in for a moved slot plans no completion check-in for the old slot; the new slot gets
+  its own. Only a task with no planned time gets a focus block from "now".
 
 ## Platform and UI
 
