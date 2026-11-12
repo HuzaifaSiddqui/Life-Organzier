@@ -81,6 +81,8 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
         <ListItem
           title={t("calendar.toggle")}
           subtitle={t("calendar.toggleHint")}
+          titleLines={0}
+          subtitleLines={0}
           leading={<Icon name="calendar" size={20} color={colors.accent} />}
           trailing={
             <Switch

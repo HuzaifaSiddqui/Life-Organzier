@@ -7,7 +7,7 @@ import type { Task } from "../types/models";
 import { formatDue, isOverdue } from "../utils/format";
 import { priorityColor } from "../utils/priorityColors";
 import { Icon } from "./icons/Icon";
-import { Dot, HighlightText, IconButton, PressableScale, ProgressBar, Text } from "./ui";
+import { Dot, HighlightText, IconButton, ProgressBar, Text } from "./ui";
 
 type Props = {
   task: Task;
@@ -36,18 +36,19 @@ export function TaskCard({ task, onPress, onLongPress, variant = "list", query =
   const meta = [formatDue(task), variant !== "compact" && !overdue && !done ? label(task.status.replace("_", " ")) : null, task.category].filter(Boolean);
 
   return (
-    <PressableScale
+    // Plain Pressable (no per-row press animation): measured smoother scrolling on long lists (UI v2 PR 5).
+    <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={`${task.title}, ${label(task.priority)} priority${overdue ? ", overdue" : ""}${done ? ", completed" : ""}`}
-      style={[
+      style={({ pressed }) => [
         styles.card,
         variant === "compact" ? { paddingVertical: spacing.md } : elevation(1),
         { borderRadius: radii.md, padding: variant === "compact" ? 0 : spacing.lg, marginBottom: variant === "compact" ? 0 : spacing.sm },
+        pressed && { opacity: 0.7 },
       ]}
-      pressedStyle={{ opacity: 0.85 }}
     >
       <View style={styles.row}>
         <View style={styles.lead}>
@@ -103,7 +104,7 @@ export function TaskCard({ task, onPress, onLongPress, variant = "list", query =
           </View>
         ) : null}
       </View>
-    </PressableScale>
+    </Pressable>
   );
 }
 
