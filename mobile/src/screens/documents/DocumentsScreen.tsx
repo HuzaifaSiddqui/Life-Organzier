@@ -9,6 +9,7 @@ import { InstructionInput, InstructionPanel } from "../../components/DocumentIns
 import { DocumentTextView } from "../../components/DocumentTextView";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
+import { Icon } from "../../components/icons/Icon";
 import { colors, palette } from "../../constants/theme";
 import { useLocale } from "../../i18n/LocaleProvider";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -318,7 +319,7 @@ export function DocumentsScreen({ navigation }: Props) {
               onChangeText={setPasted}
               multiline
               placeholder="Paste syllabus or schedule text here"
-              placeholderTextColor="#646A78"
+              placeholderTextColor={palette.muted}
             />
           ) : null}
           {picked || pasteMode ? (
@@ -430,7 +431,7 @@ export function DocumentsScreen({ navigation }: Props) {
                       onPress={() => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, include: !x.include } : x)))}
                       style={[styles.box, (d.include || d.created) && styles.boxOn]}
                     >
-                      <Text style={{ color: "#fff", fontFamily: "Inter_700Bold" }}>{d.include || d.created ? "✓" : ""}</Text>
+                      {d.include || d.created ? <Icon name="check" size={14} color={colors.surface} /> : null}
                     </Pressable>
                     <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, title } : x)))} />
                   </View>
@@ -463,7 +464,7 @@ export function DocumentsScreen({ navigation }: Props) {
                       onPress={() => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, include: !x.include } : x)))}
                       style={[styles.box, (s.include || s.created) && styles.boxOn]}
                     >
-                      <Text style={{ color: "#fff", fontFamily: "Inter_700Bold" }}>{s.include || s.created ? "✓" : ""}</Text>
+                      {s.include || s.created ? <Icon name="check" size={14} color={colors.surface} /> : null}
                     </Pressable>
                     <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={s.title} editable={!s.created} onChangeText={(title) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, title } : x)))} />
                   </View>
@@ -478,9 +479,9 @@ export function DocumentsScreen({ navigation }: Props) {
                       />
                     ))}
                   </View>
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, time } : x)))} />
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor={palette.muted} editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, time } : x)))} />
                   {/* Room only as read from the document (empty when the document has none); the user may correct it. */}
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor="#646A78" editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, room, roomCheck: false } : x)))} accessibilityLabel="Room" />
+                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor={palette.muted} editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, room, roomCheck: false } : x)))} accessibilityLabel="Room" />
                   {/* Read from an image and not shaped like a room code: ask, don't guess. Editing it clears the note. */}
                   {s.roomCheck && !s.created ? <Text style={[styles.meta, { color: palette.warning }]}>{t("docReview.checkRoom")}</Text> : null}
                   <Text style={[styles.meta, { color: confColor(s.confidence) }]}>

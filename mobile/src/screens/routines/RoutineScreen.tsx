@@ -258,7 +258,7 @@ export function RoutineScreen({ navigation, route }: Props) {
               <Card style={{ gap: 14 }}>
                 <View>
                   <Text style={ui.label}>Name</Text>
-                  <TextInput style={ui.input} value={form.title} onChangeText={(title) => setForm({ ...form, title })} placeholder="e.g. Morning walk" placeholderTextColor="#646A78" />
+                  <TextInput style={ui.input} value={form.title} onChangeText={(title) => setForm({ ...form, title })} placeholder="e.g. Morning walk" placeholderTextColor={palette.muted} />
                 </View>
                 <View>
                   <Text style={ui.label}>How often?</Text>

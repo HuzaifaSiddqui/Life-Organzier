@@ -270,7 +270,7 @@ export function TaskListScreen({ navigation, route }: Props) {
       >
         <SyncBadge />
         <TutorialTip id="tasks" title="Quick actions" text="Swipe a task right to complete it, left to push it to tomorrow, or long-press for edit/delete." />
-        <TextInput style={styles.search} placeholder="Search tasks" placeholderTextColor="#646A78" value={query} onChangeText={setQuery} />
+        <TextInput style={styles.search} placeholder="Search tasks" placeholderTextColor={palette.muted} value={query} onChangeText={setQuery} />
 
         {onlyIds ? (
           <View style={styles.chips}>

@@ -5,7 +5,9 @@ import { Alert, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } f
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, SectionTitle, Snackbar, ui } from "../../components/ui";
+import { Icon } from "../../components/icons/Icon";
 import { colors, palette } from "../../constants/theme";
+import { palettes } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useLocale } from "../../i18n/LocaleProvider";
@@ -48,7 +50,8 @@ const LANGUAGES = [
   { key: "zh", label: "中文" },
   { key: "hi", label: "हिन्दी" },
 ];
-const COLORS = ["#2563EB", "#9333EA", "#16A34A", "#EA580C", "#CA8A04", "#DB2777", "#0891B2", "#475569"];
+/** Category colours offered when adding one: the curated category hues (tokens), stored with the category. */
+const COLORS = [...palettes.light.category];
 
 function to12h(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
@@ -314,14 +317,16 @@ export function SettingsScreen({ navigation }: Props) {
               <Chip
                 key={c}
                 small
-                label={`${c}${settings.currentContext === c ? " (current)" : ""} ✕`}
+                label={`${c}${settings.currentContext === c ? " (current)" : ""}`}
+                leading={<Icon name="close" size={12} color={settings.currentContext === c ? colors.primary : colors.textMuted} />}
+                accessibilityLabel={`Remove context ${c}`}
                 selected={settings.currentContext === c}
                 onPress={() => void save({ contexts: settings.contexts.filter((x) => x !== c), currentContext: settings.currentContext === c ? null : settings.currentContext })}
               />
             ))}
           </View>
           <View style={styles.row}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={newContext} onChangeText={setNewContext} placeholder="e.g. In Village" placeholderTextColor="#646A78" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={newContext} onChangeText={setNewContext} placeholder="e.g. In Village" placeholderTextColor={palette.muted} />
             <Chip
               label="Add"
               onPress={() => {
@@ -341,7 +346,9 @@ export function SettingsScreen({ navigation }: Props) {
               <Chip
                 key={c.id}
                 small
-                label={`${c.name}${c.predefined ? "" : " ✕"}`}
+                label={c.name}
+                leading={c.predefined ? undefined : <Icon name="close" size={12} color={colors.textMuted} />}
+                accessibilityLabel={c.predefined ? c.name : `Remove category ${c.name}`}
                 onPress={
                   c.predefined
                     ? undefined
@@ -354,7 +361,7 @@ export function SettingsScreen({ navigation }: Props) {
             ))}
           </View>
           <View style={styles.row}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={catName} onChangeText={setCatName} placeholder="New category, e.g. Traveling" placeholderTextColor="#646A78" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={catName} onChangeText={setCatName} placeholder="New category, e.g. Traveling" placeholderTextColor={palette.muted} />
             <Chip
               label="Add"
               onPress={async () => {
@@ -385,7 +392,9 @@ export function SettingsScreen({ navigation }: Props) {
                 <Chip
                   key={t.tag}
                   small
-                  label={`#${t.tag} (${t.count}) ✕`}
+                  label={`#${t.tag} (${t.count})`}
+                  leading={<Icon name="close" size={12} color={colors.textMuted} />}
+                  accessibilityLabel={`Remove tag ${t.tag}`}
                   onPress={async () => {
                     await deleteTag(t.tag).catch(() => undefined);
                     setTags(await getTags());
@@ -452,8 +461,8 @@ export function SettingsScreen({ navigation }: Props) {
             }
           />
           <Text style={ui.label}>Change password</Text>
-          <TextInput style={ui.input} value={pw.current} onChangeText={(current) => setPw({ ...pw, current })} placeholder="Current password" placeholderTextColor="#646A78" secureTextEntry />
-          <TextInput style={ui.input} value={pw.next} onChangeText={(next) => setPw({ ...pw, next })} placeholder="New password (8+ characters)" placeholderTextColor="#646A78" secureTextEntry />
+          <TextInput style={ui.input} value={pw.current} onChangeText={(current) => setPw({ ...pw, current })} placeholder="Current password" placeholderTextColor={palette.muted} secureTextEntry />
+          <TextInput style={ui.input} value={pw.next} onChangeText={(next) => setPw({ ...pw, next })} placeholder="New password (8+ characters)" placeholderTextColor={palette.muted} secureTextEntry />
           <Button
             title="Update password"
             kind="secondary"

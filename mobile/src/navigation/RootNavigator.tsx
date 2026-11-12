@@ -114,7 +114,7 @@ function SyncErrorScreen() {
           <TextInput
             style={styles.ipInput}
             placeholder="e.g. 192.168.1.12"
-            placeholderTextColor="#646A78"
+            placeholderTextColor={palette.muted}
             keyboardType="numbers-and-punctuation"
             autoCapitalize="none"
             autoCorrect={false}

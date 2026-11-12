@@ -20,6 +20,10 @@ export type Palette = {
   textTertiary: string;
   accent: string;
   onAccent: string;
+  /** Accent for text and icons (links, selected chips, tonal buttons): AA on canvas, surface and accentSoft. */
+  accentStrong: string;
+  /** The logo's bright blue: illustration and brand marks only, never text or a fill behind text (2.98:1). */
+  brand: string;
   /** Accent at state opacities — pressed / selected / focus are all variations of the one accent. */
   accentSoft: string;
   accentPressed: string;
@@ -33,24 +37,30 @@ export type Palette = {
   /** Curated category hues (index-stable across themes). Used for dots/icons only, never body text. */
   category: readonly string[];
   skeleton: string;
+  /** Charts: gridlines / empty track, and the 5-step heat ramp (low → high), from the logo blues. */
+  chartGrid: string;
+  heat: readonly string[];
   inverseSurface: string;
   onInverse: string;
 };
 
+/** UI v2 (12 Nov 2026): colours from the logo (#1D99FF, #E5F4FF, #005BB5, icon background #0A6FD6). */
 const light: Palette = {
-  canvas: "#F6F5F2",
-  surface: "#FFFEFB",
-  sheet: "#FFFEFB",
-  hairline: "rgba(25, 28, 34, 0.10)",
-  scrim: "rgba(15, 18, 24, 0.40)",
-  text: "#191C22",
-  textSecondary: "#565C69",
-  textTertiary: "#646A78",
-  accent: "#0B66C2",
+  canvas: "#F5F8FC",
+  surface: "#FFFFFF",
+  sheet: "#FFFFFF",
+  hairline: "rgba(15, 27, 45, 0.10)",
+  scrim: "rgba(11, 18, 32, 0.40)",
+  text: "#0F1B2D",
+  textSecondary: "#4A5566",
+  textTertiary: "#5E6A7B",
+  accent: "#0A6FD6",
   onAccent: "#FFFFFF",
-  accentSoft: "rgba(11, 102, 194, 0.10)",
-  accentPressed: "rgba(11, 102, 194, 0.16)",
-  accentFocus: "rgba(11, 102, 194, 0.40)",
+  accentStrong: "#005BB5",
+  brand: "#1D99FF",
+  accentSoft: "rgba(10, 111, 214, 0.10)",
+  accentPressed: "rgba(10, 111, 214, 0.16)",
+  accentFocus: "rgba(10, 111, 214, 0.40)",
   highlight: "rgba(224, 178, 99, 0.35)",
   success: { fg: "#2E7A4D", bg: "#E6F1E9" },
   warning: { fg: "#93600F", bg: "#F6EDDA" },
@@ -58,25 +68,29 @@ const light: Palette = {
   info: { fg: "#2C6390", bg: "#E3EDF5" },
   priority: { URGENT: "#B83B35", HIGH: "#B0581A", MEDIUM: "#8A6A06", LOW: "#3767AE" },
   category: ["#3A68C9", "#7552C0", "#367F55", "#B65E22", "#237F80", "#B4466F", "#8F6A0E", "#5A6576"],
-  skeleton: "#EAE8E3",
-  inverseSurface: "#22262E",
-  onInverse: "#F1F2F5",
+  skeleton: "#E6EBF2",
+  chartGrid: "#E6EBF2",
+  heat: ["#EEF3F9", "#E5F4FF", "#8CC6FF", "#1D99FF", "#005BB5"],
+  inverseSurface: "#1A2436",
+  onInverse: "#E6EDF7",
 };
 
 const dark: Palette = {
-  canvas: "#0F1218",
-  surface: "#171B23",
-  sheet: "#1E232D",
-  hairline: "rgba(231, 234, 240, 0.09)",
+  canvas: "#0B1220",
+  surface: "#131B2B",
+  sheet: "#1A2436",
+  hairline: "rgba(230, 237, 247, 0.09)",
   scrim: "rgba(0, 0, 0, 0.55)",
-  text: "#E7EAF0",
-  textSecondary: "#A4AAB8",
-  textTertiary: "#8A91A0",
-  accent: "#5AAEFF",
-  onAccent: "#08111E",
-  accentSoft: "rgba(90, 174, 255, 0.14)",
-  accentPressed: "rgba(90, 174, 255, 0.22)",
-  accentFocus: "rgba(90, 174, 255, 0.50)",
+  text: "#E6EDF7",
+  textSecondary: "#A9B4C4",
+  textTertiary: "#8C98AA",
+  accent: "#4DB0FF",
+  onAccent: "#04111F",
+  accentStrong: "#4DB0FF",
+  brand: "#1D99FF",
+  accentSoft: "rgba(77, 176, 255, 0.14)",
+  accentPressed: "rgba(77, 176, 255, 0.22)",
+  accentFocus: "rgba(77, 176, 255, 0.50)",
   highlight: "rgba(226, 194, 94, 0.30)",
   success: { fg: "#6CC08B", bg: "#18271F" },
   warning: { fg: "#E0B263", bg: "#2A2316" },
@@ -84,9 +98,11 @@ const dark: Palette = {
   info: { fg: "#82B5E3", bg: "#162331" },
   priority: { URGENT: "#F0827C", HIGH: "#F0A466", MEDIUM: "#E2C25E", LOW: "#86ADEA" },
   category: ["#86A8F0", "#AE95EA", "#79C59A", "#EFA06A", "#6FCAC6", "#EA8DB3", "#DDB65D", "#A3ADBD"],
-  skeleton: "#222833",
-  inverseSurface: "#E7EAF0",
-  onInverse: "#171B23",
+  skeleton: "#1C2638",
+  chartGrid: "#1C2638",
+  heat: ["#1A2436", "#12304D", "#1F5A8F", "#3C93E0", "#4DB0FF"],
+  inverseSurface: "#E6EDF7",
+  onInverse: "#131B2B",
 };
 
 export const palettes: Record<ColorScheme, Palette> = { light, dark };
@@ -151,8 +167,8 @@ export function elevation(level: Elevation, scheme: ColorScheme): ViewStyle {
   if (scheme === "dark") return { ...border, backgroundColor: level === 1 ? p.surface : p.sheet };
   const shadow =
     level === 1
-      ? Platform.select<ViewStyle>({ ios: { shadowColor: "#191C22", shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }, default: { elevation: 1 } })
-      : Platform.select<ViewStyle>({ ios: { shadowColor: "#191C22", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } }, default: { elevation: 8 } });
+      ? Platform.select<ViewStyle>({ ios: { shadowColor: "#0F1B2D", shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }, default: { elevation: 1 } })
+      : Platform.select<ViewStyle>({ ios: { shadowColor: "#0F1B2D", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } }, default: { elevation: 8 } });
   return { ...border, ...shadow, backgroundColor: level === 1 ? p.surface : p.sheet };
 }
 

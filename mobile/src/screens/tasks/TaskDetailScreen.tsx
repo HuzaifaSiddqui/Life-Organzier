@@ -184,7 +184,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                 })}
                 style={[styles.check, s.status === "COMPLETED" && styles.checkDone]}
               >
-                <Text style={{ color: colors.bg, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>{s.status === "COMPLETED" ? "✓" : ""}</Text>
+                {s.status === "COMPLETED" ? <Icon name="check" size={12} color={colors.bg} /> : null}
               </Pressable>
               <Pressable style={{ flex: 1 }} onPress={() => navigation.push("TaskDetail", { taskId: s.id })}>
                 <Text style={[ui.body, s.status === "COMPLETED" && { textDecorationLine: "line-through", color: colors.textMuted }]}>{s.title}</Text>
@@ -193,7 +193,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             </View>
           ))}
           <View style={styles.subRow}>
-            <TextInput style={[ui.input, { flex: 1 }]} value={newSub} onChangeText={setNewSub} placeholder="Add a subtask" placeholderTextColor="#646A78" />
+            <TextInput style={[ui.input, { flex: 1 }]} value={newSub} onChangeText={setNewSub} placeholder="Add a subtask" placeholderTextColor={palette.muted} />
             <Chip
               label="Add"
               onPress={() => {

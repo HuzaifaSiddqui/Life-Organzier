@@ -32,24 +32,31 @@ Single source of truth for the mobile UI (`mobile/`). Future UI work follows thi
 
 Exactly one brand accent. Pressed, selected and focus states are opacity variations of it. Semantic and priority colours are desaturated and kept separate from the accent. Every text/background pair below was checked against WCAG AA (body text ≥ 4.5:1, large text and icons ≥ 3:1).
 
+**UI v2 (12 Nov 2026): the palette comes from the logo** (`assets/branding/app-logo.svg`: Primary Blue `#1D99FF`, Light Blue `#E5F4FF`, Dark Blue `#005BB5`, white; adaptive-icon background `#0A6FD6`). Ratios below are against canvas (light) / canvas (dark); full table in `docs/ux-audit.md` §7.
+
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `canvas` | `#F6F5F2` | `#0F1218` | Screen background (elevation 0) |
-| `surface` | `#FFFEFB` | `#171B23` | Cards/containers (elevation 1) |
-| `sheet` | `#FFFEFB` | `#1E232D` | Sheets, dialogs, floating chrome (elevation 2) |
-| `hairline` | `rgba(25,28,34,0.10)` | `rgba(231,234,240,0.09)` | 1px borders |
-| `scrim` | `rgba(15,18,24,0.40)` | `rgba(0,0,0,0.55)` | Behind sheets |
-| `text` | `#191C22` (15.7:1) | `#E7EAF0` (15.6:1) | Primary text |
-| `textSecondary` | `#565C69` (6.2:1) | `#A4AAB8` (8.1:1) | Supporting text |
-| `textTertiary` | `#646A78` (5.0:1) | `#8A91A0` (5.9:1) | Hints, placeholders, timestamps |
-| `accent` | `#0B66C2` (5.2:1) | `#5AAEFF` (8.0:1) | Brand accent, links, primary buttons |
-| `onAccent` | `#FFFFFF` (5.7:1) | `#08111E` (8.1:1) | Text on accent fill |
+| `canvas` | `#F5F8FC` | `#0B1220` | Screen background (elevation 0) |
+| `surface` | `#FFFFFF` | `#131B2B` | Cards/containers (elevation 1) |
+| `sheet` | `#FFFFFF` | `#1A2436` | Sheets, dialogs, floating chrome (elevation 2) |
+| `hairline` | `rgba(15,27,45,0.10)` | `rgba(230,237,247,0.09)` | 1px borders |
+| `scrim` | `rgba(11,18,32,0.40)` | `rgba(0,0,0,0.55)` | Behind sheets |
+| `text` | `#0F1B2D` (16.2:1) | `#E6EDF7` (15.9:1) | Primary text |
+| `textSecondary` | `#4A5566` (7.1:1) | `#A9B4C4` (8.9:1) | Supporting text |
+| `textTertiary` | `#5E6A7B` (5.2:1) | `#8C98AA` (6.4:1) | Hints, placeholders, timestamps |
+| `accent` | `#0A6FD6` (4.6:1; = icon background) | `#4DB0FF` (8.0:1) | **Fills**: primary buttons, selected borders, progress, icons |
+| `onAccent` | `#FFFFFF` (4.9:1 on accent) | `#04111F` (8.1:1) | Text on accent fill |
+| `accentStrong` | `#005BB5` (6.2:1; 5.8:1 on `accentSoft`; = Dark Blue) | `#4DB0FF` (5.7:1 on `accentSoft`) | **Text** in the accent colour: links, selected chips, tonal / ghost buttons. `<Text color="accent">` renders it |
+| `brand` | `#1D99FF` | `#1D99FF` | The logo blue: illustration only, never text or a fill behind text (2.98:1) |
 | `accentSoft` | accent @ 10% | accent @ 14% | Selected / tonal backgrounds |
 | `accentPressed` | accent @ 16% | accent @ 22% | Pressed backgrounds |
 | `accentFocus` | accent @ 40% | accent @ 50% | Focus ring (`outline`) |
 | `highlight` | `rgba(224,178,99,0.35)` | `rgba(226,194,94,0.30)` | Search-match highlight |
-| `skeleton` | `#EAE8E3` | `#222833` | Skeleton blocks, progress tracks |
-| `inverseSurface` / `onInverse` | `#22262E` / `#F1F2F5` | `#E7EAF0` / `#171B23` | Snackbar |
+| `skeleton` | `#E6EBF2` | `#1C2638` | Skeleton blocks, progress tracks |
+| `chartGrid` / `heat` | `#E6EBF2` / `#EEF3F9 → #E5F4FF → #8CC6FF → #1D99FF → #005BB5` | `#1C2638` / `#1A2436 → #12304D → #1F5A8F → #3C93E0 → #4DB0FF` | Chart gridlines and tracks; 5-step heat map (logo blues) |
+| `inverseSurface` / `onInverse` | `#1A2436` / `#E6EDF7` | `#E6EDF7` / `#131B2B` | Snackbar |
+
+Rule: accent on `accentSoft` is 4.3:1 in light (fails for small text), so text on a tinted background always uses `accentStrong`; `accent` is for fills, borders and icons. Legacy `constants/theme` maps `colors.primary` and `palette.ai` to `accentStrong` for the same reason.
 
 **Semantic** (`fg` text/icon, `bg` tint; fg ≥ 4.5:1 on its own tint):
 
@@ -263,7 +270,15 @@ App-level transient messages with no screen of their own (e.g. the one-time loca
 
 Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), a charts library (`react-native-svg` + `components/charts` are enough), and a keyboard library (the `KeyboardPad` primitive covers screens; don't add `KeyboardAvoidingView` to screens, it would pad twice. Text entry in a popup uses a `Modal` + `KeyboardAvoidingView`, as `LocationPickerSheet` does).
 
+## Handoff (UI v2)
+
+Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and plan: `docs/ux-audit.md`.
+
+- **PR 1, colour (12 Nov 2026).** Only `theme/tokens.ts` holds colours. New tokens `accentStrong`, `brand`, `chartGrid`, `heat`. Use `colors.accent` for fills / borders / icons and `<Text color="accent">` (→ `accentStrong`) for text. Placeholders: `palette.muted` (legacy) or `colors.textTertiary`. Remove / tick marks are the `close` / `check` icons, never "✕" / "✓" text. Category colours offered in Settings are `palettes.light.category` (the curated 8). The native splash background (`app.json`, `#F6F5F2`) is unchanged: changing it needs a new build.
+
 ## Migration log
+
+**UI v2, PR 1 (colour, 12 Nov 2026).** Logo palette in `tokens.ts` (both themes, AA checked); `accentStrong` for accent text (`Text` primitive, legacy `colors.primary` / `palette.ai`). Raw colours and glyph icons removed from the Tier 1 screens: task detail (1 hex, "✓" → `check`), task form (3 hex, "✕" tag chip → `close`), Routines (1), Documents (3 hex + 2 `#fff`, "✓" → `check`), Settings (4 hex, 8-colour list → category tokens, 3 "✕" chips → `close` + labels "Remove …"), Onboarding (1). Also tokenised: placeholders on Login, Signup, Forgot password, Tasks, Memory, Mood, the date / time pickers and the root navigator; Insights charts (bar colour, grid, heat ramp). No raw hex left outside `tokens.ts`, `constants/theme` and the logo components.
 
 **Phase 0 (foundation): done.** Tokens, ThemeProvider, i18n/LocaleProvider, primitives, fonts, and the legacy theme remapped onto tokens. Unmigrated screens already pick up the new palette, fonts (via `ui.*` styles) and restyled primitives, but they still use static light styles, hard-coded copy and some legacy `Animated` code.
 

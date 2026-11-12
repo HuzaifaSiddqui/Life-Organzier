@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
 import { Button, Card, Chip, ui } from "../../components/ui";
+import { Icon } from "../../components/icons/Icon";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import { getTags } from "../../services/settingsApi";
@@ -319,7 +320,7 @@ export function TaskForm({
         <Card style={{ gap: 14 }}>
           <View>
             <Text style={ui.label}>Title</Text>
-            <TextInput style={ui.input} value={v.title} onChangeText={(t) => set("title", t)} placeholder="What do you need to do?" placeholderTextColor="#646A78" />
+            <TextInput style={ui.input} value={v.title} onChangeText={(t) => set("title", t)} placeholder="What do you need to do?" placeholderTextColor={palette.muted} />
           </View>
           <View>
             <Text style={ui.label}>Description</Text>
@@ -328,7 +329,7 @@ export function TaskForm({
               value={v.description}
               onChangeText={(t) => set("description", t)}
               placeholder="Optional details"
-              placeholderTextColor="#646A78"
+              placeholderTextColor={palette.muted}
               multiline
             />
           </View>
@@ -362,7 +363,7 @@ export function TaskForm({
             <Text style={ui.label}>Tags</Text>
             <View style={ui.wrap}>
               {v.tags.map((t) => (
-                <Chip key={t} small selected label={`#${t} ✕`} onPress={() => set("tags", v.tags.filter((x) => x !== t))} />
+                <Chip key={t} small selected label={`#${t}`} leading={<Icon name="close" size={12} color={colors.primary} />} accessibilityLabel={`Remove tag ${t}`} onPress={() => set("tags", v.tags.filter((x) => x !== t))} />
               ))}
             </View>
             <TextInput
@@ -371,7 +372,7 @@ export function TaskForm({
               onChangeText={setTagDraft}
               onSubmitEditing={() => addTag(tagDraft)}
               placeholder="Add a tag and press enter"
-              placeholderTextColor="#646A78"
+              placeholderTextColor={palette.muted}
               autoCapitalize="none"
             />
             {tagCompletions.length ? (

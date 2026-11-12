@@ -25,8 +25,8 @@ export const colors = {
   surfaceSoft: light.accentSoft,
   text: light.text,
   textMuted: light.textSecondary,
-  primary: light.accent,
-  primaryDark: light.accent,
+  primary: light.accentStrong,
+  primaryDark: light.accentStrong,
   border: light.hairline,
   success: light.success.fg,
   danger: light.danger.fg,
@@ -41,7 +41,7 @@ export const radii = {
 };
 
 export const shadow = {
-  shadowColor: "#191C22",
+  shadowColor: light.text,
   shadowOpacity: 0.04,
   shadowRadius: 3,
   shadowOffset: { width: 0, height: 1 },
@@ -68,9 +68,9 @@ export const shadowTile = {
 
 /** @deprecated See `colors`. One accent: the old assistant purple now maps to the brand accent. */
 export const palette = {
-  ai: light.accent,
+  ai: light.accentStrong,
   aiSoft: light.accentSoft,
-  aiDark: light.accent,
+  aiDark: light.accentStrong,
   warning: light.warning.fg,
   warningSoft: light.warning.bg,
   danger: light.danger.fg,

@@ -69,7 +69,7 @@ export function MemoryScreen({ navigation }: Props) {
             value={draft}
             onChangeText={setDraft}
             placeholder="e.g. I study best after Isha prayer"
-            placeholderTextColor="#646A78"
+            placeholderTextColor={palette.muted}
           />
           <View style={ui.wrap}>
             {(["PREFERENCE", "COPING", "GOAL", "FACT"] as const).map((k) => (

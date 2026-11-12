@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Path, Rect } from "react-native-svg";
 import { colors } from "../../constants/theme";
+import { palettes } from "../../theme/tokens";
 
 /**
  * Small, dependency-free charts (react-native-svg).
@@ -9,7 +10,7 @@ import { colors } from "../../constants/theme";
  * sequential single-hue heatmap, values always reachable by tap (no color-only identity).
  */
 
-const BAR_HUE = "#2563EB";
+const BAR_HUE = palettes.light.accent; // legacy chart: light theme, like the screens around it
 
 export function BarChart({ data, height = 140, unit = "" }: { data: Array<{ label: string; value: number }>; height?: number; unit?: string }) {
   const [active, setActive] = useState<number | null>(null);
@@ -23,7 +24,7 @@ export function BarChart({ data, height = 140, unit = "" }: { data: Array<{ labe
       <Text style={styles.readout}>{shown ? `${shown.label}: ${shown.value}${unit}` : "Tap a bar to see its value"}</Text>
       <Svg width={width} height={height}>
         {[0.5, 1].map((f) => (
-          <Rect key={f} x={0} y={height - f * (height - 4)} width={width} height={1} fill="#EEF2F6" />
+          <Rect key={f} x={0} y={height - f * (height - 4)} width={width} height={1} fill={palettes.light.chartGrid} />
         ))}
         {data.map((d, i) => {
           const h = Math.max(d.value > 0 ? 3 : 0, (d.value / max) * (height - 6));
@@ -66,7 +67,7 @@ export function Donut({ data, size = 132 }: { data: Array<{ label: string; value
   return (
     <View style={styles.donutRow}>
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke="#EEF2F6" strokeWidth={14} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={palettes.light.chartGrid} strokeWidth={14} fill="none" />
         {total > 0 &&
           data.map((d) => {
             const sweep = (d.value / total) * Math.PI * 2;
@@ -97,7 +98,7 @@ export function Donut({ data, size = 132 }: { data: Array<{ label: string; value
 }
 
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
-const HEAT = ["#EEF2F6", "#DBEAFE", "#93C5FD", "#3B82F6", "#1D4ED8"];
+const HEAT = palettes.light.heat;
 
 /** Completions by weekday × hour (sequential, single hue). Tap a cell for its count. */
 export function Heatmap({ grid }: { grid: number[][] }) {

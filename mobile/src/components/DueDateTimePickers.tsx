@@ -10,7 +10,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import { colors, radii } from "../constants/theme";
+import { colors, palette, radii } from "../constants/theme";
 import { TASK_FIELD_INPUT_HEIGHT, taskFormStyles } from "../screens/tasks/taskFormStyles";
 import {
   combineYmdAndTimeStrings,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   triggerPlaceholder: {
-    color: "#646A78",
+    color: palette.muted,
   },
   quickRow: {
     marginTop: 8,
