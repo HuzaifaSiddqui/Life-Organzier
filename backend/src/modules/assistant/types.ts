@@ -97,6 +97,8 @@ export type Pending =
   | { kind: "conflict"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; routine: string }
   /** Task collaboration: "Share this with @ali?" — together, only for them, or just me (draft.share has the people). */
   | { kind: "share_choice"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP" }
+  /** "Why?" after "decline X's task": a number (quick pick) or a short reason; the decline happens after the answer. */
+  | { kind: "decline_reason"; sharedTaskId: string; title: string; owner: string }
   /** Chat command waiting for "yes" (destructive or bulk); args are already resolved. */
   | { kind: "confirm_command"; command: string; args: Record<string, unknown>; summary: string; at?: string; text?: string }
   /** Chat command waiting for "which one?"; the answer fills args[field] with the chosen id. */

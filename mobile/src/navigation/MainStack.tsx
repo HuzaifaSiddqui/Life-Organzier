@@ -14,6 +14,7 @@ import { SettingsScreen } from "../screens/profile/SettingsScreen";
 import { RoutineScreen } from "../screens/routines/RoutineScreen";
 import { AddTaskScreen } from "../screens/tasks/AddTaskScreen";
 import { EditTaskScreen } from "../screens/tasks/EditTaskScreen";
+import { NotificationsScreen } from "../screens/collab/NotificationsScreen";
 import { SavedPlacesScreen } from "../screens/places/SavedPlacesScreen";
 import { TaskDetailScreen } from "../screens/tasks/TaskDetailScreen";
 import { TaskListScreen } from "../screens/tasks/TaskListScreen";
@@ -50,7 +51,8 @@ export type MainStackParamList = {
   /** Task collaboration (COLLAB_TASKS): requests, people, shared tasks. */
   Collab: { tab?: "requests" | "people" | "shared" } | undefined;
   /** edit: the owner changes a shared task; accept: a member accepts it for their own date/time. */
-  SharedTaskEdit: { id: string; mode: "edit" | "accept" };
+  SharedTaskEdit: { id: string; mode: "edit" | "accept" | "decline" };
+  Notifications: undefined;
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -81,6 +83,7 @@ export function MainStack() {
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Collab" component={CollabScreen} />
       <Stack.Screen name="SharedTaskEdit" component={SharedTaskEditScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
     </Stack.Navigator>
   );
 }

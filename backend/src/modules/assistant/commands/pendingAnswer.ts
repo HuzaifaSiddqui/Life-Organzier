@@ -64,6 +64,8 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): bool
     if (p.kind === "routine_draft" && p.awaiting.includes("title")) return words <= 6 && !matchCommand(t, ctx);
     return /^(?:pick another day|another (?:day|date|time)|different day|add anyway|anyway|move (?:flexible )?tasks|keep the routine|do the task anyway|later today|end of day|no deadline|not sure|flexible|no reminders?|without (?:a )?reminder|don'?t remind me|bina reminder|reminder (?:nahi|nahin|mat))\b/i.test(t);
   }
+  // "Why are you declining?": a quick-pick number, cancel, or a short reason that isn't itself a command.
+  if (p.kind === "decline_reason") return words <= 25 && !matchCommand(t, ctx);
   // "Share this with @ali?": together / only for them / just me, or a person's name when one name fits two people.
   if (p.kind === "share_choice") {
     const said = t.toLowerCase();

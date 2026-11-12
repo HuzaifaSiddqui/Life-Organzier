@@ -26,6 +26,7 @@ export const TASK_FIELDS = [
   "category",
   "status",
   "progress",
+  "progressUpdatedBy",
   "parentTaskId",
   "durationMinutes",
   "difficulty",
@@ -50,6 +51,8 @@ export type TaskChanges = Partial<{
   category: string | null;
   status: TaskStatus;
   progress: number;
+  /** Done together: who set this progress (null = the user themselves). */
+  progressUpdatedBy: string | null;
   parentTaskId: string | null;
   durationMinutes: number | null;
   difficulty: number | null;
@@ -273,6 +276,8 @@ export async function updateTask(
   }
   if (c.progress !== undefined) {
     c.progress = Math.max(0, Math.min(100, Math.round(c.progress)));
+    // The user's own change clears "updated by X"; a propagated one (fromSharedTask) names who made it.
+    if (!opts.fromSharedTask && c.progressUpdatedBy === undefined) c.progressUpdatedBy = null;
     if (c.progress === 100 && c.status === undefined) c.status = TaskStatus.COMPLETED;
     if (c.progress > 0 && c.progress < 100 && c.status === undefined && existing.status === TaskStatus.PENDING) {
       c.status = TaskStatus.IN_PROGRESS;

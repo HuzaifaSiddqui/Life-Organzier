@@ -192,7 +192,9 @@ test("collab: a task done together by three — nothing on a member's timeline u
   // b finishes their part: everyone sees it, c's part is still open; owner and c are told.
   await updateTask({ userId: b.id, tz: TZ }, bTask.id, { status: TaskStatus.COMPLETED });
   const seen = await getSharedTask(c.id, shared.id);
-  assert.deepEqual(seen.participants.map((p) => [p.user.id, p.state]), [[owner.id, "accepted"], [b.id, "done"], [c.id, "accepted"]]);
+  // Members created together share a timestamp, so their order isn't fixed: compare as a set (the owner comes first).
+  assert.deepEqual(seen.participants[0].user.id, owner.id);
+  assert.deepEqual(new Map(seen.participants.map((p) => [p.user.id, p.state])), new Map([[owner.id, "accepted"], [b.id, "done"], [c.id, "accepted"]]));
   await backgroundSettled();
   assert.ok((await kinds(owner)).includes("TASK_TIME_CHANGED"));
   assert.ok((await kinds(owner)).includes("TASK_COMPLETED"));
@@ -238,7 +240,7 @@ test("collab: the owner changes the time — accepted members must accept again;
   const { task: bAgain } = await acceptSharedTask(b, TZ, shared.id);
   assert.equal(bAgain.id, bTask.id, "the same copy, updated");
   assert.equal(bAgain.dueTime, "5 PM");
-  await rejectSharedTask(c, TZ, shared.id);
+  await rejectSharedTask(c, TZ, shared.id, null, "Too busy right now");
   assert.equal((await prisma.task.findUniqueOrThrow({ where: { id: cTask.id } })).status, TaskStatus.DELETED, "declining the change removes c's copy");
   await backgroundSettled();
   assert.ok((await kinds(b)).includes("TASK_CHANGED"));
@@ -262,7 +264,7 @@ test("collab: declined, sent again; the owner can delete their own copy or cance
   await connect(owner, b);
   await connect(owner, c);
   const { shared, ownerTask } = await createSharedTask(owner, TZ, { kind: SharedTaskKind.COLLAB, memberIds: [b.id, c.id], title: "Poster", priority: "LOW" });
-  await rejectSharedTask(b, TZ, shared.id);
+  await rejectSharedTask(b, TZ, shared.id, null, "Not my task");
   assert.equal((await timeline(b)).length, 0, "declined: never created for b");
   await assert.rejects(acceptSharedTask(b, TZ, shared.id), /not found/, "declined: no access any more");
   await assert.rejects(getSharedTask(b.id, shared.id), /not found/);

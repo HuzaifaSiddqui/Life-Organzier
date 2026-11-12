@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMention, cleanUsername, collabErrorKey, doneCount, filterPeople, personLabel, searchable, withoutActiveMention } from "../collab";
+import { activeMention, cleanUsername, collabErrorKey, doneCount, filterPeople, personLabel, searchable, withoutActiveMention, noticeTarget, badgeText, validReason, insertMention, DECLINE_REASON_MAX } from "../collab";
 
 const people = [
   { id: "1", username: "ali_khan", displayName: "Ali Khan" },
@@ -51,5 +51,24 @@ describe("task collaboration helpers", () => {
     expect(searchable("ali khan")).toBe(false);
     expect(searchable("ali.khan@gm")).toBe(false);
     expect(searchable(" Ali.Khan@Gmail.com ")).toBe(true);
+  });
+
+  it("where a notice or its push opens: the card to answer, my copy, People, or Shared", () => {
+    expect(noticeTarget({ kind: "TASK_INVITE", sharedTaskId: "s1", pending: true })).toEqual({ screen: "SharedTaskEdit", params: { id: "s1", mode: "accept" } });
+    expect(noticeTarget({ kind: "TASK_PROGRESS", sharedTaskId: "s1", taskId: "t1" })).toEqual({ screen: "TaskDetail", params: { taskId: "t1" } });
+    expect(noticeTarget({ kind: "TASK_REJECTED", sharedTaskId: "s1", taskId: null })).toEqual({ screen: "Collab", params: { tab: "shared" } });
+    expect(noticeTarget({ kind: "CONNECTION_REQUEST", sharedTaskId: null })).toEqual({ screen: "Collab", params: { tab: "requests" } });
+    expect(noticeTarget({ kind: "TASK_INVITE", sharedTaskId: "s1" })).toEqual({ screen: "SharedTaskEdit", params: { id: "s1", mode: "accept" } });
+  });
+
+  it("badge text, decline reasons, inserting a mention", () => {
+    expect(badgeText(0)).toBeNull();
+    expect(badgeText(3)).toBe("3");
+    expect(badgeText(12)).toBe("9+");
+    expect(validReason("  ")).toBe(false);
+    expect(validReason("Too busy")).toBe(true);
+    expect(validReason("x".repeat(DECLINE_REASON_MAX + 1))).toBe(false);
+    expect(insertMention("Finish slides with @al", { id: "1", username: "ali_khan", displayName: "Ali Khan" })).toBe("Finish slides with @ali_khan ");
+    expect(insertMention("@", { id: "2", username: null, displayName: "Sana Zaidi" })).toBe("Sana Zaidi ");
   });
 });

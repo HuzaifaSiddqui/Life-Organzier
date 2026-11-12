@@ -17,6 +17,7 @@ import {
   listConnections,
   listNotices,
   listSharedTasks,
+  markNoticeRead,
   markNoticesRead,
   rejectSharedTask,
   removeConnection,
@@ -172,9 +173,13 @@ collabRouter.post(
   }),
 );
 
+/** `reason` is required: plain text, at most 200 characters (400 `REASON_REQUIRED` otherwise). */
 collabRouter.post(
   "/tasks/:id/reject",
-  handle(async (req, res) => sendSuccess(res, { shared: await rejectSharedTask(req.user, req.settings.timezone, idParam(req), req.deviceId) })),
+  handle(async (req, res) => {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 1000) : null; // checked after access (service)
+    sendSuccess(res, { shared: await rejectSharedTask(req.user, req.settings.timezone, idParam(req), req.deviceId, reason) });
+  }),
 );
 
 collabRouter.post(
@@ -207,4 +212,9 @@ collabRouter.get("/notices", handle(async (req, res) => sendSuccess(res, { notic
 collabRouter.post(
   "/notices/read",
   handle(async (req, res) => sendSuccess(res, { marked: await markNoticesRead(req.user.id) })),
+);
+
+collabRouter.post(
+  "/notices/:id/read",
+  handle(async (req, res) => sendSuccess(res, { marked: await markNoticeRead(req.user.id, idParam(req)) })),
 );
