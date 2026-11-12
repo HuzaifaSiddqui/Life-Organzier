@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { HttpError } from "../../../lib/http.js";
 import { fuzzySimilarity, truncate } from "../../../lib/text.js";
-import { collabOn, personLabel } from "../../collab/collabRules.js";
+import { cleanReason, collabOn, DECLINE_QUICK_PICKS, personLabel } from "../../collab/collabRules.js";
 import {
   acceptSharedTask,
   listConnections,
@@ -11,8 +11,8 @@ import {
   unshareTask,
   type SharedTaskView,
 } from "../../collab/collabService.js";
-import { commandAction } from "../actions.js";
-import { focusOn, taskCard, type Turn } from "../dialogue.js";
+import { answerAction, commandAction } from "../actions.js";
+import { focusOn, taskCard, type Out, type Turn } from "../dialogue.js";
 import { askChoice } from "./runtime.js";
 import type { Command, CommandArgs, Prepared } from "./types.js";
 
@@ -150,17 +150,42 @@ const sharedDecline: Command = {
     return { ref: refOf(text, DECLINE_WORDS) };
   },
   prepare: (turn, args) => prepareCard(turn, "shared_decline", args),
+  // A decline needs a reason the owner will see: ask first; the decline itself happens in resolveDeclineReason.
   async execute(turn, args) {
-    try {
-      const shared = await rejectSharedTask(turn.user, turn.tz, String(args.sharedTaskId), turn.task.deviceId);
-      return { content: `Okay, declined "${shared.title}". Nothing was added, and ${personLabel(shared.owner)} will see it.`, intent: "shared_declined" };
-    } catch (error) {
-      if (error instanceof HttpError) return { content: "You already answered that one.", intent: "shared_gone" };
-      throw error;
-    }
+    const id = String(args.sharedTaskId);
+    const card = (await listSharedTasks(turn.user.id)).cards.find((c) => c.id === id);
+    if (!card) return { content: "That shared task isn't waiting for you any more.", intent: "shared_gone" };
+    turn.state.pending = { kind: "decline_reason", sharedTaskId: id, title: card.title, owner: personLabel(card.owner) };
+    return {
+      content: `Why are you declining "${truncate(card.title, 40)}"? ${personLabel(card.owner)} will see your reason.\n${DECLINE_QUICK_PICKS.map((r, i) => `${i + 1}. ${r}`).join("\n")}\nOr type a short reason.`,
+      actions: DECLINE_QUICK_PICKS.map((r, i) => answerAction(r, "decline_reason", String(i + 1))),
+      intent: "decline_reason",
+    };
   },
   undoable: false,
 };
+
+/** The answer to "Why?": a quick-pick number or a short reason; "cancel" / "never mind" keeps the card. */
+export async function resolveDeclineReason(turn: Turn, text: string): Promise<Out> {
+  const p = turn.state.pending;
+  if (p?.kind !== "decline_reason") return { content: "Okay.", intent: "noop" };
+  const t = text.trim();
+  if (/^(?:cancel|never ?mind|forget it|keep it|no)$/i.test(t)) {
+    turn.state.pending = null;
+    return { content: `Okay, "${p.title}" is still waiting for your answer.`, intent: "cancel" };
+  }
+  const n = /^\d+$/.test(t) ? Number(t) : NaN;
+  const reason = cleanReason(n >= 1 && n <= DECLINE_QUICK_PICKS.length ? DECLINE_QUICK_PICKS[n - 1] : t);
+  if (!reason) return { content: "A short reason, please (up to 200 characters), or say cancel.", intent: "decline_reason" };
+  turn.state.pending = null;
+  try {
+    const shared = await rejectSharedTask(turn.user, turn.tz, p.sharedTaskId, turn.task.deviceId, reason);
+    return { content: `Okay, declined "${shared.title}" (${reason}). Nothing was added, and ${personLabel(shared.owner)} will see why.`, intent: "shared_declined" };
+  } catch (error) {
+    if (error instanceof HttpError) return { content: "You already answered that one.", intent: "shared_gone" };
+    throw error;
+  }
+}
 
 /** Buttons under "Added and shared with @ali": Undo (cancel for everyone, delete my copy) / Just for me (keep my copy). */
 const sharedCancel: Command = {

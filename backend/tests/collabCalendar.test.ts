@@ -90,7 +90,7 @@ test("collab × calendar (server): removed, left or cancelled — the recipient'
 
   // The owner changes a detail, the member declines the change: their copy is deleted (and so is its event).
   await updateSharedTask(owner, TZ, ids.declined, { dueTime: "5 PM" });
-  await rejectSharedTask(users.declined, TZ, ids.declined);
+  await rejectSharedTask(users.declined, TZ, ids.declined, null, "Wrong time for me");
   const gone = await pull(users.declined, since);
   assert.equal(gone[0]?.status, TaskStatus.DELETED, "declined after a change: the copy arrives as deleted");
 });

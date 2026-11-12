@@ -34,6 +34,7 @@ import { WhatsappLinkCard } from "../../components/WhatsappLinkCard";
 import { isLocationRemindersEnabled, setLocationRemindersEnabled, takeLocationOnboarding } from "../../services/locationReminders";
 import { listPlaces } from "../../services/locationsApi";
 import { syncReminders } from "../../services/reminders";
+import { getCollabSummary } from "../../services/collabApi";
 import type { UserSettings } from "../../types/models";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Settings">;
@@ -60,6 +61,11 @@ export function SettingsScreen({ navigation }: Props) {
   const { settings, update, categories, setCategories, reload } = usePreferences();
   const { t } = useLocale();
   const [toast, setToast] = useState<string | null>(null);
+  // Task collaboration (COLLAB_TASKS): the email switch shows only when the server has the feature on.
+  const [collabAvailable, setCollabAvailable] = useState(false);
+  useEffect(() => {
+    void getCollabSummary().then((s) => setCollabAvailable(Boolean(s)), () => undefined);
+  }, []);
   const [toastAction, setToastAction] = useState<{ label: string; onPress: () => void } | undefined>(undefined);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [name, setName] = useState("");
@@ -236,6 +242,15 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={[ui.body, { flex: 1 }]}>Critical reminders break through DND</Text>
             <Switch value={settings.criticalOverridesDnd} onValueChange={(criticalOverridesDnd) => void save({ criticalOverridesDnd })} />
           </View>
+          {collabAvailable ? (
+            <>
+              <View style={styles.rowBetween}>
+                <Text style={[ui.body, { flex: 1 }]}>{t("collab.email.setting")}</Text>
+                <Switch value={settings.emailInvites !== false} onValueChange={(emailInvites) => void save({ emailInvites })} accessibilityLabel={t("collab.email.setting")} />
+              </View>
+              <Text style={ui.meta}>{t("collab.email.hint")}</Text>
+            </>
+          ) : null}
           <View style={styles.rowBetween}>
             <Text style={[ui.body, { flex: 1 }]}>{t("settings.checkins")}</Text>
             <Switch

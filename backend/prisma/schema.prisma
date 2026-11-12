@@ -71,6 +71,8 @@ model Task {
   updatedAt       DateTime     @updatedAt
   parentTaskId    String?
   progress        Int          @default(0)
+  /// Done together: who set the current progress on this copy (their @username / name); null when the user did.
+  progressUpdatedBy String?
   durationMinutes Int?
   /// 1 (trivial) .. 5 (very hard)
   difficulty      Int?
@@ -159,6 +161,10 @@ model SharedTask {
   revision        Int            @default(1)
   /// The owner cancelled it for everyone: pending cards are withdrawn, accepted copies stay with their owners.
   cancelledAt     DateTime?
+  /// Done together: the shared progress (0–99), set by whoever updated their copy last (server time wins).
+  progress        Int            @default(0)
+  progressById    String?
+  progressAt      DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -183,6 +189,8 @@ model SharedTaskMember {
   reapproval     Boolean            @default(false)
   /// What the member changed when accepting ({ dueDate, dueTime }), shown to the owner.
   proposedChange Json?
+  /// Why they declined (required, plain text, at most 200 characters), shown to the owner.
+  declineReason  String?
   respondedAt    DateTime?
   createdAt      DateTime           @default(now())
 
@@ -204,8 +212,8 @@ model CollabNotice {
   id           String    @id @default(uuid())
   userId       String
   actorId      String?
-  /// CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED ·
-  /// TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED
+  /// CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_JOINED · TASK_REJECTED · TASK_CHANGED ·
+  /// TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED · TASK_PROGRESS · TASK_MEMBER_REMOVED · TASK_MEMBER_LEFT
   kind         String
   sharedTaskId String?
   /// Small facts for the text: { title, dueDate, dueTime }.
@@ -318,6 +326,8 @@ model UserSettings {
   remindersPlannedAt    DateTime?
   /// FR-RN-004 start & completion check-ins
   checkinsEnabled       Boolean   @default(true)
+  /// Task collaboration: email me when someone shares or assigns a task to me (needs SMTP on the server).
+  emailInvites          Boolean   @default(true)
   /// FUNNY | SERIOUS | GENTLE — changes only when the user changes it
   checkinTone           String    @default("FUNNY")
   /// Research mode: randomly include/omit the first step (50/50)

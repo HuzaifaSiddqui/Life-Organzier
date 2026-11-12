@@ -73,6 +73,8 @@ export type Task = {
   isOverdue?: boolean;
   /** Task collaboration: this task is my copy of a shared task. */
   sharedTaskId?: string | null;
+  /** Done together: who set the current progress (null when I did). */
+  progressUpdatedBy?: string | null;
   /** Client-only: change not yet confirmed by the server. */
   pendingSync?: boolean;
 };
@@ -146,6 +148,8 @@ export type UserSettings = {
   checkinsEnabled: boolean;
   checkinTone: "FUNNY" | "SERIOUS" | "GENTLE";
   checkinResearchMode: boolean;
+  /** Task collaboration: email me when someone shares or assigns a task to me. */
+  emailInvites?: boolean;
   lastWhatsappMessageAt: string | null;
 };
 

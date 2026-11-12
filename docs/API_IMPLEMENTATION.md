@@ -236,7 +236,7 @@ switched off with `WHATSAPP_AGENT=off`; connect and test need Pro (403 `PRO_REQU
 
 All routes need the Firebase token; every query is scoped by the caller. Error codes: `INVALID_USERNAME`,
 `USERNAME_TAKEN`, `NOT_CONNECTED`, `ALREADY_ANSWERED`, `SHARED_TASK_CANCELLED`, `SHARED_TASK_NOT_FOUND`, `MEMBER_NOT_FOUND`,
-`TOO_MANY_MEMBERS`, `OPEN_SHARED_TASKS`, `RATE_LIMITED` (429; per user: 30 searches a minute, 20 connection requests an hour).
+`TOO_MANY_MEMBERS`, `OPEN_SHARED_TASKS`, `REASON_REQUIRED`, `RATE_LIMITED` (429; per user: 30 searches a minute, 20 connection requests an hour).
 
 - **`GET /me`** → `{ username, requests, cards, unread }` (requests to me, cards waiting for my answer, unread notices).
   The app shows the feature only when this answers.
@@ -263,16 +263,32 @@ All routes need the Firebase token; every query is scoped by the caller. Error c
   with access) → `{ ok }`: the same for oneself; the owner gets `TASK_MEMBER_LEFT`.
 - **`POST /tasks/:id/accept`** `{ dueDate?, dueTime? }` → `{ shared, task }`: creates my copy (`Task.sharedTaskId`), or
   updates it when I am accepting the owner's change. A different date/time is kept as `proposedChange` and the
-  owner is told. **`POST /tasks/:id/reject`**: declining a change removes my copy (restorable for 24 h).
+  owner is told (`TASK_ACCEPTED` notice + push, with `taskId` = the owner's copy for a task done together), and I get a
+  `TASK_JOINED` notice (in-app only). **`POST /tasks/:id/reject`** `{ reason }`: required, plain text, at most 200
+  characters after markup and control characters are stripped (400 `REASON_REQUIRED`; a caller with no access gets 404
+  first). The owner gets `TASK_REJECTED` with `payload.reason`, and the view shows it as `participants[].declineReason`
+  (to the owner, and to that member). Declining a change removes my copy (restorable for 24 h).
 - **`PATCH /tasks/:id`** (owner) any of the create fields: a change to title, description, due date/time or
   duration bumps `revision` and puts every accepted member back to `PENDING` with `reapproval: true` (their copy is
   unchanged until they accept). Editing those fields on the owner's own COLLAB copy through `PUT/PATCH /api/tasks/:id`
   does the same. **`POST /tasks/:id/resend`** `{ userId }` (a declined member). **`DELETE /tasks/:id`** cancels for
   everyone: unanswered cards are withdrawn, members lose access, accepted copies stay as ordinary (unlinked) tasks.
-- **`GET /notices`** → the last 50 `{ id, kind, sharedTaskId, payload, read, createdAt, actor }`; **`POST /notices/read`**.
+- **`GET /notices`** → the last 50 `{ id, kind, sharedTaskId, taskId, pending, payload, read, createdAt, actor }`. `taskId`:
+  my own live copy of that shared task (a tap opens it); `pending`: a card still waiting for my answer (a tap opens the
+  accept screen). `payload` may carry `reason` (declines) and `progress` (progress updates). **`POST /notices/read`**
+  marks all mine read; **`POST /notices/:id/read`** marks one (someone else's id marks nothing).
   Each notice is also a push `{ type: "collab", kind, sharedTaskId }` (the phone syncs; a tap opens People & sharing).
   Kinds: `CONNECTION_REQUEST · CONNECTION_ACCEPTED · TASK_INVITE · TASK_ACCEPTED · TASK_REJECTED · TASK_CHANGED · TASK_TIME_CHANGED · TASK_CANCELLED · TASK_COMPLETED · TASK_MEMBER_REMOVED · TASK_MEMBER_LEFT`.
-- Tasks (`/api/tasks`, `/api/sync`) carry `sharedTaskId` (null for ordinary tasks).
+- Tasks (`/api/tasks`, `/api/sync`) carry `sharedTaskId` (null for ordinary tasks) and `progressUpdatedBy` (who set
+  the progress on a task done together, e.g. `@sana`; null when the user did).
+- **Progress (done together):** a part-way progress change (1–99 %) on any accepted copy sets the shared task's
+  `progress` / `progressBy` / `progressAt` (server time: the last write wins), updates every other open copy with
+  `progressUpdatedBy`, and sends them a `TASK_PROGRESS` notice + push. Done (100 %) stays personal. The shared task view
+  adds `progress` and `progressBy` (null for "only for them").
+- **Invitation emails:** sharing (`POST /tasks`, chat) and `resend` queue an email to each invited user, addressed
+  from their own account on the server (never in any response). SMTP from `SMTP_*` in `backend/.env` (none = no email);
+  at most 10 an hour per recipient; skipped when the recipient turned off `UserSettings.emailInvites`
+  (`PATCH /api/settings` `{ emailInvites }`); a failure never fails the share and is logged without the address.
 - Assistant (`POST /api/assistant/message`, voice, WhatsApp): new intents `share_choice` (question; answer payload
   `{ type: "answer", pending: "share_choice", text: "together" | "only for them" | "just me" | "@username" }`),
   `task_shared`, `shared_requests`, `shared_accepted`, `shared_declined`, `shared_unshared`, `shared_cancelled`;

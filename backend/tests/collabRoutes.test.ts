@@ -51,7 +51,7 @@ test("collab routes: strangers, non-accepted, declined and removed members are r
     await connect(owner, declined);
     await connect(owner, removed);
     const { shared } = await createSharedTask(owner, TZ, { kind: SharedTaskKind.COLLAB, memberIds: [pending.id, declined.id, removed.id], title: "Group report", priority: "MEDIUM" });
-    await rejectSharedTask(declined, TZ, shared.id);
+    await rejectSharedTask(declined, TZ, shared.id, null, "Too busy right now");
     await acceptSharedTask(removed, TZ, shared.id);
     await removeMember(owner, shared.id, removed.id);
     const id = shared.id;

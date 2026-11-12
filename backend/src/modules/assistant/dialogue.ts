@@ -93,6 +93,7 @@ import { getAi } from "../../ai/llm.js";
 import { bankIndex } from "./commands/neighbours.js";
 import type { CommandArgs, ParseCtx } from "./commands/types.js";
 import { recordUndo, resolveCommandPending, runCommand } from "./commands/runtime.js";
+import { resolveDeclineReason } from "./commands/collab.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
@@ -595,6 +596,8 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
       if (r) return r;
       break;
     }
+    case "decline_reason":
+      return resolveDeclineReason(turn, text);
     case "routine_time": {
       // Asked once: a time or part of day ("evening", "shaam", "9:30 pm") sets it, "no reminder" clears it;
       // anything else drops the question and the default time stays.

@@ -17,8 +17,10 @@ import { background } from "../../lib/background.js";
 import { ensureSettings, HttpError } from "../../lib/http.js";
 import { sendPushToUser } from "../push/pushService.js";
 import { createTask, setSharedTaskHooks, softDeleteTask, updateTask, type CreateTaskInput, type TaskChanges } from "../tasks/taskService.js";
+import { queueInviteEmail } from "./collabEmail.js";
 import {
   AGREED_FIELDS,
+  cleanReason,
   collabOn,
   changedAgreedFields,
   isUnsettled,
@@ -44,22 +46,33 @@ const stranger = (u: Person): Person => ({ ...person(u), photoUrl: null });
 
 /* ------------------------------------------------------------------ notices */
 
+/**
+ * An in-app notice (Notifications screen, bell badge) and, unless `push` is false, a push. `extra` goes into the
+ * notice's payload; `reason` / `progress` in it also go into the push text. `taskId`: the recipient's own copy, so
+ * a tap can open it.
+ */
 async function notify(
   userId: string,
   actor: Pick<User, "id" | "username" | "displayName">,
   kind: NoticeKind,
   shared?: Pick<SharedTask, "id" | "title" | "dueDate" | "dueTime"> | null,
   extra: Record<string, unknown> = {},
+  opts: { push?: boolean; taskId?: string | null } = {},
 ): Promise<void> {
   const payload = shared ? { title: shared.title, dueDate: shared.dueDate?.toISOString() ?? null, dueTime: shared.dueTime, ...extra } : extra;
   await prisma.collabNotice.create({
     data: { userId, actorId: actor.id, kind, sharedTaskId: shared?.id ?? null, payload: payload as Prisma.InputJsonValue },
   });
-  const text = pushText(kind, personLabel(actor), shared?.title);
-  // "sync": the phone pulls changes (a new copy, a cancelled card); "collab": a tap opens People & sharing.
-  background(sendPushToUser(userId, { ...text, data: { type: "collab", kind, sharedTaskId: shared?.id ?? null } }));
+  if (opts.push === false) return;
+  const text = pushText(kind, personLabel(actor), shared?.title, { reason: typeof extra.reason === "string" ? extra.reason : null, progress: typeof extra.progress === "number" ? extra.progress : null });
+  // The phone pulls changes on any collab push; a tap opens the task (taskId), the card (TASK_INVITE) or Notifications.
+  background(sendPushToUser(userId, { ...text, data: { type: "collab", kind, sharedTaskId: shared?.id ?? null, taskId: opts.taskId ?? null } }));
 }
 
+/**
+ * The last 50 notices, each with where a tap should go: `taskId` (my live copy of that shared task) or `pending`
+ * (a card still waiting for my answer, so the accept screen).
+ */
 export async function listNotices(userId: string) {
   const notices = await prisma.collabNotice.findMany({
     where: { userId },
@@ -67,10 +80,21 @@ export async function listNotices(userId: string) {
     take: 50,
     include: { actor: { select: PERSON } },
   });
+  const ids = [...new Set(notices.map((n) => n.sharedTaskId).filter((x): x is string => Boolean(x)))];
+  const [copies, members] = ids.length
+    ? await Promise.all([
+        prisma.task.findMany({ where: { userId, sharedTaskId: { in: ids }, status: { not: TaskStatus.DELETED } }, select: { id: true, sharedTaskId: true } }),
+        prisma.sharedTaskMember.findMany({ where: { userId, sharedTaskId: { in: ids }, status: SharedMemberStatus.PENDING, sharedTask: { cancelledAt: null } }, select: { sharedTaskId: true } }),
+      ])
+    : [[], []];
+  const copyOf = new Map(copies.map((c) => [c.sharedTaskId, c.id]));
+  const pending = new Set(members.map((m) => m.sharedTaskId));
   return notices.map((n) => ({
     id: n.id,
     kind: n.kind,
     sharedTaskId: n.sharedTaskId,
+    taskId: n.sharedTaskId ? (copyOf.get(n.sharedTaskId) ?? null) : null,
+    pending: Boolean(n.sharedTaskId && pending.has(n.sharedTaskId)),
     payload: n.payload,
     read: Boolean(n.readAt),
     createdAt: n.createdAt,
@@ -80,6 +104,11 @@ export async function listNotices(userId: string) {
 
 export async function markNoticesRead(userId: string): Promise<number> {
   return (await prisma.collabNotice.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } })).count;
+}
+
+/** One notice of mine; someone else's id marks nothing. */
+export async function markNoticeRead(userId: string, id: string): Promise<boolean> {
+  return (await prisma.collabNotice.updateMany({ where: { id, userId, readAt: null }, data: { readAt: new Date() } })).count > 0;
 }
 
 /* ------------------------------------------------------------------ profile, username, search */
@@ -312,8 +341,11 @@ function viewOf(s: LoadedShared, userId: string) {
       state: participantState(m, copyStatus(s.tasks, m.userId)),
       proposedChange: m.status === SharedMemberStatus.ACCEPTED ? m.proposedChange : null,
       completedAt: live(m.userId)?.completedAt ?? null,
+      // Why they declined: the owner sees it, and the member sees their own.
+      declineReason: m.status === SharedMemberStatus.REJECTED && (s.ownerId === userId || m.userId === userId) ? (m.declineReason ?? null) : null,
     })),
   ];
+  const progressBy = s.progressById ? [s.owner, ...s.members.map((m) => m.user)].find((u) => u.id === s.progressById) : null;
   return {
     id: s.id,
     kind: s.kind,
@@ -327,6 +359,10 @@ function viewOf(s: LoadedShared, userId: string) {
     taskType: s.taskType,
     revision: s.revision,
     cancelled: Boolean(s.cancelledAt),
+    /** Done together: the shared progress and who set it (null before anyone did). */
+    progress: s.kind === SharedTaskKind.COLLAB ? s.progress : null,
+    progressBy: progressBy ? personLabel(progressBy) : null,
+    progressAt: s.progressAt,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
     owner: person(s.owner),
@@ -397,6 +433,7 @@ export async function createSharedTask(
       members: { create: memberIds.map((userId) => ({ userId })) },
     },
   });
+  for (const id of memberIds) queueInviteEmail(id, me, { title: shared.title, kind: input.kind });
   const ownerTask =
     input.kind === SharedTaskKind.COLLAB
       ? await createTask({ userId: me.id, tz, deviceId: input.deviceId }, { source: TaskSource.MANUAL, ...input.ownerCopy, ...copyInput(shared), sharedTaskId: shared.id })
@@ -453,20 +490,32 @@ export async function acceptSharedTask(
     : await createTask(ctx, { ...details, source: TaskSource.MANUAL, sharedTaskId: s.id });
   await prisma.sharedTaskMember.update({
     where: { id: m.id },
-    data: { status: SharedMemberStatus.ACCEPTED, reapproval: false, respondedAt: new Date(), proposedChange: change ?? Prisma.JsonNull },
+    data: { status: SharedMemberStatus.ACCEPTED, reapproval: false, respondedAt: new Date(), proposedChange: change ?? Prisma.JsonNull, declineReason: null },
   });
-  await notify(s.ownerId, me, change ? "TASK_TIME_CHANGED" : "TASK_ACCEPTED", s, change ? { proposed: change } : {});
+  const ownerCopy = s.kind === SharedTaskKind.COLLAB ? await liveCopy(s.id, s.ownerId) : null;
+  await notify(s.ownerId, me, change ? "TASK_TIME_CHANGED" : "TASK_ACCEPTED", s, change ? { proposed: change } : {}, { taskId: ownerCopy?.id ?? null });
+  // The member's own confirmation: a row under Notifications, no push (they just tapped Accept).
+  const owner = await prisma.user.findUnique({ where: { id: s.ownerId }, select: { id: true, username: true, displayName: true } });
+  if (owner) await notify(me.id, owner, "TASK_JOINED", s, {}, { push: false, taskId: task.id });
   return { shared: await viewFor(s.id, me.id), task };
 }
 
-/** Decline a card. Declining a change to a task I had accepted removes my copy (24 h to restore, as any delete). */
-export async function rejectSharedTask(me: User, tz: string, id: string, deviceId?: string | null): Promise<SharedTaskView> {
-  const { s, m } = await memberRow(id, me.id);
+/**
+ * Decline a card, with a short reason (required; plain text, see cleanReason) that the owner sees in the notice and
+ * on the task. Declining a change to a task I had accepted removes my copy (24 h to restore, as any delete).
+ */
+export async function rejectSharedTask(me: User, tz: string, id: string, deviceId: string | null | undefined, rawReason: unknown): Promise<SharedTaskView> {
+  const { s, m } = await memberRow(id, me.id); // no access: 404 before anything else
   if (m.status !== SharedMemberStatus.PENDING) throw new HttpError(409, "ALREADY_ANSWERED", "You already answered this.");
-  await prisma.sharedTaskMember.update({ where: { id: m.id }, data: { status: SharedMemberStatus.REJECTED, respondedAt: new Date() } });
+  const reason = cleanReason(rawReason);
+  if (!reason) throw new HttpError(400, "REASON_REQUIRED", "Give a short reason (up to 200 characters).");
+  await prisma.sharedTaskMember.update({ where: { id: m.id }, data: { status: SharedMemberStatus.REJECTED, respondedAt: new Date(), declineReason: reason } });
   const copy = await liveCopy(s.id, me.id);
   if (copy) await softDeleteTask({ userId: me.id, tz, deviceId }, copy.id);
-  if (!s.cancelledAt) await notify(s.ownerId, me, "TASK_REJECTED", s);
+  if (!s.cancelledAt) {
+    const ownerCopy = s.kind === SharedTaskKind.COLLAB ? await liveCopy(s.id, s.ownerId) : null;
+    await notify(s.ownerId, me, "TASK_REJECTED", s, { reason }, { taskId: ownerCopy?.id ?? null });
+  }
   return viewFor(s.id, me.id);
 }
 
@@ -515,8 +564,9 @@ export async function resendSharedTask(owner: User, id: string, memberUserId: st
   if (!m) throw new HttpError(404, "MEMBER_NOT_FOUND", "That person isn't on this task.");
   if (m.status !== SharedMemberStatus.REJECTED) throw new HttpError(409, "NOT_DECLINED", "Only a declined task can be sent again.");
   if (!(await areConnected(owner.id, memberUserId)) || (await deleting(memberUserId))) throw new HttpError(403, "NOT_CONNECTED", "You can only share tasks with people who accepted your request.");
-  await prisma.sharedTaskMember.update({ where: { id: m.id }, data: { status: SharedMemberStatus.PENDING, reapproval: false, respondedAt: null, proposedChange: Prisma.JsonNull } });
+  await prisma.sharedTaskMember.update({ where: { id: m.id }, data: { status: SharedMemberStatus.PENDING, reapproval: false, respondedAt: null, proposedChange: Prisma.JsonNull, declineReason: null } });
   await notify(memberUserId, owner, "TASK_INVITE", s, { kind: s.kind });
+  queueInviteEmail(memberUserId, owner, { title: s.title, kind: s.kind });
   return viewFor(s.id, owner.id);
 }
 
@@ -586,12 +636,38 @@ async function onCopyCompleted(task: Task): Promise<void> {
   }
 }
 
+/**
+ * Done together: a member (or the owner) set their copy's progress to a part-way value. The shared progress takes it
+ * (server time: the last write wins) and every other open copy follows, marked "updated by X", with a notice. Done
+ * (100 %) stays personal: each person finishes their own part. "Only for them" tasks are untouched.
+ */
+async function syncProgress(task: Task, prev: Task, s: SharedTask): Promise<void> {
+  if (s.kind !== SharedTaskKind.COLLAB || task.progress === prev.progress || task.progress >= 100 || task.status === TaskStatus.COMPLETED) return;
+  const me = await prisma.user.findUnique({ where: { id: task.userId }, select: { id: true, username: true, displayName: true } });
+  if (!me) return;
+  const now = new Date();
+  await prisma.sharedTask.update({ where: { id: s.id }, data: { progress: task.progress, progressById: me.id, progressAt: now } });
+  const members = await prisma.sharedTaskMember.findMany({ where: { sharedTaskId: s.id, status: SharedMemberStatus.ACCEPTED }, select: { userId: true } });
+  const others = new Set([s.ownerId, ...members.map((m) => m.userId)]);
+  others.delete(task.userId);
+  const label = personLabel(me);
+  for (const userId of others) {
+    const copy = await liveCopy(s.id, userId);
+    if (!copy || copy.status === TaskStatus.COMPLETED) continue;
+    const tz = (await ensureSettings(userId)).timezone;
+    await updateTask({ userId, tz, deviceId: null }, copy.id, { progress: task.progress, progressUpdatedBy: label }, { fromSharedTask: true });
+    await notify(userId, me, "TASK_PROGRESS", s, { progress: task.progress }, { taskId: copy.id });
+  }
+}
+
 /** The owner edited an agreed detail on their own copy of a task done together: the same as editing the shared task. */
 async function onCopyEdited(task: Task, prev: Task): Promise<void> {
   try {
     if (!task.sharedTaskId) return;
     const s = await prisma.sharedTask.findUnique({ where: { id: task.sharedTaskId } });
-    if (!s || s.ownerId !== task.userId || s.cancelledAt) return;
+    if (!s || s.cancelledAt) return;
+    await syncProgress(task, prev, s);
+    if (s.ownerId !== task.userId) return;
     const changes: Partial<SharedTaskInput> = {};
     for (const f of AGREED_FIELDS) {
       const now = task[f];

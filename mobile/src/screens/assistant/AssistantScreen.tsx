@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AssistantCards } from "../../components/assistant/AssistantCards";
+import { MentionPicker } from "../../components/collab/MentionPicker";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
 import { MicIcon } from "../../components/icons/MicIcon";
 import { Icon } from "../../components/icons/Icon";
@@ -348,6 +349,8 @@ export function AssistantScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : (
+          <>
+          <MentionPicker text={draft} onPick={setDraft} />
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
@@ -384,6 +387,7 @@ export function AssistantScreen({ navigation, route }: Props) {
               <SendIcon size={18} />
             </Pressable>
           </View>
+          </>
         )}
       </View>
     </View>
