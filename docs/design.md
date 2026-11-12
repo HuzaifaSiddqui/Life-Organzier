@@ -152,7 +152,7 @@ Rules:
 - Haptics (`expo-haptics`, `services/haptics.ts`, UI v2 PR 4): success on done, selection on start / range chips / move to tomorrow, warning before a delete confirm. Never the only feedback.
 - **Screen transitions (UI v2 PR 5, `MainStack`):** the five bottom-nav screens fade into each other; detail screens slide from the right; Add task slides up; `animationDuration` = `duration.slow` (iOS; Android uses the platform's own timing). Reduce motion: `animation: "none"`.
 - **Pops (UI v2 PR 5, `theme/usePop`):** scale from `pop.*` to 1 only when a value changes after the first render (never on mount, so lists don't animate as they load): the done tick on a task row, the bell badge when the unread count changes. Off with reduce motion.
-- **Press feedback:** task rows use `PressableScale` too (scale `pressScale` + 85 % opacity), like buttons, chips, cards and tiles.
+- **Press feedback:** buttons, chips, cards and tiles use `PressableScale`. **Task rows keep a plain `Pressable` (70 % opacity while pressed)**: a per-row press animation was measured on a Pixel 7 (gfxinfo, debug build) to raise Tasks scroll p90 from 10 ms to 14–20 ms, so long lists get no per-row Reanimated hooks beyond the done-tick pop.
 - Swipes use `react-native-gesture-handler` and must not capture vertical scrolling.
 
 ### Touch targets
@@ -289,7 +289,7 @@ Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), 
 
 Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and plan: `docs/ux-audit.md`.
 
-- **PR 5, motion (12 Nov 2026).** Only four kinds of motion: tab fade / detail slide / Add-task slide-up, press scale, the done-tick pop, the bell-badge pop. Nothing animates per row while a list loads or scrolls. New motion goes through `usePop` or `PressableScale` and the `motion` tokens; `motionTokens.test.ts` keeps UI durations within 150–300 ms.
+- **PR 5, motion (12 Nov 2026).** Only these kinds of motion: tab fade / detail slide / Add-task slide-up, press scale (not on task rows), the done-tick pop, the bell-badge pop. Nothing animates per row while a list loads or scrolls. New motion goes through `usePop` or `PressableScale` and the `motion` tokens; `motionTokens.test.ts` keeps UI durations within 150–300 ms.
 - **PR 4, polish (12 Nov 2026).** New copy goes in `strings.ts` with Urdu; action labels come from `action.*` only. Haptics only through `services/haptics.ts`. An empty list always names the reason and offers a next step. Home's time rule is `isEvening()` (deterministic, local clock).
 - **PR 3, key flows (12 Nov 2026).** Start everywhere goes through `startTaskNow` (assistant `start_task`; keeps the plan, never "rescheduled"); unsynced (local-id) tasks get no Start. Any new swipe must keep its Undo and a visible alternative (row Start, long-press menu). Form copy `taskForm.*`, list copy `tasks.*`, `task.start*` (en + ur).
 - **PR 2, Home (12 Nov 2026).** Order: date / sync / bell → greeting → summary line ("3 due today · 1 overdue · 2 done", overdue in `danger`) → ask bar (type, speak) → quick row (Task, Upload) → context chips → Shared with you (COLLAB_TASKS) → Next up → tiles → tip → Needs attention → Today (workload bar moved here from the old stats card) → Check in → Insights → Organize (Memory only; Routines, Documents and Mood are tiles). Copy `home.*` in `strings.ts` (en + ur). New behaviour, approved: "Remind in 1 h" on Next up (local reminder, Undo; first named "Snooze 1 h"). The floating "+" also sits on Tasks.
@@ -297,7 +297,7 @@ Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and 
 
 ## Migration log
 
-**UI v2, PR 5 (motion, 12 Nov 2026).** Screen transitions per screen type (tab fade, detail slide, Add task slide-up; none with reduce motion), task rows on `PressableScale`, done-tick pop on task rows, bell-badge pop. Reanimated 4 only; no new native module.
+**UI v2, PR 5 (motion, 12 Nov 2026).** Screen transitions per screen type (tab fade, detail slide, Add task slide-up; none with reduce motion), done-tick pop on task rows, bell-badge pop. Reanimated 4 only; no new native module. Task rows tried `PressableScale` and went back to a plain `Pressable` after measuring scroll jank (3 runs each vs main: scroll p90 10 ms on both, janky ≤ 0.56 % vs main's worst 1.60 %). `ListItem` got optional `titleLines` / `subtitleLines` (default 1 / 2; 0 = wrap): the Settings → Phone calendar switch row wraps its title and explanation instead of cutting them off.
 
 **UI v2, PR 4 (polish, 12 Nov 2026).** O: action names unified (Tasks header and long-press, task detail, Add screen title). M: haptics on done / start / chips / move / before delete. K: empty states with next actions on Tasks, Home Today and Routines. E: evening order on Home (check-in + Tomorrow card first after 18:00). Tasks also follows its `filter` parameter when opened again.
 
