@@ -4,6 +4,7 @@ import { api, apiDelete, apiGet, apiPost } from "./api";
 import { getDeviceId } from "./device";
 import { syncNow } from "./syncEngine";
 import { scheduleReminderSync } from "./reminders";
+import { uploadPart, type PickedFile } from "../utils/uploadPart";
 
 export type DocType = "SYLLABUS" | "SCHEDULE" | "NOTES" | "OTHER";
 
@@ -121,14 +122,16 @@ export type DocumentSummary = {
 };
 
 export async function uploadDocument(
-  file: { uri: string; name: string; mimeType: string },
+  file: PickedFile,
   docType: DocType,
   language: string,
   onProgress?: (fraction: number) => void,
   instruction?: string,
 ): Promise<ProcessResult> {
   const form = new FormData();
-  form.append("file", { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
+  const part = uploadPart(file);
+  if (part instanceof Blob) form.append("file", part, file.name);
+  else form.append("file", part as unknown as Blob);
   form.append("docType", docType);
   form.append("language", language);
   form.append("autoCreate", "true");

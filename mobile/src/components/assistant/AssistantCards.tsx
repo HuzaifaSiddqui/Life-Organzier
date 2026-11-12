@@ -8,6 +8,7 @@ import { BreathingExercise } from "./BreathingExercise";
 import { CalendarCard, CalendarClashCard } from "./CalendarCard";
 import { CrisisCard } from "./CrisisCard";
 import { LocationSetupCard } from "./LocationSetupCard";
+import { platformFeatures } from "../../constants/platformFeatures";
 
 /** Draft slot names → words users understand. */
 const MISSING_LABEL: Record<string, string> = { title: "what to do", date: "date", time: "time", duration: "duration" };
@@ -211,7 +212,7 @@ export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction }: {
             // Older stored messages have no resources; the card then shows only the guidance text.
             return <CrisisCard key={i} resources={card.resources ?? []} />;
           case "location_setup":
-            return <LocationSetupCard key={i} taskId={card.taskId} place={card.place} saved={card.saved} />;
+            return platformFeatures.locationReminders ? <LocationSetupCard key={i} taskId={card.taskId} place={card.place} saved={card.saved} /> : null;
           case "calendar":
             return <CalendarCard key={i} card={card} onAction={onAction} />;
           case "calendar_clash":

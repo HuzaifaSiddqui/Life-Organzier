@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
+import { DateTimePicker, type DateTimePickerChangeEvent } from "./DateTimePickerCompat";
 import { type ReactNode, useState } from "react";
 import {
   type StyleProp,
@@ -63,12 +63,12 @@ export function TaskFormDueDateRow({
     : new Date();
 
   const onPick = (_event: DateTimePickerChangeEvent, selected: Date) => {
-    if (Platform.OS === "android") setShow(false);
+    if (Platform.OS !== "ios") setShow(false);
     onChangeYmd(ymdFromLocalDate(selected));
   };
 
   const onDismiss = () => {
-    if (Platform.OS === "android") setShow(false);
+    if (Platform.OS !== "ios") setShow(false);
   };
 
   const display = valueYmd.trim() ? valueYmd : "Choose date";
@@ -128,12 +128,12 @@ export function TaskFormDueTimeRow({
   const current = combineYmdAndTimeStrings(baseYmd, seed);
 
   const onPick = (_event: DateTimePickerChangeEvent, selected: Date) => {
-    if (Platform.OS === "android") setShow(false);
+    if (Platform.OS !== "ios") setShow(false);
     onChangeTime(formatDueTime12h(selected));
   };
 
   const onDismiss = () => {
-    if (Platform.OS === "android") setShow(false);
+    if (Platform.OS !== "ios") setShow(false);
   };
 
   const display = valueTime.trim() ? valueTime : "Choose time";
@@ -198,12 +198,12 @@ export function InlineTimePickerField({
   const current = combineYmdAndTimeStrings(baseYmd, seed);
 
   const onPick = (_event: DateTimePickerChangeEvent, selected: Date) => {
-    if (Platform.OS === "android") setShow(false);
+    if (Platform.OS !== "ios") setShow(false);
     onChange(formatDueTime12h(selected));
   };
 
   const onDismiss = () => {
-    if (Platform.OS === "android") setShow(false);
+    if (Platform.OS !== "ios") setShow(false);
   };
 
   return (

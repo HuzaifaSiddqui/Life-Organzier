@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
 import { Button, Card, Chip, ui } from "../../components/ui";
@@ -26,6 +26,8 @@ import {
   validateDueDateNotPast,
   ymdFromLocalDate,
 } from "../../utils/datetimeValidation";
+import { showAlert } from "../../services/dialog";
+import { platformFeatures } from "../../constants/platformFeatures";
 
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const TYPES: Array<{ key: TaskType; label: string; hint: string }> = [
@@ -295,7 +297,7 @@ export function TaskForm({
     const time = formatTime(new Date(hits[0].start).toISOString());
     const title = hits.length > 1 ? t("calendar.clashMore", { title: hits[0].title, count: String(hits.length - 1), time }) : t("calendar.clashTitle", { title: hits[0].title, time });
     return new Promise((resolve) =>
-      Alert.alert(title, undefined, [
+      showAlert(title, undefined, [
         { text: t("calendar.changeTime"), style: "cancel", onPress: () => resolve(false) },
         { text: t("calendar.addAnyway"), onPress: () => resolve(true) },
       ], { cancelable: true, onDismiss: () => resolve(false) }),
@@ -492,7 +494,7 @@ export function TaskForm({
               ))}
             </View>
           </View>
-          {isPro ? (
+          {isPro && platformFeatures.locationReminders ? (
             <View>
               <Text style={ui.label}>{t("location.sectionTitle")}</Text>
               <TaskLocationsField taskId={taskId ?? null} initial={initialLocations ?? []} onPendingChange={(places) => {

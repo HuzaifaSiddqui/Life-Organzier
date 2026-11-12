@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Alert, Linking, StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { usePreferences } from "../context/PreferencesContext";
 import { useLocale } from "../i18n/LocaleProvider";
 import { startWhatsappLink, unlinkWhatsapp } from "../services/settingsApi";
 import { useTheme } from "../theme/ThemeProvider";
 import { Icon } from "./icons/Icon";
 import { Button, Card, Text } from "./ui";
+import { showAlert } from "../services/dialog";
 
 /**
  * FR-WA-001 Settings → WhatsApp. Pro only. Linking proves the number is yours: the app shows a code, you
@@ -38,7 +39,7 @@ export function WhatsappLinkCard() {
   };
 
   const unlink = () =>
-    Alert.alert(t("whatsapp.unlinkTitle"), t("whatsapp.unlinkBody"), [
+    showAlert(t("whatsapp.unlinkTitle"), t("whatsapp.unlinkBody"), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("whatsapp.unlink"), style: "destructive", onPress: () => void unlinkWhatsapp().then(reload, () => setNote(t("whatsapp.error"))) },
     ]);

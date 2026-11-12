@@ -17,6 +17,7 @@ import type { MainStackParamList } from "../../navigation/MainStack";
 import { clearGeofenceData } from "../../services/locationReminders";
 import { clearAllReminders } from "../../services/reminders";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useLayout } from "../../theme/useLayout";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Profile">;
 
@@ -30,6 +31,7 @@ function initials(displayName: string | null | undefined, email: string | null |
 
 export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { bottomPad } = useLayout();
   const { colors, spacing } = useTheme();
   const { dbUser } = useAuth();
   const { settings, isPro } = usePreferences();
@@ -80,7 +82,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.canvas }]}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 110, gap: spacing.xl }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad(insets.bottom + 110), gap: spacing.xl }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <Text variant="title1" style={styles.flex}>
             Account

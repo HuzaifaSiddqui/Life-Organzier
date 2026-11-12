@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { BarChart, Donut, Heatmap } from "../../components/charts/Charts";
@@ -11,8 +11,10 @@ import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
 import { acceptInsight, dismissInsight, exportAnalyticsCsv, getAnalytics, getInsights, type Analytics } from "../../services/insightsApi";
+import { shareText } from "../../services/share";
 import type { Pattern, Recommendation } from "../../types/models";
 import { categoryColor } from "../../utils/priorityColors";
+import { useLayout } from "../../theme/useLayout";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Insights">;
 type Range = "week" | "month" | "3months" | "all";
@@ -45,6 +47,7 @@ function Metric({ label, value, delta }: { label: string; value: string; delta?:
 
 export function InsightsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { bottomPad } = useLayout();
   const { categories, isPro } = usePreferences();
   const [range, setRange] = useState<Range>("month");
   const [data, setData] = useState<Analytics | null>(null);
@@ -85,7 +88,7 @@ export function InsightsScreen({ navigation }: Props) {
     }
     try {
       const { csv, filename } = await exportAnalyticsCsv();
-      await Share.share({ title: filename, message: csv });
+      await shareText(filename, csv);
     } catch (e) {
       setToast(getApiErrorMessage(e));
     }
@@ -97,7 +100,7 @@ export function InsightsScreen({ navigation }: Props) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 110 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad(insets.bottom + 110) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(range, true); }} />}
       >
         <View style={styles.header}>

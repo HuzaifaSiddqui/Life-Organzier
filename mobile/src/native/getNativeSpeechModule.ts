@@ -1,4 +1,5 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import { platformFeatures } from "../constants/platformFeatures";
 
 /** Matches expo-speech-recognition native module surface we use. */
 export type NativeSpeechModule = {
@@ -21,7 +22,8 @@ let cached: NativeSpeechModule | null | undefined;
 export function getNativeSpeechModule(): NativeSpeechModule | null {
   if (cached !== undefined) return cached;
 
-  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+  // Web / desktop: no speech recogniser there (constants/platformFeatures), so the mic button hides.
+  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient || !platformFeatures.voiceInput) {
     cached = null;
     return null;
   }

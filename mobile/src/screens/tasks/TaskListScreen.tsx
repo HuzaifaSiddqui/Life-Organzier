@@ -3,7 +3,6 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionSheetIOS,
-  Alert,
   Animated,
   PanResponder,
   Platform,
@@ -38,6 +37,8 @@ import { inRange, type RangeFilter } from "../../utils/taskRange";
 import { undoStatusChanges } from "../../utils/taskUndo";
 import { isOverdue } from "../../utils/format";
 import { PRIORITY_RANK } from "../../utils/priorityColors";
+import { showAlert } from "../../services/dialog";
+import { useLayout } from "../../theme/useLayout";
 
 type Props = NativeStackScreenProps<MainStackParamList, "TaskList">;
 
@@ -108,6 +109,7 @@ function SwipeRow({ children, onRight, onLeft, doneLabel, tomorrowLabel }: { chi
 
 export function TaskListScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { bottomPad } = useLayout();
   const { categories, settings } = usePreferences();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -239,7 +241,7 @@ export function TaskListScreen({ navigation, route }: Props) {
 
   const confirmDelete = (t: Task) => {
     hapticWarn();
-    Alert.alert(`Delete "${t.title}"?`, "You can undo within 1 day.", [
+    showAlert(`Delete "${t.title}"?`, "You can undo within 1 day.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -265,7 +267,7 @@ export function TaskListScreen({ navigation, route }: Props) {
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions({ options, destructiveButtonIndex: 3, cancelButtonIndex: 4, title: t.title }, handle);
     } else {
-      Alert.alert(t.title, undefined, [
+      showAlert(t.title, undefined, [
         { text: options[0], onPress: () => handle(0) },
         { text: options[1], onPress: () => handle(1) },
         { text: options[2], onPress: () => handle(2) },
@@ -293,7 +295,7 @@ export function TaskListScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 160 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad(insets.bottom + 160) }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} />}
       >

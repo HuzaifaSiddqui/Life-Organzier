@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
+import { DateTimePicker, type DateTimePickerChangeEvent } from "./DateTimePickerCompat";
 import { useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
@@ -58,7 +58,7 @@ export function DeadlineReviewItem({
   const value = combineYmdAndTimeStrings(date || undefined, time || "11:59 PM");
 
   const onPick = (_e: DateTimePickerChangeEvent, selected: Date) => {
-    if (Platform.OS === "android") setPicking(null);
+    if (Platform.OS !== "ios") setPicking(null);
     if (picking === "date") onChangeDate(ymdFromLocalDate(selected));
     else onChangeTime(clock12(selected));
   };

@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, SectionTitle, Snackbar, ui } from "../../components/ui";
@@ -38,6 +38,9 @@ import { listPlaces } from "../../services/locationsApi";
 import { syncReminders } from "../../services/reminders";
 import { getCollabSummary } from "../../services/collabApi";
 import type { UserSettings } from "../../types/models";
+import { showAlert } from "../../services/dialog";
+import { shareText } from "../../services/share";
+import { platformFeatures } from "../../constants/platformFeatures";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Settings">;
 
@@ -156,14 +159,16 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.meta}>Pro adds deeper AI conversations for emotional support, WhatsApp reminders and analytics export. (Demo switch — payments are out of scope.)</Text>
         </Card>
 
-        <SectionTitle title="Language & voice" />
+        <SectionTitle title={platformFeatures.voiceInput ? "Language & voice" : "Language"} />
         <Card style={{ gap: 10 }}>
           <View style={ui.wrap}>
             {LANGUAGES.map((l) => (
               <Chip key={l.key} small label={l.label} selected={settings.language === l.key} onPress={() => void save({ language: l.key }, "Language updated")} />
             ))}
           </View>
-          <Text style={styles.meta}>Assistant replies, speech recognition and read-back follow this language. Time zone: {settings.timezone} (from your phone).</Text>
+          <Text style={styles.meta}>
+            {platformFeatures.voiceInput ? "Assistant replies, speech recognition and read-back follow this language." : "Assistant replies and read-back follow this language."} Time zone: {settings.timezone} (from this device).
+          </Text>
           <View style={styles.rowBetween}>
             <Text style={ui.body}>Read replies aloud</Text>
             <Switch value={settings.ttsEnabled} onValueChange={(ttsEnabled) => void save({ ttsEnabled })} />
@@ -205,12 +210,16 @@ export function SettingsScreen({ navigation }: Props) {
               <Chip key={f} small label={f.toLowerCase()} selected={settings.notificationFrequency === f} onPress={() => void save({ notificationFrequency: f })} />
             ))}
           </View>
-          <Text style={ui.label}>Method</Text>
-          <View style={ui.wrap}>
-            {([["SOUND_VIBRATION", "Sound + vibration"], ["SOUND", "Sound only"], ["VIBRATION", "Vibration"], ["APP", "Silent"]] as const).map(([k, l]) => (
-              <Chip key={k} small label={l} selected={settings.notificationMethod === k} onPress={() => void save({ notificationMethod: k })} />
-            ))}
-          </View>
+          {platformFeatures.phoneAlertStyle ? (
+            <>
+              <Text style={ui.label}>Method</Text>
+              <View style={ui.wrap}>
+                {([["SOUND_VIBRATION", "Sound + vibration"], ["SOUND", "Sound only"], ["VIBRATION", "Vibration"], ["APP", "Silent"]] as const).map(([k, l]) => (
+                  <Chip key={k} small label={l} selected={settings.notificationMethod === k} onPress={() => void save({ notificationMethod: k })} />
+                ))}
+              </View>
+            </>
+          ) : null}
           <Text style={ui.label}>Devices</Text>
           <View style={ui.wrap}>
             {([["ALL", "All devices"], ["PHONE", "Phone only"], ["DESKTOP", "Desktop only"], ["WHATSAPP", "WhatsApp only (Pro)"]] as const).map(([k, l]) => (
@@ -285,6 +294,8 @@ export function SettingsScreen({ navigation }: Props) {
               </View>
             </>
           ) : null}
+          {platformFeatures.locationReminders ? (
+          <>
           <View style={styles.rowBetween}>
             <Text style={[ui.body, { flex: 1 }]}>{t("settings.locationReminders")}</Text>
             <Switch value={isPro && locationOn} disabled={!isPro} onValueChange={(on) => void toggleLocation(on)} accessibilityLabel={t("settings.locationReminders")} />
@@ -292,6 +303,8 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={ui.meta}>{isPro ? t("settings.locationRemindersHint") : t("settings.proFeature")}</Text>
           {isPro && (locationOn || placeCount > 0) ? (
             <Button title={t("settings.savedPlaces")} kind="ghost" onPress={() => navigation.navigate("SavedPlaces")} />
+          ) : null}
+          </>
           ) : null}
           {__DEV__ ? (
             <View style={styles.rowBetween}>
@@ -437,7 +450,7 @@ export function SettingsScreen({ navigation }: Props) {
             onPress={async () => {
               try {
                 const { csv, filename } = await exportAllData();
-                await Share.share({ title: filename, message: csv });
+                await shareText(filename, csv);
               } catch (e) {
                 setToast(getApiErrorMessage(e));
               }
@@ -447,7 +460,7 @@ export function SettingsScreen({ navigation }: Props) {
             title="Re-sync from cloud"
             kind="secondary"
             onPress={() =>
-              Alert.alert("Re-sync from cloud?", "Replaces the data cached on this phone with the cloud copy. Unsynced changes are kept in the queue.", [
+              showAlert("Re-sync from cloud?", "Replaces the data cached on this phone with the cloud copy. Unsynced changes are kept in the queue.", [
                 { text: "Cancel", style: "cancel" },
                 {
                   text: "Re-sync",
@@ -499,7 +512,7 @@ export function SettingsScreen({ navigation }: Props) {
               title="Delete my account"
               kind="danger"
               onPress={() =>
-                Alert.alert("Delete account?", "Your account will be deleted in 30 days. Sign in before then and tap “Keep my account” to recover it.", [
+                showAlert("Delete account?", "Your account will be deleted in 30 days. Sign in before then and tap “Keep my account” to recover it.", [
                   { text: "Cancel", style: "cancel" },
                   {
                     text: "Delete",

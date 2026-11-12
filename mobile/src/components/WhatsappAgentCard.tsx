@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, Switch, TextInput, View } from "react-native";
+import { StyleSheet, Switch, TextInput, View } from "react-native";
 import { usePreferences } from "../context/PreferencesContext";
 import { useLocale } from "../i18n/LocaleProvider";
 import type { StringKey } from "../i18n/strings";
@@ -9,6 +9,7 @@ import { useTheme } from "../theme/ThemeProvider";
 import { agentChip, agentErrorKey, CHIP_ICON, CHIP_TONE, cleanKey, keyLooksValid, maskedKey } from "../utils/whatsappAgent";
 import { Icon } from "./icons/Icon";
 import { Button, Card, Chip, Skeleton, Text } from "./ui";
+import { showAlert } from "../services/dialog";
 
 /**
  * Settings → WhatsApp Agent (docs/whatsapp-agent.md). The user creates an agent in WhatsApp, copies its API key and
@@ -85,7 +86,7 @@ export function WhatsappAgentCard() {
   };
 
   const disconnect = () =>
-    Alert.alert(t("waAgent.disconnectTitle"), t("waAgent.disconnectBody"), [
+    showAlert(t("waAgent.disconnectTitle"), t("waAgent.disconnectBody"), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("waAgent.disconnect"), style: "destructive", onPress: () => void disconnectAgent().then(load, fail) },
     ]);

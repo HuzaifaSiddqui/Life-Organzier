@@ -113,7 +113,7 @@ export function useDeviceSpeechRecognition(options: DeviceSpeechRecognitionOptio
     const mod = getNativeSpeechModule();
     if (!mod) {
       optsRef.current.onError?.(
-        "Voice needs a development build — Expo Go does not include speech recognition. Run: npx expo run:ios or npx expo run:android."
+        "Voice input isn't available here. Type your message instead."
       );
       return false;
     }

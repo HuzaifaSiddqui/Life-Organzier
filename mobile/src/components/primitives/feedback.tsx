@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { plural, useLocale } from "../../i18n/LocaleProvider";
 import { getSyncStatus, retrySync, subscribeSync, type SyncStatus } from "../../services/syncEngine";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radii, spacing, typeScale } from "../../theme/tokens";
+import { layout, radii, spacing, typeScale } from "../../theme/tokens";
+import { useLayout } from "../../theme/useLayout";
 import { friendlyError } from "../../utils/friendlyError";
 import { Button, Dot, PressableScale } from "./controls";
 import { Sheet } from "./surfaces";
@@ -31,6 +32,7 @@ export function Snackbar({
 }) {
   const { colors, motion } = useTheme();
   const insets = useSafeAreaInsets();
+  const { isWide } = useLayout();
   useEffect(() => {
     if (!text) return;
     const t = setTimeout(onHide, action ? motion.snackbar.withAction : motion.snackbar.plain);
@@ -43,7 +45,12 @@ export function Snackbar({
       exiting={FadeOutDown.duration(motion.duration.fast)}
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
-      style={[styles.snackbar, { backgroundColor: colors.inverseSurface, bottom: insets.bottom + BOTTOM_NAV_CLEARANCE }]}
+      style={[
+        styles.snackbar,
+        { backgroundColor: colors.inverseSurface, bottom: insets.bottom + BOTTOM_NAV_CLEARANCE },
+        // Desktop: no bottom nav to clear; a toast in the bottom end corner, no wider than a dialog.
+        isWide ? { bottom: spacing.xl, start: undefined, end: spacing.xl, maxWidth: layout.dialogMax } : null,
+      ]}
     >
       {tone !== "neutral" ? <Dot color={colors[tone].fg} /> : null}
       <Text variant="callout" color="onInverse" style={styles.flex}>

@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { TaskLocationsField } from "../../components/TaskLocationsField";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -19,6 +19,8 @@ import { createTask, deleteTask, getTask, splitTask, suggestSlot, undoTaskEdit, 
 import type { Task } from "../../types/models";
 import { formatDue, formatDuration, formatTime, isOverdue } from "../../utils/format";
 import { priorityPill } from "../../utils/priorityColors";
+import { showAlert } from "../../services/dialog";
+import { platformFeatures } from "../../constants/platformFeatures";
 
 type Props = NativeStackScreenProps<MainStackParamList, "TaskDetail">;
 
@@ -133,7 +135,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           {Array.isArray(task.tags) && task.tags.length ? <Text style={styles.tags}>{task.tags.map((t) => `#${t}`).join("  ")}</Text> : null}
           {task.description ? <Text style={ui.body}>{task.description}</Text> : null}
           {task.source !== "MANUAL" ? <Text style={styles.meta}>Added via {task.source.toLowerCase()}</Text> : null}
-          {isPro && !isLocalId(task.id) ? <TaskLocationsField key={task.updatedAt} taskId={task.id} initial={task.locations ?? []} showDistance /> : null}
+          {isPro && platformFeatures.locationReminders && !isLocalId(task.id) ? <TaskLocationsField key={task.updatedAt} taskId={task.id} initial={task.locations ?? []} showDistance /> : null}
         </Card>
         {task.sharedTaskId ? (
           <SharedTaskLink onPress={() => navigation.navigate("Collab", { tab: "shared" })} />
@@ -279,7 +281,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             title="Delete"
             kind="danger"
             onPress={() =>
-              Alert.alert(`Delete "${task.title}"?`, "You can undo within 1 day.", [
+              showAlert(`Delete "${task.title}"?`, "You can undo within 1 day.", [
                 { text: "Cancel", style: "cancel" },
                 {
                   text: "Delete",

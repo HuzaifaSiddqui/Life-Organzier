@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
@@ -23,6 +23,7 @@ import type { Routine, RoutineFrequency, RoutineOccurrence, RoutinePriority } fr
 import { ymdFromLocalDate } from "../../utils/datetimeValidation";
 import { formatDuration, WEEKDAYS_SHORT } from "../../utils/format";
 import { INTERVAL_CHOICES, intervalRepeatLabel } from "../../utils/routineRepeat";
+import { showAlert } from "../../services/dialog";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Routines">;
 
@@ -117,7 +118,7 @@ export function RoutineScreen({ navigation, route }: Props) {
       await load();
     } catch (e) {
       if (apiErrorCode(e) === "MANDATORY_CONFIRMATION_REQUIRED") {
-        Alert.alert("Mandatory routine", getApiErrorMessage(e), [
+        showAlert("Mandatory routine", getApiErrorMessage(e), [
           { text: "Keep it", style: "cancel" },
           { text: "Skip anyway", style: "destructive", onPress: () => void setOccurrence(o, status, true) },
         ]);
@@ -389,7 +390,7 @@ export function RoutineScreen({ navigation, route }: Props) {
                   title="Delete routine"
                   kind="danger"
                   onPress={() =>
-                    Alert.alert("Delete routine?", "Its history will be removed too.", [
+                    showAlert("Delete routine?", "Its history will be removed too.", [
                       { text: "Cancel", style: "cancel" },
                       {
                         text: "Delete",
