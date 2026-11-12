@@ -34,7 +34,7 @@ export type TaskFormPrefill = {
 export type MainStackParamList = {
   Dashboard: undefined;
   Assistant: { voice?: boolean; prefill?: string; autoSend?: boolean; payload?: ActionPayload; label?: string; nonce?: number } | undefined;
-  TaskList: { toast?: string; toastTone?: "success" | "warning"; /** A share just made from the task form: the toast offers Undo. */ undoShare?: { id: string; taskId: string | null }; filter?: "overdue" | "today"; /** Only these tasks (e.g. from a location reminder). */ ids?: string[] } | undefined;
+  TaskList: { toast?: string; toastTone?: "success" | "warning"; /** A share just made from the task form: the toast offers Undo. */ undoShare?: { id: string; taskId: string | null }; filter?: "overdue" | "today" | "tomorrow"; /** Only these tasks (e.g. from a location reminder). */ ids?: string[] } | undefined;
   TaskDetail: { taskId: string };
   AddTask: { prefill?: TaskFormPrefill } | undefined;
   EditTask: { taskId: string };

@@ -16,6 +16,7 @@ import { useLocale } from "../../i18n/LocaleProvider";
 import type { StringKey } from "../../i18n/strings";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
+import { hapticDone, hapticTap } from "../../services/haptics";
 import { getApiErrorMessage } from "../../services/api";
 import { getBriefing, sendToAssistant } from "../../services/assistantApi";
 import { acceptInsight, dismissInsight, logMood } from "../../services/insightsApi";
@@ -25,7 +26,8 @@ import { subscribeTasks } from "../../services/syncEngine";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { ActionPayload, AttentionItem, Briefing, Mood, QuickAction, Task } from "../../types/models";
 import { formatDuration, formatTime } from "../../utils/format";
-import { moodCaption, routinesCaption, summaryParts, thenUp } from "../../utils/homeCards";
+import { isEvening, moodCaption, routinesCaption, summaryParts, thenUp, tomorrowPreview } from "../../utils/homeCards";
+import { getCachedTasks } from "../../services/tasksApi";
 import { NEXT_UP_SNOOZE_MINUTES } from "../../utils/taskSnooze";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Dashboard">;
@@ -79,10 +81,14 @@ export function DashboardScreen({ navigation }: Props) {
   const setToast = useCallback((text: string | null) => setSnack(text ? { text } : null), []);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const onboardingChecked = useRef(false);
+  const [tomorrow, setTomorrow] = useState<Task[]>([]);
+  const evening = isEvening();
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
+      // Evening order (UI v2): tomorrow's first tasks from the phone's task store (no extra request).
+      if (isEvening()) void getCachedTasks().then((all) => setTomorrow(tomorrowPreview(all)), () => undefined);
       const res = await getBriefing();
       setBriefing(res.briefing);
       setAiOnline(res.ai.available);
@@ -181,6 +187,7 @@ export function DashboardScreen({ navigation }: Props) {
   const completeRoutine = async (id: string) => {
     try {
       await updateRoutineOccurrence(id, "COMPLETED");
+      hapticDone();
       void load(true);
     } catch (e) {
       setToast(getApiErrorMessage(e));
@@ -203,6 +210,18 @@ export function DashboardScreen({ navigation }: Props) {
   );
 
   const divider = <View style={[styles.divider, { backgroundColor: colors.hairline }]} />;
+
+  const moodCheckin =
+    b && (b.mood.checkinDue || !b.mood.latest) ? (
+      <View>
+        {sectionHeader("Check in", <Pressable onPress={() => navigation.navigate("Mood")} hitSlop={8}><Text variant="label" color="accent">More</Text></Pressable>)}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {MOODS.map((m) => (
+            <Chip key={m.mood} label={m.label} onPress={() => !busyAction && void checkIn(m)} />
+          ))}
+        </ScrollView>
+      </View>
+    ) : null;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.canvas }]}>
@@ -283,6 +302,36 @@ export function DashboardScreen({ navigation }: Props) {
 
         <SharedWithYouCard onOpen={(id) => navigation.navigate("SharedTaskEdit", { id, mode: "accept" })} />
 
+        {/* Evening (from 18:00): check in first, then a look at tomorrow; the day's work follows */}
+        {evening ? moodCheckin : null}
+        {evening && tomorrow.length ? (
+          <View>
+            {sectionHeader(t("home.tomorrow.title"), <Pressable onPress={() => navigation.navigate("TaskList", { filter: "tomorrow" })} hitSlop={8} accessibilityRole="button"><Text variant="label" color="accent">{t("home.tomorrow.all")}</Text></Pressable>)}
+            <Card style={styles.listCard}>
+              {tomorrow.map((task, i) => (
+                <View key={task.id}>
+                  {i > 0 ? divider : null}
+                  <Pressable
+                    onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.item, { paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.accentSoft }]}
+                  >
+                    <View style={styles.dotWrap}>
+                      <Dot color={colors.priority[task.priority]} />
+                    </View>
+                    <Text variant="body" numberOfLines={1} style={styles.flex}>
+                      {task.title}
+                    </Text>
+                    <Text variant="caption" color="secondary" tabular>
+                      {task.dueTime ?? ""}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
+            </Card>
+          </View>
+        ) : null}
+
         {/* Next up (UI v2): Start / Done / Snooze 1 h, and what comes after */}
         {b?.nextUp ? (
           <View>
@@ -304,8 +353,8 @@ export function DashboardScreen({ navigation }: Props) {
                 ) : null}
               </View>
               <View style={styles.actions}>
-                <Button title={t("home.next.start")} size="sm" icon={<LineIcon name="play" size={16} color={colors.onAccent} />} onPress={() => void runAction({ label: "Start", payload: { type: "start_task", taskId: b.nextUp!.id } })} />
-                <Button title={t("home.next.done")} size="sm" kind="secondary" icon={<LineIcon name="check" size={16} color={colors.text} />} onPress={() => void runAction({ label: "Done", payload: { type: "complete_task", taskId: b.nextUp!.id } })} />
+                <Button title={t("home.next.start")} size="sm" icon={<LineIcon name="play" size={16} color={colors.onAccent} />} onPress={() => { hapticTap(); void runAction({ label: "Start", payload: { type: "start_task", taskId: b.nextUp!.id } }); }} />
+                <Button title={t("home.next.done")} size="sm" kind="secondary" icon={<LineIcon name="check" size={16} color={colors.text} />} onPress={() => { hapticDone(); void runAction({ label: "Done", payload: { type: "complete_task", taskId: b.nextUp!.id } }); }} />
                 <Button title={t("home.next.snooze")} size="sm" kind="ghost" icon={<LineIcon name="clock" size={16} color={colors.accentStrong} />} onPress={() => void snoozeNext(b.nextUp!)} />
               </View>
               {(() => {
@@ -471,26 +520,21 @@ export function DashboardScreen({ navigation }: Props) {
                   </View>
                 ))}
                 {!b.today.tasks.length && !b.today.routines.length ? (
-                  <View style={{ padding: spacing.lg }}>
+                  <View style={{ padding: spacing.lg, gap: spacing.md }}>
                     <Text variant="callout" color="secondary">
-                      Nothing scheduled for today.
+                      {t("empty.home.today")}
                     </Text>
+                    <View style={[styles.actions]}>
+                      <Button title={t("action.addTask")} size="sm" kind="tonal" onPress={() => navigation.navigate("AddTask")} />
+                      <Button title={t("empty.planDay")} size="sm" kind="secondary" onPress={() => navigation.navigate("Assistant", { payload: { type: "plan_day" }, label: "Plan my day", nonce: Date.now() })} />
+                    </View>
                   </View>
                 ) : null}
               </Card>
             </View>
 
-            {/* Mood check-in */}
-            {b.mood.checkinDue || !b.mood.latest ? (
-              <View>
-                {sectionHeader("Check in", <Pressable onPress={() => navigation.navigate("Mood")} hitSlop={8}><Text variant="label" color="accent">More</Text></Pressable>)}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                  {MOODS.map((m) => (
-                    <Chip key={m.mood} label={m.label} onPress={() => !busyAction && void checkIn(m)} />
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
+            {/* Mood check-in (in the evening it moves to the top) */}
+            {evening ? null : moodCheckin}
 
             {/* Insights */}
             {b.recommendations.length ? (

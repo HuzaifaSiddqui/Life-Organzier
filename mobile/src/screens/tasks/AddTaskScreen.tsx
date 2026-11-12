@@ -42,7 +42,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
 
   return (
     <View style={ui.screen}>
-      <ScreenHeader title="New task" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t("action.addTask")} onBack={() => navigation.goBack()} />
       <TaskForm
         initial={initial}
         submitLabel={sharing ? t("collab.share.submit") : "Add task"}

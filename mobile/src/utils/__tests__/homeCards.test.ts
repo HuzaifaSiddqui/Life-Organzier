@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Briefing, Task } from "../../types/models";
-import { moodCaption, routinesCaption, summaryParts, thenUp } from "../homeCards";
+import { isEvening, moodCaption, routinesCaption, summaryParts, thenUp, tomorrowPreview } from "../homeCards";
 import { addTaskSnooze, NEXT_UP_SNOOZE_MINUTES } from "../taskSnooze";
 
 const task = (id: string, over: Partial<Task> = {}) => ({ id, title: `Task ${id}`, status: "PENDING", dueTime: null, ...over }) as Task;
@@ -45,5 +45,27 @@ describe("Snooze 1 h on Next up", () => {
     const base = { taskId: "t1", title: "Reminder", body: "Essay", data: { taskId: "t1" }, categoryIdentifier: "lo-task" };
     const once = addTaskSnooze(addTaskSnooze([], base, t0), base, t0, NEXT_UP_SNOOZE_MINUTES);
     expect(once.map((s) => s.fireAt)).toEqual([new Date(t0 + 3600000).toISOString()]);
+  });
+});
+
+describe("evening order", () => {
+  it("evening from 18:00 local time", () => {
+    expect(isEvening(new Date(2026, 10, 12, 17, 59))).toBe(false);
+    expect(isEvening(new Date(2026, 10, 12, 18, 0))).toBe(true);
+    expect(isEvening(new Date(2026, 10, 12, 23, 30))).toBe(true);
+  });
+  it("tomorrow preview: open top-level tasks for tomorrow, earliest first, max 3", () => {
+    const now = new Date(2026, 10, 12, 19, 0);
+    const iso = (d: number, h: number) => new Date(2026, 10, d, h, 0).toISOString();
+    const tasks = [
+      task("late", { dueAt: iso(13, 17) }),
+      task("early", { dueAt: iso(13, 9) }),
+      task("planned", { scheduledStart: iso(13, 11), dueAt: iso(20, 9) }),
+      task("done", { dueAt: iso(13, 8), status: "COMPLETED" }),
+      task("sub", { dueAt: iso(13, 8), parentTaskId: "late" }),
+      task("today", { dueAt: iso(12, 21) }),
+      task("extra", { dueAt: iso(13, 20) }),
+    ];
+    expect(tomorrowPreview(tasks, now).map((t) => t.id)).toEqual(["early", "planned", "late"]);
   });
 });

@@ -1,4 +1,5 @@
-import type { Briefing } from "../types/models";
+import type { Briefing, Task } from "../types/models";
+import { inRange } from "./taskRange";
 
 /**
  * Home (UI v2): pure rules for the summary line, the "then: …" line under Next up and the quick-access tile captions.
@@ -38,4 +39,19 @@ export function routinesCaption(routines: Briefing["today"]["routines"]): Copy |
 export function moodCaption(mood: Briefing["mood"]): Copy {
   if (mood.checkinDue || !mood.latest) return { key: "home.tiles.moodCheckin" };
   return { key: "home.tiles.moodLatest", vars: { mood: mood.latest.mood } };
+}
+
+/** Evening order on Home (UI v2): from 18:00 local time the mood check-in and a Tomorrow preview come first. */
+export const EVENING_FROM_HOUR = 18;
+export function isEvening(now = new Date()): boolean {
+  return now.getHours() >= EVENING_FROM_HOUR;
+}
+
+/** Tomorrow preview: open, top-level tasks due (or planned) tomorrow, earliest first, at most `max`. */
+export function tomorrowPreview(tasks: Task[], now = new Date(), max = 3): Task[] {
+  const at = (t: Task) => Date.parse(t.scheduledStart ?? t.dueAt ?? t.dueDate ?? "") || Number.POSITIVE_INFINITY;
+  return tasks
+    .filter((t) => (t.status === "PENDING" || t.status === "IN_PROGRESS") && !t.archived && !t.parentTaskId && inRange(at(t), "TOMORROW", now))
+    .sort((a, b) => at(a) - at(b))
+    .slice(0, max);
 }
