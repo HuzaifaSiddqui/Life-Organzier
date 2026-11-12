@@ -56,6 +56,16 @@ To confirm on the phone (counts from the layout; the fold is about 720 dp on a m
 | 9 | Tomorrow's tasks | Tasks tab → Filters & sort → no Tomorrow → This week → scan: 3 + scan | **2** (Tasks tab → Tomorrow) |
 | — | Edit an advanced field (e.g. category) | scroll to it | "More options" (+1), and its value shows in the summary when collapsed |
 
+### After PR 4 (polish), taps from Home
+
+| Flow | Before | After PR 4 |
+|---|---|---|
+| Tomorrow's tasks, in the evening | 2 (Tasks → Tomorrow) | **0** (Tomorrow card on Home after 18:00; "See all" = 1) |
+| Log a mood in the evening | scroll to "Check in" | **0 scroll** (check-in at the top after 18:00) |
+| Empty list → next step (e.g. nothing tomorrow → add a task) | back out, find "+": 2 | **1** (button in the empty state) |
+| Wrong filter / search leaves an empty list | find and undo each filter | **1** (Clear filters / Clear search) |
+| Move a task to tomorrow from the long-press menu | "Reschedule to tomorrow" (iOS) / "Tomorrow" (Android) | same taps; one name: "Move to tomorrow" |
+
 ## 3. Problems ranked by impact on the 5-minute demo
 
 Demo path assumed: Home first impression → add a task by chat and by form → start / complete it → tomorrow's plan →

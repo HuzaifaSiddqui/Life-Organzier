@@ -5,6 +5,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInpu
 import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
+import { useLocale } from "../../i18n/LocaleProvider";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -74,6 +75,7 @@ function adherence(r: Routine): { pct: number; total: number } | null {
 }
 
 export function RoutineScreen({ navigation, route }: Props) {
+  const { t } = useLocale();
   const { settings } = usePreferences();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [today, setToday] = useState<Array<RoutineOccurrence & { routine: Routine }>>([]);
@@ -212,7 +214,7 @@ export function RoutineScreen({ navigation, route }: Props) {
           right={contexts.length ? <Chip small label={showAll ? "All contexts" : "This context"} onPress={() => setShowAll((v) => !v)} /> : undefined}
         />
         {routines.length === 0 ? (
-          <EmptyState title="No routines yet" text="Build habits that the assistant protects when it plans your day." />
+          <EmptyState title={t("empty.routines.title")} text={t("empty.routines.text")} action={<Button title={t("empty.routines.add")} size="sm" onPress={() => setForm({ ...EMPTY })} />} />
         ) : (
           routines.map((r) => {
             const a = adherence(r);

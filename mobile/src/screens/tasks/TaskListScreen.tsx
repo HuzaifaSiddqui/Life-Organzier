@@ -19,10 +19,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { FloatingAddButton } from "../../components/FloatingAddButton";
 import { TaskCard } from "../../components/TaskCard";
-import { Chip, EmptyState, HelpButton, SyncBadge, Snackbar, TutorialTip } from "../../components/ui";
+import { Button, Chip, EmptyState, HelpButton, SyncBadge, Snackbar, TutorialTip } from "../../components/ui";
+import { tasksEmpty } from "../../utils/emptyStates";
 import { colors, palette, radii } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
+import { hapticDone, hapticTap, hapticWarn } from "../../services/haptics";
 import { getApiErrorMessage } from "../../services/api";
 import { isLocalId, subscribeTasks } from "../../services/syncEngine";
 import { deleteTask, getCachedTasks, getTasks, restoreTask, updateTask } from "../../services/tasksApi";
@@ -113,7 +115,14 @@ export function TaskListScreen({ navigation, route }: Props) {
   const { t: tr } = useLocale();
   const [onlyIds, setOnlyIds] = useState<string[] | null>(route.params?.ids?.length ? route.params.ids : null);
   useEffect(() => setOnlyIds(route.params?.ids?.length ? route.params.ids : null), [route.params?.ids]);
-  const [range, setRange] = useState<RangeFilter>(route.params?.filter === "today" ? "TODAY" : "ALL");
+  const [range, setRange] = useState<RangeFilter>(route.params?.filter === "today" ? "TODAY" : route.params?.filter === "tomorrow" ? "TOMORROW" : "ALL");
+  // Opened again with a filter (e.g. Home's evening "See all" → Tomorrow) while the screen is already in the stack.
+  useEffect(() => {
+    const f = route.params?.filter;
+    if (f === "today") setRange("TODAY");
+    else if (f === "tomorrow") setRange("TOMORROW");
+    else if (f === "overdue") setStatus("OVERDUE");
+  }, [route.params?.filter]);
   const [sort, setSort] = useState<SortKey>("due_asc");
   const [cats, setCats] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -197,6 +206,7 @@ export function TaskListScreen({ navigation, route }: Props) {
     try {
       // Optimistic (the local store changes first); Undo puts the previous status back.
       await updateTask(t.id, { status: t.status === "COMPLETED" ? "PENDING" : "COMPLETED" });
+      if (t.status !== "COMPLETED") hapticDone();
       setToast({
         text: tr(t.status === "COMPLETED" ? "tasks.toast.reopened" : "tasks.toast.done", { title: t.title }),
         undo: () => updateTask(t.id, { status: t.status }),
@@ -210,6 +220,7 @@ export function TaskListScreen({ navigation, route }: Props) {
     const base = t.dueDate ? new Date(t.dueDate) : new Date();
     base.setDate(base.getDate() + days);
     try {
+      hapticTap();
       await updateTask(t.id, {
         dueDate: base.toISOString(),
         scheduledStart: t.scheduledStart ? new Date(Date.parse(t.scheduledStart) + days * 86400000).toISOString() : null,
@@ -225,6 +236,7 @@ export function TaskListScreen({ navigation, route }: Props) {
   };
 
   const confirmDelete = (t: Task) => {
+    hapticWarn();
     Alert.alert(`Delete "${t.title}"?`, "You can undo within 1 day.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -239,7 +251,8 @@ export function TaskListScreen({ navigation, route }: Props) {
   };
 
   const moreOptions = (t: Task) => {
-    const options = ["Edit", "Reschedule to tomorrow", t.status === "COMPLETED" ? "Archive" : "Ask assistant to plan it", "Delete", "Cancel"];
+    // One name per action across the app (docs/ux-audit.md §6), the same on iOS and Android.
+    const options = [tr("action.edit"), tr("action.moveTomorrow"), tr(t.status === "COMPLETED" ? "action.archive" : "action.planIt"), tr("action.delete"), tr("action.cancel")];
     const handle = (i: number) => {
       if (i === 0) navigation.navigate("EditTask", { taskId: t.id });
       else if (i === 1) void postpone(t, 1);
@@ -251,10 +264,10 @@ export function TaskListScreen({ navigation, route }: Props) {
       ActionSheetIOS.showActionSheetWithOptions({ options, destructiveButtonIndex: 3, cancelButtonIndex: 4, title: t.title }, handle);
     } else {
       Alert.alert(t.title, undefined, [
-        { text: "Edit", onPress: () => handle(0) },
-        { text: "Tomorrow", onPress: () => handle(1) },
-        { text: t.status === "COMPLETED" ? "Archive" : "Plan it", onPress: () => handle(2) },
-        { text: "Delete", style: "destructive", onPress: () => handle(3) },
+        { text: options[0], onPress: () => handle(0) },
+        { text: options[1], onPress: () => handle(1) },
+        { text: options[2], onPress: () => handle(2) },
+        { text: options[3], style: "destructive", onPress: () => handle(3) },
       ], { cancelable: true });
     }
   };
@@ -271,8 +284,8 @@ export function TaskListScreen({ navigation, route }: Props) {
             title="Managing tasks"
             text="Swipe right to complete, swipe left to postpone a day, long-press for more options. Filters combine; tags can match all (AND) or any (OR)."
           />
-          <Pressable style={styles.addBtn} onPress={() => navigation.navigate("AddTask")}>
-            <Text style={styles.addText}>New task</Text>
+          <Pressable style={styles.addBtn} onPress={() => navigation.navigate("AddTask")} accessibilityRole="button" hitSlop={8}>
+            <Text style={styles.addText}>{tr("action.addTask")}</Text>
           </Pressable>
         </View>
       </View>
@@ -299,7 +312,7 @@ export function TaskListScreen({ navigation, route }: Props) {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {RANGES.map((r) => (
-            <Chip key={r.key} small label={tr(r.label)} selected={range === r.key} onPress={() => setRange(r.key)} />
+            <Chip key={r.key} small label={tr(r.label)} selected={range === r.key} onPress={() => { hapticTap(); setRange(r.key); }} />
           ))}
         </ScrollView>
 
@@ -350,10 +363,31 @@ export function TaskListScreen({ navigation, route }: Props) {
         </Text>
 
         {filtered.length === 0 ? (
-          <EmptyState
-                        title={query ? "No matching tasks" : "Nothing here"}
-            text={query ? "Try another word." : "Tell the assistant what you need to do — it will organise it for you."}
-          />
+          (() => {
+            // UI v2: say why it's empty and offer the next step.
+            const e = tasksEmpty({ query, filters: activeFilters, range, status });
+            const act = {
+              clearSearch: { title: tr("empty.clearSearch"), onPress: () => setQuery("") },
+              clearFilters: { title: tr("empty.clearFilters"), onPress: () => { setCats([]); setTags([]); setStatus("ALL"); } },
+              addTask: { title: tr("action.addTask"), onPress: () => navigation.navigate("AddTask") },
+              planDay: { title: tr("empty.planDay"), onPress: () => navigation.navigate("Assistant", { payload: { type: "plan_day" }, label: "Plan my day", nonce: Date.now() }) },
+              askAssistant: { title: tr("empty.askAssistant"), onPress: () => navigation.navigate("Assistant") },
+            } as const;
+            return (
+              <EmptyState
+                icon={<Icon name="tasks" size={32} color={palette.muted} />}
+                title={tr(e.title as StringKey)}
+                text={tr(e.text as StringKey)}
+                action={
+                  <View style={styles.emptyActions}>
+                    {e.actions.map((a, i) => (
+                      <Button key={a} title={act[a].title} kind={i ? "secondary" : "primary"} size="sm" onPress={act[a].onPress} />
+                    ))}
+                  </View>
+                }
+              />
+            );
+          })()
         ) : (
           filtered.map((t) => {
             const kids = (childrenOf.get(t.id) ?? []).filter((k) => k.status !== "DELETED");
@@ -366,7 +400,7 @@ export function TaskListScreen({ navigation, route }: Props) {
                     categoryColors={categories}
                     onPress={() => navigation.navigate("TaskDetail", { taskId: t.id })}
                     onLongPress={() => moreOptions(t)}
-                    onStart={isLocalId(t.id) ? undefined : () => void startTaskNow(t.id).then((text) => setToast({ text }), (e) => setToast({ text: getApiErrorMessage(e) }))}
+                    onStart={isLocalId(t.id) ? undefined : () => { hapticTap(); void startTaskNow(t.id).then((text) => setToast({ text }), (e) => setToast({ text: getApiErrorMessage(e) })); }}
                     subtaskCount={kids.length}
                     expanded={expanded[t.id]}
                     onToggleExpand={() => setExpanded((e) => ({ ...e, [t.id]: !e[t.id] }))}
@@ -479,6 +513,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   swipeText: { fontFamily: "Inter_700Bold" },
+  emptyActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
   swipeSide: { flexDirection: "row", alignItems: "center", gap: 6 },
   navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
 });

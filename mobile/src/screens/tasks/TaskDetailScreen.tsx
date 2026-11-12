@@ -11,6 +11,7 @@ import { useLocale } from "../../i18n/LocaleProvider";
 import { useTheme } from "../../theme/ThemeProvider";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
+import { hapticDone, hapticTap } from "../../services/haptics";
 import { getApiErrorMessage } from "../../services/api";
 import { sendToAssistant, startTaskNow } from "../../services/assistantApi";
 import { isLocalId } from "../../services/syncEngine";
@@ -142,7 +143,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           <Card tone="danger" style={{ gap: 10 }}>
             <Text style={ui.body}>This is past its deadline and still pending. What would you like to do?</Text>
             <View style={ui.wrap}>
-              <Chip small selected label="Complete now" onPress={() => void viaAssistant("od", { type: "overdue_action", taskId: task.id, choice: "complete_now" }, "Complete now")} />
+              <Chip small selected label={t("action.doItNow")} onPress={() => void viaAssistant("od", { type: "overdue_action", taskId: task.id, choice: "complete_now" }, t("action.doItNow"))} />
               <Chip small label="I couldn't finish" onPress={() => void viaAssistant("od", { type: "overdue_action", taskId: task.id, choice: "couldnt" }, "I couldn't finish")} />
               <Chip small label="Need extension?" onPress={() => navigation.navigate("Assistant", { payload: { type: "overdue_action", taskId: task.id, choice: "extension" }, label: "Need an extension", nonce: Date.now() })} />
               <Chip small label="Plan finishing" onPress={() => navigation.navigate("Assistant", { payload: { type: "overdue_action", taskId: task.id, choice: "plan" }, label: "Plan finishing", nonce: Date.now() })} />
@@ -249,14 +250,15 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
         <View style={{ gap: 10 }}>
           {task.status === "PENDING" && !isLocalId(task.id) ? (
-            <Button title={t("task.start")} icon={<Icon name="play" size={18} color={themeColors.onAccent} />} loading={busy === "start"} onPress={() => void run("start", () => startTaskNow(task.id))} />
+            <Button title={t("task.start")} icon={<Icon name="play" size={18} color={themeColors.onAccent} />} loading={busy === "start"} onPress={() => { hapticTap(); void run("start", () => startTaskNow(task.id)); }} />
           ) : null}
           <Button
-            title={done ? "Reopen task" : "Mark complete"}
+            title={t(done ? "action.reopen" : "action.markDone")}
             kind={done || (task.status === "PENDING" && !isLocalId(task.id)) ? "secondary" : "primary"}
             loading={busy === "done"}
             onPress={() => void run("done", async () => {
               await updateTask(task.id, { status: done ? "PENDING" : "COMPLETED" });
+              if (!done) hapticDone();
               return done ? "Reopened" : "Marked as done";
             })}
           />
