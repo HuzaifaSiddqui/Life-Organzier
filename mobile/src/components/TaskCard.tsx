@@ -1,11 +1,13 @@
 import { Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { usePop } from "../theme/usePop";
 import { useLocale } from "../i18n/LocaleProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Task } from "../types/models";
 import { formatDue, isOverdue } from "../utils/format";
 import { priorityColor } from "../utils/priorityColors";
 import { Icon } from "./icons/Icon";
-import { Dot, HighlightText, IconButton, ProgressBar, Text } from "./ui";
+import { Dot, HighlightText, IconButton, PressableScale, ProgressBar, Text } from "./ui";
 
 type Props = {
   task: Task;
@@ -24,33 +26,35 @@ type Props = {
 const label = (p: string) => p.charAt(0) + p.slice(1).toLowerCase();
 
 export function TaskCard({ task, onPress, onLongPress, variant = "list", query = "", subtaskCount, expanded, onToggleExpand, onStart }: Props) {
-  const { colors, spacing, radii, elevation } = useTheme();
+  const { colors, spacing, radii, elevation, motion } = useTheme();
   const { t } = useLocale();
+  // Completing a task: the tick pops in (only on the change, never as the list loads).
+  const tickPop = usePop(task.status === "COMPLETED", { from: motion.pop.done, duration: motion.duration.base, when: task.status === "COMPLETED" });
   const done = task.status === "COMPLETED";
   const overdue = isOverdue(task);
   const progress = task.progress ?? 0;
   const meta = [formatDue(task), variant !== "compact" && !overdue && !done ? label(task.status.replace("_", " ")) : null, task.category].filter(Boolean);
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={`${task.title}, ${label(task.priority)} priority${overdue ? ", overdue" : ""}${done ? ", completed" : ""}`}
-      style={({ pressed }) => [
+      style={[
         styles.card,
         variant === "compact" ? { paddingVertical: spacing.md } : elevation(1),
         { borderRadius: radii.md, padding: variant === "compact" ? 0 : spacing.lg, marginBottom: variant === "compact" ? 0 : spacing.sm },
-        pressed && { opacity: 0.7 },
       ]}
+      pressedStyle={{ opacity: 0.85 }}
     >
       <View style={styles.row}>
         <View style={styles.lead}>
           {done ? (
-            <View style={[styles.doneMark, { backgroundColor: colors.text }]}>
+            <Animated.View style={[styles.doneMark, { backgroundColor: colors.text }, tickPop]}>
               <Icon name="check" size={11} color={colors.canvas} strokeWidth={2.4} />
-            </View>
+            </Animated.View>
           ) : (
             <Dot color={priorityColor(task.priority, colors)} />
           )}
@@ -99,7 +103,7 @@ export function TaskCard({ task, onPress, onLongPress, variant = "list", query =
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

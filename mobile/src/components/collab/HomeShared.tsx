@@ -1,6 +1,8 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { usePop } from "../../theme/usePop";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { getCollabSummary, getSharedTasks, type SharedTask } from "../../services/collabApi";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -38,8 +40,10 @@ function useCollabHome(): { unread: number; cards: SharedTask[] } | null {
 
 export function NotificationBell({ onPress }: { onPress: () => void }) {
   const { t } = useLocale();
-  const { colors, radii } = useTheme();
+  const { colors, radii, motion } = useTheme();
   const state = useCollabHome();
+  // The badge pops when the unread count changes (not on first show).
+  const badgePop = usePop(state?.unread ?? 0, { from: motion.pop.badge, duration: motion.duration.fast, when: Boolean(state?.unread) });
   if (!state) return null;
   const badge = badgeText(state.unread);
   return (
@@ -52,11 +56,11 @@ export function NotificationBell({ onPress }: { onPress: () => void }) {
     >
       <Icon name="bell" size={22} color={colors.text} />
       {badge ? (
-        <View style={[styles.badge, { backgroundColor: colors.danger.fg, borderRadius: radii.pill, borderColor: colors.canvas }]}>
+        <Animated.View style={[styles.badge, { backgroundColor: colors.danger.fg, borderRadius: radii.pill, borderColor: colors.canvas }, badgePop]}>
           <Text variant="caption" style={{ color: colors.onAccent, fontSize: 10, lineHeight: 12 }} tabular>
             {badge}
           </Text>
-        </View>
+        </Animated.View>
       ) : null}
     </Pressable>
   );

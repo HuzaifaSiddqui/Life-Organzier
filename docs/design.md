@@ -138,6 +138,7 @@ Shadows are invisible on dark canvases, so in dark mode depth comes from lighter
 | `duration.slow` | 300 ms | Upper bound |
 | `duration.pulse` | 900 ms | Skeleton breathing (one direction) |
 | `pressScale` | 0.97 | Press feedback |
+| `pop.done` / `pop.badge` | 0.6 / 0.8 | `usePop` start scale: the done tick (with `duration.base`), the bell badge (with `duration.fast`) |
 | `spring.press` | damping 22, stiffness 340, mass 0.6 | Press in/out |
 | `spring.gentle` | damping 20, stiffness 180, mass 1 | Sheet entrance |
 | `stagger` | step 40 ms, max 8 items, offsetY 8 | First-render list entrance |
@@ -148,7 +149,10 @@ Rules:
 - No linear easing. Use springs for press feedback and timing curves for fades.
 - **Reduce motion:** `PressableScale` drops the scale, `Skeleton` stops pulsing, and `useEntrance` returns nothing.
 - Entrance animation runs only on a screen's first render and only for the first 8 items. It never replays on scroll, refresh or re-render.
-- Haptics (`expo-haptics`): a light impact on task completion and when a swipe passes its threshold, and nowhere else.
+- Haptics (`expo-haptics`, `services/haptics.ts`, UI v2 PR 4): success on done, selection on start / range chips / move to tomorrow, warning before a delete confirm. Never the only feedback.
+- **Screen transitions (UI v2 PR 5, `MainStack`):** the five bottom-nav screens fade into each other; detail screens slide from the right; Add task slides up; `animationDuration` = `duration.slow` (iOS; Android uses the platform's own timing). Reduce motion: `animation: "none"`.
+- **Pops (UI v2 PR 5, `theme/usePop`):** scale from `pop.*` to 1 only when a value changes after the first render (never on mount, so lists don't animate as they load): the done tick on a task row, the bell badge when the unread count changes. Off with reduce motion.
+- **Press feedback:** task rows use `PressableScale` too (scale `pressScale` + 85 % opacity), like buttons, chips, cards and tiles.
 - Swipes use `react-native-gesture-handler` and must not capture vertical scrolling.
 
 ### Touch targets
@@ -285,12 +289,15 @@ Not added: `expo-blur` (solid surfaces first; candidate for the chat composer), 
 
 Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and plan: `docs/ux-audit.md`.
 
+- **PR 5, motion (12 Nov 2026).** Only four kinds of motion: tab fade / detail slide / Add-task slide-up, press scale, the done-tick pop, the bell-badge pop. Nothing animates per row while a list loads or scrolls. New motion goes through `usePop` or `PressableScale` and the `motion` tokens; `motionTokens.test.ts` keeps UI durations within 150–300 ms.
 - **PR 4, polish (12 Nov 2026).** New copy goes in `strings.ts` with Urdu; action labels come from `action.*` only. Haptics only through `services/haptics.ts`. An empty list always names the reason and offers a next step. Home's time rule is `isEvening()` (deterministic, local clock).
 - **PR 3, key flows (12 Nov 2026).** Start everywhere goes through `startTaskNow` (assistant `start_task`; keeps the plan, never "rescheduled"); unsynced (local-id) tasks get no Start. Any new swipe must keep its Undo and a visible alternative (row Start, long-press menu). Form copy `taskForm.*`, list copy `tasks.*`, `task.start*` (en + ur).
 - **PR 2, Home (12 Nov 2026).** Order: date / sync / bell → greeting → summary line ("3 due today · 1 overdue · 2 done", overdue in `danger`) → ask bar (type, speak) → quick row (Task, Upload) → context chips → Shared with you (COLLAB_TASKS) → Next up → tiles → tip → Needs attention → Today (workload bar moved here from the old stats card) → Check in → Insights → Organize (Memory only; Routines, Documents and Mood are tiles). Copy `home.*` in `strings.ts` (en + ur). New behaviour, approved: "Remind in 1 h" on Next up (local reminder, Undo; first named "Snooze 1 h"). The floating "+" also sits on Tasks.
 - **PR 1, colour (12 Nov 2026).** Only `theme/tokens.ts` holds colours. New tokens `accentStrong`, `brand`, `chartGrid`, `heat`. Use `colors.accent` for fills / borders / icons and `<Text color="accent">` (→ `accentStrong`) for text. Placeholders: `palette.muted` (legacy) or `colors.textTertiary`. Remove / tick marks are the `close` / `check` icons, never "✕" / "✓" text. Category colours offered in Settings are `palettes.light.category` (the curated 8). The native splash background (`app.json`, `#F6F5F2`) is unchanged: changing it needs a new build.
 
 ## Migration log
+
+**UI v2, PR 5 (motion, 12 Nov 2026).** Screen transitions per screen type (tab fade, detail slide, Add task slide-up; none with reduce motion), task rows on `PressableScale`, done-tick pop on task rows, bell-badge pop. Reanimated 4 only; no new native module.
 
 **UI v2, PR 4 (polish, 12 Nov 2026).** O: action names unified (Tasks header and long-press, task detail, Add screen title). M: haptics on done / start / chips / move / before delete. K: empty states with next actions on Tasks, Home Today and Routines. E: evening order on Home (check-in + Tomorrow card first after 18:00). Tasks also follows its `filter` parameter when opened again.
 

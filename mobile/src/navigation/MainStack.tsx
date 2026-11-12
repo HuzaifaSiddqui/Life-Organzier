@@ -1,3 +1,5 @@
+import { useReducedMotion } from "react-native-reanimated";
+import { motion } from "../theme/tokens";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { colors } from "../constants/theme";
 import { AssistantScreen } from "../screens/assistant/AssistantScreen";
@@ -57,14 +59,22 @@ export type MainStackParamList = {
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
 
+/**
+ * UI v2 motion (docs/ux-audit.md §8): the five bottom-nav screens fade into each other (switching tabs isn't moving
+ * deeper); detail screens slide in from the right; Add task slides up. Reduce motion: no transition.
+ */
+const TAB_SCREENS = new Set(["Dashboard", "TaskList", "Assistant", "Insights", "Profile"]);
+
 export function MainStack() {
+  const reduceMotion = useReducedMotion();
   return (
     <Stack.Navigator
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
-        animation: "slide_from_right",
+        animation: reduceMotion ? "none" : TAB_SCREENS.has(route.name) ? "fade" : route.name === "AddTask" ? "slide_from_bottom" : "slide_from_right",
+        animationDuration: motion.duration.slow,
         contentStyle: { backgroundColor: colors.bg },
-      }}
+      })}
     >
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
       <Stack.Screen name="Assistant" component={AssistantScreen} />

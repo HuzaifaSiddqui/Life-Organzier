@@ -176,6 +176,8 @@ export const motion = {
   duration: { fast: 150, base: 220, slow: 300, /** skeleton breathing, one direction */ pulse: 900 },
   /** Press feedback on buttons and tappable cards. */
   pressScale: 0.97,
+  /** UI v2 "pop" start scales (`usePop`): the done tick and the bell badge. */
+  pop: { done: 0.6, badge: 0.8 },
   spring: {
     press: { damping: 22, stiffness: 340, mass: 0.6 },
     gentle: { damping: 20, stiffness: 180, mass: 1 },
