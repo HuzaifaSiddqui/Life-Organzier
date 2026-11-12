@@ -7,6 +7,7 @@ import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, SectionTitle, Snackbar, ui } from "../../components/ui";
 import { Icon } from "../../components/icons/Icon";
 import { colors, palette } from "../../constants/theme";
+import { VersionLine } from "../../components/ServerAddressSheet";
 import { palettes } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -519,6 +520,7 @@ export function SettingsScreen({ navigation }: Props) {
           )}
           <Text style={styles.meta}>Privacy: your data is stored in your Life Organizer database and the AI runs on your own server — nothing is sold or shared.</Text>
         </Card>
+        <VersionLine />
       </ScrollView>
       <Snackbar
         text={toast}

@@ -14,6 +14,8 @@ import { firstReachableInOrder } from "../utils/firstReachable";
 import { api } from "./api";
 
 const STORAGE_LAST_GOOD = "life-organizer:last-working-api-base:v2";
+/** The user's own server address (Settings → long-press the version): tried before anything else. */
+const STORAGE_SERVER_ADDRESS = "life-organizer:server-address:v1";
 const STORAGE_SAVED_IPS = "life-organizer:saved-api-host-ips";
 
 const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
@@ -160,6 +162,7 @@ async function buildCandidateBases(): Promise<string[]> {
   const primary = normalizeApiBase(getPrimaryApiBaseUrl());
   const { port } = hostPortCandidates(primary);
 
+  const override = await getServerAddress();
   const lastGood = await loadLastGoodBase();
   const savedIps = await loadSavedHostIps();
   const envIps = getEnvExtraHostIps();
@@ -175,6 +178,7 @@ async function buildCandidateBases(): Promise<string[]> {
 
   const list: string[] = [];
 
+  if (override) list.push(override);
   if (lastGood) list.push(lastGood);
   list.push(primary);
 
@@ -226,6 +230,35 @@ function getLanSubnetPrefix(ip: string): string | null {
 
 let inFlight: Promise<boolean> | null = null;
 let lastResolved = false;
+
+/** The saved server address (an API base ending in /api), or null for automatic. */
+export async function getServerAddress(): Promise<string | null> {
+  try {
+    return (await AsyncStorage.getItem(STORAGE_SERVER_ADDRESS)) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Settings → Server address: checks `apiBase` against /health first and saves it only when the server answers;
+ * then it is used at once and tried first from now on. Returns whether it was saved.
+ */
+export async function trySetServerAddress(apiBase: string): Promise<boolean> {
+  if (!(await probe(apiBase))) return false;
+  await AsyncStorage.setItem(STORAGE_SERVER_ADDRESS, apiBase);
+  api.defaults.baseURL = apiBase;
+  await persistLastGoodBase(apiBase);
+  lastResolved = true;
+  return true;
+}
+
+/** Back to automatic (built-in address, last working one, LAN guesses). */
+export async function clearServerAddress(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_SERVER_ADDRESS).catch(() => undefined);
+  await AsyncStorage.removeItem(STORAGE_LAST_GOOD).catch(() => undefined);
+  void resolveAndApplyApiBase();
+}
 
 /** Whether the last probe pass found a reachable server (false before the first pass ends). */
 export function isApiReachable(): boolean {
