@@ -275,6 +275,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   `TASK_UPDATED` event). A check-in for a moved slot plans no completion check-in for the old slot; the new slot gets
   its own. Only a task with no planned time gets a focus block from "now".
 
+## Swipe Undo on Tasks
+
+- Undo of a swipe restores the previous status and progress exactly (status alone used to leave a reopened task at
+  75 %, the server's cap for a reopen without a progress). Undo of a "reopen" swipe (done → open → Undo) marks the task
+  done again with today's completion time, not the original one; analytics count it as completed now.
+- A plain reopen (task detail "Reopen task", or a swipe without Undo) still keeps `min(progress, 75)`, by design.
+
 ## Platform and UI
 
 - Dark mode and Urdu right-to-left layout are built but switched off (`DARK_MODE_READY`, `RTL_READY`); see
