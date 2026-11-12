@@ -69,7 +69,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
                   keyboardType="email-address"
                   style={styles.input}
                   placeholder="you@example.com"
-                  placeholderTextColor="#646A78"
+                  placeholderTextColor={palette.muted}
                 />
                 {fieldState.error ? (
                   <Text style={styles.fieldError}>{fieldState.error.message}</Text>

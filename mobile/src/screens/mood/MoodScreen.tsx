@@ -103,7 +103,7 @@ export function MoodScreen({ navigation }: Props) {
               <Chip key={m} small label={m} selected={mood === m} onPress={() => setMood(mood === m ? null : m)} />
             ))}
           </View>
-          <TextInput style={ui.input} value={note} onChangeText={setNote} placeholder="Anything on your mind? (optional)" placeholderTextColor="#646A78" />
+          <TextInput style={ui.input} value={note} onChangeText={setNote} placeholder="Anything on your mind? (optional)" placeholderTextColor={palette.muted} />
           <Button title="Log mood" kind="tonal" onPress={() => void save()} loading={busy} disabled={score === null && !mood} />
         </Card>
 

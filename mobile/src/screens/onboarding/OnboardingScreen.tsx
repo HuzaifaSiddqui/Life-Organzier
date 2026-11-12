@@ -141,7 +141,7 @@ export function OnboardingScreen({ navigation }: Props) {
               ))}
             </View>
             <View style={styles.row}>
-              <TextInput style={[ui.input, { flex: 1 }]} value={customContext} onChangeText={setCustomContext} placeholder="Add your own" placeholderTextColor="#646A78" />
+              <TextInput style={[ui.input, { flex: 1 }]} value={customContext} onChangeText={setCustomContext} placeholder="Add your own" placeholderTextColor={palette.muted} />
               <Chip
                 label="Add"
                 onPress={() => {

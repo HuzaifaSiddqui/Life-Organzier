@@ -99,7 +99,7 @@ export function SignupScreen({ navigation }: Props) {
                       keyboardType="email-address"
                       style={styles.input}
                       placeholder="you@example.com"
-                      placeholderTextColor="#646A78"
+                      placeholderTextColor={palette.muted}
                     />
                     {fieldState.error ? (
                       <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -120,7 +120,7 @@ export function SignupScreen({ navigation }: Props) {
                       secureTextEntry
                       style={styles.input}
                       placeholder="At least 8 characters"
-                      placeholderTextColor="#646A78"
+                      placeholderTextColor={palette.muted}
                     />
                     {fieldState.error ? (
                       <Text style={styles.fieldError}>{fieldState.error.message}</Text>
@@ -141,7 +141,7 @@ export function SignupScreen({ navigation }: Props) {
                       secureTextEntry
                       style={styles.input}
                       placeholder="Repeat password"
-                      placeholderTextColor="#646A78"
+                      placeholderTextColor={palette.muted}
                     />
                     {fieldState.error ? (
                       <Text style={styles.fieldError}>{fieldState.error.message}</Text>

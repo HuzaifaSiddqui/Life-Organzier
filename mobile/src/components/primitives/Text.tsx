@@ -31,7 +31,7 @@ export function colorFor(c: Palette, color: TextColor): string {
     case "tertiary":
       return c.textTertiary;
     case "accent":
-      return c.accent;
+      return c.accentStrong; // text: AA on canvas, surface and accentSoft (fills use colors.accent)
     case "onAccent":
       return c.onAccent;
     case "onInverse":
