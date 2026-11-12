@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import { NavigationBar } from "expo-navigation-bar";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useColorScheme } from "react-native";
+import { Platform, useColorScheme } from "react-native";
 import { elevation, motion, palettes, radii, spacing, typeScale, type ColorScheme, type Elevation, type Palette } from "./tokens";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -68,7 +68,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
     <ThemeContext.Provider value={value}>
       <StatusBar style={bars} />
-      <NavigationBar style={bars} />
+      {Platform.OS === "android" ? <NavigationBar style={bars} /> : null}
       {children}
     </ThemeContext.Provider>
   );

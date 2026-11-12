@@ -1,7 +1,7 @@
 # Life Organizer — guide for AI coding assistants
 
 AI personal assistant (Final Year Project, deadline 1 Nov 2026). Users type, speak, upload documents
-or message on WhatsApp; the app turns that into tasks, routines, reminders and a daily plan, tracks
+or message on WhatsApp, on the phone or the Windows desktop app; the app turns that into tasks, routines, reminders and a daily plan, tracks
 mood and learns habits. Target users are students in Pakistan (English + Urdu).
 
 ## Stack
@@ -9,9 +9,10 @@ mood and learns habits. Target users are students in Pakistan (English + Urdu).
 | Part | Tech |
 |---|---|
 | Mobile (`mobile/`) | Expo SDK 57, React Native 0.86, React 19, TypeScript, React Navigation (native stack), axios, Firebase Auth (client), expo-notifications, expo-speech / expo-speech-recognition, Reanimated 4 + gesture-handler, react-hook-form + zod |
+| Desktop (`desktop/`) | Electron shell around the Expo **web** build of `mobile/` (react-native-web; `*.web.ts(x)` platform files), app:// protocol, tray, Windows notifications, electron-builder NSIS installer. See `docs/desktop.md` |
 | Backend (`backend/`) | Node 24, Express 4, TypeScript (ESM, run with `tsx`), Prisma 6 + PostgreSQL, firebase-admin, zod, multer, pdf-parse / pdfjs-dist, mammoth (DOCX), tesseract.js (OCR) |
 | AI | Ollama (local): `qwen2.5:7b` chat (`OLLAMA_MODEL`), `nomic-embed-text` embeddings. Optional Gemini provider (off by default) |
-| CI | `.github/workflows/ci.yml`: backend typecheck + tests, mobile typecheck + vitest |
+| CI | `.github/workflows/ci.yml`: backend typecheck + tests, mobile typecheck + vitest + web export, desktop typecheck + tests |
 
 ## Repo layout
 
@@ -42,6 +43,12 @@ mobile/
   src/i18n/strings.ts          UI copy (en + ur); LocaleProvider.tsx (`useLocale()`)
   src/services/                API clients, syncEngine (offline queue), reminders (local notifications), speech
   src/constants/theme.ts       Deprecated legacy palette mapped onto tokens (unmigrated screens)
+  src/**/*.web.ts(x)           Web / desktop builds of phone-only modules (reminders, push, calendar, location,
+                               firebase, MapPicker, date picker, share); src/types/platformParity.ts checks their exports
+desktop/
+  src/main.ts                  Electron main: app:// protocol, window, tray, reminder timers, start with Windows
+  src/preload.ts               window.lifeOrganizer bridge (mirrors mobile/src/services/desktopBridge.ts)
+  src/reminderScheduler.ts, appProtocol.ts, appIdentity.ts   Pure, tested (test/*.test.ts, node:test)
 ```
 
 ## Run, test, typecheck
@@ -56,10 +63,13 @@ cd ../mobile && npm install
 cd backend && npm run dev                 # http://localhost:5050 (PORT in backend/.env); GET /health
 adb reverse tcp:5050 tcp:5050             # USB phone reaches the API at 127.0.0.1:5050
 cd mobile && npx expo start --dev-client  # or `npx expo run:android` after native changes / new native deps
+cd mobile && npx expo start --web         # desktop UI in a browser; then `cd desktop && npm run dev` for the Electron shell
+cd desktop && npm run dist                # web export + Windows installer in desktop/release/
 
 # checks
 cd backend && npm run typecheck && npm test
 cd mobile && npx tsc --noEmit && npm test   # vitest: pure modules in src/utils/__tests__
+cd desktop && npm run typecheck && npm test
 cd backend && npm run smoke               # HTTP checks; needs DB + running server
 ```
 
@@ -72,8 +82,10 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
   validated with zod; failures return `null` and the rules path continues.
 - **Deterministic code owns** dates/times, the Clarity Index, scheduling, reminders, patterns,
   overload/conflict checks and **safety (crisis detection)**. Never route these through the LLM.
-- **AI only via the backend.** The mobile app never calls a model or holds AI keys.
-- **One engine for every channel.** App chat, voice and WhatsApp all go through
+- **AI only via the backend.** The mobile and desktop apps never call a model or hold AI keys.
+- **One app, two shells.** The desktop app is the same `mobile/` code built for web; phone-only modules get a
+  `*.web.ts(x)` twin with the same exports (checked by `src/types/platformParity.ts`), never a fork of a screen.
+- **One engine for every channel.** App chat (phone and desktop), voice and WhatsApp all go through
   `handleAssistantMessage` in `assistant/dialogue.ts`; memory is shared across channels.
 - **Providers are replaceable** (`LlmProvider` in `ai/llm.ts`). If Ollama is down, the circuit
   breaker skips it and the assistant keeps working on rules.
@@ -90,14 +102,16 @@ After adding native packages, restart Metro with `-c` (stale cache crashes the a
 - `docs/known-limitations.md` — known gaps and platform restrictions.
 - `docs/whatsapp-agent.md` — WhatsApp Agent beta (flags, confirmed vs unconfirmed, probe); results in `docs/whatsapp-agent-findings.md`.
 - `docs/checkins-evaluation-method.md` — how check-ins are evaluated (research mode, measures, privacy, validity).
+- `docs/desktop.md` — Windows desktop app (how it is built, run, installed; what differs from the phone).
 
 ## Out of scope (future work — do not implement)
 
-- Desktop app
+- Nothing at present. (The desktop app was brought into scope on 12 Nov 2026: `desktop/`, `docs/desktop.md`.)
 
 ## Rules for changes
 
-- Run backend `npm run typecheck && npm test` and mobile `npx tsc --noEmit && npm test` before finishing any task.
+- Run backend `npm run typecheck && npm test` and mobile `npx tsc --noEmit && npm test` before finishing any task
+  (and `desktop` `npm run typecheck && npm test` when `desktop/` or a `*.web.ts(x)` file changes).
 - Add a unit test for non-trivial logic (parsers, merge rules, planners, safety checks).
 - UI work follows `docs/design.md` and updates it (tokens, components, migration log) in the same change.
   Use primitives + `useTheme()`; no raw hex, no emoji as icons, copy via `t()` where migrated.

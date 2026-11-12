@@ -93,3 +93,24 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
+      # The desktop app runs this build (docs/desktop.md): it must bundle for web too.
+      - run: npx expo export -p web
+
+  # Desktop shell (Electron): typecheck + pure tests (scheduler, app:// paths, IPC parity). No Electron binary needed.
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

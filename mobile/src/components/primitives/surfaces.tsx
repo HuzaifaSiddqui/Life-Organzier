@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Keyboard, Modal, Pressable, StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
+import { Keyboard, Modal, Platform, Pressable, StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedKeyboard, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radii, spacing } from "../../theme/tokens";
+import { layout, radii, spacing } from "../../theme/tokens";
+import { useLayout } from "../../theme/useLayout";
 import { PressableScale } from "./controls";
 import { Text } from "./Text";
 
@@ -98,6 +99,12 @@ export function ListItem({
  * One wraps the whole app (RootNavigator). A Modal is a separate window and needs its own.
  */
 export function KeyboardPad({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  // Web / desktop: no on-screen keyboard to avoid (and useAnimatedKeyboard isn't available there).
+  if (Platform.OS === "web") return <View style={[styles.keyboardPad, style]}>{children}</View>;
+  return <PhoneKeyboardPad style={style}>{children}</PhoneKeyboardPad>;
+}
+
+function PhoneKeyboardPad({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const animated = useAnimatedKeyboard(); // follows the keyboard frame by frame in the app window
   const [shown, setShown] = useState(0); // keyboard events also arrive while a Modal has the keyboard
   useEffect(() => {
@@ -112,8 +119,16 @@ export function KeyboardPad({ children, style }: { children: ReactNode; style?: 
   return <Animated.View style={[styles.keyboardPad, style, pad]}>{children}</Animated.View>;
 }
 
-/** Bottom sheet (elevation 2). Tapping the scrim or back closes it. Not for text entry: see LocationPickerSheet. */
-export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+/**
+ * Bottom sheet (elevation 2). Tapping the scrim or back closes it. Not for text entry: see LocationPickerSheet.
+ * Wide windows (desktop) show the same content as a centred Dialog: a full-width sheet doesn't fit a desktop window.
+ */
+export function Sheet(props: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+  const { isWide } = useLayout();
+  return isWide ? <Dialog {...props} /> : <BottomSheet {...props} />;
+}
+
+function BottomSheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
   const { colors, elevation, motion } = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
@@ -148,6 +163,30 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
   );
 }
 
+/**
+ * Centred dialog (elevation 2), at most `layout.dialogMax` wide. Used for confirmations on web / desktop (DialogHost)
+ * and for sheets on wide windows. Tapping the scrim or Esc / back closes it.
+ */
+export function Dialog({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+  const { colors, elevation } = useTheme();
+  const { t } = useLocale();
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <View style={styles.dialogRoot}>
+        <Pressable style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t("common.close")} />
+        <View accessibilityViewIsModal accessibilityRole="alert" style={[styles.dialog, elevation(2)]}>
+          {title ? (
+            <Text variant="title2" accessibilityRole="header">
+              {title}
+            </Text>
+          ) : null}
+          {children}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 /** Placeholder block. Compose skeletons that match the final layout; never use a bare spinner for content. */
 export function Skeleton({ height = 16, width = "100%", radius = radii.sm, style }: { height?: number; width?: DimensionValue; radius?: number; style?: StyleProp<ViewStyle> }) {
   const { colors, motion } = useTheme();
@@ -176,4 +215,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, marginBottom: spacing.sm },
+  dialogRoot: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
+  dialog: { width: "100%", maxWidth: layout.dialogMax, borderRadius: radii.lg, padding: spacing.xl, gap: spacing.md },
 });

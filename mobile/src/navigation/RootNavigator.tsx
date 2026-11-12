@@ -26,6 +26,7 @@ import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen
 import { CheckinSheet } from "../components/CheckinSheet";
 import { LocationSnackbar } from "../components/LocationSnackbar";
 import { CalendarChangesSnackbar } from "../components/CalendarChangesSnackbar";
+import { DialogHost } from "../components/DialogHost";
 import { KeyboardPad } from "../components/primitives";
 import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
@@ -175,6 +176,7 @@ export function RootNavigator() {
         {firebaseUser?.emailVerified && !firstSync ? <CheckinSheet /> : null}
         {firebaseUser?.emailVerified && !firstSync ? <LocationSnackbar /> : null}
         {firebaseUser?.emailVerified && !firstSync ? <CalendarChangesSnackbar /> : null}
+        {Platform.OS === "web" ? <DialogHost /> : null}
       </NavigationContainer>
     </KeyboardPad>
   );

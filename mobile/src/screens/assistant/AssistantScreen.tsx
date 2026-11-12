@@ -15,6 +15,7 @@ import { AssistantCards } from "../../components/assistant/AssistantCards";
 import { MentionPicker } from "../../components/collab/MentionPicker";
 import { ListeningWaveform } from "../../components/ListeningWaveform";
 import { MicIcon } from "../../components/icons/MicIcon";
+import { platformFeatures } from "../../constants/platformFeatures";
 import { Icon } from "../../components/icons/Icon";
 import { SendIcon } from "../../components/icons/SendIcon";
 import { HelpButton, SyncBadge, TutorialTip } from "../../components/ui";
@@ -199,8 +200,8 @@ export function AssistantScreen({ navigation, route }: Props) {
     if (p.payload) void send({ payload: p.payload, label: p.label });
     else if (p.prefill && p.autoSend) void send({ text: p.prefill });
     else if (p.prefill) setDraft(p.prefill);
-    if (p.voice) void startVoice();
-  }, [loading, route.params, send, startVoice]);
+    if (p.voice && speechSupported) void startVoice();
+  }, [loading, route.params, send, speechSupported, startVoice]);
 
   const onAction = useCallback(
     (action: QuickAction | { payload: ActionPayload; label: string }) => {
@@ -258,7 +259,7 @@ export function AssistantScreen({ navigation, route }: Props) {
         </Pressable>
         <HelpButton
           title="Talking to your assistant"
-          text="Type or speak naturally. I can add tasks and routines, update or complete them, plan your day, track your mood, and I remember what you tell me (see Me → What I know). Tap the suggestions under my replies to act in one tap."
+          text={`${platformFeatures.voiceInput ? "Type or speak naturally" : "Type naturally"}. I can add tasks and routines, update or complete them, plan your day, track your mood, and I remember what you tell me (see Me → What I know). Tap the suggestions under my replies to act in one tap.`}
           example={'"Move the physics assignment to Monday and make it urgent"'}
         />
       </View>

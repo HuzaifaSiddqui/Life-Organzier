@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Network from "expo-network";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import { auth } from "../lib/firebase";
 import type { Task } from "../types/models";
 import { api, isNetworkError } from "./api";
@@ -267,6 +267,12 @@ export function retrySync(): Promise<boolean> {
   return syncNow();
 }
 
+/**
+ * Background re-sync. The phone gets a push when something changes elsewhere, so 6 h is a safety net; the desktop
+ * (web build) has no push and often sits in the tray, so it pulls every 2 minutes (FR-MS-003 "within minutes").
+ */
+const PERIODIC_SYNC_MS = Platform.OS === "web" ? 2 * 60000 : 6 * 3600000;
+
 /** Starts listeners: sync on reconnect and on app foreground (FR-MS-001 §3). */
 export function startSyncEngine(): () => void {
   if (started) return () => undefined;
@@ -282,7 +288,7 @@ export function startSyncEngine(): () => void {
   });
   const periodic = setInterval(() => {
     if (auth.currentUser) void syncNow();
-  }, 6 * 3600000);
+  }, PERIODIC_SYNC_MS);
   return () => {
     started = false;
     net.remove();

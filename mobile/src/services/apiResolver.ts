@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Constants from "expo-constants";
 import * as Network from "expo-network";
+import { Platform } from "react-native";
 import {
   getEnvExtraHostIps,
   getEnvFallbackApiBaseUrls,
@@ -195,6 +196,8 @@ async function buildCandidateBases(): Promise<string[]> {
 }
 
 async function getDeviceLanIp(): Promise<string | null> {
+  // Web / desktop: no LAN address API, and guessing hosts from a browser would fire cross-origin probes.
+  if (Platform.OS === "web") return null;
   try {
     const ipAddress = await Network.getIpAddressAsync();
     if (typeof ipAddress === "string" && isValidLanIpv4(ipAddress)) {

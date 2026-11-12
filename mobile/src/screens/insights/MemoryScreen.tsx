@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ConfidenceMeter, EmptyState, HelpButton, SectionTitle, Snackbar, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
@@ -10,6 +10,7 @@ import { getApiErrorMessage } from "../../services/api";
 import { addMemory, editMemory, forgetEverything, forgetMemory, getMemory } from "../../services/insightsApi";
 import type { MemoryItem, Pattern } from "../../types/models";
 import { relativeTime } from "../../utils/format";
+import { showAlert } from "../../services/dialog";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Memory">;
 
@@ -173,7 +174,7 @@ export function MemoryScreen({ navigation }: Props) {
             title="Forget everything"
             kind="secondary"
             onPress={() =>
-              Alert.alert("Forget everything?", "I'll lose all preferences and learned patterns. Your tasks are not affected.", [
+              showAlert("Forget everything?", "I'll lose all preferences and learned patterns. Your tasks are not affected.", [
                 { text: "Cancel", style: "cancel" },
                 {
                   text: "Forget",

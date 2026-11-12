@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { Icon } from "../../components/icons/Icon";
 import { LocationPickerSheet } from "../../components/LocationPickerSheet";
 import { MapPicker } from "../../components/MapPicker";
@@ -14,6 +14,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import type { SavedLocation } from "../../types/models";
 import { distanceM } from "../../utils/geofence";
 import { centerForPlaces, presetRadius } from "../../utils/map";
+import { showAlert } from "../../services/dialog";
 
 type Props = NativeStackScreenProps<MainStackParamList, "SavedPlaces">;
 
@@ -45,7 +46,7 @@ export function SavedPlacesScreen({ navigation }: Props) {
   );
 
   const confirmDelete = (p: SavedLocation) =>
-    Alert.alert(t("places.deleteTitle", { name: p.name }), t("places.deleteBody"), [
+    showAlert(t("places.deleteTitle", { name: p.name }), t("places.deleteBody"), [
       { text: t("places.cancel"), style: "cancel" },
       {
         text: t("places.delete"),

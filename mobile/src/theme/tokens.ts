@@ -114,6 +114,12 @@ export const radii = { sm: 8, md: 12, lg: 20, pill: 999 } as const;
 /** Minimum touch target (Android 48dp; also satisfies iOS 44pt). */
 export const touchTarget = 48;
 
+/**
+ * Desktop / wide windows (docs/design.md "Desktop layout"). From `wideMin` the app shows a start-side sidebar instead
+ * of the bottom nav and caps reading width; sheets become centred dialogs no wider than `dialogMax`.
+ */
+export const layout = { wideMin: 960, sidebarWidth: 240, contentMax: 760, dialogMax: 480 } as const;
+
 export const fonts = {
   regular: "Inter_400Regular",
   medium: "Inter_500Medium",
@@ -165,10 +171,19 @@ export function elevation(level: Elevation, scheme: ColorScheme): ViewStyle {
   const border: ViewStyle = { borderWidth: 1, borderColor: p.hairline };
   // Dark: depth comes from lighter surfaces + hairline; shadows are invisible on dark canvases.
   if (scheme === "dark") return { ...border, backgroundColor: level === 1 ? p.surface : p.sheet };
+  // Web / desktop: `elevation` draws nothing in a browser, so the same depth as a CSS box-shadow.
   const shadow =
     level === 1
-      ? Platform.select<ViewStyle>({ ios: { shadowColor: "#0F1B2D", shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }, default: { elevation: 1 } })
-      : Platform.select<ViewStyle>({ ios: { shadowColor: "#0F1B2D", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } }, default: { elevation: 8 } });
+      ? Platform.select<ViewStyle>({
+          ios: { shadowColor: "#0F1B2D", shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+          web: { boxShadow: "0px 1px 3px rgba(15, 27, 45, 0.06)" },
+          default: { elevation: 1 },
+        })
+      : Platform.select<ViewStyle>({
+          ios: { shadowColor: "#0F1B2D", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
+          web: { boxShadow: "0px 6px 16px rgba(15, 27, 45, 0.12)" },
+          default: { elevation: 8 },
+        });
   return { ...border, ...shadow, backgroundColor: level === 1 ? p.surface : p.sheet };
 }
 

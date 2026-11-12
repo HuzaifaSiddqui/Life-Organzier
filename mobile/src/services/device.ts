@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import { isDesktopApp } from "./desktopBridge";
 
 const KEY = "life-organizer:device-id";
 let cached: string | null = null;
@@ -16,7 +17,9 @@ export async function getDeviceId(): Promise<string> {
   } catch {
     // fall through and generate
   }
-  const id = `${Platform.OS}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  // Desktop (Electron) and plain browsers both run the web build; the id says which, for sync history (FR-MS-004).
+  const kind = Platform.OS === "web" ? (isDesktopApp() ? "desktop" : "web") : Platform.OS;
+  const id = `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   cached = id;
   try {
     await AsyncStorage.setItem(KEY, id);

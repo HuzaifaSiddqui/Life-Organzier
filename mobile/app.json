@@ -31,7 +31,10 @@
       "package": "com.anonymous.lifeorganizer"
     },
     "web": {
-      "favicon": "./assets/branding/app-icon.png"
+      "favicon": "./assets/branding/app-icon.png",
+      "bundler": "metro",
+      "output": "single",
+      "name": "Life Organizer"
     },
     "plugins": [
       [

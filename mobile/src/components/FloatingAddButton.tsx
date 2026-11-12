@@ -2,14 +2,20 @@ import { StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocale } from "../i18n/LocaleProvider";
 import { useTheme } from "../theme/ThemeProvider";
+import { useLayout } from "../theme/useLayout";
 import { Icon } from "./icons/Icon";
 import { PressableScale } from "./primitives";
 
-/** UI v2: the "+" within thumb reach, bottom right above the bottom nav (Home and Tasks). Opens the task form. */
+/**
+ * UI v2: the "+" within thumb reach, bottom right above the bottom nav (Home and Tasks). Opens the task form.
+ * Wide windows (desktop) have "New task" in the Sidebar instead, so it renders nothing there.
+ */
 export function FloatingAddButton({ onPress }: { onPress: () => void }) {
   const { t } = useLocale();
   const { colors, elevation } = useTheme();
   const insets = useSafeAreaInsets();
+  const { isWide } = useLayout();
+  if (isWide) return null;
   return (
     <PressableScale
       onPress={onPress}

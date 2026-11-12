@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { StateChip } from "../../components/collab/StateChip";
 import { Icon } from "../../components/icons/Icon";
 import { ScreenHeader } from "../../components/ScreenHeader";
@@ -38,6 +38,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import type { Task } from "../../types/models";
 import { cleanUsername, collabErrorKey, doneCount, personLabel, searchable } from "../../utils/collab";
 import { formatDue, formatDuration, relativeTime } from "../../utils/format";
+import { showAlert } from "../../services/dialog";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Collab">;
 type Tab = "requests" | "people" | "shared";
@@ -336,7 +337,7 @@ function PeopleTab({ data, busy, run, onRefresh }: { data: Data; busy: string | 
   };
 
   const remove = (connectionId: string, name: string) =>
-    Alert.alert(t("collab.remove.title", { name }), t("collab.remove.body"), [
+    showAlert(t("collab.remove.title", { name }), t("collab.remove.body"), [
       { text: t("collab.remove.keep"), style: "cancel" },
       {
         text: t("collab.remove.confirm"),
@@ -344,7 +345,7 @@ function PeopleTab({ data, busy, run, onRefresh }: { data: Data; busy: string | 
         onPress: () =>
           void run(`rm-${connectionId}`, async () => {
             const r = await removeConnection(connectionId);
-            if (!r.removed) Alert.alert(t("collab.err.OPEN_SHARED_TASKS"), `${t("collab.remove.blocked", { name })}\n\n${r.openTasks.map((o) => `• ${o.title}`).join("\n")}`);
+            if (!r.removed) showAlert(t("collab.err.OPEN_SHARED_TASKS"), `${t("collab.remove.blocked", { name })}\n\n${r.openTasks.map((o) => `• ${o.title}`).join("\n")}`);
           }),
       },
     ]);
@@ -509,17 +510,17 @@ const SharedCard = memo(function SharedCard({
     .filter(Boolean)
     .join(" · ");
   const confirmRemove = (userId: string, name: string) =>
-    Alert.alert(t("collab.shared.removeConfirm", { name, title: s.title }), t("collab.shared.removeBody"), [
+    showAlert(t("collab.shared.removeConfirm", { name, title: s.title }), t("collab.shared.removeBody"), [
       { text: t("collab.shared.cancelNo"), style: "cancel" },
       { text: t("collab.shared.removeYes"), style: "destructive", onPress: () => void run(`remove-${s.id}-${userId}`, () => removeSharedMember(s.id, userId)) },
     ]);
   const confirmLeave = () =>
-    Alert.alert(t("collab.shared.leaveConfirm", { title: s.title }), t("collab.shared.leaveBody"), [
+    showAlert(t("collab.shared.leaveConfirm", { title: s.title }), t("collab.shared.leaveBody"), [
       { text: t("collab.shared.cancelNo"), style: "cancel" },
       { text: t("collab.shared.leaveYes"), style: "destructive", onPress: () => void run(`leave-${s.id}`, () => leaveSharedTask(s.id)) },
     ]);
   const confirmCancel = () =>
-    Alert.alert(t("collab.shared.cancelConfirm", { title: s.title }), t("collab.shared.cancelBody"), [
+    showAlert(t("collab.shared.cancelConfirm", { title: s.title }), t("collab.shared.cancelBody"), [
       { text: t("collab.shared.cancelNo"), style: "cancel" },
       { text: t("collab.shared.cancelYes"), style: "destructive", onPress: () => void run(`cancel-${s.id}`, () => cancelSharedTask(s.id)) },
     ]);

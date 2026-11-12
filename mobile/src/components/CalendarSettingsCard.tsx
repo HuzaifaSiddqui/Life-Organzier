@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, Switch, View } from "react-native";
+import { StyleSheet, Switch, View } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
 import {
   calendarFeatureOn,
@@ -13,6 +13,7 @@ import {
 import { useTheme } from "../theme/ThemeProvider";
 import { Icon } from "./icons/Icon";
 import { Button, Card, ListItem, SectionTitle, Text } from "./ui";
+import { showAlert } from "../services/dialog";
 
 /**
  * CALENDAR_SYNC: Settings → Phone calendar. Hidden while the server flag is off. The switch asks for calendar access
@@ -55,7 +56,7 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
 
   const removeAll = async () => {
     const n = await ourEventCount();
-    Alert.alert(t("calendar.removeTitle"), t("calendar.removeBody", { count: String(n) }), [
+    showAlert(t("calendar.removeTitle"), t("calendar.removeBody", { count: String(n) }), [
       { text: t("calendar.cancel"), style: "cancel" },
       {
         text: t("calendar.remove"),

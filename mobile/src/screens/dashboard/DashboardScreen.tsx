@@ -9,6 +9,7 @@ import { FloatingAddButton } from "../../components/FloatingAddButton";
 import { QuickTiles } from "../../components/home/QuickTiles";
 import { Icon as LineIcon } from "../../components/icons/Icon";
 import { MicIcon } from "../../components/icons/MicIcon";
+import { platformFeatures } from "../../constants/platformFeatures";
 import { Button, Card, Chip, Dot, ProgressBar, Skeleton, Snackbar, SyncBadge, Text, TutorialTip } from "../../components/ui";
 import { NotificationBell, SharedWithYouCard } from "../../components/collab/HomeShared";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -29,6 +30,7 @@ import { formatDuration, formatTime } from "../../utils/format";
 import { isEvening, moodCaption, routinesCaption, summaryParts, thenUp, tomorrowPreview } from "../../utils/homeCards";
 import { getCachedTasks } from "../../services/tasksApi";
 import { NEXT_UP_SNOOZE_MINUTES } from "../../utils/taskSnooze";
+import { useLayout } from "../../theme/useLayout";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Dashboard">;
 
@@ -69,6 +71,7 @@ function greetingFor(b: Briefing | null): string {
 
 export function DashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { bottomPad } = useLayout();
   const { colors, spacing, radii } = useTheme();
   const { t } = useLocale();
   const { settings, update } = usePreferences();
@@ -226,7 +229,7 @@ export function DashboardScreen({ navigation }: Props) {
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.canvas }]}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 160, gap: spacing.xl }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad(insets.bottom + 160), gap: spacing.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.textTertiary} onRefresh={() => { setRefreshing(true); void load(true); }} />}
         showsVerticalScrollIndicator={false}
       >
@@ -274,6 +277,7 @@ export function DashboardScreen({ navigation }: Props) {
             <Text variant="body" color="tertiary" style={styles.flex}>
               Ask anything or add a task
             </Text>
+            {platformFeatures.voiceInput ? (
             <Pressable
               onPress={() => navigation.navigate("Assistant", { voice: true, nonce: Date.now() })}
               accessibilityRole="button"
@@ -283,6 +287,7 @@ export function DashboardScreen({ navigation }: Props) {
             >
               <MicIcon size={16} color={colors.canvas} />
             </Pressable>
+            ) : null}
           </Pressable>
 
           <View style={[styles.row, { gap: spacing.sm }]}>

@@ -3,7 +3,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
 import * as Network from "expo-network";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineReviewItem";
 import { InstructionInput, InstructionPanel } from "../../components/DocumentInstruction";
 import { DocumentTextView } from "../../components/DocumentTextView";
@@ -31,6 +31,7 @@ import {
   type ProcessResult,
 } from "../../services/documentsApi";
 import { WEEKDAYS_SHORT } from "../../utils/format";
+import { showAlert } from "../../services/dialog";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Documents">;
 
@@ -47,7 +48,8 @@ const LANGS = [
 ];
 const MAX_BYTES = 10 * 1024 * 1024;
 
-type Picked = { uri: string; name: string; mimeType: string; size: number };
+/** `file`: the browser File on web / desktop (uploaded as is; see utils/uploadPart). */
+type Picked = { uri: string; name: string; mimeType: string; size: number; file?: Blob | null };
 /** filteredOut: DOC_INSTRUCTIONS, left out by the user's request (hidden unless "Show everything", never pre-ticked). */
 type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags; filteredOut: boolean };
 type EditableSchedule = { index: number; title: string; room: string; roomCheck: boolean; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean; filteredOut: boolean };
@@ -229,10 +231,10 @@ export function DocumentsScreen({ navigation }: Props) {
     if (res.canceled || !res.assets[0]) return;
     const a = res.assets[0];
     if ((a.size ?? 0) > MAX_BYTES) {
-      Alert.alert("File too large", "The maximum size is 10 MB per file.");
+      showAlert("File too large", "The maximum size is 10 MB per file.");
       return;
     }
-    setPicked({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? "application/octet-stream", size: a.size ?? 0 });
+    setPicked({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? "application/octet-stream", size: a.size ?? 0, file: a.file ?? null });
     setResult(null);
     setDocType(null);
   };
@@ -527,7 +529,7 @@ export function DocumentsScreen({ navigation }: Props) {
                 </View>
                 <Pressable
                   onPress={() =>
-                    Alert.alert("Delete document?", "Tasks created from it are kept.", [
+                    showAlert("Delete document?", "Tasks created from it are kept.", [
                       { text: "Cancel", style: "cancel" },
                       { text: "Delete", style: "destructive", onPress: () => void deleteDocument(d.id).then(load) },
                     ])

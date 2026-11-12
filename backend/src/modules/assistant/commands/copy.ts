@@ -34,7 +34,7 @@ const en = {
   dndOn: (when: string, duration: string, hint: boolean, critical: boolean) =>
     `Do Not Disturb is on until ${when} (${duration}).${hint ? ' Say "DND for 2 hours" for longer.' : ""}${critical ? " Critical reminders still come through." : ""}`,
   turnOff: "Turn off",
-  devices: { ALL: "your phone and WhatsApp", PHONE: "your phone only", WHATSAPP: "WhatsApp only", DESKTOP: "desktop only" } as Record<string, string>,
+  devices: { ALL: "your phone, computer and WhatsApp", PHONE: "your phone only", WHATSAPP: "WhatsApp only", DESKTOP: "your computer only" } as Record<string, string>,
   devicesRead: (where: string) => `Reminders go to ${where}.`,
   devicesPro: "WhatsApp reminders are part of Pro. Your reminders stay on your phone.",
   devicesUnlinked: "Link WhatsApp first: open Settings → WhatsApp and send me the LINK code shown there.",
@@ -96,7 +96,7 @@ const ur: Copy = {
   dndOn: (when, duration, hint, critical) =>
     `ڈو ناٹ ڈسٹرب ${when} تک آن ہے (${duration})۔${hint ? " زیادہ دیر کے لیے \"DND for 2 hours\" کہیں۔" : ""}${critical ? " ضروری یاددہانیاں پھر بھی آئیں گی۔" : ""}`,
   turnOff: "بند کریں",
-  devices: { ALL: "آپ کے فون اور واٹس ایپ", PHONE: "صرف آپ کے فون", WHATSAPP: "صرف واٹس ایپ", DESKTOP: "صرف ڈیسک ٹاپ" },
+  devices: { ALL: "آپ کے فون، کمپیوٹر اور واٹس ایپ", PHONE: "صرف آپ کے فون", WHATSAPP: "صرف واٹس ایپ", DESKTOP: "صرف آپ کے کمپیوٹر" },
   devicesRead: (where) => `یاددہانیاں ${where} پر آتی ہیں۔`,
   devicesPro: "واٹس ایپ یاددہانیاں Pro کا حصہ ہیں۔ آپ کی یاددہانیاں فون پر ہی رہیں گی۔",
   devicesUnlinked: "پہلے واٹس ایپ جوڑیں: Settings ← WhatsApp کھولیں اور وہاں دکھایا گیا LINK کوڈ مجھے بھیجیں۔",

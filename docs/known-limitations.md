@@ -650,3 +650,29 @@ Urdu group (18/18) stay as they are.
     "matched in", routine, no due date) and the `FIELD_LABEL` Urdu names (title, location, notes, subtask, tags,
     category);
   - the crisis detection phrases (`backend/src/modules/mood/crisis.ts`).
+
+## Desktop app (Windows)
+
+The desktop app is the phone app built for the web inside an Electron shell ([desktop.md](desktop.md)). Limits:
+
+- **Not on desktop:**
+  - voice input (desktop Chromium has no speech recogniser without Google keys; reading replies aloud works);
+  - the phone calendar sync (`CALENDAR_SYNC`);
+  - location reminders and the place map;
+  - the phone's sound / vibration alert style (Windows controls how its notifications sound).
+  The controls are hidden there.
+- **Windows only.** There is no macOS build yet. The `.exe` doesn't run on a Mac.
+- **Reminders fire only while the app runs.** That includes running hidden in the tray, which happens when "Start
+  with Windows" is on. A PC that was off or asleep fires reminders missed by up to 15 minutes late after waking, and
+  drops older ones.
+- **Windows notifications have no Done / Snooze buttons.** A click opens the task, or the check-in sheet, in the app.
+- **Changes from other devices arrive by polling.** Tasks sync every 2 minutes and the reminder plan refreshes every
+  10 minutes, because there is no push to the desktop. A change on the phone can take that long to show.
+- **Storage is browser storage, not SQLite.** FR-MS-001 asks for SQLite, see `frd-deviations.md`. The offline cache
+  holds tasks only, as on the phone.
+- **The API address is built in at export time** (`EXPO_PUBLIC_API_BASE_URL`), as on the phone. A production backend
+  must list `app://lifeorganizer` in `CORS_ORIGINS`.
+- **The installer is not code-signed.** Windows SmartScreen asks once before the first run.
+- **No auto-update.** A new version is installed over the old one, and the data stays.
+- **UI parity.** The wide layout applies the design rules through primitives. Screens still on the legacy palette look
+  the same as on the phone, only wider.

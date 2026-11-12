@@ -90,7 +90,7 @@ export function OnboardingScreen({ navigation }: Props) {
                 <Chip key={l.key} label={l.label} selected={draft.language === l.key} onPress={() => set({ language: l.key })} />
               ))}
             </View>
-            <Text style={styles.meta}>Your time zone is detected from this phone ({Intl.DateTimeFormat().resolvedOptions().timeZone}).</Text>
+            <Text style={styles.meta}>Your time zone is detected from this device ({Intl.DateTimeFormat().resolvedOptions().timeZone}).</Text>
           </Card>
         ) : null}
 

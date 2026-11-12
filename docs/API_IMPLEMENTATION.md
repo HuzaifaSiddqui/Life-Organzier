@@ -15,6 +15,7 @@ This document describes how the REST API is structured, which server and client 
 
 - **API prefix:** all JSON routes are mounted under `/api` (see `createApp()` in `backend/src/app.ts`).
 - **Mobile base URL:** `EXPO_PUBLIC_API_BASE_URL`, normalized to end with `/api` (`mobile/src/constants/config.ts`). Example: `http://<host>:5050/api` (port comes from `PORT` in `backend/.env`, 5050 in this project; code default is 5000).
+- **Desktop app** ([desktop.md](desktop.md)): the same client code built for web, so the same base URL, headers and endpoints. It sends `X-Device-Id: desktop-…` (phones `android-…` / `ios-…`, a plain browser `web-…`) and calls from the origin `app://lifeorganizer`: a production server lists it in `CORS_ORIGINS` (requests without an Origin header, like the phone's, are always allowed). It schedules its own Windows notifications from `GET /api/reminders/plan`, delivering when `settings.devices` is `ALL` or `DESKTOP`. It registers no push token.
 
 **Non-prefixed endpoints (no `/api`):**
 

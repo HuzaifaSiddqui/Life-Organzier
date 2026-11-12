@@ -1,5 +1,8 @@
+import { StyleSheet, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { motion } from "../theme/tokens";
+import { Sidebar } from "../components/Sidebar";
+import { layout, motion } from "../theme/tokens";
+import { useLayout } from "../theme/useLayout";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { colors } from "../constants/theme";
 import { AssistantScreen } from "../screens/assistant/AssistantScreen";
@@ -66,6 +69,28 @@ const Stack = createNativeStackNavigator<MainStackParamList>();
 const TAB_SCREENS = new Set(["Dashboard", "TaskList", "Assistant", "Insights", "Profile"]);
 
 export function MainStack() {
+  const { isWide } = useLayout();
+  // Desktop layout (docs/design.md): the same stack beside a start-side Sidebar, reading width capped. The tree has the
+  // same shape either way, so resizing a window across `layout.wideMin` keeps the navigation state.
+  return (
+    <View style={[styles.row, { backgroundColor: colors.bg }]}>
+      {isWide ? <Sidebar /> : null}
+      <View style={styles.flex}>
+        <View style={[styles.flex, isWide && styles.capped]}>
+          <Screens />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flex: 1, flexDirection: "row" },
+  flex: { flex: 1 },
+  capped: { width: "100%", maxWidth: layout.contentMax, alignSelf: "center" },
+});
+
+function Screens() {
   const reduceMotion = useReducedMotion();
   return (
     <Stack.Navigator
