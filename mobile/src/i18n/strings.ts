@@ -562,6 +562,19 @@ const en = {
   "empty.routines.add": "Add routine",
   "home.tomorrow.title": "Tomorrow",
   "home.tomorrow.all": "See all",
+  "server.version": "Life Organizer {version}",
+  "server.hint": "Long-press to set the server address",
+  "server.title": "Server address",
+  "server.explain": "For a demo on a hotspot or another Wi-Fi: the laptop's address, e.g. 192.168.43.10 or 192.168.43.10:5050. It is checked before it is saved.",
+  "server.current": "Now: {url}",
+  "server.auto": "automatic",
+  "server.save": "Check and save",
+  "server.checking": "Checking…",
+  "server.reset": "Automatic",
+  "server.invalid": "That isn't an address. Try 192.168.43.10 or 192.168.43.10:5050.",
+  "server.unreachable": "No answer from {url}. Check the laptop's address and that the server is running on the same network. Nothing was saved.",
+  "server.saved": "Saved: {url}. The app uses it from now on.",
+  "server.automatic": "Back to automatic.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -895,6 +908,19 @@ const ur: Record<Exclude<StringKey, EnglishOnlyKey>, string> & Partial<Record<En
   "empty.routines.add": "معمول شامل کریں",
   "home.tomorrow.title": "کل",
   "home.tomorrow.all": "سب دیکھیں",
+  "server.version": "لائف آرگنائزر {version}",
+  "server.hint": "سرور کا پتہ بدلنے کے لیے دیر تک دبائیں",
+  "server.title": "سرور کا پتہ",
+  "server.explain": "ہاٹ اسپاٹ یا کسی اور وائی فائی پر ڈیمو کے لیے: لیپ ٹاپ کا پتہ، مثلاً 192.168.43.10 یا 192.168.43.10:5050۔ محفوظ کرنے سے پہلے اسے جانچا جاتا ہے۔",
+  "server.current": "ابھی: {url}",
+  "server.auto": "خودکار",
+  "server.save": "جانچیں اور محفوظ کریں",
+  "server.checking": "جانچ ہو رہی ہے…",
+  "server.reset": "خودکار",
+  "server.invalid": "یہ پتہ نہیں ہے۔ 192.168.43.10 یا 192.168.43.10:5050 آزمائیں۔",
+  "server.unreachable": "{url} سے جواب نہیں آیا۔ لیپ ٹاپ کا پتہ دیکھیں اور یہ کہ سرور اسی نیٹ ورک پر چل رہا ہے۔ کچھ محفوظ نہیں ہوا۔",
+  "server.saved": "محفوظ: {url}۔ ایپ اب یہی استعمال کرے گی۔",
+  "server.automatic": "واپس خودکار پر۔",
 };
 
 export const dictionaries = { en, ur } as const;

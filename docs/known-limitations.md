@@ -282,6 +282,17 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   done again with today's completion time, not the original one; analytics count it as completed now.
 - A plain reopen (task detail "Reopen task", or a swipe without Undo) still keeps `min(progress, 75)`, by design.
 
+## Demo release build (server address, plain HTTP)
+
+- **Plain HTTP to the laptop.** The release APK allows cleartext HTTP app-wide (`withCleartextTraffic` plugin), so
+  traffic between the phone and the laptop's API is not encrypted on the hotspot / Wi-Fi. Fine on a private hotspot for
+  the demo; not for real use (see `frd-deviations.md`).
+- **Server address is per phone and manual.** Settings → long-press "Life Organizer 1.0.0" → Server address. It must
+  answer `/health` before it is saved, and is then tried before every other address. When the laptop's IP changes
+  (another network), set it again or tap Automatic. Hidden on purpose: no visible entry point besides the long-press.
+- **USB fallback:** `adb reverse tcp:5050 tcp:5050` and the address `127.0.0.1:5050` work with no network at all, but
+  only while the cable is in.
+
 ## Platform and UI
 
 - Dark mode and Urdu right-to-left layout are built but switched off (`DARK_MODE_READY`, `RTL_READY`); see

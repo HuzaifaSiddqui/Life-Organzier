@@ -69,6 +69,7 @@
       ],
       "expo-status-bar",
       "./plugins/withLongPathCMake",
+      "./plugins/withCleartextTraffic",
       "expo-font",
       [
         "expo-location",
