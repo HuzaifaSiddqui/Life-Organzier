@@ -96,3 +96,15 @@ export async function sendToAssistant(input: {
 export async function getBriefing(): Promise<{ briefing: Briefing; ai: { enabled: boolean; available: boolean } }> {
   return apiGet("/assistant/briefing");
 }
+
+/**
+ * "Start" anywhere in the app (UI v2: task detail and list rows, as on Home's Next up): the assistant's start_task
+ * path, so starting works the same everywhere (keeps the planned slot, never "rescheduled"). Returns the reply's
+ * first line for a snackbar; the task list refreshes through the next sync.
+ */
+export async function startTaskNow(taskId: string): Promise<string> {
+  const reply = await sendToAssistant({ payload: { type: "start_task", taskId }, label: "Start" });
+  const { syncNow } = await import("./syncEngine");
+  void syncNow();
+  return reply.message.content.split("\n")[0];
+}

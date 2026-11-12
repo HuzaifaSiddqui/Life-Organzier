@@ -1,10 +1,11 @@
 import { Pressable, StyleSheet, View } from "react-native";
+import { useLocale } from "../i18n/LocaleProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Task } from "../types/models";
 import { formatDue, isOverdue } from "../utils/format";
 import { priorityColor } from "../utils/priorityColors";
 import { Icon } from "./icons/Icon";
-import { Dot, HighlightText, ProgressBar, Text } from "./ui";
+import { Dot, HighlightText, IconButton, ProgressBar, Text } from "./ui";
 
 type Props = {
   task: Task;
@@ -16,12 +17,15 @@ type Props = {
   expanded?: boolean;
   onToggleExpand?: () => void;
   categoryColors?: Array<{ name: string; color: string }>;
+  /** UI v2: a Start button on open (not started) tasks. */
+  onStart?: () => void;
 };
 
 const label = (p: string) => p.charAt(0) + p.slice(1).toLowerCase();
 
-export function TaskCard({ task, onPress, onLongPress, variant = "list", query = "", subtaskCount, expanded, onToggleExpand }: Props) {
+export function TaskCard({ task, onPress, onLongPress, variant = "list", query = "", subtaskCount, expanded, onToggleExpand, onStart }: Props) {
   const { colors, spacing, radii, elevation } = useTheme();
+  const { t } = useLocale();
   const done = task.status === "COMPLETED";
   const overdue = isOverdue(task);
   const progress = task.progress ?? 0;
@@ -85,9 +89,14 @@ export function TaskCard({ task, onPress, onLongPress, variant = "list", query =
           ) : null}
         </View>
         {variant !== "compact" ? (
-          <Text variant="caption" color="tertiary">
-            {label(task.priority)}
-          </Text>
+          <View style={styles.trailing}>
+            <Text variant="caption" color="tertiary">
+              {label(task.priority)}
+            </Text>
+            {onStart && task.status === "PENDING" ? (
+              <IconButton variant="tonal" icon={<Icon name="play" size={16} color={colors.accentStrong} />} accessibilityLabel={t("task.startA11y", { title: task.title })} onPress={onStart} />
+            ) : null}
+          </View>
         ) : null}
       </View>
     </Pressable>
@@ -97,6 +106,7 @@ export function TaskCard({ task, onPress, onLongPress, variant = "list", query =
 const styles = StyleSheet.create({
   card: {},
   row: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  trailing: { alignItems: "flex-end", gap: 6 },
   lead: { width: 16, height: 22, justifyContent: "center", alignItems: "flex-start" },
   doneMark: { width: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   flex: { flex: 1 },

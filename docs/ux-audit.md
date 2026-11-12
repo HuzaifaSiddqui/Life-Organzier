@@ -46,6 +46,16 @@ built-in-browser, computer-use; plugins ponytail and headroom). Replacements, as
 
 To confirm on the phone (counts from the layout; the fold is about 720 dp on a mid-range Android).
 
+### After PR 3 (key flows), taps from Home
+
+| # | Flow | Before | After PR 3 |
+|---|---|---|---|
+| 1a | Add a task with the form (title + date) | Tasks tab → New task → title → date row → pick → confirm → **scroll past ~15 controls** → Add task: 6 + scroll | "+" → title → date row → pick → confirm → Save (pinned): **5, no scroll**; 7 controls on screen instead of ~15 |
+| 2 | Undo a wrong swipe (complete / move) | open the task → Reopen / edit the date back: 3–4 | **1** (Undo in the snackbar) |
+| 3 | Start a task that isn't Next up | typing in chat ("start …") or a check-in | **2** (Tasks tab → Start on the row), or 3 via task detail |
+| 9 | Tomorrow's tasks | Tasks tab → Filters & sort → no Tomorrow → This week → scan: 3 + scan | **2** (Tasks tab → Tomorrow) |
+| — | Edit an advanced field (e.g. category) | scroll to it | "More options" (+1), and its value shows in the summary when collapsed |
+
 ## 3. Problems ranked by impact on the 5-minute demo
 
 Demo path assumed: Home first impression → add a task by chat and by form → start / complete it → tomorrow's plan →
