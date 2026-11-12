@@ -47,9 +47,14 @@ export function ListItem({
   trailing,
   onPress,
   accessibilityLabel,
+  titleLines = 1,
+  subtitleLines = 2,
 }: {
   title: string;
   subtitle?: string;
+  /** Line limits (0 = wrap fully). Defaults keep rows compact; settings rows with a sentence can wrap. */
+  titleLines?: number;
+  subtitleLines?: number;
   leading?: ReactNode;
   trailing?: ReactNode;
   onPress?: () => void;
@@ -60,11 +65,11 @@ export function ListItem({
     <>
       {leading}
       <View style={styles.listText}>
-        <Text variant="body" numberOfLines={1}>
+        <Text variant="body" numberOfLines={titleLines || undefined}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="caption" color="secondary" numberOfLines={2}>
+          <Text variant="caption" color="secondary" numberOfLines={subtitleLines || undefined}>
             {subtitle}
           </Text>
         ) : null}

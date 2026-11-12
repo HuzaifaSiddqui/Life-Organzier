@@ -210,6 +210,8 @@ All with Reanimated 4, `useReducedMotion()` → no movement (opacity only, or in
 
 Nothing animates per-row on scroll; no layout animations on lists longer than 8 items.
 
+**Built in PR 5 (12 Nov 2026):** screen transitions, press feedback (task rows added), completing a task (tick pop; the row keeps its existing done style), bell badge. Not built (out of PR 5's scope): list enter, progress change, swipe follow-up, snackbar (it already slides in).
+
 ## 9. Home sketch (labelled)
 
 ```

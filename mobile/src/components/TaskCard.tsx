@@ -1,4 +1,6 @@
 import { Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { usePop } from "../theme/usePop";
 import { useLocale } from "../i18n/LocaleProvider";
 import { useTheme } from "../theme/ThemeProvider";
 import type { Task } from "../types/models";
@@ -24,14 +26,17 @@ type Props = {
 const label = (p: string) => p.charAt(0) + p.slice(1).toLowerCase();
 
 export function TaskCard({ task, onPress, onLongPress, variant = "list", query = "", subtaskCount, expanded, onToggleExpand, onStart }: Props) {
-  const { colors, spacing, radii, elevation } = useTheme();
+  const { colors, spacing, radii, elevation, motion } = useTheme();
   const { t } = useLocale();
+  // Completing a task: the tick pops in (only on the change, never as the list loads).
+  const tickPop = usePop(task.status === "COMPLETED", { from: motion.pop.done, duration: motion.duration.base, when: task.status === "COMPLETED" });
   const done = task.status === "COMPLETED";
   const overdue = isOverdue(task);
   const progress = task.progress ?? 0;
   const meta = [formatDue(task), variant !== "compact" && !overdue && !done ? label(task.status.replace("_", " ")) : null, task.category].filter(Boolean);
 
   return (
+    // Plain Pressable (no per-row press animation): measured smoother scrolling on long lists (UI v2 PR 5).
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
@@ -48,9 +53,9 @@ export function TaskCard({ task, onPress, onLongPress, variant = "list", query =
       <View style={styles.row}>
         <View style={styles.lead}>
           {done ? (
-            <View style={[styles.doneMark, { backgroundColor: colors.text }]}>
+            <Animated.View style={[styles.doneMark, { backgroundColor: colors.text }, tickPop]}>
               <Icon name="check" size={11} color={colors.canvas} strokeWidth={2.4} />
-            </View>
+            </Animated.View>
           ) : (
             <Dot color={priorityColor(task.priority, colors)} />
           )}
