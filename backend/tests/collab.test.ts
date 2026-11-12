@@ -116,7 +116,9 @@ test("collab: usernames are unique; search by username prefix (3+) or exact emai
 
   assert.deepEqual(await searchUsers(me.id, "s"), [], "one letter lists nobody");
   assert.deepEqual(await searchUsers(me.id, "sa"), [], "two letters neither");
-  const byPrefix = await searchUsers(me.id, taken.slice(0, 6));
+  // All but the last character: still a prefix, and unique to this run ("sanaz_" alone also matches users left in the
+  // test database by earlier runs, and the capped, sorted results could leave her out).
+  const byPrefix = await searchUsers(me.id, taken.slice(0, -1));
   const hit = byPrefix.find((u) => u.id === sana.id)!;
   assert.ok(hit, "a username prefix finds her");
   assert.equal(hit.displayName, "Sana Zaidi", "the display name is shown");
