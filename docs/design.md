@@ -124,8 +124,8 @@ Fonts: **Inter** (400/500/600/700) and **Noto Nastaliq Urdu** (400/700), loaded 
 | Level | Use | Light | Dark |
 |---|---|---|---|
 | 0 | Canvas | — | — |
-| 1 | Cards, containers | `surface` + hairline + iOS shadow (opacity 0.04, radius 3, y 1) / Android `elevation: 1` | `surface` + hairline, no shadow |
-| 2 | Sheets, dialogs, floating chrome | `sheet` + hairline + iOS shadow (0.12, radius 16, y 6) / Android `elevation: 8` | `sheet` + hairline, no shadow |
+| 1 | Cards, containers | `surface` + hairline + iOS shadow (opacity 0.04, radius 3, y 1) / Android `elevation: 1` / web `boxShadow` 0 1 3 (0.06) | `surface` + hairline, no shadow |
+| 2 | Sheets, dialogs, floating chrome | `sheet` + hairline + iOS shadow (0.12, radius 16, y 6) / Android `elevation: 8` / web `boxShadow` 0 6 16 (0.12) | `sheet` + hairline, no shadow |
 
 Shadows are invisible on dark canvases, so in dark mode depth comes from lighter surfaces. Tinted (toned) cards drop the border and shadow.
 
@@ -159,6 +159,30 @@ Rules:
 
 Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: IconButton is 40 visual, small Button 40, Chip 28/32.
 
+### Desktop layout (`layout` token, `useLayout()`)
+
+The desktop app ([desktop.md](desktop.md)) is this app built for the web, so a desktop rule is a rule for wide windows,
+whatever the device.
+- **Tokens:** `layout = { wideMin: 960, sidebarWidth: 240, contentMax: 760, dialogMax: 480 }` in `tokens.ts`.
+- **`useLayout()`:** `theme/useLayout.ts` returns `isWide` (width ≥ `wideMin`, pure `isWideWidth` in `utils/layout.ts`,
+  tested) and `bottomPad(phone)`.
+- **Below `wideMin`, nothing changes.** Phones never reach it.
+- **From `wideMin`:**
+  - `MainStack` puts the **`Sidebar`** on the start side (logical `borderEnd`, so it mirrors in RTL). The sidebar is
+    a primary "New task" button, then one row per area: Home, Assistant, Tasks, Routines, Documents, Insights, Mood,
+    People, Me (`nav.*` copy, en + ur).
+  - Rows are 48 high, `accentSoft` + accent text and icon when active. A screen without an entry highlights its
+    parent's (task detail → Tasks; `activeSidebarRoute`).
+  - Screens sit in a column capped at `contentMax`, centred.
+  - The tree is the same shape at every width, so resizing across `wideMin` keeps the navigation state.
+  - `BottomNav` and `FloatingAddButton` render nothing. Scroll views end with `bottomPad(...)`, which is `xxl`
+    instead of the nav clearance.
+  - `Sheet` renders as a **`Dialog`**: centred, at most `dialogMax`.
+  - `Snackbar` moves to the bottom-end corner, at most `dialogMax`.
+- **Keyboard shortcuts (web):** Ctrl/⌘+N new task, Ctrl/⌘+K assistant (`shortcutFor`, tested). Esc closes dialogs.
+- **Phone-only controls are hidden on web** (`constants/platformFeatures`): voice input, location reminders, map.
+  The phone calendar card hides itself because its feature reports off.
+
 ## Components (`components/primitives`, re-exported from `components/ui`)
 
 | Component | Purpose | Props / variants | States & rules |
@@ -171,7 +195,8 @@ Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: Icon
 | `Dot` | Priority/category marker | `color`, `size` | Always next to a label |
 | `Card` | Elevation-1 container | `tone`: `neutral · accent · success · warning · danger`; `onPress` | Never nest cards. Tappable cards get press scale |
 | `ListItem` | Row | `title`, `subtitle`, `leading`, `trailing`, `onPress` | Min height 56. No scale, pressed tint only |
-| `Sheet` | Bottom sheet (elevation 2) | `visible`, `onClose`, `title` | Springs up from the bottom; tap the scrim or press back to close; `accessibilityViewIsModal`; safe-area padding. Sizes to its content and does not avoid the keyboard: don't put text fields in it (see `LocationPickerSheet`) |
+| `Sheet` | Bottom sheet (elevation 2); a `Dialog` on wide windows | `visible`, `onClose`, `title` | Springs up from the bottom; tap the scrim or press back to close; `accessibilityViewIsModal`; safe-area padding. Sizes to its content and does not avoid the keyboard: don't put text fields in it (see `LocationPickerSheet`) |
+| `Dialog` | Centred dialog (elevation 2) | `visible`, `onClose`, `title` | Max `layout.dialogMax`; tap the scrim / Esc / back to close; `accessibilityViewIsModal`, role `alert`. Used by `DialogHost` (confirmations on web) and by `Sheet` on wide windows |
 | `KeyboardPad` | Keeps content above the on-screen keyboard | `style` | Pads the bottom by the keyboard height (Android 15+ is edge-to-edge and no longer resizes the window). One wraps the whole app in `RootNavigator`, so screens need nothing. A `Modal` is a separate window: the routine form wraps its content in one; the place picker uses `KeyboardAvoidingView` |
 | `Skeleton` | Loading placeholder | `height`, `width`, `radius` | Compose skeletons that match the final layout. No bare spinners for content. Hidden from screen readers |
 | `Snackbar` | Transient feedback + Undo | `text`, `tone` `neutral · success · warning · danger`, `action`, `onHide` | Inverse surface, above bottom nav, polite live region. Use an Undo action for delete / complete / edit |
@@ -296,6 +321,18 @@ Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and 
 - **PR 1, colour (12 Nov 2026).** Only `theme/tokens.ts` holds colours. New tokens `accentStrong`, `brand`, `chartGrid`, `heat`. Use `colors.accent` for fills / borders / icons and `<Text color="accent">` (→ `accentStrong`) for text. Placeholders: `palette.muted` (legacy) or `colors.textTertiary`. Remove / tick marks are the `close` / `check` icons, never "✕" / "✓" text. Category colours offered in Settings are `palettes.light.category` (the curated 8). The native splash background (`app.json`, `#F6F5F2`) is unchanged: changing it needs a new build.
 
 ## Migration log
+
+**Desktop layout (12 Nov 2026).**
+- New tokens: `layout`, and web shadows in `elevation()`.
+- New primitive: `Dialog`.
+- `Sheet` becomes a dialog when wide; the `Snackbar` is placed differently when wide.
+- New `Sidebar` (replaces BottomNav + FAB when wide) and `DialogHost` (`showAlert()`, which replaces `Alert.alert`
+  everywhere so confirmations work on web).
+- The web date / time picker is a dialog with the browser input.
+- `BottomNav` labels moved to `t()` (`nav.*`, en + ur), so BottomNav's copy is migrated; its colours already used
+  `useTheme()`.
+- `KeyboardPad` is a plain view on web.
+- No screen was restyled. Unmigrated screens keep their legacy styles in the capped column.
 
 **UI v2, PR 5 (motion, 12 Nov 2026).** Screen transitions per screen type (tab fade, detail slide, Add task slide-up; none with reduce motion), done-tick pop on task rows, bell-badge pop. Reanimated 4 only; no new native module. Task rows tried `PressableScale` and went back to a plain `Pressable` after measuring scroll jank (3 runs each vs main: scroll p90 10 ms on both, janky ≤ 0.56 % vs main's worst 1.60 %). `ListItem` got optional `titleLines` / `subtitleLines` (default 1 / 2; 0 = wrap): the Settings → Phone calendar switch row wraps its title and explanation instead of cutting them off.
 

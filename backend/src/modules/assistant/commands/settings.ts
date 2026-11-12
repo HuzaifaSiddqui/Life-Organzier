@@ -161,14 +161,15 @@ const dnd: Command = {
 const NOTIFY = "remind|reminders|reminder|notifications|notification|notify|alerts|alert|messages|yaad dihani|ریمائنڈر|ریمائنڈرز|نوٹیفکیشن|یاد دہانی|اطلاع";
 const WA = "whatsapp|whats app|wa|واٹس ایپ|واٹس اپ";
 const PHONE = "phone|mobile|app|push|فون|موبائل";
+const DESKTOP = "desktop|computer|laptop|pc|ڈیسک ٹاپ|کمپیوٹر|لیپ ٹاپ";
 const BOTH = "both|everywhere|dono|donon|دونوں|ہر جگہ";
 
 const notifyDevices: Command = {
   name: "settings_notify_devices",
   category: "settings",
-  summary: "Where reminders go: phone, WhatsApp (Pro) or both",
-  examples: ["Send my reminders to WhatsApp only", "Remind me on both phone and WhatsApp"],
-  schema: z.object({ devices: z.enum(["ALL", "PHONE", "WHATSAPP"]).optional() }).passthrough(),
+  summary: "Where reminders go: phone, desktop, WhatsApp (Pro) or all",
+  examples: ["Send my reminders to WhatsApp only", "Remind me on both phone and WhatsApp", "Reminders on my computer only"],
+  schema: z.object({ devices: z.enum(["ALL", "PHONE", "WHATSAPP", "DESKTOP"]).optional() }).passthrough(),
   undoable: true,
   parse(text, ctx) {
     const t = norm(text);
@@ -176,11 +177,14 @@ const notifyDevices: Command = {
     const wa = has(t, WA);
     const phone = has(t, PHONE);
     const both = has(t, BOTH);
-    if (!wa && !phone && !both) return has(t, "where|kahan|kahaan|کہاں") ? {} : null;
+    const desktop = has(t, DESKTOP);
+    if (!wa && !phone && !both && !desktop) return has(t, "where|kahan|kahaan|کہاں") ? {} : null;
     const e = extractEntities(text, ctx.opts);
     if (e.date || e.timeExplicit) return null; // "remind me on WhatsApp tomorrow to …" is a new task
     const off = has(t, "off|stop|band|no|dont|بند|نہیں");
     if (both || (wa && phone && !off)) return { devices: "ALL" };
+    // Desktop app (FR-AP-002 "Desktop only"); with another channel named too it means all of them.
+    if (desktop) return off ? { devices: "PHONE" } : { devices: wa || phone ? "ALL" : "DESKTOP" };
     if (wa) return { devices: off ? "PHONE" : "WHATSAPP" };
     return { devices: off ? "WHATSAPP" : "PHONE" };
   },
@@ -190,13 +194,15 @@ const notifyDevices: Command = {
     const current = turn.settings.notificationDevices;
     if (!args.devices) return { content: c.devicesRead(where(current)), intent: "settings_notify_devices" };
     const devices = String(args.devices);
-    if (devices !== "PHONE" && !isPro(turn.settings)) return { content: c.devicesPro, intent: "settings_pro_only" };
-    if (devices !== "PHONE" && !(turn.user.phoneNumber && turn.user.phoneVerifiedAt)) {
+    // Only WhatsApp delivery (WHATSAPP, or ALL which includes it) needs Pro and a linked number; desktop doesn't.
+    const viaWhatsapp = devices === "WHATSAPP" || devices === "ALL";
+    if (viaWhatsapp && !isPro(turn.settings)) return { content: c.devicesPro, intent: "settings_pro_only" };
+    if (viaWhatsapp && !(turn.user.phoneNumber && turn.user.phoneVerifiedAt)) {
       return { content: c.devicesUnlinked, actions: [{ label: c.openSettings, payload: { type: "navigate", screen: "Settings" } }], intent: "settings_whatsapp_unlinked" };
     }
     if (devices === current) return { content: c.devicesAlready(where(devices)), intent: "settings_notify_devices" };
     await save(turn, { notificationDevices: devices }, { notificationDevices: current }, "reminder devices change");
-    return { content: c.devicesSet(where(devices), devices !== "PHONE"), actions: [undoAction(turn.settings.language)], intent: "settings_notify_devices_set" };
+    return { content: c.devicesSet(where(devices), viaWhatsapp), actions: [undoAction(turn.settings.language)], intent: "settings_notify_devices_set" };
   },
 };
 

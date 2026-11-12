@@ -17,6 +17,13 @@ test("cors: allowlist from CORS_ORIGINS, mobile requests without Origin always p
   assert.equal(allows(o, undefined), true);
 });
 
+test("cors: the desktop app's app://lifeorganizer origin is allowed when listed", () => {
+  const o = corsOrigin({ NODE_ENV: "production", CORS_ORIGINS: "app://lifeorganizer" });
+  assert.equal(allows(o, "app://lifeorganizer"), true);
+  assert.equal(allows(o, "app://other"), false);
+  assert.equal(allows(o, "null"), false); // file:// pages send Origin: null — why the desktop app uses app://
+});
+
 test("cors: no config allows all origins in development, none in production", () => {
   assert.equal(corsOrigin({}), true);
   assert.equal(corsOrigin({ NODE_ENV: "production" }), false);

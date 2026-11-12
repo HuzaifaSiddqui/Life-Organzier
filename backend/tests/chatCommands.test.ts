@@ -274,8 +274,11 @@ test("settings commands: quiet hours, DND, language; new value echoed, undo rest
 });
 
 test("settings commands: WhatsApp reminders need Pro and a linked number", { skip }, async () => {
-  await withChatUser("FREE", async (say) => {
+  await withChatUser("FREE", async (say, _tap, user) => {
     assert.equal((await say("send my reminders to WhatsApp only")).message.intent, "settings_pro_only");
+    // The desktop app needs neither Pro nor WhatsApp (FR-AP-002 "Desktop only").
+    assert.equal((await say("send my reminders to my computer only")).message.intent, "settings_notify_devices_set");
+    assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).notificationDevices, "DESKTOP");
   });
   await withChatUser("PRO", async (say, _tap, user) => {
     assert.equal((await say("send my reminders to WhatsApp only")).message.intent, "settings_whatsapp_unlinked");
@@ -285,7 +288,7 @@ test("settings commands: WhatsApp reminders need Pro and a linked number", { ski
     const both = await say("remind me on both phone and WhatsApp");
     assert.equal(both.message.intent, "settings_notify_devices_set");
     assert.equal((await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } })).notificationDevices, "ALL");
-    assert.match((await say("where do my reminders go?")).message.content, /phone and WhatsApp/);
+    assert.match((await say("where do my reminders go?")).message.content, /phone, computer and WhatsApp/);
   });
 });
 
