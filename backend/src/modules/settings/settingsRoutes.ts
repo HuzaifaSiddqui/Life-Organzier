@@ -46,6 +46,7 @@ const settingsSchema = z
     checkinsEnabled: z.boolean(),
     checkinTone: z.enum(["FUNNY", "SERIOUS", "GENTLE"]),
     checkinResearchMode: z.boolean(),
+    emailInvites: z.boolean(),
   })
   .partial();
 

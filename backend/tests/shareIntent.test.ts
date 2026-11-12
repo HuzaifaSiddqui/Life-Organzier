@@ -243,8 +243,12 @@ test("WhatsApp: the receiver lists, accepts and declines shared tasks by chat", 
   const accepted = await ali.say("accept the group slides task", "WHATSAPP");
   assert.equal(accepted.message.intent, "shared_accepted", accepted.message.content);
   assert.equal((await tasksOf(ali.user)).length, 1, "now on Ali's timeline");
-  const declined = await ali.say("decline the book the lab task", "WHATSAPP");
+  const why = await ali.say("decline the book the lab task", "WHATSAPP");
+  assert.equal(why.message.intent, "decline_reason", why.message.content);
+  assert.equal((await cardsFor(ali.user)).length, 1, "nothing declined before the reason");
+  const declined = await ali.say("2", "WHATSAPP");
   assert.equal(declined.message.intent, "shared_declined", declined.message.content);
+  assert.match(declined.message.content, /Not my task/);
   assert.equal((await cardsFor(ali.user)).length, 0);
 }));
 

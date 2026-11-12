@@ -7,6 +7,7 @@ import Svg, { Path } from "react-native-svg";
 import { BottomNav } from "../../components/BottomNav";
 import { MicIcon } from "../../components/icons/MicIcon";
 import { Button, Card, Chip, Dot, ProgressBar, Skeleton, Snackbar, SyncBadge, Text, TutorialTip } from "../../components/ui";
+import { NotificationBell, SharedWithYouCard } from "../../components/collab/HomeShared";
 import { usePreferences } from "../../context/PreferencesContext";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -197,6 +198,7 @@ export function DashboardScreen({ navigation }: Props) {
               {dateLine}
             </Text>
             <SyncBadge />
+            <NotificationBell onPress={() => navigation.navigate("Notifications")} />
           </View>
           <Text variant="title1">{greetingFor(b)}</Text>
           {b?.headline || loading ? (
@@ -243,6 +245,8 @@ export function DashboardScreen({ navigation }: Props) {
             </ScrollView>
           ) : null}
         </View>
+
+        <SharedWithYouCard onOpen={(id) => navigation.navigate("SharedTaskEdit", { id, mode: "accept" })} />
 
         <TutorialTip id="home" title="Your day at a glance" text="Items that need a decision come first, then your next task and today's plan. Tap the bar above to talk to the assistant." />
 

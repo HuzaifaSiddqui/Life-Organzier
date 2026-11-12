@@ -25,6 +25,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   const { taskId } = route.params;
   const [task, setTask] = useState<Task | null>(null);
   const { isPro } = usePreferences();
+  const { t } = useLocale();
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [parent, setParent] = useState<{ id: string; title: string } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
@@ -152,6 +153,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           <Text style={ui.h2}>Progress</Text>
           <ProgressBar value={progress} color={done ? palette.success : palette.ai} height={10} />
           <Text style={styles.meta}>{progress}% complete{subtasks.length ? ` · average of ${subtasks.length} parts` : ""}</Text>
+          {task.progressUpdatedBy ? <Text style={styles.meta}>{t("collab.progress.updatedBy", { name: task.progressUpdatedBy })}</Text> : null}
           {!subtasks.length ? (
             <View style={ui.wrap}>
               {[0, 25, 50, 75, 100].map((p) => (

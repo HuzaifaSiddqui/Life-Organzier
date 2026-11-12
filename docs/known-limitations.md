@@ -315,6 +315,16 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   success toast has Undo (cancelled for everyone, my copy removed, as chat's Undo).
 - **Notices rely on push.** Each event is a push plus an in-app notice under Requests → Activity. Without a push
   token (no permission, emulator) only the in-app list shows it.
+- **Declining needs a reason** (quick pick or up to 200 characters), in the app and in chat ("Why? 1 Too busy ·
+  2 Not my task · 3 Wrong time, or type a reason"). The reason is plain text (markup stripped) and shown to the owner.
+- **Progress on tasks done together is shared, completion is not.** A 25 / 50 / 75 % change by anyone reaches every
+  copy ("Updated by @x"); the last change by server time wins, including over a change someone made offline earlier.
+  Marking done stays personal (each person finishes their part). "Only for them" tasks never share progress.
+- **Invitation emails need SMTP** (`SMTP_*` in backend/.env; a Gmail app password works for the demo). Without it no
+  email is sent and nothing else changes. At most 10 an hour per recipient; the queue is in memory, so emails waiting
+  when the server stops are lost. Each user can turn them off in Settings.
+- **Notifications screen and bell** list the last 50 notices. The member's "You joined …" confirmation is in-app only.
+- **The chat "@" picker lists accepted connections only.** Voice uses the spoken name ("with Sana"), not the picker.
 - **Copy is English only** until after 10 Nov 2026 (`collab.*` keys; Urdu shows English).
 
 ## WhatsApp (FR-WA)

@@ -125,7 +125,13 @@ export function CollabScreen({ navigation, route }: Props) {
           <>
             {!data.summary.username ? <UsernameCard onSaved={() => void load()} /> : null}
             {tab === "requests" ? (
-              <RequestsTab data={data} busy={busy} run={run} onOtherTime={(id) => navigation.navigate("SharedTaskEdit", { id, mode: "accept" })} />
+              <RequestsTab
+                data={data}
+                busy={busy}
+                run={run}
+                onOtherTime={(id) => navigation.navigate("SharedTaskEdit", { id, mode: "accept" })}
+                onDecline={(id) => navigation.navigate("SharedTaskEdit", { id, mode: "decline" })}
+              />
             ) : tab === "people" ? (
               <PeopleTab data={data} busy={busy} run={run} onRefresh={() => void load()} />
             ) : (
@@ -196,7 +202,7 @@ function UsernameCard({ onSaved, initial = "" }: { onSaved: () => void; initial?
 
 /* ------------------------------------------------------------------ requests */
 
-function RequestsTab({ data, busy, run, onOtherTime }: { data: Data; busy: string | null; run: Run; onOtherTime: (id: string) => void }) {
+function RequestsTab({ data, busy, run, onOtherTime, onDecline }: { data: Data; busy: string | null; run: Run; onOtherTime: (id: string) => void; onDecline: (id: string) => void }) {
   const { t } = useLocale();
   const { colors, spacing } = useTheme();
   const { incoming } = data.connections;
@@ -228,7 +234,7 @@ function RequestsTab({ data, busy, run, onOtherTime }: { data: Data; busy: strin
         <View style={{ gap: spacing.sm }}>
           <SectionTitle title={t("collab.requests.cards")} />
           {data.cards.map((s) => (
-            <TaskCardRequest key={s.id} s={s} busy={busy} run={run} onOtherTime={onOtherTime} />
+            <TaskCardRequest key={s.id} s={s} busy={busy} run={run} onOtherTime={onOtherTime} onDecline={onDecline} />
           ))}
         </View>
       ) : null}
@@ -244,7 +250,7 @@ function RequestsTab({ data, busy, run, onOtherTime }: { data: Data; busy: strin
   );
 }
 
-function TaskCardRequest({ s, busy, run, onOtherTime }: { s: SharedTask; busy: string | null; run: Run; onOtherTime: (id: string) => void }) {
+function TaskCardRequest({ s, busy, run, onOtherTime, onDecline }: { s: SharedTask; busy: string | null; run: Run; onOtherTime: (id: string) => void; onDecline: (id: string) => void }) {
   const { t } = useLocale();
   const { spacing } = useTheme();
   const owner = personLabel(s.owner);
@@ -273,20 +279,25 @@ function TaskCardRequest({ s, busy, run, onOtherTime }: { s: SharedTask; busy: s
       <View style={[styles.wrap, { gap: spacing.xs }]}>
         <Button title={t("collab.card.accept")} kind="tonal" size="sm" loading={busy === `card-${s.id}`} onPress={() => void run(`card-${s.id}`, () => acceptSharedTask(s.id))} />
         <Button title={t("collab.card.otherTime")} kind="secondary" size="sm" onPress={() => onOtherTime(s.id)} />
-        <Button title={t("collab.card.decline")} kind="ghost" size="sm" loading={busy === `no-${s.id}`} onPress={() => void run(`no-${s.id}`, () => declineSharedTask(s.id))} />
+        <Button title={t("collab.card.decline")} kind="ghost" size="sm" onPress={() => onDecline(s.id)} />
       </View>
     </Card>
   );
 }
 
+/** A notice as one line of text (Activity here, and the Notifications screen). */
+export function noticeLine(n: Notice, t: (key: StringKey, vars?: Record<string, string>) => string): string {
+  const when = n.payload?.proposed ? dueLabel(n.payload.proposed.dueDate, n.payload.proposed.dueTime) : "";
+  const key = (n.kind === "TASK_REJECTED" && n.payload?.reason ? "collab.notice.TASK_REJECTED_REASON" : `collab.notice.${n.kind}`) as StringKey;
+  return t(key, { name: personLabel(n.actor), title: n.payload?.title ?? "", when, reason: n.payload?.reason ?? "", progress: String(n.payload?.progress ?? "") });
+}
+
 const NoticeRow = memo(function NoticeRow({ n }: { n: Notice }) {
   const { t } = useLocale();
   const { colors } = useTheme();
-  const when = n.payload?.proposed ? dueLabel(n.payload.proposed.dueDate, n.payload.proposed.dueTime) : "";
-  const key = `collab.notice.${n.kind}` as StringKey;
   return (
     <ListItem
-      title={t(key, { name: personLabel(n.actor), title: n.payload?.title ?? "", when })}
+      title={noticeLine(n, t)}
       subtitle={relativeTime(n.createdAt)}
       leading={<Icon name={n.read ? "bell" : "info"} color={n.read ? colors.textTertiary : colors.accent} />}
     />
@@ -527,6 +538,11 @@ const SharedCard = memo(function SharedCard({
       <Text variant="caption" color="secondary" tabular>
         {[dueLabel(s.dueDate, s.dueTime), formatDuration(s.durationMinutes), t("collab.shared.progress", { done, total })].filter(Boolean).join(" · ")}
       </Text>
+      {s.progress != null && s.progressBy ? (
+        <Text variant="caption" color="secondary" tabular>
+          {t("collab.progress.shared", { progress: String(s.progress), name: s.progressBy })}
+        </Text>
+      ) : null}
       <View style={{ gap: spacing.xs }}>
         {s.participants.map((p) => {
           const isMe = p.user.id === me;
@@ -550,6 +566,11 @@ const SharedCard = memo(function SharedCard({
                   />
                 ) : null}
               </View>
+              {p.declineReason ? (
+                <Text variant="caption" color="secondary" style={{ paddingStart: spacing.xl + spacing.xs }}>
+                  {t("collab.decline.reasonShown", { reason: p.declineReason })}
+                </Text>
+              ) : null}
               {p.proposedChange ? (
                 <Text variant="caption" color="warning" style={{ paddingStart: spacing.xl + spacing.xs }}>
                   {t("collab.shared.proposed", { when: dueLabel(p.proposedChange.dueDate, p.proposedChange.dueTime) })}

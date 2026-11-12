@@ -22,6 +22,8 @@ export type Participant = {
   state: ParticipantState;
   proposedChange: { dueDate: string | null; dueTime: string | null } | null;
   completedAt: string | null;
+  /** Why they declined: shown to the owner (and to the member themselves). */
+  declineReason?: string | null;
 };
 export type SharedTask = {
   id: string;
@@ -45,12 +47,19 @@ export type SharedTask = {
   reapproval: boolean;
   myTaskId: string | null;
   participants: Participant[];
+  /** Done together: the shared progress and who set it last (null for "only for them"). */
+  progress?: number | null;
+  progressBy?: string | null;
 };
 export type Notice = {
   id: string;
   kind: string;
   sharedTaskId: string | null;
-  payload: { title?: string; dueDate?: string | null; dueTime?: string | null; proposed?: { dueDate: string | null; dueTime: string | null } } | null;
+  /** My own copy of that task, if I have one (a tap opens it). */
+  taskId?: string | null;
+  /** A card still waiting for my answer (a tap opens the accept screen). */
+  pending?: boolean;
+  payload: { title?: string; dueDate?: string | null; dueTime?: string | null; proposed?: { dueDate: string | null; dueTime: string | null }; reason?: string; progress?: number } | null;
   read: boolean;
   createdAt: string;
   actor: Person | null;
@@ -142,8 +151,9 @@ export async function acceptSharedTask(id: string, mine: { dueDate?: string | nu
   return shared;
 }
 
-export async function declineSharedTask(id: string): Promise<SharedTask> {
-  const { shared } = await apiPost<{ shared: SharedTask }>(`/collab/tasks/${id}/reject`, {});
+/** A reason is required (plain text, at most 200 characters); the owner sees it. */
+export async function declineSharedTask(id: string, reason: string): Promise<SharedTask> {
+  const { shared } = await apiPost<{ shared: SharedTask }>(`/collab/tasks/${id}/reject`, { reason: reason.trim() });
   void syncNow().catch(() => undefined);
   return shared;
 }
@@ -172,4 +182,8 @@ export async function getNotices(): Promise<Notice[]> {
 
 export async function markNoticesRead(): Promise<void> {
   await apiPost("/collab/notices/read", {});
+}
+
+export async function markNoticeRead(id: string): Promise<void> {
+  await apiPost(`/collab/notices/${id}/read`, {});
 }

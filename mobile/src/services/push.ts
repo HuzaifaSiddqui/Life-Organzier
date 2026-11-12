@@ -9,6 +9,7 @@ import { getDeviceId } from "./device";
 import { scheduleReminderSync } from "./reminders";
 import { syncNow } from "./syncEngine";
 import { openAppScreen } from "../navigation/navigationRef";
+import { noticeTarget } from "../utils/collab";
 
 /**
  * P2: a task added on WhatsApp reaches the phone straight away. The server sends a visible push
@@ -101,13 +102,19 @@ export function flushPushQueue(): Promise<void> {
 
 /**
  * A "sync" push received in the foreground, or tapped, pulls changes and re-plans local alarms. A "collab" push
- * (task collaboration: a request, a shared task card, an answer) pulls too; tapping it opens People & sharing.
+ * (task collaboration: a request, a shared task card, an answer, progress) pulls too; tapping it opens the task, the
+ * card to answer (an invitation or a change), or People & sharing.
  */
 export function startPushListeners(): () => void {
   const onData = (data: unknown, tapped: boolean) => {
     const type = (data as { type?: string } | null)?.type;
     if (type === "sync" || type === "collab") void syncNow().then(() => scheduleReminderSync());
-    if (type === "collab" && tapped) openAppScreen("Collab", { tab: (data as { kind?: string }).kind === "TASK_COMPLETED" ? "shared" : "requests" });
+    if (type === "collab" && tapped) {
+      // The task itself when I have a copy, the card to answer for an invitation, else People & sharing.
+      const d = data as { kind?: string; sharedTaskId?: string | null; taskId?: string | null };
+      const target = noticeTarget({ kind: d.kind ?? "", sharedTaskId: d.sharedTaskId ?? null, taskId: d.taskId ?? null, pending: d.kind === "TASK_INVITE" || d.kind === "TASK_CHANGED" });
+      openAppScreen(target.screen, target.params);
+    }
   };
   const received = Notifications.addNotificationReceivedListener((n) => onData(n.request.content.data, false));
   const tapped = Notifications.addNotificationResponseReceivedListener((r) => onData(r.notification.request.content.data, true));

@@ -8,9 +8,9 @@ import { useLocale } from "../../i18n/LocaleProvider";
 import type { StringKey } from "../../i18n/strings";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { apiErrorCode, isNetworkError } from "../../services/api";
-import { acceptSharedTask, getSharedTask, updateSharedTask, type SharedTask } from "../../services/collabApi";
+import { acceptSharedTask, declineSharedTask, getSharedTask, updateSharedTask, type SharedTask } from "../../services/collabApi";
 import { useTheme } from "../../theme/ThemeProvider";
-import { collabErrorKey, personLabel } from "../../utils/collab";
+import { collabErrorKey, DECLINE_QUICK_PICKS, DECLINE_REASON_MAX, personLabel, validReason } from "../../utils/collab";
 import { dueDateAndTimeForSave, ymdFromLocalDate } from "../../utils/datetimeValidation";
 import { formatDuration } from "../../utils/format";
 
@@ -21,7 +21,8 @@ const QUICK_TIMES = ["9:00 AM", "2:00 PM", "4:00 PM", "7:00 PM", "9:00 PM"];
 
 /**
  * Task collaboration. edit: the owner changes a shared task (a change to title, notes, date, time or length asks
- * everyone who accepted again). accept: a member accepts a card for their own date/time; the owner is told.
+ * everyone who accepted again). accept: a member accepts a card for their own date/time, or declines it; the owner is
+ * told. decline (or "Decline" on the accept screen): a short reason is required, the owner sees it.
  */
 export function SharedTaskEditScreen({ navigation, route }: Props) {
   const { id, mode } = route.params;
@@ -36,6 +37,8 @@ export function SharedTaskEditScreen({ navigation, route }: Props) {
   const [duration, setDuration] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [declining, setDeclining] = useState(mode === "decline");
+  const [reason, setReason] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -71,16 +74,64 @@ export function SharedTaskEditScreen({ navigation, route }: Props) {
     }
   };
 
+  const decline = async () => {
+    if (!validReason(reason)) return setError(t("collab.err.REASON_REQUIRED"));
+    setSaving(true);
+    setError(null);
+    try {
+      await declineSharedTask(id, reason);
+      navigation.goBack();
+    } catch (e) {
+      setError(t(collabErrorKey(apiErrorCode(e), isNetworkError(e)) as StringKey));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const field = [styles.input, type.body, { color: colors.text, borderColor: colors.hairline, borderRadius: radii.md, paddingHorizontal: spacing.md, backgroundColor: colors.surface }];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <ScreenHeader title={t(mode === "accept" ? "collab.edit.acceptTitle" : "collab.edit.title")} onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t(declining ? "collab.decline.title" : mode === "edit" ? "collab.edit.title" : "collab.edit.acceptTitle")} onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl }} keyboardShouldPersistTaps="handled">
         {failed ? (
           <ErrorState error={failed} onRetry={() => void load()} />
         ) : !shared ? (
           [0, 1, 2].map((i) => <Skeleton key={i} height={56} />)
+        ) : declining ? (
+          <>
+            <Card style={{ gap: spacing.md }}>
+              <Text variant="headline">{shared.title}</Text>
+              <Text variant="callout" color="secondary">
+                {t("collab.decline.hint", { name: personLabel(shared.owner) })}
+              </Text>
+              <View style={[styles.wrap, { gap: spacing.xs }]}>
+                {DECLINE_QUICK_PICKS.map((r) => (
+                  <Chip key={r} small label={r} selected={reason === r} onPress={() => setReason(r)} />
+                ))}
+              </View>
+              <TextInput
+                value={reason}
+                onChangeText={setReason}
+                maxLength={DECLINE_REASON_MAX}
+                multiline
+                placeholder={t("collab.decline.placeholder")}
+                placeholderTextColor={colors.textTertiary}
+                accessibilityLabel={t("collab.decline.title")}
+                style={[field, styles.notes, { paddingTop: spacing.md }]}
+              />
+              <Text variant="caption" color="tertiary" tabular>
+                {t("collab.decline.count", { n: String(reason.trim().length) })}
+              </Text>
+            </Card>
+            {error ? (
+              <Text variant="callout" color="danger">
+                {error}
+              </Text>
+            ) : null}
+            <Button title={t("collab.decline.confirm")} kind="danger" onPress={() => void decline()} loading={saving} disabled={saving || !validReason(reason)} />
+            <Button title={t("collab.decline.cancel")} kind="ghost" onPress={() => (mode === "decline" ? navigation.goBack() : setDeclining(false))} disabled={saving} />
+          </>
         ) : (
           <>
             <Card style={{ gap: spacing.md }}>
@@ -120,6 +171,9 @@ export function SharedTaskEditScreen({ navigation, route }: Props) {
               </Text>
             ) : null}
             <Button title={t(mode === "accept" ? "collab.edit.acceptSave" : "collab.edit.save")} onPress={() => void save()} loading={saving} />
+            {mode === "accept" && shared.myStatus === "PENDING" ? (
+              <Button title={t("collab.card.decline")} kind="ghost" onPress={() => { setError(null); setDeclining(true); }} disabled={saving} />
+            ) : null}
           </>
         )}
       </ScrollView>

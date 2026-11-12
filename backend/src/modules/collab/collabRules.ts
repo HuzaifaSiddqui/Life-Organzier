@@ -87,7 +87,11 @@ export type NoticeKind =
   | "CONNECTION_ACCEPTED"
   | "TASK_INVITE"
   | "TASK_ACCEPTED"
+  /** To the member who accepted: "You joined …" (in-app only, no push). */
+  | "TASK_JOINED"
   | "TASK_REJECTED"
+  /** Done together: someone set the shared progress; every other copy follows. */
+  | "TASK_PROGRESS"
   | "TASK_CHANGED"
   | "TASK_TIME_CHANGED"
   | "TASK_CANCELLED"
@@ -95,8 +99,29 @@ export type NoticeKind =
   | "TASK_MEMBER_REMOVED"
   | "TASK_MEMBER_LEFT";
 
+/** Decline reasons: required, plain text, at most this long. */
+export const DECLINE_REASON_MAX = 200;
+/** The app's quick picks (the server accepts any text that passes `cleanReason`). */
+export const DECLINE_QUICK_PICKS = ["Too busy right now", "Not my task", "Wrong time for me"] as const;
+
+/**
+ * A decline reason as stored and shown to the owner: tags and control characters removed, whitespace collapsed,
+ * length-limited. Null when nothing readable is left.
+ */
+export function cleanReason(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[<>]/g, "")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text && text.length <= DECLINE_REASON_MAX ? text : null;
+}
+
 /** The push for a notice (the app shows its own copy for the in-app list). */
-export function pushText(kind: NoticeKind, actor: string, title?: string | null): { title: string; body: string } {
+export function pushText(kind: NoticeKind, actor: string, title?: string | null, extra: { reason?: string | null; progress?: number | null } = {}): { title: string; body: string } {
   const t = title ? `"${title}"` : "a task";
   switch (kind) {
     case "CONNECTION_REQUEST":
@@ -107,8 +132,12 @@ export function pushText(kind: NoticeKind, actor: string, title?: string | null)
       return { title: "Shared task", body: `${actor} shared ${t} with you. Accept it to add it to your plan.` };
     case "TASK_ACCEPTED":
       return { title: "Task accepted", body: `${actor} accepted ${t}.` };
+    case "TASK_JOINED":
+      return { title: "You joined a task", body: `You joined ${t}.` };
     case "TASK_REJECTED":
-      return { title: "Task declined", body: `${actor} declined ${t}.` };
+      return { title: "Task declined", body: `${actor} declined ${t}${extra.reason ? `: ${extra.reason}` : "."}` };
+    case "TASK_PROGRESS":
+      return { title: "Progress update", body: `${actor} set ${t} to ${extra.progress ?? 0}%.` };
     case "TASK_CHANGED":
       return { title: "Task changed", body: `${actor} changed ${t}. Please accept it again.` };
     case "TASK_TIME_CHANGED":

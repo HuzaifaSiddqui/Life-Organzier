@@ -16,6 +16,12 @@ export function withoutActiveMention(text: string): string {
   return activeMention(text) === null ? text : text.replace(/@[a-z0-9_.]*$/i, "");
 }
 
+/** The text with `p` mentioned where the "@…" being typed was: "@username " (or their name when they have none). */
+export function insertMention(text: string, p: PersonLike): string {
+  const handle = p.username ? `@${p.username}` : (p.displayName ?? "").trim();
+  return `${withoutActiveMention(text)}${handle} `;
+}
+
 /** "@username", else the name, else "Someone". */
 export function personLabel(p: PersonLike | null | undefined): string {
   if (!p) return "Someone";
@@ -79,9 +85,38 @@ export function searchable(raw: string): boolean {
   return /^@?[a-z0-9_]{3,}$/.test(text);
 }
 
+/** Mirrors the server (collabRules.DECLINE_REASON_MAX / DECLINE_QUICK_PICKS). */
+export const DECLINE_REASON_MAX = 200;
+export const DECLINE_QUICK_PICKS = ["Too busy right now", "Not my task", "Wrong time for me"] as const;
+
+/** A reason the server will take: some text, at most 200 characters once trimmed (the server also strips markup). */
+export function validReason(raw: string): boolean {
+  const t = raw.trim();
+  return t.length > 0 && t.length <= DECLINE_REASON_MAX;
+}
+
+export type NoticeTarget = { screen: "TaskDetail"; params: { taskId: string } } | { screen: "SharedTaskEdit"; params: { id: string; mode: "accept" } } | { screen: "Collab"; params?: { tab: "requests" | "people" | "shared" } };
+
+/**
+ * Where a notice (or its push) opens: a card still waiting for my answer → the accept screen; my own copy of the
+ * task → that task; a connection request → People; anything else → the Shared tab.
+ */
+export function noticeTarget(n: { kind: string; sharedTaskId: string | null; taskId?: string | null; pending?: boolean }): NoticeTarget {
+  if (n.sharedTaskId && n.pending) return { screen: "SharedTaskEdit", params: { id: n.sharedTaskId, mode: "accept" } };
+  if (n.taskId) return { screen: "TaskDetail", params: { taskId: n.taskId } };
+  if (n.kind === "TASK_INVITE" && n.sharedTaskId) return { screen: "SharedTaskEdit", params: { id: n.sharedTaskId, mode: "accept" } };
+  if (n.kind.startsWith("CONNECTION_")) return { screen: "Collab", params: { tab: n.kind === "CONNECTION_REQUEST" ? "requests" : "people" } };
+  return { screen: "Collab", params: { tab: "shared" } };
+}
+
+/** Badge text for an unread count: nothing at 0, "9+" above 9. */
+export function badgeText(n: number): string | null {
+  return n <= 0 ? null : n > 9 ? "9+" : String(n);
+}
+
 /** Server error codes → copy keys (never the server's text). */
 export function collabErrorKey(code: string | null, offline: boolean): string {
   if (offline) return "collab.err.offline";
-  const known = ["USERNAME_TAKEN", "INVALID_USERNAME", "NOT_CONNECTED", "SHARED_TASK_CANCELLED", "ALREADY_ANSWERED", "OPEN_SHARED_TASKS", "TOO_MANY_MEMBERS", "RATE_LIMITED", "SHARED_TASK_NOT_FOUND"];
+  const known = ["USERNAME_TAKEN", "INVALID_USERNAME", "NOT_CONNECTED", "SHARED_TASK_CANCELLED", "ALREADY_ANSWERED", "OPEN_SHARED_TASKS", "TOO_MANY_MEMBERS", "RATE_LIMITED", "SHARED_TASK_NOT_FOUND", "REASON_REQUIRED"];
   return code && known.includes(code) ? `collab.err.${code}` : "collab.err.generic";
 }
