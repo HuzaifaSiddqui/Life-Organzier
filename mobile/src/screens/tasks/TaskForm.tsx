@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
 import { Button, Card, Chip, ui } from "../../components/ui";
 import { Icon } from "../../components/icons/Icon";
@@ -11,6 +12,7 @@ import { clashesForTask } from "../../services/calendar";
 import { localDueAt, suggestForTitle, type TaskInput } from "../../services/tasksApi";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { taskSpan } from "../../utils/calendarSync";
+import { moreSummary } from "../../utils/taskFormSummary";
 import { formatDuration, formatTime } from "../../utils/format";
 import { TaskLocationsField } from "../../components/TaskLocationsField";
 import type { Priority, ReminderMode, SavedLocation, Task, TaskLocation, TaskStatus, TaskType } from "../../types/models";
@@ -313,25 +315,20 @@ export function TaskForm({
   };
 
   const contexts = settings?.contexts ?? [];
+  // UI v2: advanced fields start collapsed; the summary lists any that have a value.
+  const [showMore, setShowMore] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [placeCount, setPlaceCount] = useState(initialLocations?.length ?? 0);
+  const summary = moreSummary(v, { editing, places: placeCount });
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* UI v2: the essentials first; Planned start and Type (Fixed time) stay visible */}
         <Card style={{ gap: 14 }}>
           <View>
             <Text style={ui.label}>Title</Text>
             <TextInput style={ui.input} value={v.title} onChangeText={(t) => set("title", t)} placeholder="What do you need to do?" placeholderTextColor={palette.muted} />
-          </View>
-          <View>
-            <Text style={ui.label}>Description</Text>
-            <TextInput
-              style={[ui.input, { minHeight: 70, textAlignVertical: "top" }]}
-              value={v.description}
-              onChangeText={(t) => set("description", t)}
-              placeholder="Optional details"
-              placeholderTextColor={palette.muted}
-              multiline
-            />
           </View>
           <TaskFormDueDateRow valueYmd={v.dueYmd} onChangeYmd={(ymd) => set("dueYmd", ymd)} onClear={() => set("dueYmd", "")} />
           <TaskFormDueTimeRow valueTime={v.dueTime} onChangeTime={(t) => set("dueTime", t)} baseYmd={v.dueYmd || undefined} quickTimes={["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "11:59 PM"]} />
@@ -345,6 +342,61 @@ export function TaskForm({
             </View>
           </View>
 
+          <View>
+            <Text style={ui.label}>Type</Text>
+            <View style={ui.wrap}>
+              {TYPES.map((t) => (
+                <Chip key={t.key} small label={t.label} selected={v.taskType === t.key} onPress={() => { typePicked.current = true; set("taskType", t.key); }} />
+              ))}
+            </View>
+            <Text style={styles.hint}>{TYPES.find((t) => t.key === v.taskType)?.hint}</Text>
+          </View>
+          <View>
+              <Text style={ui.label}>{t("task.plannedStart")}</Text>
+              <Text style={styles.hint}>{t("task.plannedStartHint")}</Text>
+              <TaskFormDueDateRow label={t("task.plannedStart")} valueYmd={v.plannedYmd} onChangeYmd={(ymd) => set("plannedYmd", ymd)} onClear={() => setV((p) => ({ ...p, plannedYmd: "", plannedTime: "" }))} />
+              <TaskFormDueTimeRow label=" " valueTime={v.plannedTime} onChangeTime={(time) => set("plannedTime", time)} baseYmd={v.plannedYmd || undefined} quickTimes={["9:00 AM", "2:00 PM", "4:00 PM", "7:00 PM", "9:00 PM"]} />
+              {!v.plannedYmd && !v.plannedTime && v.durationMinutes ? (
+                <Button title={slotBusy ? t("task.findingTime") : t("task.findTime")} kind="secondary" size="sm" loading={slotBusy} onPress={() => void findTime()} style={{ alignSelf: "flex-start", marginTop: 6 }} />
+              ) : null}
+              {slotNote ? <Text style={styles.hint}>{slotNote}</Text> : null}
+          </View>
+        </Card>
+
+        {/* Share with (COLLAB_TASKS) stays visible, above More options */}
+        {extra ? <Card>{extra}</Card> : null}
+
+        <Card style={{ gap: 14 }}>
+          <Pressable
+            onPress={() => setShowMore((x) => !x)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showMore }}
+            accessibilityLabel={`${t(showMore ? "taskForm.fewer" : "taskForm.more")}${summary.length ? `: ${summary.join(", ")}` : ""}`}
+            style={styles.moreRow}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={ui.label}>{t(showMore ? "taskForm.fewer" : "taskForm.more")}</Text>
+              <Text style={styles.hint} numberOfLines={2}>
+                {summary.length ? summary.join(" · ") : t("taskForm.moreHint")}
+              </Text>
+            </View>
+            <View style={{ transform: [{ rotate: showMore ? "270deg" : "90deg" }] }}>
+              <Icon name="chevron" size={18} color={colors.textMuted} />
+            </View>
+          </Pressable>
+          {/* Hidden, not unmounted: fields keep their state (e.g. places picked for a new task) while collapsed. */}
+          <View style={{ gap: 14, display: showMore ? "flex" : "none" }}>
+          <View>
+            <Text style={ui.label}>Description</Text>
+            <TextInput
+              style={[ui.input, { minHeight: 70, textAlignVertical: "top" }]}
+              value={v.description}
+              onChangeText={(t) => set("description", t)}
+              placeholder="Optional details"
+              placeholderTextColor={palette.muted}
+              multiline
+            />
+          </View>
           <View>
             <Text style={ui.label}>Category</Text>
             <View style={ui.wrap}>
@@ -383,18 +435,6 @@ export function TaskForm({
               </View>
             ) : null}
           </View>
-        </Card>
-
-        <Card style={{ gap: 14 }}>
-          <View>
-            <Text style={ui.label}>Type</Text>
-            <View style={ui.wrap}>
-              {TYPES.map((t) => (
-                <Chip key={t.key} small label={t.label} selected={v.taskType === t.key} onPress={() => { typePicked.current = true; set("taskType", t.key); }} />
-              ))}
-            </View>
-            <Text style={styles.hint}>{TYPES.find((t) => t.key === v.taskType)?.hint}</Text>
-          </View>
           <View>
             <Text style={ui.label}>How long will it take?</Text>
             <View style={ui.wrap}>
@@ -419,16 +459,6 @@ export function TaskForm({
               />
             </View>
           ) : null}
-          <View>
-              <Text style={ui.label}>{t("task.plannedStart")}</Text>
-              <Text style={styles.hint}>{t("task.plannedStartHint")}</Text>
-              <TaskFormDueDateRow label={t("task.plannedStart")} valueYmd={v.plannedYmd} onChangeYmd={(ymd) => set("plannedYmd", ymd)} onClear={() => setV((p) => ({ ...p, plannedYmd: "", plannedTime: "" }))} />
-              <TaskFormDueTimeRow label=" " valueTime={v.plannedTime} onChangeTime={(time) => set("plannedTime", time)} baseYmd={v.plannedYmd || undefined} quickTimes={["9:00 AM", "2:00 PM", "4:00 PM", "7:00 PM", "9:00 PM"]} />
-              {!v.plannedYmd && !v.plannedTime && v.durationMinutes ? (
-                <Button title={slotBusy ? t("task.findingTime") : t("task.findTime")} kind="secondary" size="sm" loading={slotBusy} onPress={() => void findTime()} style={{ alignSelf: "flex-start", marginTop: 6 }} />
-              ) : null}
-              {slotNote ? <Text style={styles.hint}>{slotNote}</Text> : null}
-          </View>
           <View>
             <Text style={ui.label}>Difficulty</Text>
             <View style={ui.wrap}>
@@ -465,7 +495,10 @@ export function TaskForm({
           {isPro ? (
             <View>
               <Text style={ui.label}>{t("location.sectionTitle")}</Text>
-              <TaskLocationsField taskId={taskId ?? null} initial={initialLocations ?? []} onPendingChange={onPendingPlaces} />
+              <TaskLocationsField taskId={taskId ?? null} initial={initialLocations ?? []} onPendingChange={(places) => {
+                setPlaceCount(places.length);
+                onPendingPlaces?.(places);
+              }} />
             </View>
           ) : null}
           {editing ? (
@@ -478,18 +511,23 @@ export function TaskForm({
               </View>
             </View>
           ) : null}
+          </View>
         </Card>
+      </ScrollView>
 
-        {extra ? <Card>{extra}</Card> : null}
+      {/* Save stays in reach: pinned under the form */}
+      <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.bg, paddingBottom: Math.max(insets.bottom, 16) }]}>
         {error ? <Text style={ui.error}>{error}</Text> : null}
         <Button title={submitLabel} onPress={() => void submit()} loading={busy} />
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, gap: 14, paddingBottom: 48 },
+  content: { padding: 16, gap: 14, paddingBottom: 24 },
+  moreRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48 },
+  footer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16, gap: 8, borderTopWidth: 1 },
   suggest: { color: palette.ai, fontFamily: "Inter_600SemiBold", marginTop: 8 },
   hint: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, marginTop: 6 },
 });

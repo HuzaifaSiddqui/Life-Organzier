@@ -12,7 +12,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
-import { sendToAssistant } from "../../services/assistantApi";
+import { sendToAssistant, startTaskNow } from "../../services/assistantApi";
 import { isLocalId } from "../../services/syncEngine";
 import { createTask, deleteTask, getTask, splitTask, suggestSlot, undoTaskEdit, updateTask } from "../../services/tasksApi";
 import type { Task } from "../../types/models";
@@ -26,6 +26,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   const [task, setTask] = useState<Task | null>(null);
   const { isPro } = usePreferences();
   const { t } = useLocale();
+  const { colors: themeColors } = useTheme();
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [parent, setParent] = useState<{ id: string; title: string } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
@@ -247,9 +248,12 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         ) : null}
 
         <View style={{ gap: 10 }}>
+          {task.status === "PENDING" && !isLocalId(task.id) ? (
+            <Button title={t("task.start")} icon={<Icon name="play" size={18} color={themeColors.onAccent} />} loading={busy === "start"} onPress={() => void run("start", () => startTaskNow(task.id))} />
+          ) : null}
           <Button
             title={done ? "Reopen task" : "Mark complete"}
-            kind={done ? "secondary" : "primary"}
+            kind={done || (task.status === "PENDING" && !isLocalId(task.id)) ? "secondary" : "primary"}
             loading={busy === "done"}
             onPress={() => void run("done", async () => {
               await updateTask(task.id, { status: done ? "PENDING" : "COMPLETED" });

@@ -24,18 +24,21 @@ import { colors, palette, radii } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
-import { subscribeTasks } from "../../services/syncEngine";
+import { isLocalId, subscribeTasks } from "../../services/syncEngine";
 import { deleteTask, getCachedTasks, getTasks, restoreTask, updateTask } from "../../services/tasksApi";
 import { cancelSharedTask } from "../../services/collabApi";
 import type { Task, TaskStatus } from "../../types/models";
 import { useLocale } from "../../i18n/LocaleProvider";
+import type { StringKey } from "../../i18n/strings";
+import { Icon } from "../../components/icons/Icon";
+import { startTaskNow } from "../../services/assistantApi";
+import { inRange, type RangeFilter } from "../../utils/taskRange";
 import { isOverdue } from "../../utils/format";
 import { PRIORITY_RANK } from "../../utils/priorityColors";
 
 type Props = NativeStackScreenProps<MainStackParamList, "TaskList">;
 
 type StatusFilter = "ALL" | "PENDING" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
-type RangeFilter = "ALL" | "TODAY" | "WEEK" | "MONTH";
 type SortKey = "due_asc" | "due_desc" | "priority" | "category" | "created";
 
 const STATUS: Array<{ key: StatusFilter; label: string }> = [
@@ -45,11 +48,13 @@ const STATUS: Array<{ key: StatusFilter; label: string }> = [
   { key: "COMPLETED", label: "Completed" },
   { key: "OVERDUE", label: "Overdue" },
 ];
-const RANGES: Array<{ key: RangeFilter; label: string }> = [
-  { key: "ALL", label: "Any time" },
-  { key: "TODAY", label: "Today" },
-  { key: "WEEK", label: "This week" },
-  { key: "MONTH", label: "This month" },
+/** UI v2: always visible above the list (Tomorrow is new); labels via t(). */
+const RANGES: Array<{ key: RangeFilter; label: StringKey }> = [
+  { key: "ALL", label: "tasks.range.all" },
+  { key: "TODAY", label: "tasks.range.today" },
+  { key: "TOMORROW", label: "tasks.range.tomorrow" },
+  { key: "WEEK", label: "tasks.range.week" },
+  { key: "MONTH", label: "tasks.range.month" },
 ];
 const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "due_asc", label: "Due ↑" },
@@ -65,7 +70,7 @@ function dueTs(t: Task): number {
 }
 
 /** Swipe right → complete, swipe left → postpone a day (FR-TM-003 §5). */
-function SwipeRow({ children, onRight, onLeft }: { children: ReactNode; onRight: () => void; onLeft: () => void }) {
+function SwipeRow({ children, onRight, onLeft, doneLabel, tomorrowLabel }: { children: ReactNode; onRight: () => void; onLeft: () => void; doneLabel: string; tomorrowLabel: string }) {
   const x = useRef(new Animated.Value(0)).current;
   const responder = useRef(
     PanResponder.create({
@@ -82,8 +87,14 @@ function SwipeRow({ children, onRight, onLeft }: { children: ReactNode; onRight:
   return (
     <View>
       <View style={styles.swipeBg}>
-        <Text style={[styles.swipeText, { color: palette.success }]}>Complete</Text>
-        <Text style={[styles.swipeText, { color: palette.warning }]}>Postpone ⏭</Text>
+        <View style={styles.swipeSide}>
+          <Icon name="check" size={18} color={palette.success} />
+          <Text style={[styles.swipeText, { color: palette.success }]}>{doneLabel}</Text>
+        </View>
+        <View style={styles.swipeSide}>
+          <Text style={[styles.swipeText, { color: palette.warning }]}>{tomorrowLabel}</Text>
+          <Icon name="calendar" size={18} color={palette.warning} />
+        </View>
       </View>
       <Animated.View style={{ transform: [{ translateX: x }] }} {...responder.panHandlers}>
         {children}
@@ -110,7 +121,7 @@ export function TaskListScreen({ navigation, route }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const [useContext, setUseContext] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [toast, setToast] = useState<{ text: string; undoId?: string; undoShare?: { id: string; taskId: string | null } } | null>(null);
+  const [toast, setToast] = useState<{ text: string; undoId?: string; undoShare?: { id: string; taskId: string | null }; undo?: () => Promise<unknown> } | null>(null);
 
   const load = useCallback(async (fromServer = true) => {
     try {
@@ -141,8 +152,6 @@ export function TaskListScreen({ navigation, route }: Props) {
 
   const filtered = useMemo(() => {
     const now = new Date();
-    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const end = range === "TODAY" ? startToday + 86400000 : range === "WEEK" ? startToday + 7 * 86400000 : range === "MONTH" ? startToday + 31 * 86400000 : Infinity;
     const q = query.trim().toLowerCase();
     const context = useContext ? settings?.currentContext : null;
     const parentsShown = new Set(tasks.filter((t) => !t.parentTaskId).map((t) => t.id));
@@ -152,10 +161,7 @@ export function TaskListScreen({ navigation, route }: Props) {
       if (t.parentTaskId && parentsShown.has(t.parentTaskId) && !q) return false;
       if (status === "OVERDUE" && !isOverdue(t)) return false;
       if (status !== "ALL" && status !== "OVERDUE" && t.status !== (status as TaskStatus)) return false;
-      if (range !== "ALL") {
-        const d = dueTs(t);
-        if (!(d < end)) return false;
-      }
+      if (!inRange(dueTs(t), range, now)) return false;
       if (cats.length && !cats.includes(t.category ?? "")) return false;
       if (tags.length) {
         const own = Array.isArray(t.tags) ? t.tags : [];
@@ -189,8 +195,12 @@ export function TaskListScreen({ navigation, route }: Props) {
 
   const complete = async (t: Task) => {
     try {
+      // Optimistic (the local store changes first); Undo puts the previous status back.
       await updateTask(t.id, { status: t.status === "COMPLETED" ? "PENDING" : "COMPLETED" });
-      setToast({ text: t.status === "COMPLETED" ? `Reopened "${t.title}"` : `Completed "${t.title}"` });
+      setToast({
+        text: tr(t.status === "COMPLETED" ? "tasks.toast.reopened" : "tasks.toast.done", { title: t.title }),
+        undo: () => updateTask(t.id, { status: t.status }),
+      });
     } catch (e) {
       setToast({ text: getApiErrorMessage(e) });
     }
@@ -205,7 +215,10 @@ export function TaskListScreen({ navigation, route }: Props) {
         scheduledStart: t.scheduledStart ? new Date(Date.parse(t.scheduledStart) + days * 86400000).toISOString() : null,
         scheduledEnd: t.scheduledEnd ? new Date(Date.parse(t.scheduledEnd) + days * 86400000).toISOString() : null,
       });
-      setToast({ text: `⏭ Postponed "${t.title}" to ${base.toLocaleDateString(undefined, { weekday: "short" })}` });
+      setToast({
+        text: tr("tasks.toast.moved", { title: t.title, day: base.toLocaleDateString(undefined, { weekday: "short" }) }),
+        undo: () => updateTask(t.id, { dueDate: t.dueDate ?? null, scheduledStart: t.scheduledStart ?? null, scheduledEnd: t.scheduledEnd ?? null }),
+      });
     } catch (e) {
       setToast({ text: getApiErrorMessage(e) });
     }
@@ -247,7 +260,7 @@ export function TaskListScreen({ navigation, route }: Props) {
   };
 
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
-  const activeFilters = cats.length + tags.length + (range !== "ALL" ? 1 : 0);
+  const activeFilters = cats.length + tags.length;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -284,6 +297,12 @@ export function TaskListScreen({ navigation, route }: Props) {
           ))}
         </ScrollView>
 
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {RANGES.map((r) => (
+            <Chip key={r.key} small label={tr(r.label)} selected={range === r.key} onPress={() => setRange(r.key)} />
+          ))}
+        </ScrollView>
+
         <View style={styles.rowBetween}>
           <Pressable onPress={() => setShowFilters((v) => !v)}>
             <Text style={styles.link}>
@@ -297,12 +316,6 @@ export function TaskListScreen({ navigation, route }: Props) {
 
         {showFilters ? (
           <View style={styles.filters}>
-            <Text style={styles.label}>Date range</Text>
-            <View style={styles.wrap}>
-              {RANGES.map((r) => (
-                <Chip key={r.key} small label={r.label} selected={range === r.key} onPress={() => setRange(r.key)} />
-              ))}
-            </View>
             <Text style={styles.label}>Categories</Text>
             <View style={styles.wrap}>
               {categories.map((c) => (
@@ -346,13 +359,14 @@ export function TaskListScreen({ navigation, route }: Props) {
             const kids = (childrenOf.get(t.id) ?? []).filter((k) => k.status !== "DELETED");
             return (
               <View key={t.id}>
-                <SwipeRow onRight={() => void complete(t)} onLeft={() => void postpone(t)}>
+                <SwipeRow onRight={() => void complete(t)} onLeft={() => void postpone(t)} doneLabel={tr("tasks.swipe.done")} tomorrowLabel={tr("tasks.swipe.tomorrow")}>
                   <TaskCard
                     task={t}
                     query={query}
                     categoryColors={categories}
                     onPress={() => navigation.navigate("TaskDetail", { taskId: t.id })}
                     onLongPress={() => moreOptions(t)}
+                    onStart={isLocalId(t.id) ? undefined : () => void startTaskNow(t.id).then((text) => setToast({ text }), (e) => setToast({ text: getApiErrorMessage(e) }))}
                     subtaskCount={kids.length}
                     expanded={expanded[t.id]}
                     onToggleExpand={() => setExpanded((e) => ({ ...e, [t.id]: !e[t.id] }))}
@@ -376,7 +390,21 @@ export function TaskListScreen({ navigation, route }: Props) {
         text={toast?.text ?? null}
         onHide={() => setToast(null)}
         action={
-          toast?.undoShare
+          toast?.undo
+            ? {
+                label: tr("tasks.undo"),
+                onPress: async () => {
+                  const undo = toast.undo as () => Promise<unknown>;
+                  setToast(null);
+                  try {
+                    await undo();
+                    setToast({ text: tr("tasks.toast.undone") });
+                  } catch (e) {
+                    setToast({ text: getApiErrorMessage(e) });
+                  }
+                },
+              }
+            : toast?.undoShare
             ? {
                 label: "Undo",
                 // The same as chat's Undo: cancelled for everyone (cards withdrawn) and my copy removed.
@@ -451,5 +479,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   swipeText: { fontFamily: "Inter_700Bold" },
+  swipeSide: { flexDirection: "row", alignItems: "center", gap: 6 },
   navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
 });
