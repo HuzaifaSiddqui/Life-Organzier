@@ -330,6 +330,9 @@ async function otherOne(turn: Turn): Promise<Out> {
   return { content: "Which task do you mean?", actions: [sayAction("Show my tasks", "query_tasks", "Show my tasks")], intent: "choose_task" };
 }
 
+const FILLER_LEAD =
+  /^(?:(?:actually|just|please|ok(?:ay)?|so|well|um+|uh+|oh)[,!.]?\s+)+(?=(?:move|add|delete|remove|complete|finish|change|update|set|make|remind|share|rename|cancel|mark|push|postpone|reschedule|put)\b)/i;
+
 /** "never mind", "cancel", "stop" (bare) to an open "which task?". */
 const CANCEL_CHOICE = /^(?:no[,.]?\s+)?(?:never ?mind|cancel|stop)[\s.!]*$/i;
 /** Only "add / share / invite / include / put … it|that|this …" can be about an existing task (saves the lookup). */
@@ -362,6 +365,9 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
       intent: "crisis",
     };
   }
+
+  // PR B: "actually move it to friday", "ok add milk": a filler word in front of a command is not part of it.
+  if (chatFixesOn()) text = text.replace(FILLER_LEAD, "");
 
   // CHAT_FIXES_V2: "cancel that", "forget it" close whatever question is open (never a delete); so does "never mind"
   // to "which task?", which used to be asked again.

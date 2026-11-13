@@ -38,7 +38,8 @@ export function resolveRange(text: string, ctx: ParseCtx): DayRange | "unknown" 
   if (/\bnext weekend\b/.test(t)) return { from: addDaysYmd(thisSat, 7), to: addDaysYmd(thisSat, 8), label: "Next weekend" };
   if (/\bafter the weekend\b|\bafter weekend\b/.test(t)) return { from: nextMon, to: addDaysYmd(nextMon, 6), label: "After the weekend" };
   if (/\b(?:this |the )?weekend\b/.test(t)) return { from: dow === 0 ? today : thisSat, to: dow === 0 ? today : addDaysYmd(thisSat, 1), label: "This weekend" };
-  if (/\b(?:this week|is hafte|is haftay)\b/.test(t)) return { from: today, to: plus(6), label: "This week" };
+  // This week = Monday to Sunday (PR B); "the next 7 days" is read above as a rolling span.
+  if (/\b(?:this week|is hafte|is haftay)\b/.test(t)) return { from: plus(dow === 0 ? -6 : 1 - dow), to: plus(dow === 0 ? 0 : 7 - dow), label: "This week" };
   const [y, mo] = today.split("-").map(Number);
   const lastOf = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).toISOString().slice(0, 10);
   if (/\bthis month\b/.test(t)) return { from: today, to: lastOf(y, mo), label: "This month" };

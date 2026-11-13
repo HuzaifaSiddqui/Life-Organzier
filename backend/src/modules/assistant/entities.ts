@@ -519,6 +519,15 @@ function extractFrequency(cur: Cursor, todayYmd: string): { frequency: RoutineFr
 const POSS_MARK = "qqposs";
 const POSSESSIVE_DAY = new RegExp(`\\b(today|tomorrow|tonight|yesterday|${["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].join("|")})['’]s\\b`, "gi");
 
+/**
+ * CHAT_FIXES_V2: "high" / "low" / "medium" set a priority only with "priority" ("high priority", "priority: low") or
+ * as the whole change ("make it high", "set it to low"); "feeling low", "low on cash", "high school" are not one.
+ */
+function priorityWord(level: string, alone: string): RegExp {
+  const marked = `\\b(?:${level})[- ]priority\\b|\\bpriority\\s*(?:to\\s+|:\\s*|is\\s+)?(?:${level})\\b|(?<=\\b(?:make|set|mark|change|put)\\s+(?:it|this|that|them|the\\s+\\w+)\\s+(?:to\\s+|as\\s+)?)(?:${level})(?=\\s*[.!]*$)`;
+  return new RegExp(alone ? `${marked}|\\b(?:${alone})\\b` : marked, "i");
+}
+
 export function extractEntities(text: string, opts: ExtractOptions): Entities {
   const todayYmd = localYmd(opts.now, opts.tz);
   // CHAT_FIXES_V2: "today's lecture notes", "Friday's quiz" name a thing; the day word is part of its name, not the
@@ -551,9 +560,9 @@ export function extractEntities(text: string, opts: ExtractOptions): Entities {
   if (cur.take(/\b(?:mandatory|must[- ]do|non[- ]negotiable|compulsory)\b/i)) routinePriority = RoutinePriority.MANDATORY;
   else if (cur.take(/\boptional\b/i)) routinePriority = RoutinePriority.NORMAL;
   if (cur.take(/\b(?:urgent(?:ly)?|asap|critical|very important|top priority|immediately)\b/i)) priority = Priority.URGENT;
-  else if (cur.take(/\b(?:high[- ]priority|high|important)\b/i)) priority = Priority.HIGH;
-  else if (cur.take(/\b(?:low[- ]priority|low|whenever|someday|not urgent)\b/i)) priority = Priority.LOW;
-  else if (cur.take(/\b(?:medium|normal)(?:[- ]priority)?\b/i)) priority = Priority.MEDIUM;
+  else if (cur.take(chatFixesOn() ? priorityWord("high", "important") : /\b(?:high[- ]priority|high|important)\b/i)) priority = Priority.HIGH;
+  else if (cur.take(chatFixesOn() ? priorityWord("low", "whenever|someday|not urgent") : /\b(?:low[- ]priority|low|whenever|someday|not urgent)\b/i)) priority = Priority.LOW;
+  else if (cur.take(chatFixesOn() ? priorityWord("medium|normal", "") : /\b(?:medium|normal)(?:[- ]priority)?\b/i)) priority = Priority.MEDIUM;
   if (!routinePriority && priority === Priority.HIGH) routinePriority = RoutinePriority.IMPORTANT;
 
   let difficulty: number | null = null;

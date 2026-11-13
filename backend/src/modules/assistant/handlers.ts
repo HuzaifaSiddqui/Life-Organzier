@@ -55,7 +55,7 @@ import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
-import { bareImperative, CHANGE_TIME, EDIT_EXISTING, IMPERATIVE_START } from "./nlu.js";
+import { bareImperative, CHANGE_TIME, EDIT_EXISTING, feelingTail, IMPERATIVE_START } from "./nlu.js";
 import { chatFixesOn, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
@@ -187,7 +187,7 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   }
   switch (u.intent) {
     case "create_task": {
-      if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && TASK_CUE.test(text))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
+      if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && (TASK_CUE.test(text) || feelingTail(text)))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       // Task collaboration: connected people named in the message, and whether it's for them too (shareIntent.ts).
       const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text) };
       const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
@@ -635,6 +635,8 @@ async function splitIntent(turn: Turn, u: Understanding): Promise<Out> {
   return doSplit(turn, found.task, u.splitParts);
 }
 
+const ORDINAL_REF = /\bthe\s+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2}(?:st|nd|rd|th))(?:\s+(?:one|task|item))?\b/i;
+
 async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<Out> {
   // A question that names something to look for is a search, never today's list ("any task related to KFC").
   const find = parseFindQuery(text, { opts: extractOpts(turn), todayYmd: turn.todayYmd });
@@ -645,7 +647,9 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   if (q?.kind === "urgent") return urgentQuery(turn);
 
   // "my physics task" names the physics task: the word "task" is dropped, not a reason to list today.
-  const ref = (q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null)?.replace(/\btasks?\b/gi, " ").replace(/\s+/g, " ").trim() || null;
+  // CHAT_FIXES_V2: "what about the third one, when is it due?": a position in the last list shown (it stays shown).
+  const ordinal = chatFixesOn() && turn.state.listed?.length ? ORDINAL_REF.exec(text)?.[0] ?? null : null;
+  const ref = ordinal ?? ((q?.kind === "when_due" ? q.ref : /\b(?:when|what time|due|deadline|status)\b/i.test(text) ? u.targetRef : null)?.replace(/\btasks?\b/gi, " ").replace(/\s+/g, " ").trim() || null);
   // "what's due today" leaves "s": not a task name. Only a real word or an explicit "it/this/that" looks one up.
   const namesTask = Boolean(ref && (contentTokens(ref).length || /\b(?:it|this|that)\b/i.test(ref)));
   if (ref && namesTask && !/\b(?:today|tomorrow|week|overdue|all|tasks?)\b/i.test(ref)) {
@@ -729,7 +733,8 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
   const whatsapp = isWhatsapp(turn.channel);
   const shown = list.slice(0, whatsapp ? WHATSAPP_LIST_CAP : APP_LIST_CAP);
   focusOn(turn, ...shown.slice(0, 3).map((t) => t.id).reverse());
-  turn.state.listed = shown.map((t) => t.id);
+  // CHAT_FIXES_V2: an empty answer keeps the last list, so "the first one" still means what was shown.
+  if (!chatFixesOn() || shown.length) turn.state.listed = shown.map((t) => t.id);
   const more = moreLine(list.length, shown.length);
   const overdue = list.filter((t) => t.dueAt && t.dueAt < turn.now).length;
   const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${label.toLowerCase()}`}.`;

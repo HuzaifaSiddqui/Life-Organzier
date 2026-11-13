@@ -300,7 +300,7 @@ export async function resolveTaskRef(
       const t = tasks.find((x) => x.id === id);
       if (t) return { task: t, candidates: [], viaFocus: true };
     }
-    return { task: null, candidates: tasks.slice(0, 3), viaFocus: false };
+    return { task: null, candidates: openFirst(tasks).slice(0, 3), viaFocus: false };
   }
   const scored = tasks
     .map((t) => ({ t, s: Math.max(fuzzySimilarity(cleaned, t.title), chatFixesOn() ? wordMatch(cleaned, t.title) : 0) + (focus.includes(t.id) ? 0.08 : 0) }))
@@ -309,5 +309,12 @@ export async function resolveTaskRef(
   if (!scored.length) return { task: null, candidates: [], viaFocus: false };
   const [first, second] = scored;
   if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12)) return { task: first.t, candidates: [], viaFocus: false };
-  return { task: null, candidates: scored.slice(0, 4).map((x) => x.t), viaFocus: false };
+  return { task: null, candidates: openFirst(scored.map((x) => x.t)).slice(0, 4), viaFocus: false };
+}
+
+/** CHAT_FIXES_V2: "Which task?" offers open tasks only; completed ones only when nothing open matches. */
+function openFirst(list: Task[]): Task[] {
+  if (!chatFixesOn()) return list;
+  const open = list.filter((t) => t.status !== "COMPLETED");
+  return open.length ? open : list;
 }

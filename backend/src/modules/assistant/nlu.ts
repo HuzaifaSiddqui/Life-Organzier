@@ -66,6 +66,7 @@ const HELP = /^(?:help|what can you do|how (?:do|can) (?:i|you) (?:use|work)|wha
 const UNDO = /^\s*(?:undo|revert|take that back|undo (?:that|it|the last (?:change|edit)))\b/i;
 const READ_BACK = /\b(?:read (?:back|out|aloud|me)|tell me my tasks out loud|read my (?:tasks|schedule))\b/i;
 const PLAN = /\b(?:plan (?:my|the) (?:day|week|tomorrow|morning|evening)|what should i (?:do|work on|focus on|start with)(?: now| next| today| first)?|schedule my (?:day|tasks)|organi[sz]e my (?:day|tasks)|make (?:me )?a plan|when should i (?:do|work on|study)|find (?:me )?(?:a )?(?:time|slot))\b/i;
+const PLAN_A_DAY = /\bplan\s+(?:out\s+)?(?:for\s+)?(?:my\s+)?(?:tomorrow|today|tonight)\b/i;
 const QUERY =
   /\b(?:what(?:'s| is| do i have| have i got| are my)|show(?: me)?|list|any|how many|do i have|anything)\b[^.?!]*\b(?:tasks?|to ?dos?|today|tonight|tomorrow|this week|week|due|overdue|pending|schedule|agenda|plans?|left|remaining|deadlines?)\b/i;
 const QUERY_PROGRESS = /\bhow (?:much|far)(?: of)?\b[^?]*\b(?:done|complete|completed|finished|progress)\b|\b(?:progress|status) (?:on|of|for)\b/i;
@@ -184,6 +185,8 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (e.progress !== null && /\b(?:done|complete|completed|finished|through|with|on)\b/i.test(t)) return { intent: "set_progress", confidence: 0.9 };
   if (SPLIT.test(t) && /\b(?:into|in)\s+\S+/i.test(t)) return { intent: "split_task", confidence: 0.9 };
   if (/^\s*break\s+(?:it|this|that)?\s*down\b/i.test(t)) return { intent: "split_task", confidence: 0.8 };
+  // CHAT_FIXES_V2: "can you help me plan tomorrow?", "plan today": a plan for that day, not the day's list.
+  if (chatFixesOn() && PLAN_A_DAY.test(t) && !TASK_CUE.test(t)) return { intent: "plan_day", confidence: 0.85 };
   // Deadline and class questions in English, Urdu and Roman Urdu (queries.ts), before plan/create rules.
   if (parseQuery(t)) return { intent: "query_tasks", confidence: 0.9 };
   if (PLAN.test(t)) return { intent: "plan_day", confidence: 0.85 };
@@ -325,7 +328,19 @@ const BACKGROUND = /^(?:i\s+am\s+(?:a|an)\b|i'?m\s+(?:a|an)\b|currently\b|i\s+(?
  * time and days are read from it alone, not from the background around it. Null when there is one sentence or no
  * clear winner (the whole message is read, as before).
  */
+/**
+ * PR B: "call mom, feeling low today": a trailing feeling is a mood, not part of the task (its "low" isn't a priority,
+ * its "today" isn't a due date). Returns the request in front of it.
+ */
+const FEELING_TAIL = /^(.+?)\s*[,;.-]\s*(?:and\s+|but\s+)?(?:i(?:'m| am)\s+|i\s+)?(?:feeling|feel)\s+[a-z' ]{2,40}[.!]*$/i;
+export function feelingTail(text: string): string | null {
+  const m = FEELING_TAIL.exec(text.trim());
+  return m && m[1].split(/\s+/).length >= 2 && !/\b(?:feel|feeling)\b/i.test(m[1]) ? m[1] : null;
+}
+
 export function requestClause(text: string): string | null {
+  const tail = feelingTail(text);
+  if (tail) return tail;
   const parts = text
     .split(/(?<=[.!?])\s+|\n+/)
     .map((p) => p.trim().replace(/[,;]\s*$/, ""))
@@ -363,7 +378,7 @@ export function rulesUnderstand(text: string, opts: ExtractOptions): Understandi
   const focus = chatFixesOn() ? requestClause(text) : null;
   const entities = extractEntities(focus ?? text, opts);
   const mood = detectMood(text);
-  const base = rulesIntent(focus ?? text, entities, mood);
+  const base = rulesIntent(focus ?? text, entities, chatFixesOn() && feelingTail(text) ? null : mood);
   const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, clauseIntent(text, opts, base)) : base;
   const contextMatch = text.match(SWITCH_CONTEXT);
   return {
@@ -387,7 +402,7 @@ export async function understand(
   const focus = chatFixesOn() ? requestClause(text) : null;
   const entities = extractEntities(focus ?? text, opts);
   const mood = detectMood(text);
-  const base = rulesIntent(focus ?? text, entities, mood);
+  const base = rulesIntent(focus ?? text, entities, chatFixesOn() && feelingTail(text) ? null : mood);
   const pre = chatFixesOn() ? clauseIntent(text, opts, base) : base;
   const rule = chatFixesOn() ? applyChatFixes(text, entities, mood, pre) : base;
   let intent = rule.intent;
