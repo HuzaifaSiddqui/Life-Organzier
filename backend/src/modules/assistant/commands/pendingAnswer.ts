@@ -22,7 +22,7 @@ export const YES_NO =
 const CONTROL = /^(?:done|ok done|that'?s it|that'?s all|skip|later|not now|bas|ho gaya|hogaya|agla|next|back|any|none|neither|both|first|second|third|last)[\s.!]*$/i;
 const NUMBER = /^\s*#?\d{1,2}\s*[.)]?\s*$/;
 
-const CONFIRM_KINDS = new Set<Pending["kind"]>(["confirm_command", "confirm_delete", "confirm_update", "mood_confirm", "typo", "prereq", "task_review", "clarify_intent"]);
+const CONFIRM_KINDS = new Set<Pending["kind"]>(["routine_preview", "confirm_command", "confirm_delete", "confirm_update", "mood_confirm", "typo", "prereq", "task_review", "clarify_intent"]);
 const SLOT_KINDS = new Set<Pending["kind"]>(["task_draft", "routine_draft", "past_date", "capacity", "conflict", "task_review", "routine_time"]);
 
 /** The names offered: command / location choices carry them; for "which task?" the caller passes the task titles. */

@@ -718,6 +718,13 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
     }
     case "decline_reason":
       return resolveDeclineReason(turn, text);
+    case "routine_preview": {
+      // PR E: "Add the routine …? Repeats every day until you stop it." — yes / save adds it; no / cancel drops it.
+      turn.state.pending = null;
+      if (yes || /^(?:save|add it|keep it)\b/i.test(text.trim())) return proceedWithRoutine(turn, p.draft);
+      if (no) return { content: "Okay, not added.", intent: "cancel" };
+      return null;
+    }
     case "routine_time": {
       // Asked once: a time or part of day ("evening", "shaam", "9:30 pm") sets it, "no reminder" clears it;
       // anything else drops the question and the default time stays.

@@ -86,6 +86,8 @@ export type Pending =
   | { kind: "routine_draft"; draft: RoutineDraft; awaiting: RoutineSlot[]; reasks?: number }
   /** Asked once after an every-N-days routine was made without a time (no time = no reminder). */
   | { kind: "routine_time"; routineId: string; title: string }
+  /** PR E (CHAT_FIXES_V2): a repeat said with a limit ("every evening this week"): shown before saving. */
+  | { kind: "routine_preview"; draft: RoutineDraft }
   | { kind: "mood_confirm"; mood: string; confidence: number; text: string }
   /** A chat reply suggested something to say ("Say: schedule a call with Mooz tonight at 8 PM"); "yes" (+ a new time) runs it. */
   | { kind: "offer"; text: string }

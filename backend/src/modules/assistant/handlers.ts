@@ -152,6 +152,9 @@ function changeOrNew(turn: Turn, task: Task, text: string): Out {
   };
 }
 
+/** PR E (CHAT_FIXES_V2): a repeat with a limit routines can't keep ("this week", "until friday", "for two weeks"). */
+const LIMITED_REPEAT = /\b(?:this|next|the)\s+(?:week|month)\b|\b(?:until|till)\b|\bfor\s+(?:a|one|two|three|four|\d+)\s+(?:weeks?|months?|days?)\b/i;
+
 /** PR D (CHAT_FIXES_V2): "every 2 hours", "every few hours": a repeat the routines can't do. */
 const EVERY_FEW_HOURS = /\bevery\s+(?:\d{1,2}|few|couple of|two|three|four|five|six)\s+(?:hours?|hrs?|minutes?|mins?)\b/i;
 const EVERY_FEW_HOURS_REPLY = "I can't repeat a reminder every few hours yet. I can remind you once at a set time, or every day at the same time.";
@@ -290,6 +293,18 @@ ${asked.content}` } : asked;
       if (chatFixesOn() && draft.title && !DUP_SKIP.test(text)) {
         const same = await routineDuplicate(turn.user.id, draft);
         if (same) return routineChangeOrNew(turn, same, text);
+      }
+      // PR E (CHAT_FIXES_V2): "every evening this week": a routine repeats until stopped; say so and ask before saving.
+      if (chatFixesOn() && LIMITED_REPEAT.test(text) && draft.title && draft.frequency) {
+        turn.state.pending = { kind: "routine_preview", draft };
+        return {
+          content: `Add the routine "${draft.title}"? Repeats every day until you stop it.`,
+          actions: [
+            { label: "Save", payload: { type: "confirm_pending" }, style: "primary" },
+            { label: "Cancel", payload: { type: "cancel_pending" } },
+          ],
+          intent: "routine_preview",
+        };
       }
       return proceedWithRoutine(turn, draft);
     }
@@ -1033,6 +1048,10 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       const p = turn.state.pending;
       if (!p) return { content: "There's nothing waiting for confirmation.", intent: "noop" };
       if (p.kind === "task_review") return proceedWithDraft(turn, p.draft, p.source, { clarified: true, reviewed: true });
+      if (p.kind === "routine_preview") {
+        turn.state.pending = null;
+        return proceedWithRoutine(turn, p.draft);
+      }
       if (p.kind === "confirm_delete") return confirmDelete(turn, p.taskId);
       if (p.kind === "confirm_command") return confirmPending(turn, p);
       if (p.kind === "mood_confirm" && isMood(p.mood)) return confirmMood(turn, p.mood, p.confidence);
