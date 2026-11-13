@@ -137,3 +137,27 @@ test("bare 'remind me': asks what; the reply fills the title; a placeholder titl
     await c.done();
   }
 });
+
+test("vague 'move something': which task (open, soonest due first), then when; a typed name works", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith(["Quarterly review slides", "Renew car insurance", "!Old essay"]);
+  const due = async (title: string) => (await prisma.task.findFirstOrThrow({ where: { userId: c.user.id, title } })).dueDate?.toISOString() ?? null;
+  try {
+    await prisma.task.updateMany({ where: { userId: c.user.id, title: "Renew car insurance" }, data: { dueDate: new Date("2026-11-19T19:00:00Z"), dueAt: new Date("2026-11-20T18:59:00Z") } });
+    await withFixes(async () => {
+      const which = await c.send("can you move something");
+      assert.equal(which.content, "Which task do you want to move?");
+      assert.deepEqual((which.actions ?? []).map((a) => a.label), ["Renew car insurance", "Quarterly review slides"], "open only, soonest due first");
+      const when = await c.send("the quarterly review");
+      assert.equal(when.content, 'When should I move "Quarterly review slides" to?');
+      const moved = await c.send("to next monday");
+      assert.equal(moved.intent, "task_updated");
+      assert.equal(await due("Quarterly review slides"), "2026-11-15T19:00:00.000Z", "Mon 16 Nov, Karachi");
+
+      await c.send("postpone one to tomorrow");
+      const direct = await c.send("2");
+      assert.equal(direct.intent, "task_updated", "the day said first is used after the pick");
+    });
+  } finally {
+    await c.done();
+  }
+});

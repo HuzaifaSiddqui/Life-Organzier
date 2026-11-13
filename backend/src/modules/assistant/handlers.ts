@@ -904,6 +904,15 @@ export async function resolveHandlerPending(turn: Turn, text: string, u: Underst
       default: {
         const again = await understand(String(p.data.text ?? original), { now: turn.now, tz: turn.tz, history: [], allowLlm: false });
         const { changes, summary } = changesFromUnderstanding(turn, chosen, again, String(p.data.text ?? ""));
+        // C2: a vague "move something" with no day yet: ask when; "to friday" then moves it (dialogue.ts acceptOffer).
+        if (!summary.length && chatFixesOn() && p.data.move) {
+          turn.state.pending = { kind: "offer", text: "move it" };
+          return {
+            content: `When should I move "${chosen.title}" to?`,
+            actions: ["Tomorrow", "This Friday", "Next week"].map((d) => commandAction(d, "update_task", { text: `move it to ${d.toLowerCase()}`, ref: chosen.title }, { text: `move it to ${d.toLowerCase()}` })),
+            intent: "update_ask",
+          };
+        }
         if (!summary.length) return { content: `What should I change about "${chosen.title}"?`, intent: "update_ask" };
         return applyUpdate(turn, chosen, changes, summary);
       }
