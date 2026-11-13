@@ -35,16 +35,16 @@ function optionLabels(p: Pending, titles: string[] = []): string[] {
 
 /**
  * The reply names one of the options ("call mom" to "Which task: Call mom / Book dentist?"). A reply that starts with
- * an action must name it almost exactly: "update the report" is not "Quarterly report".
+ * an action must name it exactly: "update the report" is not "Quarterly report", and "move the dentist appointment to
+ * monday" is a new request (it carries its own change), not a pick.
  */
 function namesOption(p: Pending, t: string, titles: string[]): boolean {
   if (t.split(/\s+/).length > 5) return false;
   const said = t.toLowerCase();
+  // Same words, ignoring "the" and punctuation (fuzzy scores a longer reply that contains the title as a match).
+  const plain = (x: string) => x.toLowerCase().replace(/\bthe\b/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const strict = ACTION_START.test(t);
-  return optionLabels(p, titles).some((label) => {
-    const l = label.toLowerCase();
-    return strict ? l === said || fuzzySimilarity(t, label) >= 0.85 : fuzzySimilarity(t, label) >= 0.45 || l.includes(said);
-  });
+  return optionLabels(p, titles).some((label) => (strict ? plain(label) === plain(t) : fuzzySimilarity(t, label) >= 0.45 || label.toLowerCase().includes(said)));
 }
 
 /**
