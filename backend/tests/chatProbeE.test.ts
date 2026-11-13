@@ -165,6 +165,8 @@ test("E9: a topic word filters the urgent and pending lists; 'tomorrow' also nam
       const titles = (pending.cards ?? []).flatMap((x) => ((x as { tasks?: Array<{ title: string }> }).tasks ?? []).map((t) => t.title));
       assert.deepEqual(titles.sort(), ["Book hotel for the workshop", "Workshop slides"]);
 
+      const top = await c.send("what is my top priority right now?");
+      assert.doesNotMatch(top.content, /No open tasks about/, "'top priority' is not a topic");
       const status = await c.send("show my incomplete tasks");
       assert.doesNotMatch(status.content, /Nothing pending about/, "a status word is not a topic");
       const tomorrow = await c.send("what's on tomorrow");
