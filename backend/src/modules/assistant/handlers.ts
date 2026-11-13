@@ -954,9 +954,9 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
  * PR E (CHAT_FIXES_V2): the topic a list question is about: "which of my assignments …", "pending for the conference".
  * A plain word (not "tasks", "things", a day…); singular form.
  */
-const NOT_TOPIC = new Set(["task", "thing", "todo", "item", "stuff", "work", "day", "week", "today", "tomorrow", "list", "plan", "deadline", "urgent", "important", "pending", "open", "remaining", "everything", "one", "it", "them", "me"]);
+const NOT_TOPIC = new Set(["task", "thing", "todo", "item", "stuff", "work", "day", "week", "today", "tomorrow", "list", "plan", "deadline", "urgent", "important", "pending", "open", "remaining", "everything", "one", "it", "them", "me", "incomplete", "unfinished", "undone", "uncompleted", "completed", "complete", "done", "finished", "overdue", "upcoming", "current", "active", "other", "next", "left", "new", "old"]);
 function topicOf(text: string): string | null {
-  const m = /\b(?:of my|my|for the|for my|for|about the|about|related to(?: the)?)\s+([a-z][a-z-]{2,})\b/i.exec(text);
+  const m = /\b(?:of my|my|for the|for my|for|about the|about|related to(?: the)?)\s+([a-z][a-z-]{2,})\b(?!\s+(?:tasks?|todos?|things|items?|work|stuff|ones?)\b)/i.exec(text);
   const word = m?.[1]?.toLowerCase().replace(/(?<=[a-z]{3})s$/, "");
   return word && !NOT_TOPIC.has(word) ? word : null;
 }
