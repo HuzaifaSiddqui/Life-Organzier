@@ -329,13 +329,16 @@ const BACKGROUND = /^(?:i\s+am\s+(?:a|an)\b|i'?m\s+(?:a|an)\b|currently\b|i\s+(?
  * clear winner (the whole message is read, as before).
  */
 /**
- * PR B: "call mom, feeling low today": a trailing feeling is a mood, not part of the task (its "low" isn't a priority,
- * its "today" isn't a due date). Returns the request in front of it.
+ * PR B: "call mom, feeling low today": a trailing feeling is a mood, not part of the task (its "low" isn't a priority).
+ * Returns the request in front of it, with a day said in the feeling clause ("call mom today").
  */
 const FEELING_TAIL = /^(.+?)\s*[,;.-]\s*(?:and\s+|but\s+)?(?:i(?:'m| am)\s+|i\s+)?(?:feeling|feel)\s+[a-z' ]{2,40}[.!]*$/i;
 export function feelingTail(text: string): string | null {
   const m = FEELING_TAIL.exec(text.trim());
-  return m && m[1].split(/\s+/).length >= 2 && !/\b(?:feel|feeling)\b/i.test(m[1]) ? m[1] : null;
+  if (!m || m[1].split(/\s+/).length < 2 || /\b(?:feel|feeling)\b/i.test(m[1])) return null;
+  // A day said with the feeling stays with the request ("…, feeling low today": the task is for today).
+  const day = /\b(?:today|tonight|tomorrow)\b/i.exec(text.slice(m[1].length))?.[0];
+  return day && !new RegExp(`\\b${day}\\b`, "i").test(m[1]) ? `${m[1]} ${day}` : m[1];
 }
 
 export function requestClause(text: string): string | null {

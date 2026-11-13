@@ -65,6 +65,29 @@ Status: built and unit-tested on new sentences; turned on only after it passes o
   with [Show my tasks].
 - *Alarms* (`OOS_NOTE`): "I can't set phone alarms, but I'll keep it as a reminder." To be removed once ALARM_STYLE
   (reminders that ring like an alarm) is built.
+
+**Chat probe fixes, PR B (off by default; `CHAT_FIXES_V2`).** Same probe set, rules only:
+- *Week* (`ranges.ts`, `analytics → "calendar_week"`): "this week" is Monday to Sunday for due tasks and for completed
+  tasks and time per category; "next week" the next Monday to Sunday; "the next 7 days" and "last 7 days" stay rolling.
+- *Completed tasks* (`commands/insights.ts`): "what did I just complete?" names the most recent one; "what did I get
+  done this week", "show me everything I finished this week", "my completed tasks" list them (most recent first)
+  under the count. A correction to it ("I'm asking about my completed tasks") is answered the same way.
+- *Lists* (`handlers.ts`): "what about the third one, when is it due?" answers from the last list and keeps it, so
+  "move the first to monday" still works; an empty answer never replaces the remembered list. "Which task?" offers
+  open tasks only (completed ones only when nothing open matches); after the pick, the change said first is applied
+  ("move it to friday" → pick → moved).
+- *Filler* (`dialogue.ts`): "actually / just / please / ok …" in front of a command is dropped ("actually move it").
+- *Two tasks* (`commands/compound.ts → create_tasks`): "add dentist on friday at 4 pm and call the bank tomorrow" is
+  one preview for both ([Add both] / [Cancel]) and one Undo step; when a part matches an open task, nothing is added
+  and each part is offered as its own message (never a silent duplicate).
+- *Priority and feelings* (`entities.ts`, `nlu.ts → feelingTail`): "high / low / medium" set a priority only with
+  "priority" or as the whole change ("make it high"); "call mom, feeling low today" is the task "Call mom" (today) and
+  the mood, not "Call mom, feeling" at low priority.
+- *Weather* (`appQuestions.ts`): "I can't check the weather, so your weather app is the best place for that.", with
+  "in Lahore" only when the user named a place.
+- *Plan a day* (`nlu.ts`): "can you help me plan tomorrow?" plans that day.
+- Sharing an existing task: the collaboration service has no function for it, so the PR A how-to / "Sharing isn't
+  available yet." stays.
 **Cloud fallback (off by default; `docs/rollout.md`).** With `CLOUD_FALLBACK=on` and `LLM_PROVIDERS_CHAT` set, the
 router's model calls go through a hosted chain (`backend/src/ai/chains.ts`, order in `config/provider-order.json`):
 Ollama → Deploy GLM-5.3-flash (tier B, masked text, few-shot: the 5 nearest English bank rows) → Groq gpt-oss-20b

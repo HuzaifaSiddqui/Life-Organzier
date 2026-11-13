@@ -66,7 +66,7 @@ test("B5: priority words need 'priority' or a clear marker; a trailing feeling i
     assert.equal(pr("set it to low"), "LOW");
     assert.equal(pr("submit the essay, important"), "HIGH");
     assert.equal(pr("whenever you can, clean the garage"), "LOW");
-    assert.equal(feelingTail("call mom, feeling low today"), "call mom");
+    assert.equal(feelingTail("call mom, feeling low today"), "call mom today", "the day stays with the task");
     assert.equal(feelingTail("finish the slides - I'm feeling tired"), "finish the slides");
     assert.equal(feelingTail("feeling low today"), null);
     const u = rulesUnderstand("call mom, feeling low today", opts);

@@ -412,7 +412,9 @@ async function chooseOrResolve(
   const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress", listed: turn.state.listed });
   if (r.task) return { task: r.task };
   if (r.candidates.length) {
-    turn.state.pending = { kind: "choose_task", purpose, candidates: r.candidates.map((t) => t.id), data: { ...data, text: u.targetRef } };
+    // PR B (CHAT_FIXES_V2): keep the whole message, so after the pick "move it to friday" still moves it to Friday
+    // (before, only the reference "it" was kept and the change was lost).
+    turn.state.pending = { kind: "choose_task", purpose, candidates: r.candidates.map((t) => t.id), data: { ...data, text: chatFixesOn() && typeof data.text === "string" ? data.text : u.targetRef } };
     return {
       out: {
         content: "Which task do you mean?",
