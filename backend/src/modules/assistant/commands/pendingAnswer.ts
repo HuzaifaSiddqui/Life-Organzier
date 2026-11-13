@@ -33,9 +33,18 @@ function optionLabels(p: Pending, titles: string[] = []): string[] {
   return [];
 }
 
-/** The reply names one of the options ("call mom" to "Which task: Call mom / Book dentist?"). */
+/**
+ * The reply names one of the options ("call mom" to "Which task: Call mom / Book dentist?"). A reply that starts with
+ * an action must name it almost exactly: "update the report" is not "Quarterly report".
+ */
 function namesOption(p: Pending, t: string, titles: string[]): boolean {
-  return t.split(/\s+/).length <= 5 && optionLabels(p, titles).some((label) => fuzzySimilarity(t, label) >= 0.45 || label.toLowerCase().includes(t.toLowerCase()));
+  if (t.split(/\s+/).length > 5) return false;
+  const said = t.toLowerCase();
+  const strict = ACTION_START.test(t);
+  return optionLabels(p, titles).some((label) => {
+    const l = label.toLowerCase();
+    return strict ? l === said || fuzzySimilarity(t, label) >= 0.85 : fuzzySimilarity(t, label) >= 0.45 || l.includes(said);
+  });
 }
 
 /**
