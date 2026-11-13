@@ -212,3 +212,62 @@ test("D4 on WhatsApp: the question appears; replying 'add a new task' in text cr
     await prisma.user.delete({ where: { id: user.id } });
   }
 });
+
+const STILL_CREATES = [
+  "remind me to buy milk tomorrow",
+  "add pay rent on friday",
+  "I need to submit the lab report by monday",
+  "I have to call the plumber tomorrow at 10",
+  "what should I cook tonight? remind me to buy chicken at 6 pm",
+  "can you remind me to water the plants tomorrow",
+  "add a task to book the car service",
+  "schedule a dentist visit next tuesday at 4 pm",
+  "I should email the professor tomorrow",
+  "need to renew my passport next week",
+  "set a reminder to take the cake out at 5 pm",
+  "don't forget to pay the internet bill on the 20th",
+  "I studied the wrong chapter, remind me to revise chapter 4 tomorrow",
+  "I must finish the slides by thursday",
+  "how should I remember this? add buy a planner to my list",
+  "what can I do? remind me to ask the advisor on monday",
+  "I spent too long on emails, remind me to block focus time tomorrow at 9",
+];
+const NO_TASK = [
+  "what should I cook for dinner tonight?",
+  "how should I prepare for the viva?",
+  "which assignment should I start with",
+  "what can I do this weekend?",
+  "where should I study tomorrow?",
+  "how can I focus better tonight?",
+  "I studied for 2 hours today",
+  "worked on the thesis for 3 hours",
+  "spent 90 minutes on chemistry",
+  "I practised guitar for an hour",
+  "I forgot what I asked you yesterday",
+  "same as yesterday",
+  "yesterday was exhausting",
+];
+
+test("D5: questions and progress reports never create a task; requests (17) still do", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  const count = async () => prisma.task.count({ where: { userId: c.user.id } });
+  try {
+    await withFixes(async () => {
+      for (const say of NO_TASK) {
+        const before = await count();
+        const m = await c.send(say);
+        assert.ok(!["task_created", "clarify", "past_date", "change_or_new"].includes(m.intent ?? ""), `${say}: [${m.intent}] ${m.content}`);
+        assert.equal(await count(), before, `${say}: no task`);
+      }
+      assert.equal((await c.send("I studied for 2 hours today")).content, "Nice work — 2 hours of studying.");
+      assert.equal((await c.send("spent 90 minutes on chemistry")).content, "Nice work — 1 hour 30 minutes on chemistry.");
+      for (const say of STILL_CREATES) {
+        const m = await c.send(say);
+        assert.ok(["task_created", "clarify", "past_date", "create_tasks_confirm"].includes(m.intent ?? ""), `${say}: [${m.intent}] ${m.content}`);
+        if (m.intent !== "task_created") await c.send("cancel");
+      }
+    });
+  } finally {
+    await c.done();
+  }
+});

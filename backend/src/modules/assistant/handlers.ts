@@ -50,6 +50,7 @@ import {
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
 import { alreadyDoneTask, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
+import { progressReport } from "./appQuestions.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
@@ -223,6 +224,13 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
     case "create_task": {
       // PR D (CHAT_FIXES_V2): an open task with (nearly) the same title: ask instead of adding a duplicate, unless the
       // message says it is another one. Completed tasks never count.
+      // PR D (CHAT_FIXES_V2): "I studied for 2 hours today" would become a task: acknowledged instead. (A report that
+      // names a routine or task, "I read for half an hour", is a completion and never gets here.)
+      const report = chatFixesOn() ? progressReport(text, u.entities.durationMinutes) : null;
+      if (report) return { content: report, intent: "progress_noted" };
+      // PR D (CHAT_FIXES_V2): a sentence about a past day ("I forgot what I asked you yesterday", "same as yesterday")
+      // starts no draft unless it asks for a task outright; it is conversation.
+      if (chatFixesOn() && u.entities.date && u.entities.date.ymd < turn.todayYmd && !EXPLICIT_CREATE.test(text)) return conversationalReply(turn, text, "chat");
       if (chatFixesOn() && u.title && !DUP_SKIP.test(text)) {
         const dup = await openDuplicate(turn.user.id, u.title);
         if (dup) return changeOrNew(turn, dup, text);

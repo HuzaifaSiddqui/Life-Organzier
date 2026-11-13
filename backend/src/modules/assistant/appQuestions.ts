@@ -15,6 +15,34 @@ export const APP_IDENTITY_REPLY = "I'm your Life Organizer assistant. I help you
 export const APP_PRIVACY_REPLY =
   "Your tasks and chats are tied to your account. The assistant runs through the app's own server, and personal numbers like phone or CNIC are hidden before any AI sees them. You can delete your account and data in Settings → Data & account (it's removed after 30 days).";
 
+/**
+ * PR D (CHAT_FIXES_V2): a past-tense report of time spent ("I studied for 2 hours today", "spent 90 minutes on
+ * chemistry"): acknowledged, never a task. Not with "remind / add / need to / tomorrow" (that asks for something).
+ */
+const SPENT = /^(?:(?:so|ok|okay|today|yesterday)[,\s]+)?(?:i\s+)?(?:just\s+|already\s+)?(?:(?:have|'ve)\s+)?(studied|worked|read|practi[cs]ed|exercised|revised|coded|wrote|ran|walked|trained|meditated|spent)\b/i;
+const ACTIVITY: Record<string, string> = { studied: "studying", worked: "work", read: "reading", practised: "practice", practiced: "practice", exercised: "exercise", revised: "revision", coded: "coding", wrote: "writing", ran: "running", walked: "walking", trained: "training", meditated: "meditation" };
+const NOT_A_REPORT = /\b(?:remind|add|create|schedule|need to|have to|must|should|will|tomorrow|tonight|next|later)\b|\?\s*$/i;
+
+function durationWords(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hours = h ? `${h} ${h === 1 ? "hour" : "hours"}` : "";
+  const mins = m ? `${m} ${m === 1 ? "minute" : "minutes"}` : "";
+  return [hours, mins].filter(Boolean).join(" ");
+}
+
+export function progressReport(text: string, durationMinutes: number | null): string | null {
+  const t = text.trim();
+  const m = SPENT.exec(t);
+  if (!m || !durationMinutes || NOT_A_REPORT.test(t)) return null;
+  const verb = m[1].toLowerCase();
+  if (verb === "spent") {
+    const on = /\bon\s+(?:the\s+|my\s+)?([a-z][\w\s-]{1,40}?)\s*(?:today|yesterday|this \w+)?[.!]*$/i.exec(t)?.[1];
+    return `Nice work — ${durationWords(durationMinutes)}${on ? ` on ${on.trim()}` : ""}.`;
+  }
+  return `Nice work — ${durationWords(durationMinutes)} of ${ACTIVITY[verb] ?? "work"}.`;
+}
+
 /** PR B: weather questions ("what's the weather like in Lahore?", "will it rain tomorrow?"): the app can't check. */
 /** Not "temperature" ("what temperature for baking?" is not about the weather). */
 const WEATHER = /\b(?:weather|forecast|rain(?:ing|s)?|snow(?:ing|s)?|sunny|humid(?:ity)?|mausam|موسم)\b/i;
