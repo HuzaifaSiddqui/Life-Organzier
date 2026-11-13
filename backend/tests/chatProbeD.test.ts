@@ -312,3 +312,65 @@ test("D6: flags off keeps the old titles (unchanged)", { skip: !dbAvailable && "
     await c.done();
   }
 });
+
+test("D review: 'read' is a report only after I / just / already / have; imperatives still create", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  try {
+    await prisma.routine.create({ data: { userId: c.user.id, title: "Reading", frequency: "DAILY", dueTime: "10:00 PM" } });
+    await withFixes(async () => {
+      for (const say of ["Read chapter 4 for an hour", "read the paper for 30 minutes", "revise chapter 3 for 2 hours"]) {
+        const m = await c.send(say);
+        assert.ok(["clarify", "task_created"].includes(m.intent ?? ""), `${say}: [${m.intent}] ${m.content}`);
+        assert.doesNotMatch(m.content, /Nice work/);
+        if (m.intent === "clarify") await c.send("cancel");
+      }
+      const routine = await c.send("I read for half an hour");
+      assert.match(routine.content, /Reading/, "still completes the Reading routine for today");
+      const ack = await c.send("I read chapter 4 for an hour");
+      assert.equal(ack.content, "Nice work — 1 hour of reading.");
+    });
+  } finally {
+    await c.done();
+  }
+});
+
+test("D review: the past-day guard lets real requests through", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  try {
+    await withFixes(async () => {
+      const retake = await c.send("I missed the quiz yesterday, add a retake for friday");
+      assert.equal(retake.intent, "task_created");
+      assert.match(retake.content, /^Added: Retake due tomorrow/, "Friday (tomorrow), the request's own day");
+      const due = await c.send("remind me to finish the report that was due yesterday");
+      assert.equal(due.intent, "past_date", "asks which day instead of guessing");
+    });
+  } finally {
+    await c.done();
+  }
+});
+
+test("D review: a routine duplicate needs a similar time too; the alarm note comes before the duplicate question", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([["Renew gas cylinder", null]]);
+  try {
+    await prisma.routine.create({ data: { userId: c.user.id, title: "Stretching", frequency: "DAILY", dueTime: "7:00 AM" } });
+    await withFixes(async () => {
+      const evening = await c.send("stretching every weekday at 7 pm");
+      assert.notEqual(evening.intent, "change_or_new", "12 hours apart: a second routine");
+      const morning = await c.send("stretching every monday at 8 am");
+      assert.equal(morning.intent, "change_or_new", "within 3 hours on a shared day: asks");
+      await c.send("cancel");
+      const prev = process.env.OOS_NOTE;
+      process.env.OOS_NOTE = "on";
+      try {
+        const alarm = await c.send("set an alarm so I don't forget the gas cylinder tomorrow");
+        assert.equal(alarm.intent, "change_or_new");
+        assert.match(alarm.content, /^I can't set phone alarms, but I'll keep it as a reminder\.\nChange "Renew gas cylinder", or add a new task\?$/);
+      } finally {
+        if (prev === undefined) delete process.env.OOS_NOTE;
+        else process.env.OOS_NOTE = prev;
+      }
+    });
+  } finally {
+    await c.done();
+  }
+});

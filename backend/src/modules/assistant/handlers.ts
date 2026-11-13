@@ -61,7 +61,7 @@ import { chatFixesOn, NOT_DONE, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
-import { understand, type Understanding } from "./nlu.js";
+import { rulesUnderstand, understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
 import type { ActionPayload, QuickAction, RoutineDraft } from "./types.js";
 import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, runCommand, snapshots, UNDO_ACTION } from "./commands/runtime.js";
@@ -166,9 +166,15 @@ const daysOf = (r: { frequency: string | null; daysOfWeek: unknown }): number[] 
 /** PR D: an active routine named like the draft (title score >= 0.6) on at least one of the same days. */
 async function routineDuplicate(userId: string, draft: RoutineDraft): Promise<{ id: string; title: string; frequency: string; daysOfWeek: unknown } | null> {
   const want = new Set(draft.frequency === "DAILY" || !draft.daysOfWeek?.length ? [0, 1, 2, 3, 4, 5, 6] : draft.daysOfWeek);
-  const routines = await prisma.routine.findMany({ where: { userId, active: true }, select: { id: true, title: true, frequency: true, daysOfWeek: true } });
+  const routines = await prisma.routine.findMany({ where: { userId, active: true }, select: { id: true, title: true, frequency: true, daysOfWeek: true, dueTime: true } });
+  // A similar time too: within 3 hours, or no time on either side ("yoga in the evening" is not the 7 AM yoga).
+  const minutes = (clock: string | null) => {
+    const c = clock ? parseClock(clock) : null;
+    return c ? c.h * 60 + c.m : null;
+  };
+  const near = (a: number | null, b: number | null) => a === null || b === null || Math.min(Math.abs(a - b), 1440 - Math.abs(a - b)) <= 180;
   const best = routines
-    .filter((r) => daysOf(r).some((d) => want.has(d)))
+    .filter((r) => daysOf(r).some((d) => want.has(d)) && near(minutes(draft.dueTime), minutes(r.dueTime)))
     .map((r) => ({ r, s: refScore(draft.title ?? "", r.title) }))
     .sort((a, b) => b.s - a.s)[0];
   return best && best.s >= 0.6 ? best.r : null;
@@ -223,6 +229,9 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       const parsed = getCommand("routine_reschedule_once")?.parse(text, parseCtx(extractOpts(turn))) ?? {};
       return runCommand(turn, "routine_reschedule_once", { ...parsed, routineId: routine.id, ref: routine.title }, { text });
     }
+    // PR D: "I read chapter 4 for an hour" with no such task or routine: a report of time spent, acknowledged.
+    const report = u.intent === "complete_task" ? progressReport(text, u.entities.durationMinutes) : null;
+    if (report) return { content: report, intent: "progress_noted" };
   }
   switch (u.intent) {
     case "create_task": {
@@ -237,12 +246,30 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       // names a routine or task, "I read for half an hour", is a completion and never gets here.)
       const report = chatFixesOn() ? progressReport(text, u.entities.durationMinutes) : null;
       if (report) return { content: report, intent: "progress_noted" };
+      // PR D (CHAT_FIXES_V2): "I missed the quiz yesterday, add a retake for friday": the request after the explicit
+      // "add / remind me" is what is asked; its own (later) day wins over the past day in the story before it.
+      if (chatFixesOn() && u.entities.date && u.entities.date.ymd < turn.todayYmd) {
+        const cue = EXPLICIT_CREATE.exec(text);
+        if (cue && cue.index > 0) {
+          const ask = rulesUnderstand(text.slice(cue.index), extractOpts(turn));
+          if (ask.entities.date && ask.entities.date.ymd >= turn.todayYmd) {
+            const title = ask.title.replace(/^(?:add|create)\s+(?:a\s+|an\s+)?(?:task\s+(?:to\s+)?)?/i, "");
+            u = { ...u, entities: ask.entities, title: title ? title.charAt(0).toUpperCase() + title.slice(1) : ask.title };
+          }
+        }
+      }
       // PR D (CHAT_FIXES_V2): a sentence about a past day ("I forgot what I asked you yesterday", "same as yesterday")
       // starts no draft unless it asks for a task outright; it is conversation.
       if (chatFixesOn() && u.entities.date && u.entities.date.ymd < turn.todayYmd && !EXPLICIT_CREATE.test(text)) return conversationalReply(turn, text, "chat");
       if (chatFixesOn() && u.title && !DUP_SKIP.test(text)) {
         const dup = await openDuplicate(turn.user.id, u.title);
-        if (dup) return changeOrNew(turn, dup, text);
+        if (dup) {
+          const asked = changeOrNew(turn, dup, text);
+          // h-11: "set an alarm so I don't forget …": the alarm note (OOS_NOTE) is said before the question too.
+          const note = cantDoNote(text);
+          return note ? { ...asked, content: `${note}
+${asked.content}` } : asked;
+        }
       }
       if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && (TASK_CUE.test(text) || feelingTail(text)))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       // Task collaboration: connected people named in the message, and whether it's for them too (shareIntent.ts).

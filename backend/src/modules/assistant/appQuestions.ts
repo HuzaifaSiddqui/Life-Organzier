@@ -36,6 +36,8 @@ export function progressReport(text: string, durationMinutes: number | null): st
   const m = SPENT.exec(t);
   if (!m || !durationMinutes || NOT_A_REPORT.test(t)) return null;
   const verb = m[1].toLowerCase();
+  // "read" is also the imperative ("Read chapter 4 for an hour" is a task): a report only after I / just / already / have.
+  if (verb === "read" && !/^(?:(?:so|ok|okay|today|yesterday)[,\s]+)?(?:i\s+|just\s+|already\s+|(?:i\s+)?(?:have|'ve)\s+)/i.test(t)) return null;
   if (verb === "spent") {
     const on = /\bon\s+(?:the\s+|my\s+)?([a-z][\w\s-]{1,40}?)\s*(?:today|yesterday|this \w+)?[.!]*$/i.exec(t)?.[1];
     return `Nice work — ${durationWords(durationMinutes)}${on ? ` on ${on.trim()}` : ""}.`;
