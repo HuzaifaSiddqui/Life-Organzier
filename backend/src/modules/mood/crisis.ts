@@ -84,9 +84,23 @@ const ENGLISH: Phrase[] = [
   { re: "suicidal" },
   { re: "suicide", negation: "before", unless: /^ ?(?:squad|prevention|awarenes|rates?|statistics|bomb\w*)\b/ },
   { re: "(?:want|wanna|wish) (?:to )?die|wish i (?:was|were) dead|better off dead", negation: "before" },
-  { re: "dont want to (?:live|be alive|wake up)|no reason to live|not worth living|no point (?:in )?living|cant go on living" },
+  { re: "dont want to (?:live|be alive)|no reason to live|not worth living|no point (?:in )?living|cant go on living" },
+  // "wake up" stays silent when it is about the alarm or the day ("… early tomorrow", "… at 6", "… for the exam").
+  { re: "dont want to wake up", unless: /^ ?(?:early|at|before|on time|for)\b/ },
   { re: "self ?harm|hurt(?:ing)? myself|cut(?:ing)? myself|hang myself|overdose", negation: "before" },
   { re: "jump off (?:a |the )?(?:bridge|building|roof)" },
+  // Hopelessness (English only). Each phrase needs its object, so "giving up sugar", a bare "I give up" or
+  // "can't go on the trip" stay silent.
+  { re: "(?:giving|givin|give|gave|given) up on (?:everything|life|living|it all|myself)", negation: "before" },
+  { re: "(?:cant|cannot|can not) go on (?:anymore|any more|any longer|living|like this)" },
+  { re: "no point (?:in )?(?:anything|anymore|any more|living|going on)" },
+  { re: "(?:better|happier) off without me|be (?:better|happier) without me", negation: "before" },
+  { re: "(?:dont|do not) want to be here (?:anymore|any more|any longer)" },
+  { re: "(?:want|wanna|wish i could) (?:to )?disappear", negation: "before" },
+  { re: "tired of living", negation: "before", unless: /^ ?(?:on|in|with|at|near|off|out|here|there|alone|paycheck)\b/ },
+  { re: "tired of (?:life|being alive)", negation: "before" },
+  { re: "wish i (?:was|were|had) (?:gone|never (?:been )?born)", negation: "before" },
+  { re: "(?:im|i am) (?:just |such |nothing but )?a burden" },
 ];
 
 const NEGATION_BEFORE = /\b(?:not|never|dont|do not|didnt|wont|wouldnt|would never|no longer)(?: \w+){0,2} $/;

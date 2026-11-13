@@ -89,6 +89,83 @@ test("crisis: negated and everyday phrasing is not flagged", () => {
   for (const p of BENIGN) assert.equal(detectCrisis(p), false, `false positive: ${p}`);
 });
 
+// Hopelessness wording (English only): each phrase needs its object.
+const HOPELESS = [
+  "I feel like giving up on everything",
+  "honestly I'm giving up on life",
+  "I just want to give up on it all",
+  "I gave up on myself",
+  "givin up on everything",
+  "Giving Up On Everything.",
+  "I can't go on anymore",
+  "cant go on anymore",
+  "I can’t go on anymore",
+  "I CAN'T GO ON ANYMORE!!!",
+  "i cant go on like this",
+  "I cannot go on any longer",
+  "there's no point in anything",
+  "no point anymore...",
+  "everyone would be better off without me",
+  "they'd be happier without me",
+  "I don't want to be here anymore",
+  "I just want to disappear",
+  "i wanna disappear",
+  "I wish I could disappear",
+  "I'm tired of living",
+  "I'm so tired of living like this",
+  "so tired of life",
+  "I'm tired of being alive",
+  "I wish I was gone",
+  "I wish I were never born",
+  "I wish I had never been born",
+  "I'm a burden",
+  "I am such a burden to everyone",
+];
+const NOT_HOPELESS = [
+  "I'm giving up on this bug",
+  "giving up sugar this month",
+  "giving up on the diet",
+  "I give up",
+  "I give up, this puzzle is too hard",
+  "I can't go on the trip tomorrow",
+  "can't go on Friday, move it",
+  "no point in rushing the report",
+  "there's no point arguing",
+  "the team is better off without the old process",
+  "the song sounds better without me singing",
+  "I don't want to be here when the guests arrive",
+  "I'm not giving up on life",
+  "never give up on everything",
+  "I want the stain to disappear",
+  "make the bug disappear",
+  "I'm tired of living on instant noodles",
+  "tired of living in this city",
+  "I'm tired of my life admin, help me plan",
+  "I'm not a burden",
+  // Deliberately not covered: too common about homework and tasks.
+  "can't take it anymore",
+  "I can't do this anymore",
+  "what's the point",
+];
+
+test("crisis: hopelessness wording with an object is detected (English)", () => {
+  for (const p of HOPELESS) assert.equal(detectCrisis(p), true, `missed: ${p}`);
+});
+
+test("crisis: hopelessness words without their object, negated, or about tasks are not flagged", () => {
+  for (const p of NOT_HOPELESS) assert.equal(detectCrisis(p), false, `false positive: ${p}`);
+});
+
+test("crisis: 'don't want to wake up' fires, except about the alarm or the day", () => {
+  for (const p of ["I don't want to wake up", "I don't want to wake up tomorrow", "dont want to wake up anymore"]) assert.equal(detectCrisis(p), true, `missed: ${p}`);
+  for (const p of ["I don't want to wake up early tomorrow, move the alarm", "I don't want to wake up for the exam", "I don't want to wake up at 6", "I don't want to wake up before 8", "I don't want to wake up on time"]) assert.equal(detectCrisis(p), false, `false positive: ${p}`);
+});
+
+test("crisis: behaviour kept as before", () => {
+  assert.equal(detectCrisis("I'm not suicidal"), true, "unchanged: 'suicidal' has no negation guard");
+  assert.equal(detectCrisis("I can't go on like this without coffee, haha"), true, "accepted false positive: resources shown once");
+});
+
 test("crisis: normalisation collapses spelling variants and Urdu letter forms", () => {
   assert.equal(normalizeForCrisis("JEEEENA   Nahiii"), "jena nahi");
   assert.equal(normalizeForCrisis("مر جاؤں"), "مر جاوں");
