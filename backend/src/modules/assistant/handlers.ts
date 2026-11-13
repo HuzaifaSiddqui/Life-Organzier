@@ -935,6 +935,20 @@ export async function planDay(turn: Turn, ymd: string | null): Promise<Out> {
   const target = ymd ?? turn.todayYmd;
   const plan = await dayPlan(turn.user.id, turn.settings, target, turn.now);
   const suggested = plan.blocks.filter((b) => b.kind === "suggested");
+  // PR E (CHAT_FIXES_V2): never "0 min of work": say nothing is due and name the most urgent open tasks instead.
+  if (chatFixesOn() && plan.load.minutes === 0 && !suggested.length) {
+    const day = plan.label === "today" ? "today" : plan.label;
+    const top = mostUrgent(await listActiveTasks(turn.user.id), turn.now);
+    if (!top.length) return { content: `Nothing is due ${day}, and you have no open tasks.`, intent: "plan_day" };
+    focusOn(turn, ...top.map((t) => t.id).reverse());
+    turn.state.listed = top.map((t) => t.id);
+    const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
+    return {
+      content: [`Nothing is due ${day}. Most urgent:`, ...lines].join("\n"),
+      cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }],
+      intent: "plan_day",
+    };
+  }
   const lines = [
     `Here's ${plan.label === "today" ? "today's" : `${plan.label}'s`} plan — ${formatDuration(plan.load.minutes)} of work against your ${formatDuration(plan.load.capacity)} capacity.`,
     ...plan.notes,

@@ -91,3 +91,33 @@ test("E8: a split with no names asks how; named or counted parts are shown first
     await c.done();
   }
 });
+
+test("E10: a plan with nothing due names the most urgent open tasks, never '0 min of work'; a day with work is planned as before", { skip: !dbAvailable && "no database" }, async () => {
+  const empty = await chatWith([]);
+  try {
+    await withFixes(async () => {
+      assert.equal((await empty.send("plan my day")).content, "Nothing is due today, and you have no open tasks.");
+    });
+  } finally {
+    await empty.done();
+  }
+  const open = await chatWith([["Finish the thesis chapter", "2026-11-16"], ["Buy a gift for Ayesha", null]]);
+  try {
+    await withFixes(async () => {
+      const m = await open.send("plan my evening");
+      assert.match(m.content, /^Nothing is due today\. Most urgent:\n1\) Finish the thesis chapter/);
+      assert.doesNotMatch(m.content, /0 min of work/);
+    });
+  } finally {
+    await open.done();
+  }
+  const busy = await chatWith([["Submit the lab report", "2026-11-12"]]);
+  try {
+    await withFixes(async () => {
+      const m = await busy.send("plan my day");
+      assert.match(m.content, /^Here's today's plan/, "a day with work: the plan as before");
+    });
+  } finally {
+    await busy.done();
+  }
+});
