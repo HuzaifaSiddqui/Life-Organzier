@@ -82,7 +82,7 @@ import { extractEntities, extractInterval, isHabitLike, isVagueTitle, saysDoneTo
 import { rulesUnderstand, understand, type Understanding } from "./nlu.js";
 import { generateReply } from "./responder.js";
 import { shareAnswer, titleForShare } from "./shareIntent.js";
-import { createSharedTask, whatsappCollabLine } from "../collab/collabService.js";
+import { createSharedTask, listConnections, whatsappCollabLine } from "../collab/collabService.js";
 import { HttpError } from "../../lib/http.js";
 import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
@@ -90,7 +90,7 @@ import { capabilityReply, unknownReply } from "./commands/capabilities.js";
 import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
 import { routeWithLlm } from "./commands/router.js";
 import { appQuestionReply } from "./appQuestions.js";
-import { CANCEL_CHOICE, correctionTarget, OTHER_ONE, shareExistingReply } from "./repairs.js";
+import { addToExistingReply, correctionTarget, OTHER_ONE } from "./repairs.js";
 import { collabOn } from "../collab/collabRules.js";
 import { getAi } from "../../ai/llm.js";
 import { bankIndex } from "./commands/neighbours.js";
@@ -98,7 +98,7 @@ import type { CommandArgs, ParseCtx } from "./commands/types.js";
 import { recordUndo, resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { resolveDeclineReason } from "./commands/collab.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
-import { answerPrompt, isNewRequest, isPlausibleAnswer } from "./commands/pendingAnswer.js";
+import { answerPrompt, CANCEL_QUESTION, isNewRequest, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
 export type { Channel } from "./channel.js";
@@ -330,6 +330,25 @@ async function otherOne(turn: Turn): Promise<Out> {
   return { content: "Which task do you mean?", actions: [sayAction("Show my tasks", "query_tasks", "Show my tasks")], intent: "choose_task" };
 }
 
+/** "never mind", "cancel", "stop" (bare) to an open "which task?". */
+const CANCEL_CHOICE = /^(?:no[,.]?\s+)?(?:never ?mind|cancel|stop)[\s.!]*$/i;
+/** Only "add / share / invite / include / put … it|that|this …" can be about an existing task (saves the lookup). */
+const ADD_TO_IT_CUE = /^(?:please\s+)?(?:add|share|invite|include|put)\b.*\b(?:it|that|this|above|previous|same)\b/i;
+
+/** Titles of the tasks an open "which task?" offers, in order (the options' names). */
+async function choiceTitles(turn: Turn): Promise<string[]> {
+  const p = turn.state.pending;
+  if (p?.kind !== "choose_task") return [];
+  const tasks = await prisma.task.findMany({ where: { userId: turn.user.id, id: { in: p.candidates } }, select: { id: true, title: true } });
+  return p.candidates.map((id) => tasks.find((t) => t.id === id)?.title ?? "").filter(Boolean);
+}
+
+/** The user's connections by name and username, lower case ("add Sana to it" names a person only if Sana is one). */
+async function connectionNames(userId: string): Promise<string[]> {
+  const { connected } = await listConnections(userId);
+  return connected.flatMap((c) => [c.user.username, c.user.displayName, c.user.displayName?.split(/\s+/)[0]]).filter((x): x is string => Boolean(x)).map((x) => x.toLowerCase());
+}
+
 export async function handleText(turn: Turn, text: string): Promise<Out> {
   if (!text) return { content: "I'm listening — what would you like to do?", intent: "empty" };
 
@@ -344,9 +363,17 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
     };
   }
 
+  // CHAT_FIXES_V2: "cancel that", "forget it" close whatever question is open (never a delete); so does "never mind"
+  // to "which task?", which used to be asked again.
+  const titles = chatFixesOn() ? await choiceTitles(turn) : [];
+  if (chatFixesOn() && turn.state.pending && (CANCEL_QUESTION.test(text.trim()) || (turn.state.pending.kind === "choose_task" && CANCEL_CHOICE.test(text.trim())))) {
+    turn.state.pending = null;
+    return { content: "Okay, cancelled.", intent: "cancel" };
+  }
+
   // CHAT_FIXES_V2: a clearly new request (a question, or a reply that starts with an action) replaces the open
   // question instead of being read as its answer. Only a half-made task or routine is mentioned, after the new reply.
-  if (chatFixesOn() && turn.state.pending && turn.state.pending.kind !== "offer" && isNewRequest(turn.state.pending, text, parseCtx(extractOpts(turn)))) {
+  if (chatFixesOn() && turn.state.pending && turn.state.pending.kind !== "offer" && isNewRequest(turn.state.pending, text, parseCtx(extractOpts(turn)), titles)) {
     const dropped = turn.state.pending;
     turn.state.pending = null;
     const left = "draft" in dropped && dropped.draft.title ? dropped.draft.title : null;
@@ -358,16 +385,15 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
   const app = chatFixesOn() ? appQuestionReply(text) : null;
   if (app) return app;
   if (chatFixesOn()) {
-    const share = shareExistingReply(text, collabOn());
-    if (share) return { content: share, intent: "share_existing" };
+    const added = ADD_TO_IT_CUE.test(text) ? addToExistingReply(text, collabOn(), await connectionNames(turn.user.id)) : null;
+    if (added) {
+      const actions = added.item ? [sayAction(`Add "${truncate(added.item, 24)}"`, "create_task", `add ${added.item.toLowerCase()}`)] : undefined;
+      return { content: added.content, actions, intent: added.intent };
+    }
     if (OTHER_ONE.test(text.trim())) return otherOne(turn);
     // "I am not asking about X, I am asking about Y", "no, I meant Y": answer Y.
     const fixed = correctionTarget(text, Boolean(turn.state.pending));
     if (fixed) return handleText(turn, fixed);
-    if (turn.state.pending?.kind === "choose_task" && CANCEL_CHOICE.test(text.trim())) {
-      turn.state.pending = null;
-      return { content: "Okay.", intent: "deny" };
-    }
   }
 
   // The last chat reply offered something ("Say: …"): "yes", "sure, for 6 pm" runs it; anything else moves on.
@@ -390,7 +416,7 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
 
   const ctx = parseCtx(extractOpts(turn));
   // An open question gets a plausible answer first ("2", "tomorrow", "haan", "done"): no command may take it.
-  const answering = turn.state.pending && isPlausibleAnswer(turn.state.pending, text, ctx) ? turn.state.pending.kind : null;
+  const answering = turn.state.pending && isPlausibleAnswer(turn.state.pending, text, ctx, titles) ? turn.state.pending.kind : null;
   if (!answering) {
     // Chat commands (commands/registry.ts): their rules are specific, so a match is a new request and
     // drops the open question. Everything else continues through nlu.ts and the existing handlers.

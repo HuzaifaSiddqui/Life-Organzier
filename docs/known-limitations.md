@@ -31,7 +31,11 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   gets the same answer; a second list question ("what about the third one") replaces the remembered list, so "move
   the first" then fails; filler words ("actually move it") are read as the task name; two tasks in one message become
   one task; "call mom, feeling low today" keeps "feeling" in the title; the weather question gets the generic fallback.
-  An existing task can't get new people (sharing works only when a task is added). The alarm note ("I can't set phone
+  An existing task can't get new people (sharing works only when a task is added) or items ("add milk to it" offers
+  "Milk" as its own task). "when I get home" is taken as the answer to "When should … be done?" but there is no date in
+  it, so the question is asked again. Picking a task by name or number after "Which task do you mean?" asks what to
+  change instead of using the change said first ("move the call to friday" → pick → "What should I change?"); this was
+  already so before CHAT_FIXES_V2. The alarm note ("I can't set phone
   alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is built.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"

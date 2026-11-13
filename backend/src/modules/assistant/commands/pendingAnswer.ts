@@ -25,32 +25,48 @@ const NUMBER = /^\s*#?\d{1,2}\s*[.)]?\s*$/;
 const CONFIRM_KINDS = new Set<Pending["kind"]>(["confirm_command", "confirm_delete", "confirm_update", "mood_confirm", "typo", "prereq", "task_review", "clarify_intent"]);
 const SLOT_KINDS = new Set<Pending["kind"]>(["task_draft", "routine_draft", "past_date", "capacity", "conflict", "task_review", "routine_time"]);
 
-function optionLabels(p: Pending): string[] {
+/** The names offered: command / location choices carry them; for "which task?" the caller passes the task titles. */
+function optionLabels(p: Pending, titles: string[] = []): string[] {
   if (p.kind === "command_choice") return p.candidates.map((c) => c.label);
   if (p.kind === "location_choice") return p.results.map((r) => r.name);
+  if (p.kind === "choose_task") return titles;
   return [];
 }
 
+/** The reply names one of the options ("call mom" to "Which task: Call mom / Book dentist?"). */
+function namesOption(p: Pending, t: string, titles: string[]): boolean {
+  return t.split(/\s+/).length <= 5 && optionLabels(p, titles).some((label) => fuzzySimilarity(t, label) >= 0.45 || label.toLowerCase().includes(t.toLowerCase()));
+}
+
+/**
+ * CHAT_FIXES_V2: closes whatever question is open ("cancel that", "forget it"); never a delete. A bare "cancel" or
+ * "never mind" is a no to the question, as before.
+ */
+export const CANCEL_QUESTION = /^(?:no[,.]?\s+)?(?:cancel|forget|drop|leave|stop)\s+(?:it|that|this|about it)[\s.!]*$/i;
+
 const PRONOUN = /^(?:it|its|her|him|his|them|their|this|that|there|wo|woh|usse|use|isko|usko|unko)$/i;
+const VERB = /^(?:remind|make|set|put|move|change|book|call|schedule|do|keep|plan)$/i;
 
 /**
  * A longer reply still answers when it adds nothing new: once the date, time and filler are gone, what is left is
  * only pronouns and words of the draft's title ("I'll call her tomorrow", "we will do it in the evening",
  * "I need it by Friday"). "I need to call mom's doctor tomorrow" adds "doctor": a new task, not Call mom's date.
  */
-export function refersBack(p: Pending, text: string, ctx: ParseCtx): boolean {
+export function refersBack(p: Pending, text: string, ctx: ParseCtx, allowVerb = false): boolean {
   const title = "draft" in p && p.draft && typeof p.draft === "object" && "title" in p.draft ? String(p.draft.title ?? "") : "";
   const words = (s: string) => (s.toLowerCase().replace(/['’]s\b/g, "").match(/[\p{L}\p{N}]{3,}/gu) ?? []);
   const own = new Set(words(title));
   const said = words(cleanTitle(extractEntities(text, ctx.opts).residual));
-  return said.every((w) => PRONOUN.test(w) || own.has(w));
+  // allowVerb: the verb of "make it friday", "remind me tomorrow at 5" adds nothing either.
+  return said.every((w, i) => PRONOUN.test(w) || own.has(w) || (allowVerb && i === 0 && VERB.test(w)));
 }
 
 /** A reply that starts with an action ("add milk", "update the report", "set an alarm for 6 am"). */
 const ACTION_START = /^(?:(?:please|ok(?:ay)?|also|and|now|so)[,\s]+)*(?:add|set|create|make|remind|book|call|move|change|update|delete|remove|complete|finish|mark|rename|share|schedule|cancel|plan|show|list|start)\b/i;
-/** A question ("what's due tomorrow?", "who made you?"). */
-const QUESTION = /\?\s*$|^(?:what|when|where|who|why|how|can|could|is|are|(?:do|does)\s+(?:i|you|we|they|my))\b/i;
-const BACK_REF = /\b(?:it|that|this)\b/i;
+/** A question ("what's due tomorrow?", "who made you?"); "can't" is not "can" (the apostrophe ends the word). */
+const QUESTION = /\?\s*$|^(?:what|when|where|who|why|how|can|could|is|are|(?:do|does)\s+(?:i|you|we|they|my))\b(?!['’])/i;
+/** To a date / time question, "when I get home", "after lunch", "by friday" (no "?") is the answer. */
+const WHEN_ANSWER = /^(?:when|after|before|by)\b(?!.*\?\s*$)/i;
 
 /** The open question asks for a date or time. */
 function asksDateOrTime(p: Pending): boolean {
@@ -63,28 +79,33 @@ function asksDateOrTime(p: Pending): boolean {
  * starts with an action. Exception: to a date / time question, an action about "it / that / this" with a date or time
  * is still the answer ("make it friday", "set it for 6 pm"). A number, yes / no or a control word is always an answer.
  */
-export function isNewRequest(p: Pending, text: string, ctx: ParseCtx): boolean {
+export function isNewRequest(p: Pending, text: string, ctx: ParseCtx, titles: string[] = []): boolean {
   const t = text.trim();
-  if (!t || YES_NO.test(t) || NUMBER.test(t) || CONTROL.test(t)) return false;
+  if (!t || YES_NO.test(t) || NUMBER.test(t) || CONTROL.test(t) || CANCEL_QUESTION.test(t)) return false;
+  // A name from the options is the answer, even "call mom" or "finish report".
+  if (namesOption(p, t, titles)) return false;
+  if (asksDateOrTime(p) && WHEN_ANSWER.test(t)) return false;
   if (QUESTION.test(t)) return true;
   if (!ACTION_START.test(t)) return false;
-  if (asksDateOrTime(p) && BACK_REF.test(t)) {
+  // "remind me tomorrow at 5", "call her tomorrow", "make it friday": a date or time and nothing new beside it.
+  if (asksDateOrTime(p)) {
     const e = extractEntities(t, ctx.opts);
-    if (e.date || e.time) return false;
+    if ((e.date || e.time) && refersBack(p, t, ctx, true)) return false;
   }
   return true;
 }
 
-export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): boolean {
+export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx, titles: string[] = []): boolean {
   const t = text.trim();
   if (!t) return false;
-  if (chatFixesOn() && isNewRequest(p, t, ctx)) return false;
+  if (chatFixesOn() && isNewRequest(p, t, ctx, titles)) return false;
   if (YES_NO.test(t) || NUMBER.test(t) || CONTROL.test(t)) return true;
+  if (chatFixesOn() && (CANCEL_QUESTION.test(t) || namesOption(p, t, titles) || (asksDateOrTime(p) && WHEN_ANSWER.test(t)))) return true;
   const words = t.split(/\s+/).length;
   if (p.kind === "command_choice" || p.kind === "location_choice" || p.kind === "choose_task") {
     // A name from the list ("night reading"); task candidates are only ids here, so any short reply is a try.
     // Only a short reply can be a name from the list: "Add a task … at home" is not picking "home".
-    if (words <= 5 && optionLabels(p).some((label) => fuzzySimilarity(t, label) >= 0.45 || label.toLowerCase().includes(t.toLowerCase()))) return true;
+    if (namesOption(p, t, [])) return true;
     return words <= 3 && !matchCommand(t, ctx); // a short try ("tomorrow") is asked again, never a new task
   }
   if (SLOT_KINDS.has(p.kind)) {

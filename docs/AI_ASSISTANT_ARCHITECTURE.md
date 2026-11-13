@@ -42,14 +42,21 @@ Status: built and unit-tested on new sentences; turned on only after it passes o
   (deleting the account and data is in Settings → Data & account, removed after 30 days). A model's "support" is
   taken only when the message itself shows distress (`distressSignal`); crisis detection still runs first, unchanged.
 - *Dropping an open question* (`commands/pendingAnswer.ts → isNewRequest`): a question, or a reply that starts with an
-  action ("set an alarm for 6 am", "update the report", "add milk"), is a new request, not the answer. A back-reference
-  with a date or time ("make it friday", "set it for 6 pm") still answers a date question. When a half-made task or
-  routine is dropped, the new reply ends with `(I've left "X" unfinished.)`; a dropped "which one?" is silent.
+  action ("set an alarm for 6 am", "update the report", "add milk"), is a new request, not the answer. Still answers:
+  a name from the options ("call mom" to "Which task?"; the task titles are looked up), and, to a date / time
+  question, a date or time with nothing new beside it ("remind me tomorrow at 5", "call her tomorrow", "make it
+  friday") or a "when / after / before / by" reply without "?" ("when I get home", "after lunch"). "can't …" is not a
+  question. When a half-made task or routine is dropped, the new reply ends with `(I've left "X" unfinished.)`; a
+  dropped "which one?" is silent. "cancel that", "forget it", "drop that", "leave it", "stop that" close any open
+  question ("Okay, cancelled."), never start a delete; with no question open they are read as before.
 - *Command + reference* (`nlu.ts → refCommand`): "complete the second one", "finish it", "delete that one" act on an
   existing task, never create one; "update the report" edits a task with that name (asks which when several match)
   and is a new to-do when none does. "add Sana to the above task" explains that an existing task can't be shared yet
-  (`repairs.ts → shareExistingReply`; with `COLLAB_TASKS` off: "Sharing isn't available yet.").
-- *Repairs* (`assistant/repairs.ts`): "I am not asking about X, I am asking about Y" and "no, I meant Y" answer Y;
+  (`repairs.ts → addToExistingReply`; with `COLLAB_TASKS` off: "Sharing isn't available yet."), but only when the name
+  is an "@name" or one of the user's connections. "add milk to it" is an item, not a person: "I can't add things
+  inside a task yet. Want "Milk" as its own task?" with an [Add "Milk"] button; no task is made by itself.
+- *Repairs* (`assistant/repairs.ts`): "I am not asking about X, I am asking about Y" and "no, I meant Y" answer Y
+  ("I meant to call mom" is not a correction);
   "no, the other one" picks the other of two candidates when one was assumed, otherwise asks "Which task do you
   mean?"; "never mind" closes an open "which task?". A missing task reads `I couldn't find a task called "…".`
   with [Show my tasks].

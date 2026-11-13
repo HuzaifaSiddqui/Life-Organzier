@@ -101,7 +101,7 @@ test("chat probe (29 messages), rules path: the PR A fixes hold", { skip: !dbAva
     // A4: "no, the other one" never offers to add a task.
     const other = at("no, the other one");
     assert.ok(!["unknown", "task_created", "clarify"].includes(other.intent), other.intent);
-    assert.equal(at("never mind").intent, "deny", "cancels the open question");
+    assert.equal(at("never mind").intent, "cancel", "cancels the open question");
     // Nothing anywhere became a junk task named after a command.
     for (const r of replies) assert.ok(!r.titles.some((x) => /^(?:complete|update|add sana|i am not asking)\b/i.test(x)), `${r.say}: ${r.titles.join(", ")}`);
   } finally {

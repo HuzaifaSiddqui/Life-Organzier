@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AiService, setAi } from "../src/ai/llm.js";
 import { appQuestionReply, distressSignal } from "../src/modules/assistant/appQuestions.js";
-import { isNewRequest } from "../src/modules/assistant/commands/pendingAnswer.js";
+import { CANCEL_QUESTION, isNewRequest, isPlausibleAnswer } from "../src/modules/assistant/commands/pendingAnswer.js";
 import { parseCtx } from "../src/modules/assistant/commands/registry.js";
 import { refCommand, understand } from "../src/modules/assistant/nlu.js";
-import { CANCEL_CHOICE, correctionTarget, OTHER_ONE, shareExistingReply } from "../src/modules/assistant/repairs.js";
+import { addToExistingReply, correctionTarget, OTHER_ONE } from "../src/modules/assistant/repairs.js";
 import { detectMood } from "../src/modules/mood/moodService.js";
 import type { Pending } from "../src/modules/assistant/types.js";
 import { randomUUID } from "node:crypto";
@@ -62,6 +62,63 @@ test("A2: a new request replaces an open date question; a back-reference with a 
   });
 });
 
+test("review #63 (1): a name from the options is the answer, even when it starts with an action verb", async () => {
+  const choose: Pending = { kind: "choose_task", purpose: "update", candidates: ["a", "b", "c", "d"], data: {} };
+  const titles = ["Call mom", "Book dentist", "Plan the trip", "Finish report"];
+  const ctx = parseCtx({ now: NOW, tz: TZ, contexts: [] });
+  await withFixes(() => {
+    for (const t of ["call mom", "book dentist", "plan the trip", "finish report"]) {
+      assert.equal(isNewRequest(choose, t, ctx, titles), false, t);
+      assert.equal(isPlausibleAnswer(choose, t, ctx, titles), true, t);
+    }
+    assert.equal(isNewRequest(choose, "add milk", ctx, titles), true, "not an option: a new request");
+    const reading: Pending = { kind: "command_choice", command: "routine_update", args: {}, field: "routineId", candidates: [{ id: "r1", label: "Plan meals" }, { id: "r2", label: "Call grandma" }] };
+    assert.equal(isNewRequest(reading, "call grandma", ctx), false);
+    const place: Pending = { kind: "location_choice", taskId: "t", taskTitle: "x", place: "library", results: [{ name: "Book Corner", displayName: "", latitude: 0, longitude: 0 }], more: false };
+    assert.equal(isNewRequest(place, "book corner", ctx), false);
+  });
+});
+
+test("review #63 (2): \"can't\" is not a question; 'when I get home' answers a date question", async () => {
+  const draft: Pending = { kind: "task_draft", draft: { title: "Water the plants" } as never, awaiting: ["date"], source: "CHAT", clarity: 0.5 };
+  const confirm: Pending = { kind: "confirm_delete", taskId: "t", title: "x" };
+  const ctx = parseCtx({ now: NOW, tz: TZ, contexts: [] });
+  await withFixes(() => {
+    for (const t of ["can't do it today", "cannot say yet", "couldn't tell you", "can’t right now"]) assert.equal(isNewRequest(draft, t, ctx), false, t);
+    assert.equal(isNewRequest(draft, "can you show my tasks", ctx), true, "a real question still is one");
+    for (const t of ["when I get home", "when I'm free", "after lunch", "before class", "by friday"]) {
+      assert.equal(isNewRequest(draft, t, ctx), false, t);
+      assert.equal(isPlausibleAnswer(draft, t, ctx), true, t);
+    }
+    assert.equal(isNewRequest(draft, "when is my dentist appointment?", ctx), true, "with '?' it is a question");
+    assert.equal(isNewRequest(confirm, "when I get home", ctx), true, "not a date question: a question as before");
+  });
+});
+
+test("review #63 (3): a date or time with nothing new beside it answers a date question", async () => {
+  const call: Pending = { kind: "task_draft", draft: { title: "Call mom" } as never, awaiting: ["date"], source: "CHAT", clarity: 0.5 };
+  const cab: Pending = { kind: "task_draft", draft: { title: "Book me a cab to the airport" } as never, awaiting: ["date"], source: "CHAT", clarity: 0.5 };
+  const ctx = parseCtx({ now: NOW, tz: TZ, contexts: [] });
+  await withFixes(() => {
+    for (const t of ["remind me tomorrow at 5", "call her tomorrow", "make it friday", "set it for 6 pm"]) assert.equal(isNewRequest(call, t, ctx), false, t);
+    assert.equal(isNewRequest(cab, "book it for friday", ctx), false);
+    for (const t of ["set an alarm for 6 am", "update the report", "add milk", "call the bank tomorrow"]) assert.equal(isNewRequest(call, t, ctx), true, t);
+  });
+});
+
+test("review #63 (4): 'cancel that', 'forget it' close any open question; never a delete", async () => {
+  const ctx = parseCtx({ now: NOW, tz: TZ, contexts: [] });
+  const bulk: Pending = { kind: "confirm_command", command: "bulk_delete", args: {}, summary: "Delete 5 tasks?" };
+  await withFixes(() => {
+    for (const t of ["cancel it", "cancel that", "cancel this", "forget it", "drop that", "leave it", "stop that", "no, forget about it"]) {
+      assert.ok(CANCEL_QUESTION.test(t), t);
+      assert.equal(isNewRequest(bulk, t, ctx), false, t);
+      assert.equal(isPlausibleAnswer(bulk, t, ctx), true, t);
+    }
+    for (const t of ["cancel the dentist", "drop the gym routine", "stop reminding me"]) assert.ok(!CANCEL_QUESTION.test(t), t);
+  });
+});
+
 test("A3: a command verb on a reference edits a task; it never names a new one", () => {
   const cases: Array<[string, string | null]> = [
     ["complete the second one", "complete_task"],
@@ -79,11 +136,20 @@ test("A3: a command verb on a reference edits a task; it never names a new one",
   for (const [t, want] of cases) assert.equal(refCommand(t), want, t);
 });
 
-test("A3: adding people to an existing task is explained, never a new task", () => {
-  assert.equal(shareExistingReply("add Sana to the above task", false), "Sharing isn't available yet.");
-  assert.match(shareExistingReply("share it with @ali", true)!, /@sana/);
-  assert.match(shareExistingReply("add Sana and Ali to this task", true)!, /already exists/);
-  for (const t of ["add milk to the list", "add Sana's birthday", "share notes with Ali tomorrow"]) assert.equal(shareExistingReply(t, true), null, t);
+test("A3 / review #63 (5): people on an existing task only for @name or a connection; items are not people", () => {
+  const people = ["sana", "ali"];
+  assert.equal(addToExistingReply("add Sana to the above task", false, people)?.content, "Sharing isn't available yet.");
+  assert.equal(addToExistingReply("add Sana to the above task", true, people)?.intent, "share_existing");
+  assert.equal(addToExistingReply("share it with @ali", true, [])?.intent, "share_existing");
+  assert.equal(addToExistingReply("add @bilal to it", true, [])?.intent, "share_existing");
+  assert.equal(addToExistingReply("add Sana and Ali to this task", true, people)?.intent, "share_existing");
+  for (const t of ["add milk to it", "add eggs to that task", "add Bilal to it"]) {
+    const r = addToExistingReply(t, true, people);
+    assert.equal(r?.intent, "add_to_task", t);
+    assert.doesNotMatch(r!.content, /people/, t);
+  }
+  assert.equal(addToExistingReply("add milk to it", true, people)?.item, "Milk");
+  for (const t of ["add milk to the list", "add Sana's birthday", "share notes with Ali tomorrow", "add milk"]) assert.equal(addToExistingReply(t, true, people), null, t);
 });
 
 test("A4: corrections and 'the other one'", () => {
@@ -92,10 +158,10 @@ test("A4: corrections and 'the other one'", () => {
   assert.equal(correctionTarget("no, I meant what's due tomorrow"), "what's due tomorrow");
   assert.equal(correctionTarget("I mean it"), "show it");
   assert.equal(correctionTarget("remind me what I meant to buy"), null);
+  assert.equal(correctionTarget("I meant to call mom yesterday"), null, "review #63 (6): a plan, not a correction");
+  assert.equal(correctionTarget("no, I meant to say friday"), null);
   for (const t of ["no, the other one", "the other one", "other task", "no, I meant the other one"]) assert.ok(OTHER_ONE.test(t), t);
   assert.ok(!OTHER_ONE.test("buy the other one tomorrow"));
-  for (const t of ["never mind", "cancel", "no, forget it"]) assert.ok(CANCEL_CHOICE.test(t), t);
-  assert.ok(!CANCEL_CHOICE.test("cancel the dentist"));
 });
 
 test("A3: 'update the X' edits a task named X; with no such task it is still a new to-do", { skip: !dbAvailable && "no database" }, async () => {
@@ -112,6 +178,36 @@ test("A3: 'update the X' edits a task named X; with no such task it is still a n
       assert.notEqual(site.intent, "not_found");
       assert.ok(["clarify", "task_created"].includes(site.intent ?? ""), site.intent);
       assert.equal(await prisma.task.count({ where: { userId: user.id, title: "Project report" } }), 1);
+    });
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("review #63: through the chat: option names, cancel, items vs people", { skip: !dbAvailable && "no database" }, async () => {
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, tier: "PRO" } });
+  for (const title of ["Call mom", "Call the plumber", "Old notes"]) await prisma.task.create({ data: { userId: user.id, title } });
+  const conversation = await prisma.conversation.create({ data: { userId: user.id, channel: "APP", title: "t" } });
+  const send = async (text: string) =>
+    (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", conversationId: conversation.id, now: NOW, text } as never)).message;
+  const open = () => prisma.task.count({ where: { userId: user.id, status: { not: "DELETED" } } });
+  try {
+    await withFixes(async () => {
+      assert.equal((await send("move the call to friday")).intent, "choose_task");
+      const picked = await send("call mom");
+      assert.match(picked.content, /"Call mom"/, "the name picks the option, not a new 'Call mom' task");
+      assert.equal(await open(), 3);
+      assert.equal((await send("delete all my tasks")).intent, "bulk_delete_open_confirm");
+      assert.equal((await send("cancel that")).intent, "cancel");
+      assert.equal(await open(), 3, "nothing deleted");
+      const milk = await send("add milk to it");
+      assert.equal(milk.intent, "add_to_task");
+      assert.equal(await open(), 3, "no task called 'Add milk to it'");
+      // With no question open, "cancel it" is as before: the delete preview of the task in focus (nothing deleted).
+      assert.equal((await send("cancel it")).intent, "confirm_delete");
+      assert.equal(await open(), 3);
     });
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
