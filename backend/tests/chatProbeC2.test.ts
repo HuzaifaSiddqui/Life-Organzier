@@ -237,3 +237,48 @@ test("11:59 PM rule: end of day only with deadline wording; 'remind me' / 'befor
     await c.done();
   }
 });
+
+test("end of day also for until / till / before <day>; 'before <event>' asks; 'before <clock>' sets the time; 'remind me … by <day>' asks", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  const task = (title: string) => prisma.task.findFirst({ where: { userId: c.user.id, title } });
+  const END = /Due by the end of the day\. I'll remind you earlier that day\./;
+  try {
+    await withFixes(async () => {
+      const until = await c.send("the bike service can wait until saturday");
+      assert.equal(until.intent, "task_created");
+      assert.match(until.content, END);
+      const beforeDay = await c.send("renew the parking permit before friday");
+      assert.equal(beforeDay.intent, "task_created");
+      assert.match(beforeDay.content, END);
+      assert.equal((await task("Renew the parking permit"))?.dueTime, null);
+      const beforeTomorrow = await c.send("pay the hostel deposit before tomorrow");
+      assert.match(beforeTomorrow.content, END);
+      const beforeEvent = await c.send("back up the laptop before standup tomorrow");
+      assert.equal(beforeEvent.intent, "clarify");
+      assert.match(beforeEvent.content, /What time is "Back up the laptop before standup" due\?/);
+      await c.send("cancel");
+      const beforeClock = await c.send("print the handouts before 5 pm tomorrow");
+      assert.equal(beforeClock.intent, "task_created");
+      assert.equal((await task("Print the handouts"))?.dueTime, "5 PM");
+      const remindBy = await c.send("remind me to renew the parking permit by friday");
+      assert.equal(remindBy.intent, "clarify", "'remind me … by <day>' still asks the time");
+    });
+  } finally {
+    await c.done();
+  }
+});
+
+test("'move some tasks to friday' asks which task (known, tested behaviour)", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith(["Clean the garage", "Order printer ink"]);
+  try {
+    await withFixes(async () => {
+      const m = await c.send("move some tasks to friday");
+      assert.equal(m.intent, "choose_task");
+      assert.equal(m.content, "Which task do you want to move?");
+      const moved = await c.send("Order printer ink");
+      assert.equal(moved.intent, "task_updated", "the day said first is applied after the pick");
+    });
+  } finally {
+    await c.done();
+  }
+});
