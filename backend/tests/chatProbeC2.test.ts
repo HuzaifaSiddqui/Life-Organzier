@@ -209,3 +209,31 @@ test("bulk move: a named source day other than today moves that day's tasks (pre
     await c.done();
   }
 });
+
+test("11:59 PM rule: end of day only with deadline wording; 'remind me' / 'before <event>' ask the time; 'before 12' = 12 PM", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  const task = (title: string) => prisma.task.findFirst({ where: { userId: c.user.id, title } });
+  try {
+    await withFixes(async () => {
+      const asked = await c.send("remind me to back up the server before the meeting tomorrow");
+      assert.equal(asked.intent, "clarify");
+      assert.match(asked.content, /What time is "Back up the server before the meeting" due\?/);
+      assert.ok((asked.actions ?? []).some((a) => a.label === "End of day"), "the time chips, as before the flag");
+      await c.send("cancel");
+
+      const noon = await c.send("remind me to pay the plumber before 12 tomorrow");
+      assert.equal(noon.intent, "task_created");
+      assert.equal((await task("Pay the plumber"))?.dueTime, "12 PM", "'before 12' = 12 PM, out of the title");
+
+      const deadline = await c.send("submit the tax form by friday");
+      assert.equal(deadline.intent, "task_created");
+      assert.match(deadline.content, /Due by the end of the day\. I'll remind you earlier that day\./);
+      assert.equal((await task("Submit the tax form"))?.dueTime, null);
+
+      const remindDeadline = await c.send("remind me to submit the visa form by friday");
+      assert.equal(remindDeadline.intent, "clarify", "a 'remind me' cue asks the time");
+    });
+  } finally {
+    await c.done();
+  }
+});

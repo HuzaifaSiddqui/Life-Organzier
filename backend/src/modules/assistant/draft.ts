@@ -14,6 +14,11 @@ export const PLACEHOLDER_TITLE = /^(?:(?:please\s+)?remind(?:\s+(?:me|us))?(?:\s
 const isPlaceholder = (title: string | null) => chatFixesOn() && Boolean(title && PLACEHOLDER_TITLE.test(title.trim()));
 export const VERY_LOW_CLARITY = 20;
 
+/** C2: "before 12", "before noon", "before 5 pm", "before 9:30 am" (a bare 1–11 is left to ask: AM or PM?). */
+const BEFORE_CLOCK = /\bbefore\s+(?:(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|12(?::00)?(?!\s*(?:am|pm|:\d))\b|noon\b|midday\b)/i;
+/** C2: the words that make a date-only task a deadline due at the end of that day. */
+const DEADLINE_WORDING = /\b(?:by|due|submit|submission|deadline|hand in|turn in)\b/i;
+
 export function draftFromEntities(text: string, title: string, e: Entities, todayYmd: string): TaskDraft {
   const taskType = classifyTaskType(text, e);
   let priority = e.priority ?? Priority.MEDIUM;
@@ -41,9 +46,19 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
     draft.title = null;
     draft.askRemind = true;
   }
+  // C2 (CHAT_FIXES_V2): "before 12" / "before noon" / "before 5 pm" is the due time, not part of the title.
+  if (chatFixesOn() && !draft.dueTime) {
+    const m = BEFORE_CLOCK.exec(text);
+    if (m) {
+      draft.dueTime = m[1] ? `${Number(m[1])}${m[2] ? `:${m[2]}` : ""} ${m[3].toUpperCase()}` : "12 PM";
+      if (draft.title) draft.title = draft.title.replace(BEFORE_CLOCK, "").replace(/\s+/g, " ").trim() || draft.title;
+    }
+  }
   // CHAT_FIXES_V2 (deliberate FRD deviation from the FR-TM-001 Clarity Index): a deadline with a real date but no time
   // is not asked about; it is due at the end of that day and the reply says so. No date still asks.
-  if (chatFixesOn() && draft.taskType === TaskType.DEADLINE && draft.dueYmd && !draft.dueTime && !e.date?.fuzzy) {
+  // C2: only with deadline wording (by / due / submit / deadline); "remind me …" and "before <event>" ask the time.
+  const endOfDayOk = !chatFixesOn() || (DEADLINE_WORDING.test(text) && !/\bremind\b/i.test(text) && !/\bbefore\b/i.test(text));
+  if (chatFixesOn() && endOfDayOk && draft.taskType === TaskType.DEADLINE && draft.dueYmd && !draft.dueTime && !e.date?.fuzzy) {
     draft.allowNoTime = true;
     draft.assumedEndOfDay = true;
   }
