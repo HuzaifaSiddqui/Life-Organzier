@@ -749,7 +749,41 @@ async function doSplit(turn: Turn, task: Task, parts: string[]): Promise<Out> {
 async function splitIntent(turn: Turn, u: Understanding): Promise<Out> {
   const found = await chooseOrResolve(turn, u, "split", { parts: u.splitParts });
   if ("out" in found) return found.out;
+  if (chatFixesOn()) {
+    // PR E: never one junk subtask ("smaller tasks"): ask how; named (or counted) parts are shown before they are added.
+    if (!u.splitParts.length || u.splitParts.every((p) => GENERIC_PART.test(p.trim()))) {
+      focusOn(turn, found.task.id);
+      turn.state.pending = { kind: "split_ask", taskId: found.task.id };
+      return { content: "How should I split it? For example: outline, draft, review.", actions: [{ label: "Cancel", payload: { type: "cancel_pending" } }], intent: "split_ask" };
+    }
+    return splitPreview(turn, found.task, u.splitParts);
+  }
   return doSplit(turn, found.task, u.splitParts);
+}
+
+const GENERIC_PART = /^(?:(?:smaller|small|little|separate|more)\s+)?(?:tasks?|parts?|pieces?|chunks?|steps?|bits?|sub-?tasks?)$/i;
+
+/** PR E: the subtasks as a preview: [Add them] [Cancel]. */
+export function splitPreview(turn: Turn, task: Task, parts: string[]): Out {
+  const names = parts.map((p) => p.trim()).filter(Boolean).slice(0, 12).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+  focusOn(turn, task.id);
+  turn.state.pending = { kind: "split_preview", taskId: task.id, parts: names };
+  return {
+    content: [`Split "${task.title}" into ${names.length} ${names.length === 1 ? "part" : "parts"}?`, ...names.map((n) => `• ${n}`)].join("\n"),
+    actions: [
+      { label: "Add them", payload: { type: "confirm_pending" }, style: "primary" },
+      { label: "Cancel", payload: { type: "cancel_pending" } },
+    ],
+    intent: "split_preview",
+  };
+}
+
+/** PR E: "Add them" / yes to the split preview. */
+export async function confirmSplit(turn: Turn, p: { taskId: string; parts: string[] }): Promise<Out> {
+  turn.state.pending = null;
+  const task = await getTaskForUser(turn.user.id, p.taskId);
+  if (!task) return { content: "I couldn't find that task anymore.", intent: "not_found" };
+  return doSplit(turn, task, p.parts);
 }
 
 const ORDINAL_REF = /\bthe\s+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2}(?:st|nd|rd|th))(?:\s+(?:one|task|item))?\b/i;
@@ -1048,6 +1082,7 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       const p = turn.state.pending;
       if (!p) return { content: "There's nothing waiting for confirmation.", intent: "noop" };
       if (p.kind === "task_review") return proceedWithDraft(turn, p.draft, p.source, { clarified: true, reviewed: true });
+      if (p.kind === "split_preview") return confirmSplit(turn, p);
       if (p.kind === "routine_preview") {
         turn.state.pending = null;
         return proceedWithRoutine(turn, p.draft);

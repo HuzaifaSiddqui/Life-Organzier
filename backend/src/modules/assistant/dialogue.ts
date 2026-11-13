@@ -84,7 +84,7 @@ import { generateReply } from "./responder.js";
 import { shareAnswer, titleForShare } from "./shareIntent.js";
 import { createSharedTask, listConnections, whatsappCollabLine } from "../collab/collabService.js";
 import { HttpError } from "../../lib/http.js";
-import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
+import { confirmSplit, handleIntent, handlePayload, resolveHandlerPending, splitPreview } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
 import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
@@ -718,6 +718,19 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
     }
     case "decline_reason":
       return resolveDeclineReason(turn, text);
+    case "split_ask": {
+      // PR E: "outline, draft and review" → the preview; anything unusable drops the question.
+      turn.state.pending = null;
+      const parts = text.trim().replace(/[.!?]+$/, "").replace(/^(?:into|in)\s+/i, "").split(/\s*(?:,|;|\band\b|&|\+|\n)\s*/i).map((x) => x.trim()).filter((x) => x.length >= 2);
+      const task = parts.length ? await getTaskForUser(turn.user.id, p.taskId) : null;
+      return task ? splitPreview(turn, task, parts) : null;
+    }
+    case "split_preview": {
+      if (yes || /^(?:add them|add|split it|do it)\b/i.test(text.trim())) return confirmSplit(turn, p);
+      turn.state.pending = null;
+      if (no) return { content: "Okay, not split.", intent: "cancel" };
+      return null;
+    }
     case "routine_preview": {
       // PR E: "Add the routine …? Repeats every day until you stop it." — yes / save adds it; no / cancel drops it.
       turn.state.pending = null;

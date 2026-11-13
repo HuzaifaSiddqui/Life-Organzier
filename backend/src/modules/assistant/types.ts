@@ -88,6 +88,10 @@ export type Pending =
   | { kind: "routine_time"; routineId: string; title: string }
   /** PR E (CHAT_FIXES_V2): a repeat said with a limit ("every evening this week"): shown before saving. */
   | { kind: "routine_preview"; draft: RoutineDraft }
+  /** PR E (CHAT_FIXES_V2): "split X into smaller tasks" with no names: how to split it. */
+  | { kind: "split_ask"; taskId: string }
+  /** PR E (CHAT_FIXES_V2): the subtasks, shown before they are added. */
+  | { kind: "split_preview"; taskId: string; parts: string[] }
   | { kind: "mood_confirm"; mood: string; confidence: number; text: string }
   /** A chat reply suggested something to say ("Say: schedule a call with Mooz tonight at 8 PM"); "yes" (+ a new time) runs it. */
   | { kind: "offer"; text: string }

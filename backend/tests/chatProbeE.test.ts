@@ -66,3 +66,28 @@ test("E7: a repeat with a limit is shown first ('Repeats every day until you sto
     await c.done();
   }
 });
+
+test("E8: a split with no names asks how; named or counted parts are shown first; never one junk subtask", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([["Write the marketing plan", null]]);
+  const subtasks = () => prisma.task.findMany({ where: { userId: c.user.id, parentTaskId: { not: null } }, orderBy: { createdAt: "asc" }, select: { title: true } });
+  try {
+    await withFixes(async () => {
+      const ask = await c.send("split the marketing plan into smaller tasks");
+      assert.equal(ask.content, "How should I split it? For example: outline, draft, review.");
+      assert.deepEqual(await subtasks(), [], "no junk subtask");
+      const preview = await c.send("research, outline and draft");
+      assert.equal(preview.intent, "split_preview");
+      assert.deepEqual((preview.actions ?? []).map((a) => a.label), ["Add them", "Cancel"]);
+      assert.deepEqual(await subtasks(), [], "nothing before 'Add them'");
+      await c.send(null, (preview.actions ?? [])[0].payload);
+      assert.deepEqual((await subtasks()).map((t) => t.title), ["Research", "Outline", "Draft"]);
+
+      const named = await c.send("break the marketing plan into budget and timeline");
+      assert.equal(named.intent, "split_preview");
+      await c.send(null, (named.actions ?? [])[1].payload);
+      assert.equal((await subtasks()).length, 3, "Cancel adds nothing");
+    });
+  } finally {
+    await c.done();
+  }
+});
