@@ -77,3 +77,10 @@ export function applyChatFixes<T extends Decision>(text: string, e: Pick<Entitie
   if (rule.intent === "create_task" && mood && (STATE.test(t) || feelingOnly(e.residual)) && !CLOCK.test(t)) return { ...rule, intent: "log_mood", confidence: Math.max(0.75, mood.confidence), fix: "I" };
   return rule;
 }
+
+/**
+ * "not done", "unfinished", "what haven't I finished yet?": open tasks, never the completed ones. First person only
+ * ("hasn't she finished the report?" is about someone else); "yet" counts only with "I / we haven't / didn't".
+ */
+export const NOT_DONE =
+  /\b(?:not|never)\s+(?:yet\s+)?(?:been\s+)?(?:done|finished|completed|complete)\b|\byet to\b|\b(?:unfinished|undone|incomplete|uncompleted)\b|\b(?:hasn'?t|has not)\s+been\s+(?:done|finished|completed)\b|\b(?:haven'?t|have not|didn'?t|did not)\s+(?:(?:i|we)\s+)?(?:done|finished|completed|complete|do|finish)\b|\b(?:i|we)\s+(?:haven'?t|have not|didn'?t|did not)\s+(?:done|finished|completed|complete|do|finish)\b|\b(?:haven'?t|have not|didn'?t|did not)\s+(?:i|we)\b[^.?!]*\byet\b|\b(?:i|we)\s+(?:haven'?t|have not|didn'?t|did not)\b[^.?!]*\byet\b/i;

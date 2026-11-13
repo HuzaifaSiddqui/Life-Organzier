@@ -1,5 +1,5 @@
 import { isWhatsapp } from "../channel.js";
-import { chatFixesOn } from "../chatFixes.js";
+import { chatFixesOn, NOT_DONE } from "../chatFixes.js";
 import type { Priority } from "@prisma/client";
 import { normalizeSpelled } from "../../../lib/spelled.js";
 import { truncate } from "../../../lib/text.js";
@@ -83,7 +83,9 @@ export function parseFindQuery(text: string, ctx: ParseCtx): FindFilter | null {
 }
 
 /** CHAT_FIXES_V2 (F): words that rank or time a question, not what it is about ("my most urgent task right now"). */
-const FILLER = new Set(["most", "least", "right", "now", "latest", "current", "currently", "top", "main", "biggest", "first"]);
+const FILLER = new Set(["most", "least", "right", "now", "latest", "current", "currently", "top", "main", "biggest", "first",
+  // PR B: "show my incomplete tasks" asks for the open tasks, not a task called "incomplete" (nlu.ts lists them).
+  "incomplete", "unfinished", "undone", "uncompleted", "remaining", "left", "yet", "not"]);
 
 function filterFrom(said: string, about: string, ctx: ParseCtx, place?: boolean): FindFilter | null {
   const lower = said.toLowerCase();
@@ -98,7 +100,8 @@ function filterFrom(said: string, about: string, ctx: ParseCtx, place?: boolean)
   if (!terms.length && !tag) return null;
   const range = findDateRange(said, ctx);
   const priority: Priority | undefined = /\burgent\b/.test(lower) ? "URGENT" : /\b(?:high priority|important)\b/.test(lower) ? "HIGH" : /\blow priority\b/.test(lower) ? "LOW" : undefined;
-  const status = /\b(?:done|completed|finished|ho gaya|mukammal)\b/.test(lower) ? "completed" : /\b(?:all|sab|sare|tamam)\b/.test(lower) ? "all" : undefined;
+  // PR B: "not done" / "unfinished" is the open tasks, never the completed ones.
+  const status = /\b(?:done|completed|finished|ho gaya|mukammal)\b/.test(lower) && !(chatFixesOn() && NOT_DONE.test(lower)) ? "completed" : /\b(?:all|sab|sare|tamam)\b/.test(lower) ? "all" : undefined;
   const parsed = findFilterSchema.safeParse({
     terms: terms.length ? terms : [tag],
     ...(status ? { status } : {}),

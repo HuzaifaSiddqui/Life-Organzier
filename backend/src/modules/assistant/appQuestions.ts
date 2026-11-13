@@ -15,10 +15,23 @@ export const APP_IDENTITY_REPLY = "I'm your Life Organizer assistant. I help you
 export const APP_PRIVACY_REPLY =
   "Your tasks and chats are tied to your account. The assistant runs through the app's own server, and personal numbers like phone or CNIC are hidden before any AI sees them. You can delete your account and data in Settings → Data & account (it's removed after 30 days).";
 
-export function appQuestionReply(text: string): { content: string; intent: "app_identity" | "app_privacy" } | null {
+/** PR B: weather questions ("what's the weather like in Lahore?", "will it rain tomorrow?"): the app can't check. */
+/** Not "temperature" ("what temperature for baking?" is not about the weather). */
+const WEATHER = /\b(?:weather|forecast|rain(?:ing|s)?|snow(?:ing|s)?|sunny|humid(?:ity)?|mausam|موسم)\b/i;
+const ASKS = /\?\s*$|^(?:what(?:'s|s| is| will)?|how(?:'s| is| hot| cold)?|will it|is it|does it|tell me|check|any)\b/i;
+const NOT_A_QUESTION = /\b(?:remind|add|create|note|task|if it|in case)\b/i;
+const NOT_A_PLACE = new Set(["the", "my", "this", "that", "today", "tomorrow", "tonight", "morning", "evening", "afternoon", "week", "weekend", "here", "there", "general", "a", "an"]);
+
+export function appQuestionReply(text: string): { content: string; intent: "app_identity" | "app_privacy" | "out_of_scope" } | null {
   const t = text.trim();
   if (WHO.test(t)) return { content: APP_IDENTITY_REPLY, intent: "app_identity" };
   if (PRIVACY.test(t)) return { content: APP_PRIVACY_REPLY, intent: "app_privacy" };
+  if (WEATHER.test(t) && ASKS.test(t) && !NOT_A_QUESTION.test(t)) {
+    // The place is named only when the user named one, capitalised ("in Lahore"; "in the morning" is no place).
+    const said = /\b(?:[Ii]n|[Ff]or|[Aa]t)\s+(\p{Lu}[\p{L}-]+)/u.exec(t)?.[1];
+    const place = said && !NOT_A_PLACE.has(said.toLowerCase()) ? ` in ${said.charAt(0).toUpperCase()}${said.slice(1)}` : "";
+    return { content: `I can't check the weather${place}, so your weather app is the best place for that.`, intent: "out_of_scope" };
+  }
   return null;
 }
 

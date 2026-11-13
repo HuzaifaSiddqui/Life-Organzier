@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { sayAction } from "../actions.js";
-import { dayName, formatClock } from "../../../lib/time.js";
+import { TaskStatus } from "@prisma/client";
+import { prisma } from "../../../config/db.js";
+import { addDaysYmd, dayName, formatClock, localParts, localYmd, relativeDayLabel, startOfLocalDay } from "../../../lib/time.js";
 import { formatDuration, plural } from "../../../lib/text.js";
-import { completionStreak, getAnalytics, timeByCategory } from "../../analytics/analyticsService.js";
+import { completionStreak, getAnalytics, mondayOf, timeByCategory } from "../../analytics/analyticsService.js";
+import { chatFixesOn, NOT_DONE } from "../chatFixes.js";
 import { PREDEFINED_CATEGORIES } from "../../settings/settingsRoutes.js";
 import type { Out } from "../dialogue.js";
 import { has, norm } from "./lexicon.js";
@@ -17,6 +20,8 @@ const HOW_MANY = "how many|count|number of|total|kitne|kitni|کتنے|کتنی";
 const MONTH = "month|this month|mahine|maheene|mahina|مہینے|مہینہ";
 const range = (t: string): "week" | "month" => (has(t, MONTH) ? "month" : "week");
 const rangeLabel = (r: "week" | "month") => (r === "week" ? "in the last 7 days" : "in the last 30 days");
+/** CHAT_FIXES_V2: "this week" said means Monday to Sunday; "the last 7 days" (or nothing) stays the rolling week. */
+const saysCalendarWeek = (t: string) => chatFixesOn() && has(t, "this week|week|is hafte|hafte|ہفتے") && !has(t, "last 7 days|past 7 days|last seven days|past seven days");
 const OPEN_INSIGHTS = { label: "Open insights", payload: { type: "navigate" as const, screen: "Insights" } };
 const none = z.object({}).passthrough();
 
@@ -96,11 +101,13 @@ const categoryTime: Command = {
     if (!timeQ) return null;
     const named = /\bon\s+(?:the\s+)?([A-Za-z][\w-]*)/.exec(text)?.[1];
     const category = named && (CATEGORY_NAMES.some((c) => c.toLowerCase() === named.toLowerCase()) || /^[A-Z]/.test(named)) && !/^(?:each|every|all|my)$/i.test(named) ? named : undefined;
-    return { range: range(t), ...(category ? { category } : {}) };
+    return { range: range(t), ...(category ? { category } : {}), ...(saysCalendarWeek(t) ? { calendar: true } : {}) };
   },
   async execute(turn, args) {
     const r = args.range === "month" ? "month" : "week";
-    const rows = await timeByCategory(turn.user.id, turn.tz, r, turn.now);
+    const calendar = args.calendar === true && r === "week";
+    const rangeLabel = (x: "week" | "month") => (calendar ? "this week (since Monday)" : x === "week" ? "in the last 7 days" : "in the last 30 days");
+    const rows = await timeByCategory(turn.user.id, turn.tz, calendar ? "calendar_week" : r, turn.now);
     const wanted = typeof args.category === "string" ? args.category.toLowerCase() : null;
     const shown = wanted ? rows.filter((x) => x.category.toLowerCase() === wanted) : rows;
     if (!shown.length) return { content: wanted ? `No ${args.category} tasks completed ${rangeLabel(r)}.` : `No tasks completed ${rangeLabel(r)} yet.`, intent: "insights_category_time" };
@@ -120,21 +127,52 @@ const completed: Command = {
   parse(text) {
     const t = norm(text);
     const counted = has(t, HOW_MANY) && has(t, "complete|completed|finish|finished|done|did|kiye|kie|kar liye|kiye hain|mukammal|مکمل|کیے|کئے");
-    const what = /\bwhat (?:did|have) i (?:get done|got done|complete|completed|finish|finished|do|done)\b/.test(t);
-    return counted || what ? { range: range(t) } : null;
+    const what = (chatFixesOn() ? /\bwhat (?:did|have) i (?:just |already |last )?(?:get done|got done|complete|completed|finish|finished|do|done)\b/ : /\bwhat (?:did|have) i (?:get done|got done|complete|completed|finish|finished|do|done)\b/).test(t);
+    // CHAT_FIXES_V2: "show me everything I finished this week", "my completed tasks": the tasks themselves.
+    const shown = chatFixesOn() && !has(t, "delete|clear|remove|erase|undo") && !NOT_DONE.test(t) && (/\b(?:show|list|see|tell me)\b.*\b(?:finished|completed|done|got done)\b/.test(t) || /^(?:show\s+)?(?:my\s+)?(?:completed|finished|done)\s+tasks?$/.test(t));
+    if (!counted && !what && !shown) return null;
+    return {
+      range: range(t),
+      ...(saysCalendarWeek(t) ? { calendar: true } : {}),
+      ...(chatFixesOn() && (what || shown) ? { list: true } : {}),
+      ...(chatFixesOn() && !counted && /\b(?:just|last|latest|most recent(?:ly)?)\b/.test(t) ? { latest: true } : {}),
+    };
   },
   async execute(turn, args) {
+    if (args.latest) return lastCompleted(turn);
     const r = args.range === "month" ? "month" : "week";
-    const a = await getAnalytics(turn.user.id, turn.tz, r, turn.now);
+    const calendar = args.calendar === true && r === "week";
+    const label = calendar ? "this week (since Monday)" : rangeLabel(r);
+    const a = await getAnalytics(turn.user.id, turn.tz, calendar ? "calendar_week" : r, turn.now);
     const n = a.totals.completed;
     const onTime = a.totals.onTimeRate !== null ? ` ${a.totals.onTimeRate}% of those with a deadline were on time.` : "";
     const routineDone = a.routines.reduce((s, x) => s + x.completed, 0);
     const content = n
-      ? `You completed ${plural(n, "task")} ${rangeLabel(r)}.${onTime}${routineDone ? ` Plus ${plural(routineDone, "routine")} done.` : ""}`
-      : `No tasks completed ${rangeLabel(r)} yet.${routineDone ? ` You did keep up ${plural(routineDone, "routine")}.` : ""}`;
-    return { content, actions: [OPEN_INSIGHTS], intent: "insights_completed" } satisfies Out;
+      ? `You completed ${plural(n, "task")} ${label}.${onTime}${routineDone ? ` Plus ${plural(routineDone, "routine")} done.` : ""}`
+      : `No tasks completed ${label} yet.${routineDone ? ` You did keep up ${plural(routineDone, "routine")}.` : ""}`;
+    if (!args.list || !n) return { content, actions: [OPEN_INSIGHTS], intent: "insights_completed" } satisfies Out;
+    // CHAT_FIXES_V2: name them, most recent first.
+    const today = localYmd(turn.now, turn.tz);
+    const from = startOfLocalDay(calendar ? mondayOf(today) : addDaysYmd(today, r === "month" ? -29 : -6), turn.tz);
+    const done = await prisma.task.findMany({ where: { userId: turn.user.id, status: TaskStatus.COMPLETED, completedAt: { gte: from, lte: turn.now } }, orderBy: { completedAt: "desc" }, take: 9 });
+    const lines = done.slice(0, 8).map((t) => `• ${t.title} (${whenDone(t.completedAt as Date, turn.tz, today)})`);
+    if (n > 8) lines.push(`…and ${n - 8} more.`);
+    return { content: [content, ...lines].join("\n"), actions: [OPEN_INSIGHTS], intent: "insights_completed" } satisfies Out;
   },
 };
+
+/** "today, 4:50 PM", "Tue 10 Nov, 9:00 AM". */
+function whenDone(at: Date, tz: string, today: string): string {
+  const p = localParts(at, tz);
+  return `${relativeDayLabel(localYmd(at, tz), today)}, ${formatClock(p.h, p.mi)}`;
+}
+
+/** CHAT_FIXES_V2: "what did I just complete?": the most recently completed task. */
+async function lastCompleted(turn: Parameters<Command["execute"]>[0]): Promise<Out> {
+  const t = await prisma.task.findFirst({ where: { userId: turn.user.id, status: TaskStatus.COMPLETED, completedAt: { not: null } }, orderBy: { completedAt: "desc" } });
+  if (!t) return { content: "You haven't completed any tasks yet.", intent: "insights_completed" };
+  return { content: `The last task you completed was "${t.title}" (${whenDone(t.completedAt as Date, turn.tz, localYmd(turn.now, turn.tz))}).`, actions: [OPEN_INSIGHTS], intent: "insights_completed" };
+}
 
 const busiestDay: Command = {
   name: "insights_busiest_day",

@@ -211,7 +211,7 @@ test("review #63: through the chat: option names, cancel, items vs people", { sk
     await withFixes(async () => {
       assert.equal((await send("move the call to friday")).intent, "choose_task");
       const picked = await send("call mom");
-      assert.match(picked.content, /"Call mom"/, "the name picks the option, not a new 'Call mom' task");
+      assert.match(picked.content, /^Updated: Call mom — due Friday/, "the name picks the option (not a new 'Call mom' task) and the change said first is kept");
       assert.equal(await open(), 3);
       assert.equal((await send("delete all my tasks")).intent, "bulk_delete_open_confirm");
       assert.equal((await send("cancel that")).intent, "cancel");

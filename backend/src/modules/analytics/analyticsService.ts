@@ -2,7 +2,14 @@ import { RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { addDaysYmd, dayName, formatClock, localParts, localYmd, shortDateLabel, startOfLocalDay } from "../../lib/time.js";
 
-export type RangeKey = "week" | "month" | "3months" | "all";
+/** "calendar_week": Monday of this week to today (chat, CHAT_FIXES_V2: "this week" said); "week": the last 7 days. */
+export type RangeKey = "week" | "calendar_week" | "month" | "3months" | "all";
+
+/** Monday of the week that holds `ymd`. */
+export function mondayOf(ymd: string): string {
+  const dow = new Date(`${ymd}T00:00:00Z`).getUTCDay();
+  return addDaysYmd(ymd, dow === 0 ? -6 : 1 - dow);
+}
 
 type Bucket = { label: string; from: Date; to: Date };
 
@@ -12,6 +19,8 @@ function rangeBounds(key: RangeKey, tz: string, now: Date, firstActivity: Date |
   switch (key) {
     case "week":
       return { from: startOfLocalDay(addDaysYmd(today, -6), tz), to, label: "This week", bucketDays: 1 };
+    case "calendar_week":
+      return { from: startOfLocalDay(mondayOf(today), tz), to, label: "This week", bucketDays: 1 };
     case "month":
       return { from: startOfLocalDay(addDaysYmd(today, -29), tz), to, label: "This month", bucketDays: 1 };
     case "3months":
@@ -233,9 +242,9 @@ export async function completionStreak(userId: string, tz: string, now = new Dat
 }
 
 /** Planned time (task durations) of tasks completed in the range, per category. Tasks without a duration are counted, not timed. */
-export async function timeByCategory(userId: string, tz: string, key: "week" | "month", now = new Date()) {
+export async function timeByCategory(userId: string, tz: string, key: "week" | "calendar_week" | "month", now = new Date()) {
   const today = localYmd(now, tz);
-  const from = startOfLocalDay(addDaysYmd(today, key === "week" ? -6 : -29), tz);
+  const from = startOfLocalDay(key === "calendar_week" ? mondayOf(today) : addDaysYmd(today, key === "week" ? -6 : -29), tz);
   const done = await prisma.task.findMany({ where: { userId, status: TaskStatus.COMPLETED, completedAt: { gte: from, lte: now } }, select: { category: true, durationMinutes: true } });
   const map = new Map<string, { minutes: number; tasks: number; untimed: number }>();
   for (const t of done) {

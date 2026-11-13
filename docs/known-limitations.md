@@ -26,19 +26,23 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   time from the background sentence and ignored "except Saturday and Sunday" (`tests/chatFixesReported.test.ts`), and
   a days-old open question ("When should … be done?") captured an unrelated "How are you today?" as its answer.
   Vocabulary misses ("organize my afternoon", "turn off notifications") are not code fixes; they become bank rows.
-- **Chat probe, PR A (`CHAT_FIXES_V2`, off): still open after it** (planned for PR B): "this week" is a rolling 7 days;
-  "what did I just complete?" answers with due tasks, so a correction to it ("I'm asking about my completed tasks")
-  gets the same answer; a second list question ("what about the third one") replaces the remembered list, so "move
-  the first" then fails; filler words ("actually move it") are read as the task name; two tasks in one message become
-  one task; "call mom, feeling low today" keeps "feeling" in the title; the weather question gets the generic fallback.
-  An existing task can't get new people (sharing works only when a task is added) or items ("add milk to it" offers
-  "Milk" as its own task). Fields added this way are not understood yet: "add a reminder to it" gets "I'm not sure
-  what you mean" with choices, and "add 30 minutes to it" starts a new task "Add to it" and asks when (nothing is
-  saved before the user answers; the same as before CHAT_FIXES_V2). "when I get home" is taken as the answer to "When should … be done?" but there is no date in
-  it, so the question is asked again. Picking a task by name or number after "Which task do you mean?" asks what to
-  change instead of using the change said first ("move the call to friday" → pick → "What should I change?"); this was
-  already so before CHAT_FIXES_V2. The alarm note ("I can't set phone
-  alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is built.
+- **Chat probe, PR A + B (`CHAT_FIXES_V2`, off): still open.** An existing task can't get new people (sharing works
+  only when a task is added) or items ("add milk to it" offers "Milk" as its own task). Fields added this way are not
+  understood yet: "add a reminder to it" gets "I'm not sure what you mean" with choices, and "add 30 minutes to it"
+  starts a new task "Add to it" and asks when (nothing is saved before the user answers; as before CHAT_FIXES_V2).
+  "when I get home" is taken as the answer to "When should … be done?" but has no date, so the question is asked
+  again. Two tasks in one message are read only as exactly two parts ("add X <day> and <verb> Y <day>"); three or
+  more, or a part without its own day, stay one task. When a part matches an open task nothing is added from that
+  message: each part is offered as its own message. The weather reply names a place only from "in / for / at <Capitalised word>".
+  "This week" is Monday to Sunday for due and completed tasks; "compare with last week" and replies that say "the
+  last 7 days" stay rolling. Side effect: the same reader (`ranges.ts → resolveRange`) serves search (`find.ts`) and
+  document instructions (`DOC_INSTRUCTIONS`), so with `CHAT_FIXES_V2` on, "only this week" on a document also keeps
+  Monday to Sunday (on a Thursday that drops next Monday–Wednesday, which the rolling week kept); with the flag off it
+  stays today plus 6 days. "which X tasks are done?" answers with today's list (as before PR B).
+  "Not done" questions are read in the first person only ("what haven't I finished yet?"; "hasn't she finished the
+  report?" is not about the user's list). With a day in it, "what didn't I finish yesterday?" answers with the open
+  tasks that were due that day ("Nothing due yesterday." when none), not the tasks left unfinished on that day. The alarm note ("I can't set phone alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is
+  built.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
   for bare imperatives instead; questions like "what's the weather" are not covered by it.
