@@ -69,6 +69,22 @@ test("s-07 class: complete / delete pick a task by themselves only on full cover
   }
 });
 
+test("s-07 class: a typo completes by itself only above 0.9; 0.8 to 0.9 asks", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith(["Dentist appointment", "Passport renewal", "Water the plants"]);
+  try {
+    await withFixes(async () => {
+      for (const say of ["done with the dentist appointmnt", "finished the pasport renewal"]) {
+        const m = await c.send(say);
+        assert.equal(m.intent, "choose_task", `${say}: a 0.8 to 0.9 typo asks`);
+      }
+      assert.deepEqual(await c.statusOf("Dentist appointment"), ["PENDING"]);
+      assert.deepEqual(await c.statusOf("Passport renewal"), ["PENDING"]);
+    });
+  } finally {
+    await c.done();
+  }
+});
+
 test("s-07 class: an open task with the same title as a completed one wins", { skip: !dbAvailable && "no database" }, async () => {
   const c = await chatWith(["!Weekly report", "Weekly report"]);
   try {
@@ -88,6 +104,35 @@ test("s-07 class: flag off is unchanged (half the words still asks, as before)",
     const m = await c.send("done with the lab report");
     assert.notEqual(m.intent, "already_done");
     assert.deepEqual(await c.statusOf("Physics lab report"), ["COMPLETED"]);
+  } finally {
+    await c.done();
+  }
+});
+
+test("bare 'remind me': asks what; the reply fills the title; a placeholder title is never saved", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  const titles = async () => (await prisma.task.findMany({ where: { userId: c.user.id }, select: { title: true } })).map((t) => t.title);
+  try {
+    await withFixes(async () => {
+      const ask = await c.send("remind me");
+      assert.equal(ask.content, "What should I remind you about?");
+      assert.deepEqual((ask.actions ?? []).map((a) => a.label), ["Cancel"], "no day chips under the 'what' question");
+      // A date and time without the 'what': kept, and the question is asked again; nothing saved.
+      const timeOnly = await c.send("tonight at 9");
+      assert.equal(timeOnly.content, "What should I remind you about?");
+      assert.deepEqual(await titles(), []);
+      const made = await c.send("water the balcony plants");
+      assert.equal(made.intent, "task_created");
+      assert.deepEqual(await titles(), ["Water the balcony plants"]);
+
+      const ask2 = await c.send("set a reminder");
+      assert.equal(ask2.content, "What should I remind you about?");
+      const when = await c.send("to renew the car insurance");
+      assert.match(when.content, /When should "Renew the car insurance" be done\?/);
+      await c.send("no deadline");
+      assert.ok((await titles()).includes("Renew the car insurance"));
+      assert.ok(!(await titles()).some((t) => /^remind/i.test(t)), "never a 'Remind me' task");
+    });
   } finally {
     await c.done();
   }

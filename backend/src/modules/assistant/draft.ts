@@ -8,6 +8,10 @@ import type { TaskDraft, TaskSlot } from "./types.js";
 import { chatFixesOn } from "./chatFixes.js";
 
 export const AUTO_CREATE_CLARITY = 95;
+
+/** C2 (CHAT_FIXES_V2): a title that only says "remind me" names nothing; it is never saved. */
+export const PLACEHOLDER_TITLE = /^(?:(?:please\s+)?remind(?:\s+(?:me|us))?(?:\s+(?:to|about|of))?|(?:set\s+)?(?:a\s+)?reminder|about|to|of)$/i;
+const isPlaceholder = (title: string | null) => chatFixesOn() && Boolean(title && PLACEHOLDER_TITLE.test(title.trim()));
 export const VERY_LOW_CLARITY = 20;
 
 export function draftFromEntities(text: string, title: string, e: Entities, todayYmd: string): TaskDraft {
@@ -32,6 +36,11 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
     context: e.context,
     location: e.location,
   };
+  // C2: "remind me" alone: ask what about, never keep "Remind me" as the title.
+  if (isPlaceholder(draft.title) || (chatFixesOn() && !draft.title && /\bremind(?:er)?\b/i.test(text))) {
+    draft.title = null;
+    draft.askRemind = true;
+  }
   // CHAT_FIXES_V2 (deliberate FRD deviation from the FR-TM-001 Clarity Index): a deadline with a real date but no time
   // is not asked about; it is due at the end of that day and the reply says so. No date still asks.
   if (chatFixesOn() && draft.taskType === TaskType.DEADLINE && draft.dueYmd && !draft.dueTime && !e.date?.fuzzy) {
@@ -55,8 +64,9 @@ function needsDuration(d: TaskDraft): boolean {
  */
 export function clarityOf(d: TaskDraft): { clarity: number; missing: TaskSlot[] } {
   const missing: TaskSlot[] = [];
-  const vague = isVagueTitle(d.title);
-  const titleScore = !d.title ? 0 : vague ? 0.4 : 1;
+  // A placeholder title ("Remind me") counts as no title, whatever else the draft has, so it is never saved.
+  const vague = isVagueTitle(d.title) || isPlaceholder(d.title);
+  const titleScore = !d.title || isPlaceholder(d.title) ? 0 : vague ? 0.4 : 1;
   if (!d.title || vague) missing.push("title");
   const dateScore = d.dueYmd ? (d.dateFuzzy ? 0.5 : 1) : d.allowNoDate ? 1 : 0;
   if ((!d.dueYmd && !d.allowNoDate) || d.dateFuzzy) missing.push("date");
@@ -72,6 +82,7 @@ export function clarityOf(d: TaskDraft): { clarity: number; missing: TaskSlot[] 
 export function clarificationQuestion(d: TaskDraft, missing: TaskSlot[]): string {
   const parts: string[] = [];
   const subject = d.title && !isVagueTitle(d.title) ? `"${d.title}"` : "it";
+  if (missing.includes("title") && (d.askRemind || isPlaceholder(d.title))) return "What should I remind you about?";
   if (missing.includes("title")) {
     const single = d.title && isVagueTitle(d.title) && d.title.trim().split(/\s+/).length === 1;
     parts.push(single ? `What exactly will you ${(d.title as string).toLowerCase()}?` : "What's the task, exactly?");
@@ -137,7 +148,7 @@ export function fillDraft(draft: TaskDraft, awaiting: TaskSlot[], text: string, 
   if (awaiting.includes("title") && !/\?\s*$|^(?:what|when|where|why|how|who|hi|hello|hey|thanks)\b/i.test(text.trim())) {
     const residual = cleanTitle(e.residual).replace(/^(?:it'?s|its|it is|about|for|on)\s+/i, "");
     if (residual && residual.length >= 2 && !/^(?:yes|no|ok|okay|sure)$/i.test(residual)) {
-      const vagueVerb = draft.title && isVagueTitle(draft.title) ? draft.title : null;
+      const vagueVerb = draft.title && isVagueTitle(draft.title) && !isPlaceholder(draft.title) ? draft.title : null;
       next.title = vagueVerb && !residual.toLowerCase().startsWith(vagueVerb.toLowerCase()) ? `${vagueVerb} ${residual}` : residual.charAt(0).toUpperCase() + residual.slice(1);
       filled = true;
     }
@@ -338,8 +349,9 @@ export async function resolveTaskRef(
   if (!scored.length) return { task: null, candidates: [], viaFocus: false };
   const [first, second] = scored;
   // C2 (CHAT_FIXES_V2), strict (complete / delete): pick by itself only when every word of the reference is in the title
-  // or it is a near-exact (typo) match; half the words ("lab report" vs "Submit FYP progress report") asks "Which task?".
-  const sure = !(chatFixesOn() && opts.strict) || coversAll(cleaned, first.t.title) || fuzzySimilarity(cleaned, first.t.title) >= 0.8;
+  // or it is a near-exact typo (fuzzy above 0.9, no close second); half the words ("lab report" vs "Submit FYP progress
+  // report") or a looser typo asks "Which task?".
+  const sure = !(chatFixesOn() && opts.strict) || coversAll(cleaned, first.t.title) || fuzzySimilarity(cleaned, first.t.title) > 0.9;
   if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12) && sure) return { task: first.t, candidates: [], viaFocus: false };
   return { task: null, candidates: openFirst(scored.map((x) => x.t)).slice(0, 4), viaFocus: false };
 }

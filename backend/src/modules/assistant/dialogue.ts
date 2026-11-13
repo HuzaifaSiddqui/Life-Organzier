@@ -627,7 +627,8 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
       }
       const { draft, filled } = fillDraft(p.draft, p.awaiting, text, extractOpts(turn));
       if (filled) {
-        if (p.awaiting.includes("title") && isVagueTitle(draft.title) && isVagueTitle(p.draft.title)) {
+        // C2: after "remind me", a date or time without the "what" keeps the date and asks "what" again.
+        if (p.awaiting.includes("title") && isVagueTitle(draft.title) && isVagueTitle(p.draft.title) && !draft.askRemind) {
           turn.state.pending = { kind: "clarify_intent", text };
           return {
             content: "I'm still not sure what you'd like to do. Do you want to:",
@@ -743,7 +744,7 @@ function reask(turn: Turn): Out | null {
   if (p.kind === "task_draft") {
     return {
       content: `Just to finish "${p.draft.title ?? "this task"}": ${clarificationQuestion(p.draft, p.awaiting)}`,
-      actions: [...slotChips(p.awaiting), { label: "Cancel", payload: { type: "cancel_pending" } }],
+      actions: [...slotChips(p.awaiting, p.draft.askRemind), { label: "Cancel", payload: { type: "cancel_pending" } }],
       intent: "clarify",
     };
   }
@@ -759,8 +760,10 @@ export function moodChips(): QuickAction[] {
   }));
 }
 
-function slotChips(awaiting: string[]): QuickAction[] {
+function slotChips(awaiting: string[], askRemind = false): QuickAction[] {
   const chip = (l: string) => answerAction(l, "task_draft", l);
+  // C2: "What should I remind you about?" is answered in words; no day chips under it.
+  if (askRemind && awaiting.includes("title")) return [];
   if (awaiting.includes("date")) return ["Today", "Tomorrow", "This Friday", "Next week", "No deadline"].map(chip);
   if (awaiting.includes("time")) return ["9 AM", "12 PM", "3 PM", "6 PM", "9 PM", "End of day"].map(chip);
   if (awaiting.includes("duration")) return ["30 min", "1 hour", "2 hours", "3 hours", "Not sure"].map(chip);
@@ -825,7 +828,8 @@ export async function proceedWithDraft(
   const { clarity, missing } = clarityOf(draft);
 
   // FR-EH-003: very low clarity → offer intents instead of guessing.
-  if (clarity < VERY_LOW_CLARITY && !opts.clarified) {
+  // C2: "remind me" alone is clear about what kind of thing it is; it goes on to "What should I remind you about?".
+  if (clarity < VERY_LOW_CLARITY && !opts.clarified && !draft.askRemind) {
     turn.state.pending = { kind: "clarify_intent", text: draft.title ?? "" };
     return {
       content: "I'm not sure what you mean. Do you want to:",
@@ -850,7 +854,7 @@ export async function proceedWithDraft(
       content: `${clarificationQuestion(draft, missing)}${priorityHint}`,
       cards: [await draftCard(turn, draft, clarity, missing)],
       actions: [
-        ...slotChips(missing),
+        ...slotChips(missing, draft.askRemind),
         ...(priorityHint ? (["Urgent", "High", "Low"] as const).map((p) => answerAction(p, "task_draft", `${p} priority`)) : []),
         { label: "Cancel", payload: { type: "cancel_pending" } },
       ],

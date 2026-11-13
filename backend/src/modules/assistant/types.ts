@@ -24,6 +24,8 @@ export type TaskDraft = {
   allowNoTime?: boolean;
   /** CHAT_FIXES_V2: a deadline given a date but no time is created for the end of that day (FRD deviation, FR-TM-001). */
   assumedEndOfDay?: boolean;
+  /** C2 (CHAT_FIXES_V2): "remind me" with nothing else; the title question is "What should I remind you about?". */
+  askRemind?: boolean;
   allowNoDuration?: boolean;
   allowNoDate?: boolean;
   overrideCapacity?: boolean;
