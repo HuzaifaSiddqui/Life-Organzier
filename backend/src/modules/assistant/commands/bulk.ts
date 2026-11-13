@@ -238,14 +238,20 @@ const postponeNonUrgent: Command = {
   category: "bulk",
   summary: "Move non-urgent tasks due by tomorrow one day later (preview, one confirmation, undo)",
   examples: ["Postpone all non-urgent tasks", "ghair zaroori kaam kal pe daal do"],
-  schema: z.object({ taskIds: z.array(z.string()).optional() }).passthrough(),
+  schema: z.object({ fromYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), taskIds: z.array(z.string()).optional() }).passthrough(),
   undoable: true,
-  parse(text) {
+  parse(text, ctx) {
     const t = norm(text);
-    return !addBeforeMove(t) && has(t, `${MOVE}|aage kar|aage karo`) && has(t, "non urgent|nonurgent|not urgent|less important|unimportant|ghair zaroori|ghair zaruri|jo zaroori nahi|غیر ضروری") ? {} : null;
+    if (!(!addBeforeMove(t) && has(t, `${MOVE}|aage kar|aage karo`) && has(t, "non urgent|nonurgent|not urgent|less important|unimportant|ghair zaroori|ghair zaruri|jo zaroori nahi|غیر ضروری"))) return null;
+    // PR D (CHAT_FIXES_V2): a named source day ("… from friday") limits it to that day; an unreadable one doesn't run it.
+    const d = chatFixesOn() ? dayRef(text, ctx.opts) : null;
+    if (d === "unreadable") return null;
+    return d ? { fromYmd: d } : {};
   },
-  async prepare(turn) {
-    const all = nonUrgentSoon(turn, await listActiveTasks(turn.user.id));
+  async prepare(turn, args) {
+    const from = typeof args.fromYmd === "string" ? args.fromYmd : null;
+    const open = await listActiveTasks(turn.user.id);
+    const all = from ? onDay(turn, open, from).filter((t) => t.priority !== Priority.URGENT && t.taskType !== TaskType.FIXED) : nonUrgentSoon(turn, open);
     if (!all.length) return nothing(tx(turn).bulkNoNonUrgent, "bulk_nothing");
     const list = all.slice(0, BULK_CAP);
     return preview(turn, tx(turn).bulkPostponePreview(list.length), list, all.length);
@@ -260,12 +266,15 @@ const postponeNonUrgent: Command = {
 
 /* ------------------------------------------------------------------ CHAT_FIXES_V2: a group of tasks by tag or category */
 
+const DAY_WORD = /^(?:today|tonight|tomorrow|yesterday|(?:mon|tues|wednes|thurs|fri|satur|sun)day)$/;
 const NOT_A_GROUP = new Set(["tasks", "task", "todos", "today", "todays", "everything", "it", "them", "of", "completed", "done", "finished", "open", "pending", "remaining", "the", "my", "stuff", "things", "items"]);
 
 /** "all my errands", "every uni task": a word naming a group (a tag or a category), never "all my tasks". */
 export function groupIn(text: string): string | null {
   const m = /\b(?:all|every|each)\s+(?:of\s+)?(?:my\s+|the\s+)?([a-z][a-z-]{2,30})(?:\s+(?:tasks?|todos?))?\b/i.exec(text);
   const word = m?.[1]?.toLowerCase();
+  // PR D (CHAT_FIXES_V2): "all of friday's tasks", "all tomorrow tasks" name a day, never a tag.
+  if (word && chatFixesOn() && DAY_WORD.test(word)) return null;
   return word && !NOT_A_GROUP.has(word) ? word : null;
 }
 
@@ -347,5 +356,79 @@ const deleteGroup: Command = {
 
 const localYmdOf = (turn: Turn, d: Date) => localYmd(d, turn.tz);
 
-export const bulkCommands: Command[] = [postponeNonUrgent, moveToday, completeTag, deleteCompleted, deleteOpen, moveGroup, deleteGroup];
+/* ------------------------------------------------------------------ PR D: a named day */
+
+/**
+ * PR D (CHAT_FIXES_V2): the day a bulk request names ("from tomorrow", "for friday", "of friday", "friday's tasks").
+ * "unreadable" when a "from / for <words>" is there but is no day; null when no day is named.
+ */
+function dayRef(text: string, opts: Parameters<typeof extractTargetDay>[1]): string | "unreadable" | null {
+  const m =
+    /\b(tomorrow|today|tonight|(?:mon|tues|wednes|thurs|fri|satur|sun)day)'?s\s+(?:tasks?|todos?|to dos?|stuff|work|list|plans?|schedule)\b/i.exec(text) ??
+    /\b(?:from|for|of|on)\s+((?:this\s+|next\s+)?(?:today|tonight|tomorrow|(?:mon|tues|wednes|thurs|fri|satur|sun)day|the\s+\d{1,2}(?:st|nd|rd|th)?))\b/i.exec(text);
+  if (!m) return /\bfrom\s+(?!now\b)\w+/i.test(text) ? "unreadable" : null;
+  const ymd = extractTargetDay(m[1], opts);
+  return ymd ?? "unreadable";
+}
+
+/** Open tasks due or planned on that local day. */
+function onDay(turn: Turn, tasks: Task[], ymd: string): Task[] {
+  const start = startOfLocalDay(ymd, turn.tz);
+  const end = startOfLocalDay(addDaysYmd(ymd, 1), turn.tz);
+  return tasks.filter((t) => (t.dueAt && t.dueAt >= start && t.dueAt < end) || (t.scheduledStart && t.scheduledStart >= start && t.scheduledStart < end));
+}
+
+const DAY_DONE = /\b(?:complete|finish|tick off|check off)\b|\bmark\b[^.]*\b(?:done|complete|completed|finished)\b/i;
+const DAY_DELETE = /\b(?:delete|remove|clear|erase|cancel|get rid of|drop)\b/i;
+
+/** "complete all tasks from tomorrow", "mark everything from friday as done", "delete all of friday's tasks". */
+const dayTasks: Command = {
+  name: "bulk_day",
+  category: "bulk",
+  summary: "Complete or delete the tasks of one named day (preview, one confirmation, undo)",
+  enabled: chatFixesOn,
+  examples: ["Complete all tasks from tomorrow", "Delete all of Friday's tasks"],
+  schema: z.object({ action: z.enum(["complete", "delete"]), ymd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), taskIds: z.array(z.string()).optional() }).passthrough(),
+  undoable: true,
+  parse(text, ctx) {
+    const t = norm(text);
+    if (/#\w/.test(text) || !/\b(?:all|every|everything|tasks?|todos?|stuff|list)\b/i.test(text)) return null;
+    const del = DAY_DELETE.test(text);
+    const done = !del && DAY_DONE.test(text);
+    if (!del && !done) return null;
+    // "delete all completed tasks" stays bulk_delete_completed.
+    if (del && has(t, "completed|done|finished")) return null;
+    const d = dayRef(text, ctx.opts);
+    if (!d || d === "unreadable" || d < ctx.todayYmd) return null;
+    return { action: del ? "delete" : "complete", ymd: d };
+  },
+  async prepare(turn, args) {
+    const ymd = String(args.ymd);
+    const tasks = onDay(turn, await listActiveTasks(turn.user.id), ymd);
+    if (!tasks.length) return nothing(tx(turn).bulkDayNothing(day(turn, ymd)), "bulk_nothing");
+    const list = tasks.slice(0, BULK_CAP);
+    const q = args.action === "delete" ? tx(turn).bulkDayDeletePreview(list.length, day(turn, ymd)) : tx(turn).bulkDayCompletePreview(list.length, day(turn, ymd));
+    const p = preview(turn, q, list, tasks.length);
+    return "args" in p ? { ...p, args: { ...p.args, action: args.action, ymd } } : p;
+  },
+  async execute(turn, args) {
+    const tasks = await tasksByIds(turn, args);
+    const label = day(turn, String(args.ymd));
+    if (args.action === "delete") {
+      const deleted: string[] = [];
+      for (const t of tasks) if (await softDeleteTask(turn.task, t.id)) deleted.push(t.id);
+      recordUndo(turn, { kind: "tasks", op: "delete", taskIds: deleted, label: `${plural(deleted.length, "task")} deleted` });
+      return { content: tx(turn).bulkDayDeleted(deleted.length, label), actions: [undoAction(turn.settings.language)], intent: "bulk_deleted" };
+    }
+    const done: Task[] = [];
+    for (const t of tasks) {
+      const u = await updateTask(turn.task, t.id, { status: TaskStatus.COMPLETED });
+      if (u) done.push(u);
+    }
+    recordUndo(turn, { kind: "tasks", op: "edit", taskIds: done.map((t) => t.id), before: snapshots(tasks), label: `${plural(done.length, "task")} completed` });
+    return { content: tx(turn).bulkDayCompleted(done.length, label), cards: [{ type: "task_list", title: tx(turn).cardCompleted, tasks: done.map((t) => serializeTask(t, turn.now)) }], actions: [undoAction(turn.settings.language)], intent: "bulk_completed" };
+  },
+};
+
+export const bulkCommands: Command[] = [dayTasks, postponeNonUrgent, moveToday, completeTag, deleteCompleted, deleteOpen, moveGroup, deleteGroup];
 
