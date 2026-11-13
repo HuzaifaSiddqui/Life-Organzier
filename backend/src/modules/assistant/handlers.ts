@@ -49,7 +49,7 @@ import {
   handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
-import { alreadyDoneTask, resolveTaskRef } from "./draft.js";
+import { alreadyDoneTask, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
@@ -62,7 +62,7 @@ import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
-import type { ActionPayload, QuickAction } from "./types.js";
+import type { ActionPayload, QuickAction, RoutineDraft } from "./types.js";
 import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, runCommand, snapshots, UNDO_ACTION } from "./commands/runtime.js";
 import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
 import { capabilityReply, helpReply, unknownReply } from "./commands/capabilities.js";
@@ -149,6 +149,37 @@ function changeOrNew(turn: Turn, task: Task, text: string): Out {
   };
 }
 
+/** PR D (CHAT_FIXES_V2): the message says it is another one, or comes from the "Add a new …" button. */
+const DUP_SKIP = /\b(?:another|again|new|also|one more|second|extra)\b|^add (?:task|routine):/i;
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const daysOf = (r: { frequency: string | null; daysOfWeek: unknown }): number[] =>
+  r.frequency === "DAILY" || !Array.isArray(r.daysOfWeek) ? [0, 1, 2, 3, 4, 5, 6] : (r.daysOfWeek as number[]);
+
+/** PR D: an active routine named like the draft (title score >= 0.6) on at least one of the same days. */
+async function routineDuplicate(userId: string, draft: RoutineDraft): Promise<{ id: string; title: string; frequency: string; daysOfWeek: unknown } | null> {
+  const want = new Set(draft.frequency === "DAILY" || !draft.daysOfWeek?.length ? [0, 1, 2, 3, 4, 5, 6] : draft.daysOfWeek);
+  const routines = await prisma.routine.findMany({ where: { userId, active: true }, select: { id: true, title: true, frequency: true, daysOfWeek: true } });
+  const best = routines
+    .filter((r) => daysOf(r).some((d) => want.has(d)))
+    .map((r) => ({ r, s: refScore(draft.title ?? "", r.title) }))
+    .sort((a, b) => b.s - a.s)[0];
+  return best && best.s >= 0.6 ? best.r : null;
+}
+
+function routineChangeOrNew(r: { title: string; frequency: string; daysOfWeek: unknown }, text: string): Out {
+  const days = daysOf(r);
+  const when = days.length === 7 ? "every day" : days.map((d) => DAY_SHORT[d]).join(", ");
+  return {
+    content: `You already have the routine "${r.title}" (${when}). Change it, or add a new routine?`,
+    actions: [
+      { label: `Change "${truncate(r.title, 24)}"`, payload: { type: "navigate", screen: "Routines" } },
+      sayAction("Add a new routine", "create_routine", `add routine: ${text.trim()}`),
+    ],
+    intent: "change_or_new",
+  };
+}
+
 /** "by <day>" / "by the <date>": a due date (CHAT_FIXES_V2). */
 const BY_DUE = /\bby\s+(?:the\s+)?(?:\d{1,2}(?:st|nd|rd|th)?\b|mon|tue|wed|thu|fri|sat|sun|tomorrow|tonight|next|this|end)/i;
 /** Asking for a new task outright; "must" / "has to" state a deadline and don't. */
@@ -187,6 +218,12 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   }
   switch (u.intent) {
     case "create_task": {
+      // PR D (CHAT_FIXES_V2): an open task with (nearly) the same title: ask instead of adding a duplicate, unless the
+      // message says it is another one. Completed tasks never count.
+      if (chatFixesOn() && u.title && !DUP_SKIP.test(text)) {
+        const dup = await openDuplicate(turn.user.id, u.title);
+        if (dup) return changeOrNew(turn, dup, text);
+      }
       if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && (TASK_CUE.test(text) || feelingTail(text)))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       // Task collaboration: connected people named in the message, and whether it's for them too (shareIntent.ts).
       const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text) };
@@ -200,8 +237,15 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       }
       return out;
     }
-    case "create_routine":
-      return proceedWithRoutine(turn, routineDraftFrom(turn, u, text));
+    case "create_routine": {
+      const draft = routineDraftFrom(turn, u, text);
+      // PR D (CHAT_FIXES_V2): a routine like this already on those days: ask first.
+      if (chatFixesOn() && draft.title && !DUP_SKIP.test(text)) {
+        const same = await routineDuplicate(turn.user.id, draft);
+        if (same) return routineChangeOrNew(same, text);
+      }
+      return proceedWithRoutine(turn, draft);
+    }
     case "update_task":
       // CHAT_FIXES_V2: "update the website" with no such task is a new to-do, as before (nlu.ts EDIT_EXISTING).
       if (chatFixesOn() && EDIT_EXISTING.test(text.trim())) {

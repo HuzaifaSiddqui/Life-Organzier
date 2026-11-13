@@ -330,6 +330,14 @@ export async function alreadyDoneTask(userId: string, ref: string): Promise<Task
   return done && done.s >= 0.8 ? done.t : null;
 }
 
+/** PR D (CHAT_FIXES_V2): the open task a new one would duplicate (title score >= 0.8); completed tasks never count. */
+export async function openDuplicate(userId: string, title: string): Promise<Task | null> {
+  if (!title.trim()) return null;
+  const open = await prisma.task.findMany({ where: { userId, status: { in: ["PENDING", "IN_PROGRESS"] }, archived: false }, take: 300 });
+  const best = open.map((t) => ({ t, s: refScore(title, t.title) })).sort((a, b) => b.s - a.s)[0];
+  return best && best.s >= 0.8 ? best.t : null;
+}
+
 /** Words too common to identify a task by ("call", "pay", "today"): matching on them alone would pick the wrong one. */
 const GENERIC = new Set(
   ["call", "pay", "buy", "get", "go", "do", "make", "send", "book", "finish", "submit", "start", "meet", "move", "change", "update", "check", "take", "bring", "write", "read", "clean", "fix", "task", "thing", "stuff", "today", "tomorrow", "actual", "actually", "now", "instead", "please", "need", "want", "will", "still", "reschedule", "push", "shift", "postpone", "delay", "cancel", "delete", "remove", "mark", "done", "complete", "due", "by"].map((w) => contentTokens(w)[0] ?? w),

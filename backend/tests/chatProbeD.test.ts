@@ -96,3 +96,58 @@ test("D2/D3: postpone non-urgent respects a named day; a day word is never a tag
     await c.done();
   }
 });
+
+test("D4: duplicates of OPEN tasks ask 'Change X, or add a new task?'; repeats of completed tasks and 'another/again' create", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([["Renew gym membership", null], ["Buy groceries", null], ["Pay gas bill", null, "COMPLETED"]]);
+  const count = async () => (await c.rows()).filter((t) => t.status !== "DELETED").length;
+  try {
+    await withFixes(async () => {
+      for (const say of ["remind me to renew the gym membership tomorrow", "renew gym membership by friday", "buy groceries on saturday"]) {
+        const m = await c.send(say);
+        assert.equal(m.intent, "change_or_new", say);
+        assert.match(m.content, /^Change "(?:Renew gym membership|Buy groceries)", or add a new task\?$/);
+      }
+      assert.equal(await count(), 3, "nothing added while asking");
+
+      const repeat = await c.send("pay the gas bill tomorrow");
+      assert.equal(repeat.intent, "task_created", "an exact repeat of a COMPLETED task creates normally");
+
+      for (const say of ["renew the gym membership again next month", "add another buy groceries task for sunday", "also buy groceries tomorrow"]) {
+        const m = await c.send(say);
+        assert.notEqual(m.intent, "change_or_new", `${say}: says it is another one`);
+        if (m.intent === "clarify") await c.send("cancel");
+      }
+
+      const ask = await c.send("buy groceries tomorrow");
+      const add = (ask.actions ?? []).find((a) => a.label === "Add a new task");
+      assert.ok(add);
+      const made = await c.send(null, add!.payload);
+      assert.equal(made.intent, "task_created", "the 'Add a new task' button creates it");
+      const change = await c.send("remind me to renew the gym membership on monday");
+      const keep = (change.actions ?? []).find((a) => a.label.startsWith("Change"));
+      const changed = await c.send(null, keep!.payload);
+      assert.equal(changed.intent, "task_updated", "the 'Change' button updates the existing one");
+    });
+  } finally {
+    await c.done();
+  }
+});
+
+test("D4: a routine like an active one on the same days asks first; other days or another routine create", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  try {
+    await prisma.routine.create({ data: { userId: c.user.id, title: "Swimming class", frequency: "WEEKLY", daysOfWeek: [2, 4], dueTime: "2:00 PM" } });
+    await withFixes(async () => {
+      const same = await c.send("swimming every tuesday and thursday at 5 pm");
+      assert.equal(same.intent, "change_or_new");
+      assert.match(same.content, /^You already have the routine "Swimming class" \(Tue, Thu\)\. Change it, or add a new routine\?$/);
+      assert.equal(await prisma.routine.count({ where: { userId: c.user.id } }), 1);
+      const other = await c.send("swimming every saturday at 9 am");
+      assert.notEqual(other.intent, "change_or_new", "no shared day");
+      const different = await c.send("guitar practice every tuesday at 6 pm");
+      assert.notEqual(different.intent, "change_or_new", "a different routine");
+    });
+  } finally {
+    await c.done();
+  }
+});
