@@ -77,6 +77,7 @@ test("review #63 (1): a name from the options is the answer, even when it starts
     assert.equal(isNewRequest(choose, "update the report", ctx, reports), true);
     assert.equal(isPlausibleAnswer(choose, "update the report", ctx, reports), false);
     assert.equal(isNewRequest(choose, "quarterly report", ctx, reports), false, "a name without a verb still picks it");
+    assert.equal(isNewRequest(choose, "move the quarterly report to monday", ctx, reports), true, "carries its own change: a new request");
     const reading: Pending = { kind: "command_choice", command: "routine_update", args: {}, field: "routineId", candidates: [{ id: "r1", label: "Plan meals" }, { id: "r2", label: "Call grandma" }] };
     assert.equal(isNewRequest(reading, "call grandma", ctx), false);
     const place: Pending = { kind: "location_choice", taskId: "t", taskTitle: "x", place: "library", results: [{ name: "Book Corner", displayName: "", latitude: 0, longitude: 0 }], more: false };
