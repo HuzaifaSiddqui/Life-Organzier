@@ -49,7 +49,7 @@ import {
   handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
-import { alreadyDoneTask, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
+import { alreadyDoneTask, coversAll, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
 import { progressReport } from "./appQuestions.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
@@ -149,6 +149,39 @@ function changeOrNew(turn: Turn, task: Task, text: string): Out {
     actions: [commandAction(`Change "${truncate(task.title, 24)}"`, "update_task", { text, ref: task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
     intent: "change_or_new",
     command: "update_task", // the question is about changing that task
+  };
+}
+
+/**
+ * PR E (CHAT_FIXES_V2): "when is the school meeting?", "which days does the tuition pickup happen?": answered from the
+ * user's open tasks and active routines by title. Read-only. Several matches: up to 3, asking which. None: null (as today).
+ */
+const LOOKUP = /^(?:(?:so|ok|and|hey)[,\s]+)?(?:when(?:'s|s| is| are)|what (?:time|day) is|which days? (?:does|do|is|are))\s+(?:the\s+|my\s+|our\s+)?(.+?)(?:\s+(?:happen(?:ing)?|due|on|start(?:ing)?|scheduled|be))?\s*\??$/i;
+
+export async function lookupReply(turn: Turn, text: string): Promise<Out | null> {
+  const m = LOOKUP.exec(text.trim());
+  const ref = m?.[1]?.trim();
+  if (!ref || !contentTokens(ref).length) return null;
+  const tasks = await prisma.task.findMany({ where: { userId: turn.user.id, status: { in: ["PENDING", "IN_PROGRESS"] }, archived: false }, take: 300 });
+  const routines = await prisma.routine.findMany({ where: { userId: turn.user.id, active: true } });
+  const fits = (title: string) => coversAll(ref, title) || refScore(ref, title) >= 0.8;
+  const found = [...tasks.filter((t) => fits(t.title)).map((t) => ({ kind: "task" as const, t })), ...routines.filter((r) => fits(r.title)).map((r) => ({ kind: "routine" as const, r }))];
+  if (!found.length) return null;
+  const say = (x: (typeof found)[number]) => {
+    if (x.kind === "task") return x.t.dueAt ? `"${x.t.title}" is due ${dueLabel(x.t, turn)}.` : `"${x.t.title}" has no due date yet.`;
+    const days = daysOf(x.r);
+    const when = days.length === 7 ? "every day" : days.map((d) => DAY_SHORT[d]).join(", ");
+    return `"${x.r.title}": ${when}${x.r.dueTime ? ` at ${x.r.dueTime}` : ""}.`;
+  };
+  // command: "query_tasks" — a read-only question about the user's tasks and routines, like the other task questions.
+  if (found.length === 1) return { content: say(found[0]), intent: "lookup", command: "query_tasks" };
+  const shown = found.slice(0, 3);
+  const titleOf = (x: (typeof found)[number]) => (x.kind === "task" ? x.t.title : x.r.title);
+  return {
+    content: ["Which one do you mean?", ...shown.map((x) => `• ${titleOf(x)}`)].join("\n"),
+    actions: shown.map((x) => sayAction(truncate(titleOf(x), 28), "query_tasks", `when is ${titleOf(x)}`)),
+    intent: "lookup_choose",
+    command: "query_tasks",
   };
 }
 

@@ -84,7 +84,7 @@ import { generateReply } from "./responder.js";
 import { shareAnswer, titleForShare } from "./shareIntent.js";
 import { createSharedTask, listConnections, whatsappCollabLine } from "../collab/collabService.js";
 import { HttpError } from "../../lib/http.js";
-import { confirmSplit, handleIntent, handlePayload, resolveHandlerPending, splitPreview } from "./handlers.js";
+import { confirmSplit, handleIntent, handlePayload, lookupReply, resolveHandlerPending, splitPreview } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
 import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
@@ -430,6 +430,9 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
   // CHAT_FIXES_V2: questions about the assistant itself ("who made you?", "is my data private?"): a fixed, honest answer.
   const app = chatFixesOn() ? appQuestionReply(text) : null;
   if (app) return app;
+  // PR E (CHAT_FIXES_V2): "when is the school meeting?": from the user's tasks and routines (none: as today).
+  const looked = chatFixesOn() ? await lookupReply(turn, text) : null;
+  if (looked) return looked;
   if (chatFixesOn()) {
     const added = ADD_TO_IT_CUE.test(text) ? addToExistingReply(text, collabOn(), await connectionNames(turn.user.id)) : null;
     if (added) {

@@ -121,3 +121,27 @@ test("E10: a plan with nothing due names the most urgent open tasks, never '0 mi
     await busy.done();
   }
 });
+
+test("E11: 'when is …' / 'which days does … happen' from tasks and routines; several: up to 3 and ask; no match: as today", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([["Parent-teacher meeting at school", "2026-11-16"], ["Physics quiz", "2026-11-17"], ["Physics lab report", "2026-11-18"], ["Physics assignment 2", "2026-11-19"], ["Physics revision", null]]);
+  try {
+    await prisma.routine.create({ data: { userId: c.user.id, title: "Tuition pickup", frequency: "WEEKLY", daysOfWeek: [1, 3], dueTime: "3:30 PM" } });
+    const tasksBefore = await prisma.task.count({ where: { userId: c.user.id } });
+    await withFixes(async () => {
+      const meeting = await c.send("when is the school meeting?");
+      assert.equal(meeting.intent, "lookup");
+      assert.match(meeting.content, /^"Parent-teacher meeting at school" is due /);
+      const pickup = await c.send("which days does the tuition pickup happen?");
+      assert.equal(pickup.content, '"Tuition pickup": Mon, Wed at 3:30 PM.');
+      const several = await c.send("when is physics?");
+      assert.equal(several.intent, "lookup_choose");
+      assert.equal((several.actions ?? []).length, 3, "at most 3");
+      assert.match(several.content, /^Which one do you mean\?/);
+      const eid = await c.send("when is Eid?");
+      assert.ok(!["lookup", "lookup_choose"].includes(eid.intent ?? ""), "no matching task: as today");
+      assert.equal(await prisma.task.count({ where: { userId: c.user.id } }), tasksBefore, "read-only");
+    });
+  } finally {
+    await c.done();
+  }
+});
