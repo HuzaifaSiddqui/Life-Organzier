@@ -151,3 +151,64 @@ test("D4: a routine like an active one on the same days asks first; other days o
     await c.done();
   }
 });
+
+test("D4: the duplicate question does not fire when answering an open draft, in the two-task preview, or for document imports", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([["Renew passport", null], ["Physics assignment 2", null]]);
+  try {
+    await withFixes(async () => {
+      // Answering an open draft question is not a new request: no duplicate check on the answer.
+      const ask = await c.send("add a new task: renew passport");
+      assert.equal(ask.intent, "clarify");
+      const answered = await c.send("to friday");
+      assert.equal(answered.intent, "task_created", "the answer finishes the draft");
+
+      // The two-task preview (PR B) keeps its own flow.
+      const two = await c.send("add buy stamps on friday at 4 pm and call the plumber tomorrow");
+      assert.equal(two.intent, "create_tasks_confirm");
+      await c.send(null, { type: "cancel_pending" });
+      const twoDup = await c.send("add renew passport on friday at 4 pm and call the plumber tomorrow");
+      assert.equal(twoDup.intent, "create_tasks_one_by_one", "a part matching an open task: one at a time, never the change-or-new question");
+
+      // Document imports: their own rule (exact repeats skipped), never a question.
+      const doc = await prisma.document.create({ data: { userId: c.user.id, fileName: "syllabus.pdf", mimeType: "application/pdf", sizeBytes: 10, docType: "SYLLABUS", text: "x" } });
+      const { applyDocumentItems } = await import("../src/modules/documents/applyItems.js");
+      const r = await applyDocumentItems({ userId: c.user.id, tz: TZ, deviceId: null }, doc.id, { deadlines: [{ title: "Physics assignment 2", date: "2026-11-20", time: "5:00 PM" }], schedules: [] });
+      assert.equal(r.tasks.length, 1, "imported as before");
+    });
+  } finally {
+    await c.done();
+  }
+});
+
+test("D4 on WhatsApp: the question appears; replying 'add a new task' in text creates it; '1' / 'change it' changes the existing one", { skip: !dbAvailable && "no database" }, async () => {
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, tier: "PRO" } });
+  await prisma.task.create({ data: { userId: user.id, title: "Call the electrician" } });
+  const conversation = await prisma.conversation.create({ data: { userId: user.id, channel: "WHATSAPP", title: "wa" } });
+  const send = async (text: string) =>
+    (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "WHATSAPP", conversationId: conversation.id, now: NOW, text } as never)).message;
+  const titles = async () => (await prisma.task.findMany({ where: { userId: user.id, status: { not: "DELETED" } }, select: { title: true, dueDate: true } }));
+  try {
+    await withFixes(async () => {
+      const first = await send("remind me to call the electrician on monday");
+      assert.equal(first.intent, "change_or_new");
+      const changed = await send("change it");
+      assert.equal(changed.intent, "task_updated");
+      assert.equal((await titles()).length, 1, "changed, not added");
+
+      const q = await send("remind me to call the electrician tomorrow");
+      assert.equal(q.intent, "change_or_new");
+      assert.match(q.content, /Change "Call the electrician", or add a new task\?/);
+      const made = await send("add a new task");
+      assert.equal(made.intent, "task_created");
+      assert.equal((await titles()).length, 2);
+      const two = await send("remind me to call the electrician on tuesday");
+      assert.equal(two.intent, "change_or_new");
+      const other = await send("what's due today");
+      assert.equal(other.intent, "query_tasks", "another message drops the question and is handled as usual");
+    });
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});

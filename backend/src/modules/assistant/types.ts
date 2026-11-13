@@ -92,6 +92,8 @@ export type Pending =
   | { kind: "location_choice"; taskId: string; taskTitle: string; place: string; results: Array<{ name: string; displayName: string; latitude: number; longitude: number }>; more: boolean }
   | { kind: "choose_task"; purpose: "update" | "complete" | "delete" | "progress" | "split" | "query_progress"; candidates: string[]; data: Record<string, unknown> }
   | { kind: "clarify_intent"; text: string }
+  /** PR D (CHAT_FIXES_V2): "Change X, or add a new task/routine?" — answered by the buttons or in words. */
+  | { kind: "change_or_new"; text: string; ref: string; routine?: boolean }
   | { kind: "prereq"; draft: TaskDraft; course: string; prereq: string; source: "CHAT" | "VOICE" | "WHATSAPP" }
   | { kind: "past_date"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP" }
   | { kind: "typo"; draft: TaskDraft; source: "CHAT" | "VOICE" | "WHATSAPP"; corrected: string }

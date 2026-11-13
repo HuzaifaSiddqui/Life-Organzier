@@ -237,6 +237,7 @@
    "lang": "en",
    "text": "call mom, feeling low today",
    "command": "create_task",
+   "alsoOk": ["update_task"],
    "source": "ai-written",
    "expect": "a task 'Call mom'; no mood-only reply"
   },
@@ -246,6 +247,7 @@
    "lang": "en",
    "text": "tired of waiting, remind me to call the bank tomorrow",
    "command": "create_task",
+   "alsoOk": ["update_task"],
    "source": "ai-written",
    "expect": "a task (or update of 'Call the bank'); not a mood log"
   },

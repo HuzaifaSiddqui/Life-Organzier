@@ -141,6 +141,8 @@ const CHANGE_CUE = /\b(?:now|instead|anymore|moved|rescheduled|long)\b/i;
 /** "Change "X", or add a new task?": nothing changes until the user picks (CHAT_FIXES_V2). */
 function changeOrNew(turn: Turn, task: Task, text: string): Out {
   focusOn(turn, task.id);
+  // PR D: typed answers ("1", "change it", "2", "add a new task") work too (dialogue.ts answerChangeOrNew).
+  if (chatFixesOn()) turn.state.pending = { kind: "change_or_new", text: text.trim(), ref: task.title };
   return {
     content: `Change "${task.title}", or add a new task?`,
     actions: [commandAction(`Change "${truncate(task.title, 24)}"`, "update_task", { text, ref: task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
@@ -167,13 +169,14 @@ async function routineDuplicate(userId: string, draft: RoutineDraft): Promise<{ 
   return best && best.s >= 0.6 ? best.r : null;
 }
 
-function routineChangeOrNew(r: { title: string; frequency: string; daysOfWeek: unknown }, text: string): Out {
+function routineChangeOrNew(turn: Turn, r: { title: string; frequency: string; daysOfWeek: unknown }, text: string): Out {
+  turn.state.pending = { kind: "change_or_new", text: text.trim(), ref: r.title, routine: true };
   const days = daysOf(r);
   const when = days.length === 7 ? "every day" : days.map((d) => DAY_SHORT[d]).join(", ");
   return {
     content: `You already have the routine "${r.title}" (${when}). Change it, or add a new routine?`,
     actions: [
-      { label: `Change "${truncate(r.title, 24)}"`, payload: { type: "navigate", screen: "Routines" } },
+      { label: "Open Routines", payload: { type: "navigate", screen: "Routines" } },
       sayAction("Add a new routine", "create_routine", `add routine: ${text.trim()}`),
     ],
     intent: "change_or_new",
@@ -242,7 +245,7 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       // PR D (CHAT_FIXES_V2): a routine like this already on those days: ask first.
       if (chatFixesOn() && draft.title && !DUP_SKIP.test(text)) {
         const same = await routineDuplicate(turn.user.id, draft);
-        if (same) return routineChangeOrNew(same, text);
+        if (same) return routineChangeOrNew(turn, same, text);
       }
       return proceedWithRoutine(turn, draft);
     }
