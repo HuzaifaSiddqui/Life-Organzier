@@ -270,6 +270,35 @@ export function wordMatch(ref: string, title: string): number {
   return hits && covered * 2 >= r.length ? 0.45 + 0.35 * (hits / t.length) : 0;
 }
 
+/** C2 (CHAT_FIXES_V2): every distinctive word of the reference is in the title ("lab report" ⊄ "Submit FYP progress report"). */
+export function coversAll(ref: string, title: string): boolean {
+  const named = (w: string) => !GENERIC.has(w) && !/\d/.test(w);
+  const r = contentTokens(ref).filter(named);
+  const t = contentTokens(title).filter(named);
+  const same = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+  return r.length > 0 && t.length > 0 && r.every((w) => t.some((x) => same(w, x)));
+}
+
+/** How well a reference names a task (the scoring resolveTaskRef uses, without focus). */
+export function refScore(ref: string, title: string): number {
+  return Math.max(fuzzySimilarity(ref, title), chatFixesOn() ? wordMatch(ref, title) : 0);
+}
+
+/**
+ * C2 (CHAT_FIXES_V2): "done with the lab report" when no OPEN task is named well (< 0.8) but a COMPLETED one is
+ * (>= 0.8): that one, so the reply can say it is already done. An open task with the same title always wins.
+ */
+export async function alreadyDoneTask(userId: string, ref: string): Promise<Task | null> {
+  const cleaned = ref.trim();
+  if (!cleaned || PRONOUN.test(cleaned) || ordinalIndex(cleaned) !== null || !contentTokens(cleaned).length) return null;
+  const tasks = await prisma.task.findMany({ where: { userId, status: { in: ["PENDING", "IN_PROGRESS", "COMPLETED"] }, archived: false }, orderBy: { completedAt: { sort: "desc", nulls: "last" } }, take: 300 });
+  const best = (list: Task[]) => list.map((t) => ({ t, s: refScore(cleaned, t.title) })).sort((a, b) => b.s - a.s)[0];
+  const open = best(tasks.filter((t) => t.status !== "COMPLETED"));
+  if (open && open.s >= 0.8) return null;
+  const done = best(tasks.filter((t) => t.status === "COMPLETED"));
+  return done && done.s >= 0.8 ? done.t : null;
+}
+
 /** Words too common to identify a task by ("call", "pay", "today"): matching on them alone would pick the wrong one. */
 const GENERIC = new Set(
   ["call", "pay", "buy", "get", "go", "do", "make", "send", "book", "finish", "submit", "start", "meet", "move", "change", "update", "check", "take", "bring", "write", "read", "clean", "fix", "task", "thing", "stuff", "today", "tomorrow", "actual", "actually", "now", "instead", "please", "need", "want", "will", "still", "reschedule", "push", "shift", "postpone", "delay", "cancel", "delete", "remove", "mark", "done", "complete", "due", "by"].map((w) => contentTokens(w)[0] ?? w),
@@ -279,7 +308,7 @@ export async function resolveTaskRef(
   userId: string,
   ref: string,
   focus: string[],
-  opts: { includeCompleted?: boolean; listed?: string[] } = {},
+  opts: { includeCompleted?: boolean; listed?: string[]; strict?: boolean } = {},
 ): Promise<Resolution> {
   const statuses = opts.includeCompleted ? undefined : { in: ["PENDING", "IN_PROGRESS"] as Array<"PENDING" | "IN_PROGRESS"> };
   const tasks = await prisma.task.findMany({
@@ -308,7 +337,10 @@ export async function resolveTaskRef(
     .sort((a, b) => b.s - a.s);
   if (!scored.length) return { task: null, candidates: [], viaFocus: false };
   const [first, second] = scored;
-  if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12)) return { task: first.t, candidates: [], viaFocus: false };
+  // C2 (CHAT_FIXES_V2), strict (complete / delete): pick by itself only when every word of the reference is in the title
+  // or it is a near-exact (typo) match; half the words ("lab report" vs "Submit FYP progress report") asks "Which task?".
+  const sure = !(chatFixesOn() && opts.strict) || coversAll(cleaned, first.t.title) || fuzzySimilarity(cleaned, first.t.title) >= 0.8;
+  if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12) && sure) return { task: first.t, candidates: [], viaFocus: false };
   return { task: null, candidates: openFirst(scored.map((x) => x.t)).slice(0, 4), viaFocus: false };
 }
 

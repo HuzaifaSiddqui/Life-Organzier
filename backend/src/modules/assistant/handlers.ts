@@ -49,7 +49,7 @@ import {
   handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
-import { resolveTaskRef } from "./draft.js";
+import { alreadyDoneTask, resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
@@ -409,7 +409,16 @@ async function chooseOrResolve(
   purpose: "update" | "complete" | "delete" | "progress" | "split" | "query_progress",
   data: Record<string, unknown> = {},
 ): Promise<{ task: Task } | { out: Out }> {
-  const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress", listed: turn.state.listed });
+  // C2 (CHAT_FIXES_V2): "done with the lab report" when that one is already done: say so, change nothing.
+  if (chatFixesOn() && purpose === "complete") {
+    const done = await alreadyDoneTask(turn.user.id, u.targetRef);
+    if (done) {
+      const day = done.completedAt ? ` (${relativeDayLabel(localYmd(done.completedAt, turn.tz), turn.todayYmd)})` : "";
+      return { out: { content: `"${done.title}" is already done${day}.`, intent: "already_done" } };
+    }
+  }
+  const strict = chatFixesOn() && (purpose === "complete" || purpose === "delete");
+  const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress", listed: turn.state.listed, strict });
   if (r.task) return { task: r.task };
   if (r.candidates.length) {
     // PR B (CHAT_FIXES_V2): keep the whole message, so after the pick "move it to friday" still moves it to Friday
