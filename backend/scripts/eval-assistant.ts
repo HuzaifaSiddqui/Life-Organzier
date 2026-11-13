@@ -30,7 +30,13 @@ function argsMatch(expected: Record<string, unknown> | undefined, got: Record<st
   return null;
 }
 
-type PendingSet = { kinds: Array<Record<string, unknown> & { kind: string }>; answers: string[]; notAnswers: Array<{ kind: string; text: string }> };
+type PendingSet = {
+  kinds: Array<Record<string, unknown> & { kind: string }>;
+  answers: string[];
+  notAnswers: Array<{ kind: string; text: string }>;
+  /** Own open question each; `titles` are the task titles a "which task?" offers. */
+  cases?: Array<{ pending: Record<string, unknown> & { kind: string }; titles?: string[]; text: string; answer: boolean }>;
+};
 
 /** Open-question group: each answer must be taken by every kind of question; each new request must not. */
 function scorePending(file: EvalFile, set: PendingSet): void {
@@ -47,6 +53,11 @@ function scorePending(file: EvalFile, set: PendingSet): void {
     total += 1;
     const p = set.kinds.find((k) => k.kind === row.kind);
     if (p && isPlausibleAnswer(p as never, row.text, ctx)) failures.push(`  ${row.kind} + "${row.text}": a new request taken as an answer`);
+  }
+  // The cases test CHAT_FIXES_V2 behaviour: scored with it on (flags off stays the saved baseline, 230/230).
+  for (const c of process.env.CHAT_FIXES_V2?.toLowerCase() === "on" ? (set.cases ?? []) : []) {
+    total += 1;
+    if (isPlausibleAnswer(c.pending as never, c.text, ctx, c.titles) !== c.answer) failures.push(`  ${c.pending.kind} + "${c.text}": ${c.answer ? "not taken as an answer" : "a new request taken as an answer"}`);
   }
   const ok = total - failures.length;
   console.log(`\npending (open question + reply): ${ok}/${total} = ${((ok / total) * 100).toFixed(1)}%`);

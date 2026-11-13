@@ -1,0 +1,223 @@
+{
+ "description": "Chat regression set (tests/chatProbe29.test.ts, rules path). Originally: 29 English messages for a small, careful Bedrock check of chat understanding (generic questions, follow-ups, corrections). Judged by a person from the printed transcript, not scored automatically. Includes the two failing messages from the user's screenshot (history-and-repair). 'assistantBefore' is a scripted assistant reply placed in the history before that message. Crisis wording is deliberately excluded: crisis detection stays deterministic and never goes to a model. AI-written except the screenshot messages.",
+ "seed": {
+  "now": "2026-11-12T12:00:00Z",
+  "timezone": "Asia/Karachi",
+  "tasks": [
+   {
+    "title": "Dentist appointment",
+    "due": "2026-11-13 16:00"
+   },
+   {
+    "title": "Tax return",
+    "due": "2026-11-15"
+   },
+   {
+    "title": "Passport renewal",
+    "due": "2026-11-17"
+   },
+   {
+    "title": "Project report",
+    "due": "2026-11-14"
+   },
+   {
+    "title": "Quarterly report",
+    "due": "2026-11-20"
+   },
+   {
+    "title": "Call the bank"
+   },
+   {
+    "title": "Submit assignment",
+    "status": "completed",
+    "completedAt": "2026-11-12T11:50:00Z"
+   },
+   {
+    "title": "Buy printer paper",
+    "status": "completed",
+    "completedAt": "2026-11-10T09:00:00Z"
+   },
+   {
+    "title": "Email professor",
+    "status": "completed",
+    "completedAt": "2026-11-11T15:00:00Z"
+   }
+  ],
+  "routines": [
+   {
+    "title": "Gym",
+    "days": "Mon,Wed,Fri",
+    "time": "06:00"
+   },
+   {
+    "title": "Reading",
+    "days": "daily",
+    "time": "22:00"
+   }
+  ],
+  "connections": [
+   "sana",
+   "ali"
+  ]
+ },
+ "conversations": [
+  {
+   "id": "history-and-repair",
+   "turns": [
+    {
+     "say": "What did I just complete?",
+     "expect": "Answers with the most recently completed task: 'Submit assignment' (done today). No 'which one do you mean?'."
+    },
+    {
+     "say": "I am not asking about task, I am asking about my completed task.",
+     "expect": "Treats this as a correction of the previous reply and answers with completed tasks (most recent first). Does not search for a task called 'not asking about'.",
+     "assistantBefore": "I couldn't find a task matching \"the last task completed\". Which one do you mean?"
+    },
+    {
+     "say": "show me everything I finished this week",
+     "expect": "Lists tasks completed this week: Submit assignment, Email professor (Buy printer paper was 10 Nov, before this week if the week starts Mon 9 Nov counts it; either is acceptable if stated)."
+    }
+   ]
+  },
+  {
+   "id": "follow-ups-on-a-new-task",
+   "turns": [
+    {
+     "say": "remind me to buy groceries tomorrow at 6 pm",
+     "expect": "Creates 'Buy groceries' for 13 Nov 6 PM."
+    },
+    {
+     "say": "make it high priority",
+     "expect": "Updates the groceries task to High priority (the task just created)."
+    },
+    {
+     "say": "actually move it to friday",
+     "expect": "Moves the groceries task to Friday 13 Nov... note: tomorrow is already Friday 13 Nov; either confirm it is already on Friday or keep 6 PM. Must not ask 'which task'."
+    },
+    {
+     "say": "add Sana to the above task",
+     "expect": "Proposes sharing the groceries task with @sana and shows the preview (Together / Only for them / Just me). Nothing is shared before the user confirms."
+    },
+    {
+     "say": "delete it",
+     "expect": "Asks for confirmation to delete the groceries task (preview). Nothing is deleted before confirmation."
+    }
+   ]
+  },
+  {
+   "id": "references-to-a-list",
+   "turns": [
+    {
+     "say": "what's due this week",
+     "expect": "Lists Dentist appointment (13 Nov), Project report (14 Nov), Tax return (15 Nov) in date order."
+    },
+    {
+     "say": "complete the second one",
+     "expect": "Completes 'Project report' (the second item listed). If unsure it must ask, not guess a different task."
+    },
+    {
+     "say": "what about the third one, when is it due?",
+     "expect": "Answers Tax return is due 15 Nov. No change to data."
+    },
+    {
+     "say": "move the first to monday",
+     "expect": "Moves Dentist appointment to Monday 16 Nov (keeping 4 PM). May show a preview."
+    }
+   ]
+  },
+  {
+   "id": "generic-app-questions",
+   "turns": [
+    {
+     "say": "what can you do?",
+     "expect": "A short, accurate list of what the app can do. No task action."
+    },
+    {
+     "say": "how do I add a routine?",
+     "expect": "Explains it (say 'add a routine' in chat or use Add routine at the top of Routines). No action."
+    },
+    {
+     "say": "is my data private?",
+     "expect": "An honest, short answer about privacy (data stays tied to the account; AI runs through the backend; no claims about encryption that are not true). No action."
+    },
+    {
+     "say": "who made you?",
+     "expect": "A simple answer: the Life Organizer assistant. No invented company claims. No action."
+    }
+   ]
+  },
+  {
+   "id": "out-of-scope",
+   "turns": [
+    {
+     "say": "what's the weather like in Lahore?",
+     "expect": "Says it can't check the weather. No task created."
+    },
+    {
+     "say": "book me a cab to the airport",
+     "expect": "Says it can't book cabs. May offer to create a reminder task; must not claim it booked anything."
+    },
+    {
+     "say": "set an alarm for 6 am",
+     "expect": "Honest about not setting phone alarms; may create a reminder task for 6 AM with a note. Must not claim an alarm was set."
+    }
+   ]
+  },
+  {
+   "id": "ambiguity-and-repair",
+   "turns": [
+    {
+     "say": "move it to tomorrow",
+     "expect": "No earlier task in this chat: asks which task. Must not guess."
+    },
+    {
+     "say": "update the report",
+     "expect": "Two matches (Project report, Quarterly report): asks which one."
+    },
+    {
+     "say": "no, the other one",
+     "expect": "Resolves 'the other one' using the previous question (Quarterly report if Project report was assumed, otherwise the remaining one) and asks what to change or does the pending change.",
+     "assistantBefore": "Do you mean \"Project report\" or \"Quarterly report\"?"
+    },
+    {
+     "say": "never mind",
+     "expect": "Cancels the pending question without changing anything."
+    }
+   ]
+  },
+  {
+   "id": "feelings-and-planning",
+   "turns": [
+    {
+     "say": "I'm so stressed about my exams",
+     "expect": "Kind, short reply; may offer to help plan. Does not create a task by itself."
+    },
+    {
+     "say": "call mom, feeling low today",
+     "expect": "Creates the task 'Call mom' (may acknowledge the feeling). Not only a mood log."
+    },
+    {
+     "say": "I have too much to do, can you help me plan tomorrow?",
+     "expect": "Offers or builds a plan for tomorrow (14 Nov... today is Thu 12 Nov, so tomorrow is Fri 13 Nov) using the existing tasks. No unrelated changes."
+    }
+   ]
+  },
+  {
+   "id": "compound-and-complex",
+   "turns": [
+    {
+     "say": "add dentist on friday at 4 pm and call the bank tomorrow",
+     "expect": "Two tasks: a dentist task Friday 4 PM (a matching 'Dentist appointment' already exists, so it may ask change or add new) and 'Call the bank' tomorrow (matches the existing one; may update or ask)."
+    },
+    {
+     "say": "what does tomorrow look like and am I forgetting anything?",
+     "expect": "Summarises tomorrow's items (Dentist appointment 4 PM, Project report is Sat) and anything overdue or untouched. A question; no changes."
+    },
+    {
+     "say": "rename the passport task to visa renewal",
+     "expect": "Renames 'Passport renewal' to 'Visa renewal'. May show a preview."
+    }
+   ]
+  }
+ ]
+}

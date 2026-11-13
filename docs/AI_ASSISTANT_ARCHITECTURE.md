@@ -36,6 +36,35 @@ routines). It also reads only the request sentence of a multi-sentence message, 
 drops "I have a routine to" from titles and drops an open question after 30 quiet minutes. Each fix only withdraws an action or hands it to a matching item; what it can't settle becomes "unsure".
 Status: built and unit-tested on new sentences; turned on only after it passes on new rows.
 
+**Chat probe fixes, PR A (off by default; `CHAT_FIXES_V2`).** From the 29-message probe
+(`backend/tests/eval/chat-probe-29.json`, checked by `tests/chatProbe29.test.ts` with AI off). All rules, no model:
+- *App questions* (`assistant/appQuestions.ts`): "who made you?" and "is my data private?" get fixed, honest answers
+  (deleting the account and data is in Settings → Data & account, removed after 30 days). A model's "support" is
+  taken only when the message itself shows distress (`distressSignal`); crisis detection still runs first, unchanged.
+- *Dropping an open question* (`commands/pendingAnswer.ts → isNewRequest`): a question, or a reply that starts with an
+  action ("set an alarm for 6 am", "update the report", "add milk"), is a new request, not the answer. Still answers:
+  a name from the options ("call mom" to "Which task?"; the task titles are looked up), and, to a date / time
+  question, a date or time with nothing new beside it ("remind me tomorrow at 5", "call her tomorrow", "make it
+  friday") or a "when / after / before / by" reply that is not a question ("when I get home", "after lunch"; "when is …",
+  "when does …", "when can …" are questions even without "?"). "can't …" is not a
+  question. When a half-made task or routine is dropped, the new reply ends with `(I've left "X" unfinished.)`; a
+  dropped "which one?" is silent. "cancel that", "forget it", "drop that", "leave it", "stop that" close any open
+  question ("Okay, cancelled."), never start a delete; with no question open they are read as before.
+- *Command + reference* (`nlu.ts → refCommand`): "complete the second one", "finish it", "delete that one" act on an
+  existing task, never create one; "update the report" edits a task with that name (asks which when several match)
+  and is a new to-do when none does. "add Sana to the above task" explains that an existing task can't be shared yet
+  (`repairs.ts → addToExistingReply`; with `COLLAB_TASKS` off: "Sharing isn't available yet."), but only when the name
+  is an "@name" or one of the user's connections. "add milk to it" is an item, not a person: "I can't add things
+  inside a task yet. Want "Milk" as its own task?" with an [Add "Milk"] button; no task is made by itself. A field of
+  the task ("add a reminder to it", "add 30 minutes to it", a deadline, priority, tag, note) is not an item: it is
+  left to the usual handling.
+- *Repairs* (`assistant/repairs.ts`): "I am not asking about X, I am asking about Y" and "no, I meant Y" answer Y
+  ("I meant to call mom" is not a correction);
+  "no, the other one" picks the other of two candidates when one was assumed, otherwise asks "Which task do you
+  mean?"; "never mind" closes an open "which task?". A missing task reads `I couldn't find a task called "…".`
+  with [Show my tasks].
+- *Alarms* (`OOS_NOTE`): "I can't set phone alarms, but I'll keep it as a reminder." To be removed once ALARM_STYLE
+  (reminders that ring like an alarm) is built.
 **Cloud fallback (off by default; `docs/rollout.md`).** With `CLOUD_FALLBACK=on` and `LLM_PROVIDERS_CHAT` set, the
 router's model calls go through a hosted chain (`backend/src/ai/chains.ts`, order in `config/provider-order.json`):
 Ollama → Deploy GLM-5.3-flash (tier B, masked text, few-shot: the 5 nearest English bank rows) → Groq gpt-oss-20b

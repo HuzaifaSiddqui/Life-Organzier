@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getAi, type ChatMessage } from "../../ai/llm.js";
 import { detectMood, isMood, type MoodDetection } from "../mood/moodService.js";
+import { distressSignal } from "./appQuestions.js";
 import { parseCheckinStyle } from "../checkins/style.js";
 import { parseQuery } from "./queries.js";
 import { parseSnooze } from "../whatsapp/snooze.js";
@@ -111,6 +112,23 @@ function addBeforeEdit(t: string): boolean {
 export const CHANGE_TIME = /^(?:please\s+)?(?:change|set|update|edit|fix)\s+(?:the\s+|its\s+|that\s+)?(?:due\s+)?time\b/i;
 const changeTimeOfFocus = (text: string) => (chatFixesOn() && CHANGE_TIME.test(text.trim()) ? "it" : null);
 
+/**
+ * CHAT_FIXES_V2: a command verb on a reference to a task already there ("complete the second one", "finish it",
+ * "delete that one") edits that task; it is never a new task called "Complete the second one".
+ */
+const REF = String.raw`(?:it|this|that|(?:this|that) one|the (?:above|previous|same)(?: one| task)?|the (?:first|second|third|fourth|fifth|last|\d{1,2}(?:st|nd|rd|th))(?: one| task| item)?)`;
+const REF_COMMANDS: Array<[RegExp, Intent]> = [
+  [new RegExp(`^(?:please\\s+)?(?:complete|finish|tick off|check off)\\s+${REF}[\\s.!]*$`, "i"), "complete_task"],
+  [new RegExp(`^(?:please\\s+)?(?:delete|remove|cancel|drop)\\s+${REF}\\b`, "i"), "delete_task"],
+  [new RegExp(`^(?:please\\s+)?(?:move|reschedule|postpone|update|change|edit)\\s+${REF}\\b`, "i"), "update_task"],
+];
+/** "update the report", "edit my essay": an edit verb and a name, nothing else; edits that task when there is one. */
+export const EDIT_EXISTING = /^(?:please\s+)?(?:update|edit|modify)\s+(?:the|my)\s+[a-z][\w' -]{1,40}?[\s.!?]*$/i;
+export function refCommand(text: string): Intent | null {
+  if (EDIT_EXISTING.test(text.trim())) return "update_task";
+  return REF_COMMANDS.find(([re]) => re.test(text.trim()))?.[1] ?? null;
+}
+
 /** Asking (CHAT_FIXES_V2): a "?", a question or list opener, "do I have", or a noun phrase about tasks for some days. */
 const ASKS_ABOUT =
   /\?\s*$|^(?:what(?:'s|s| is| are| do| have)?|which|anything|any|is there|are there|show|list|tell me|do (?:i|we) have|have (?:i|we) got|got anything)\b|^(?:my\s+|the\s+)?(?:tasks?|to-?dos?|things|plans?|deadlines?|schedule|agenda)\s+(?:for|due|on|by|this|next|before|after)\b/i;
@@ -172,6 +190,8 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
   if (QUERY.test(t) && !CREATE_CUE.test(t) && (QUESTION.test(t) || /^(?:show|list)/i.test(t))) return { intent: "query_tasks", confidence: 0.85 };
   // CHAT_FIXES_V2: "change time", "set the time to 5 pm": the time of the task in focus (the one just added).
   if (chatFixesOn() && CHANGE_TIME.test(t)) return { intent: "update_task", confidence: 0.9 };
+  const onRef = chatFixesOn() ? refCommand(t) : null;
+  if (onRef) return { intent: onRef, confidence: 0.9 };
   // CHAT_FIXES_V2: asking about a day or a span ("what do I have next weekend", "anything on the 14th?", "tasks for the
   // long weekend") is a task question, whatever the words around it; the range reader then answers or asks which days.
   if (chatFixesOn() && ASKS_ABOUT.test(t) && (e.date || RANGE_WORD.test(t) || NEXT_N_DAYS.test(t) || UNREADABLE_SPAN.test(t)) && !CREATE_CUE.test(t) && !TASK_CUE.test(t)) {
@@ -387,7 +407,9 @@ export async function understand(
       source = "llm";
       const llmIntent = result.intent as Intent;
       // Rules win when they were fairly confident and the LLM disagrees on something structural.
-      if (rule.confidence < 0.75 || llmIntent === intent) {
+      // CHAT_FIXES_V2: the model's "support" only stands when the message itself shows distress.
+      const unbackedSupport = chatFixesOn() && llmIntent === "support" && intent !== "support" && !distressSignal(text, mood);
+      if ((rule.confidence < 0.75 || llmIntent === intent) && !unbackedSupport) {
         intent = llmIntent;
         confidence = Math.max(0.6, rule.confidence);
       }
