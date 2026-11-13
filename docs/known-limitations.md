@@ -26,6 +26,13 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   time from the background sentence and ignored "except Saturday and Sunday" (`tests/chatFixesReported.test.ts`), and
   a days-old open question ("When should … be done?") captured an unrelated "How are you today?" as its answer.
   Vocabulary misses ("organize my afternoon", "turn off notifications") are not code fixes; they become bank rows.
+- **Chat probe, PR A (`CHAT_FIXES_V2`, off): still open after it** (planned for PR B): "this week" is a rolling 7 days;
+  "what did I just complete?" answers with due tasks, so a correction to it ("I'm asking about my completed tasks")
+  gets the same answer; a second list question ("what about the third one") replaces the remembered list, so "move
+  the first" then fails; filler words ("actually move it") are read as the task name; two tasks in one message become
+  one task; "call mom, feeling low today" keeps "feeling" in the title; the weather question gets the generic fallback.
+  An existing task can't get new people (sharing works only when a task is added). The alarm note ("I can't set phone
+  alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is built.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
   for bare imperatives instead; questions like "what's the weather" are not covered by it.

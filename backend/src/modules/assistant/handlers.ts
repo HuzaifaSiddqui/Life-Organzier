@@ -55,7 +55,7 @@ import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
-import { bareImperative, CHANGE_TIME, IMPERATIVE_START } from "./nlu.js";
+import { bareImperative, CHANGE_TIME, EDIT_EXISTING, IMPERATIVE_START } from "./nlu.js";
 import { chatFixesOn, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
@@ -100,7 +100,8 @@ const CANT_DO: Array<[RegExp, string]> = [
 const ALARM = /\balarms?\b|\bwake me(?:\s+up)?\b|\bget me up\b/i;
 function cantDoNote(text: string): string | null {
   if (process.env.OOS_NOTE?.toLowerCase() !== "on") return null;
-  if (ALARM.test(text)) return "I can't set phone alarms myself, so I'll keep it as a task for you.";
+  // Remove this note once ALARM_STYLE (reminders that ring like an alarm) is built: the app will then do what was asked.
+  if (ALARM.test(text)) return "I can't set phone alarms, but I'll keep it as a reminder.";
   if (TASK_CUE.test(text)) return null;
   const hit = CANT_DO.find(([re]) => re.test(text.trim()));
   return hit ? `I can't ${hit[1]} myself, so I'll keep it as a task for you.` : null;
@@ -191,7 +192,7 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text) };
       const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
       const note = cantDoNote(text);
-      if (note && (out.intent === "task_created" || out.intent === "clarify")) out.content = `${note}\n${out.content}`;
+      if (note && (out.intent === "task_created" || out.intent === "clarify" || out.intent === "past_date")) out.content = `${note}\n${out.content}`;
       if (u.mood?.explicit && out.intent === "task_created") {
         out.content += `\nI also sense you're ${u.mood.mood}. Want a quick 2-minute breathing break before you start?`;
         out.actions = [{ label: "Breathing break", payload: { type: "breathing", minutes: 2 } }, ...(out.actions ?? [])];
@@ -202,6 +203,11 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
     case "create_routine":
       return proceedWithRoutine(turn, routineDraftFrom(turn, u, text));
     case "update_task":
+      // CHAT_FIXES_V2: "update the website" with no such task is a new to-do, as before (nlu.ts EDIT_EXISTING).
+      if (chatFixesOn() && EDIT_EXISTING.test(text.trim())) {
+        const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: true, listed: turn.state.listed });
+        if (!r.task && !r.candidates.length) return handleIntent(turn, { ...u, intent: "create_task" }, text);
+      }
       return updateIntent(turn, u, text);
     case "complete_task":
       return completeIntent(turn, u);
@@ -418,7 +424,7 @@ async function chooseOrResolve(
   }
   return {
     out: {
-      content: u.targetRef ? `I couldn't find a task matching "${u.targetRef}". Which one do you mean?` : "Which task do you mean?",
+      content: !u.targetRef ? "Which task do you mean?" : chatFixesOn() ? `I couldn't find a task called "${u.targetRef}".` : `I couldn't find a task matching "${u.targetRef}". Which one do you mean?`,
       actions: [sayAction("Show my tasks", "query_tasks", "Show my tasks")],
       intent: "not_found",
     },

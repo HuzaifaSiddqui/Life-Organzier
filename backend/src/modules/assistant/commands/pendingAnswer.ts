@@ -1,6 +1,7 @@
 import { fuzzySimilarity } from "../../../lib/text.js";
 import { answerAction } from "../actions.js";
 import { cleanTitle, extractEntities } from "../entities.js";
+import { chatFixesOn } from "../chatFixes.js";
 import { shareAnswer } from "../shareRules.js";
 import type { Pending, QuickAction } from "../types.js";
 import { commandText } from "./copy.js";
@@ -45,9 +46,39 @@ export function refersBack(p: Pending, text: string, ctx: ParseCtx): boolean {
   return said.every((w) => PRONOUN.test(w) || own.has(w));
 }
 
+/** A reply that starts with an action ("add milk", "update the report", "set an alarm for 6 am"). */
+const ACTION_START = /^(?:(?:please|ok(?:ay)?|also|and|now|so)[,\s]+)*(?:add|set|create|make|remind|book|call|move|change|update|delete|remove|complete|finish|mark|rename|share|schedule|cancel|plan|show|list|start)\b/i;
+/** A question ("what's due tomorrow?", "who made you?"). */
+const QUESTION = /\?\s*$|^(?:what|when|where|who|why|how|can|could|is|are|(?:do|does)\s+(?:i|you|we|they|my))\b/i;
+const BACK_REF = /\b(?:it|that|this)\b/i;
+
+/** The open question asks for a date or time. */
+function asksDateOrTime(p: Pending): boolean {
+  if (p.kind === "task_draft" || p.kind === "routine_draft") return p.awaiting.some((a) => a === "date" || a === "time");
+  return p.kind === "past_date" || p.kind === "routine_time";
+}
+
+/**
+ * CHAT_FIXES_V2: the reply is clearly a new request, not an answer to the open question: a question, or a reply that
+ * starts with an action. Exception: to a date / time question, an action about "it / that / this" with a date or time
+ * is still the answer ("make it friday", "set it for 6 pm"). A number, yes / no or a control word is always an answer.
+ */
+export function isNewRequest(p: Pending, text: string, ctx: ParseCtx): boolean {
+  const t = text.trim();
+  if (!t || YES_NO.test(t) || NUMBER.test(t) || CONTROL.test(t)) return false;
+  if (QUESTION.test(t)) return true;
+  if (!ACTION_START.test(t)) return false;
+  if (asksDateOrTime(p) && BACK_REF.test(t)) {
+    const e = extractEntities(t, ctx.opts);
+    if (e.date || e.time) return false;
+  }
+  return true;
+}
+
 export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx): boolean {
   const t = text.trim();
   if (!t) return false;
+  if (chatFixesOn() && isNewRequest(p, t, ctx)) return false;
   if (YES_NO.test(t) || NUMBER.test(t) || CONTROL.test(t)) return true;
   const words = t.split(/\s+/).length;
   if (p.kind === "command_choice" || p.kind === "location_choice" || p.kind === "choose_task") {

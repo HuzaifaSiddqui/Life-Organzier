@@ -36,6 +36,25 @@ routines). It also reads only the request sentence of a multi-sentence message, 
 drops "I have a routine to" from titles and drops an open question after 30 quiet minutes. Each fix only withdraws an action or hands it to a matching item; what it can't settle becomes "unsure".
 Status: built and unit-tested on new sentences; turned on only after it passes on new rows.
 
+**Chat probe fixes, PR A (off by default; `CHAT_FIXES_V2`).** From the 29-message probe
+(`backend/tests/eval/chat-probe-29.json`, checked by `tests/chatProbe29.test.ts` with AI off). All rules, no model:
+- *App questions* (`assistant/appQuestions.ts`): "who made you?" and "is my data private?" get fixed, honest answers
+  (deleting the account and data is in Settings → Data & account, removed after 30 days). A model's "support" is
+  taken only when the message itself shows distress (`distressSignal`); crisis detection still runs first, unchanged.
+- *Dropping an open question* (`commands/pendingAnswer.ts → isNewRequest`): a question, or a reply that starts with an
+  action ("set an alarm for 6 am", "update the report", "add milk"), is a new request, not the answer. A back-reference
+  with a date or time ("make it friday", "set it for 6 pm") still answers a date question. When a half-made task or
+  routine is dropped, the new reply ends with `(I've left "X" unfinished.)`; a dropped "which one?" is silent.
+- *Command + reference* (`nlu.ts → refCommand`): "complete the second one", "finish it", "delete that one" act on an
+  existing task, never create one; "update the report" edits a task with that name (asks which when several match)
+  and is a new to-do when none does. "add Sana to the above task" explains that an existing task can't be shared yet
+  (`repairs.ts → shareExistingReply`; with `COLLAB_TASKS` off: "Sharing isn't available yet.").
+- *Repairs* (`assistant/repairs.ts`): "I am not asking about X, I am asking about Y" and "no, I meant Y" answer Y;
+  "no, the other one" picks the other of two candidates when one was assumed, otherwise asks "Which task do you
+  mean?"; "never mind" closes an open "which task?". A missing task reads `I couldn't find a task called "…".`
+  with [Show my tasks].
+- *Alarms* (`OOS_NOTE`): "I can't set phone alarms, but I'll keep it as a reminder." To be removed once ALARM_STYLE
+  (reminders that ring like an alarm) is built.
 **Cloud fallback (off by default; `docs/rollout.md`).** With `CLOUD_FALLBACK=on` and `LLM_PROVIDERS_CHAT` set, the
 router's model calls go through a hosted chain (`backend/src/ai/chains.ts`, order in `config/provider-order.json`):
 Ollama → Deploy GLM-5.3-flash (tier B, masked text, few-shot: the 5 nearest English bank rows) → Groq gpt-oss-20b

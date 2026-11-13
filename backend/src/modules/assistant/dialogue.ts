@@ -89,13 +89,16 @@ import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
 import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
 import { routeWithLlm } from "./commands/router.js";
+import { appQuestionReply } from "./appQuestions.js";
+import { CANCEL_CHOICE, correctionTarget, OTHER_ONE, shareExistingReply } from "./repairs.js";
+import { collabOn } from "../collab/collabRules.js";
 import { getAi } from "../../ai/llm.js";
 import { bankIndex } from "./commands/neighbours.js";
 import type { CommandArgs, ParseCtx } from "./commands/types.js";
 import { recordUndo, resolveCommandPending, runCommand } from "./commands/runtime.js";
 import { resolveDeclineReason } from "./commands/collab.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
-import { answerPrompt, isPlausibleAnswer } from "./commands/pendingAnswer.js";
+import { answerPrompt, isNewRequest, isPlausibleAnswer } from "./commands/pendingAnswer.js";
 import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
 export type { Channel } from "./channel.js";
@@ -311,6 +314,22 @@ const CHANGE_INTERVAL = /^(?:please\s+)?(?:change|switch|update|edit|move|make\s
 const STRONG_SWITCH = new Set(["set_checkin_style", "query_tasks", "plan_day", "complete_task", "delete_task", "update_task", "set_progress", "query_progress", "split_task", "undo", "greeting", "help", "switch_context", "read_back"]);
 
 /** Text turns. The crisis check is the first step, ahead of open questions, NLU and every handler. */
+/**
+ * CHAT_FIXES_V2: "no, the other one". With an open "which task?" of exactly two and one of them in focus (the one
+ * assumed), it picks the other; otherwise it asks again. Never a new task.
+ */
+async function otherOne(turn: Turn): Promise<Out> {
+  const p = turn.state.pending;
+  if (p?.kind === "choose_task") {
+    const assumed = p.candidates.findIndex((id) => turn.state.focus[0] === id);
+    if (p.candidates.length === 2 && assumed >= 0) return handleText(turn, String(2 - assumed));
+    const tasks = await prisma.task.findMany({ where: { userId: turn.user.id, id: { in: p.candidates } }, select: { id: true, title: true } });
+    const titles = p.candidates.map((id) => tasks.find((t) => t.id === id)?.title ?? "");
+    return { content: "Which task do you mean?", actions: titles.map((t, i) => answerAction(truncate(t, 32), "choose_task", `${i + 1}`)), intent: "choose_task" };
+  }
+  return { content: "Which task do you mean?", actions: [sayAction("Show my tasks", "query_tasks", "Show my tasks")], intent: "choose_task" };
+}
+
 export async function handleText(turn: Turn, text: string): Promise<Out> {
   if (!text) return { content: "I'm listening — what would you like to do?", intent: "empty" };
 
@@ -323,6 +342,32 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
       actions: [{ label: turn.settings.language === "ur" ? "آج کے غیر ضروری کام ہٹا دیں" : "Clear today's non-urgent tasks", payload: { type: "postpone_nonurgent" } }],
       intent: "crisis",
     };
+  }
+
+  // CHAT_FIXES_V2: a clearly new request (a question, or a reply that starts with an action) replaces the open
+  // question instead of being read as its answer. Only a half-made task or routine is mentioned, after the new reply.
+  if (chatFixesOn() && turn.state.pending && turn.state.pending.kind !== "offer" && isNewRequest(turn.state.pending, text, parseCtx(extractOpts(turn)))) {
+    const dropped = turn.state.pending;
+    turn.state.pending = null;
+    const left = "draft" in dropped && dropped.draft.title ? dropped.draft.title : null;
+    const out = await handleText(turn, text);
+    return left ? { ...out, content: `${out.content}\n(I've left "${left}" unfinished.)` } : out;
+  }
+
+  // CHAT_FIXES_V2: questions about the assistant itself ("who made you?", "is my data private?"): a fixed, honest answer.
+  const app = chatFixesOn() ? appQuestionReply(text) : null;
+  if (app) return app;
+  if (chatFixesOn()) {
+    const share = shareExistingReply(text, collabOn());
+    if (share) return { content: share, intent: "share_existing" };
+    if (OTHER_ONE.test(text.trim())) return otherOne(turn);
+    // "I am not asking about X, I am asking about Y", "no, I meant Y": answer Y.
+    const fixed = correctionTarget(text, Boolean(turn.state.pending));
+    if (fixed) return handleText(turn, fixed);
+    if (turn.state.pending?.kind === "choose_task" && CANCEL_CHOICE.test(text.trim())) {
+      turn.state.pending = null;
+      return { content: "Okay.", intent: "deny" };
+    }
   }
 
   // The last chat reply offered something ("Say: …"): "yes", "sure, for 6 pm" runs it; anything else moves on.
