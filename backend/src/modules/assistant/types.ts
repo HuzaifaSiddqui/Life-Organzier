@@ -26,6 +26,8 @@ export type TaskDraft = {
   assumedEndOfDay?: boolean;
   /** C2 (CHAT_FIXES_V2): "remind me" with nothing else; the title question is "What should I remind you about?". */
   askRemind?: boolean;
+  /** PR D (CHAT_FIXES_V2): "add rice, flour… to my shopping": one list task, shown as a preview first. */
+  listPreview?: boolean;
   allowNoDuration?: boolean;
   allowNoDate?: boolean;
   overrideCapacity?: boolean;

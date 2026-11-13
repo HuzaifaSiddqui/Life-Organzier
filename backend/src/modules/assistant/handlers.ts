@@ -55,7 +55,7 @@ import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
-import { parseLocationCommand } from "./entities.js";
+import { parseLocationCommand, reframedTitle } from "./entities.js";
 import { bareImperative, CHANGE_TIME, EDIT_EXISTING, feelingTail, IMPERATIVE_START } from "./nlu.js";
 import { chatFixesOn, NOT_DONE, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
@@ -152,6 +152,10 @@ function changeOrNew(turn: Turn, task: Task, text: string): Out {
   };
 }
 
+/** PR D (CHAT_FIXES_V2): "every 2 hours", "every few hours": a repeat the routines can't do. */
+const EVERY_FEW_HOURS = /\bevery\s+(?:\d{1,2}|few|couple of|two|three|four|five|six)\s+(?:hours?|hrs?|minutes?|mins?)\b/i;
+const EVERY_FEW_HOURS_REPLY = "I can't repeat a reminder every few hours yet. I can remind you once at a set time, or every day at the same time.";
+
 /** PR D (CHAT_FIXES_V2): the message says it is another one, or comes from the "Add a new …" button. */
 const DUP_SKIP = /\b(?:another|again|new|also|one more|second|extra)\b|^add (?:task|routine):/i;
 
@@ -222,6 +226,11 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
   }
   switch (u.intent) {
     case "create_task": {
+      // PR D (CHAT_FIXES_V2): the real title out of a frame ("add 'X' as …", "set an alarm so I don't forget X", …).
+      const framed = chatFixesOn() ? reframedTitle(text, u.title, extractOpts(turn)) : { title: u.title };
+      u = { ...u, title: framed.title };
+      // PR D: "remind me to drink water every 2 hours": repeats every few hours are not supported; say so, add nothing.
+      if (chatFixesOn() && EVERY_FEW_HOURS.test(text)) return { content: EVERY_FEW_HOURS_REPLY, intent: "unsupported_interval" };
       // PR D (CHAT_FIXES_V2): an open task with (nearly) the same title: ask instead of adding a duplicate, unless the
       // message says it is another one. Completed tasks never count.
       // PR D (CHAT_FIXES_V2): "I studied for 2 hours today" would become a task: acknowledged instead. (A report that
@@ -237,8 +246,8 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       }
       if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && (TASK_CUE.test(text) || feelingTail(text)))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       // Task collaboration: connected people named in the message, and whether it's for them too (shareIntent.ts).
-      const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text) };
-      const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
+      const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text), ...(framed.list ? { listPreview: true, allowNoDate: true } : {}) };
+      const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: (u.source === "llm" && u.confidence < 0.75) || Boolean(framed.list) });
       const note = cantDoNote(text);
       if (note && (out.intent === "task_created" || out.intent === "clarify" || out.intent === "past_date")) out.content = `${note}\n${out.content}`;
       if (u.mood?.explicit && out.intent === "task_created") {

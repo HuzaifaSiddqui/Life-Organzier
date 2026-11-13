@@ -808,6 +808,8 @@ const DANGLING_URDU = /\s+(?:tak|lagenge|lagega|lagegi|lagein\s*ge)\s*$/i;
 
 export function cleanTitle(residual: string): string {
   let t = residual.replace(/\s+/g, " ").trim();
+  // PR D (CHAT_FIXES_V2): "again" says it is a repeat; it is not part of the title.
+  if (chatFixesOn()) t = t.replace(/\s+again\b/gi, "").replace(/^again\s+/i, "");
   for (let i = 0; i < 3; i += 1) t = t.replace(REPLY_WORDS, "").replace(FILLER_PREFIX, "").replace(/^i\s+(?:to\s+)?/i, "").trim();
   // CHAT_FIXES_V2: "a routine to go to office", "my habit of reading": the framing is not the title.
   if (chatFixesOn()) t = t.replace(/^(?:i\s+have\s+)?(?:a|my|the)\s+(?:daily\s+|weekly\s+|morning\s+|evening\s+)?(?:routine|habit)\s+(?:to|of)\s+/i, "").trim();
@@ -847,6 +849,29 @@ export function classifyTaskType(text: string, e: Pick<Entities, "durationMinute
 
 export function needsDurationByNature(text: string, type: TaskType): boolean {
   return type === TaskType.DURATION || (type === TaskType.FLEXIBLE && DURATION_ACTIVITY_RE.test(text));
+}
+
+/**
+ * PR D (CHAT_FIXES_V2): titles hidden in a frame. "add 'investigate flaky test' as high priority" → the quoted words;
+ * "set an alarm so I don't forget the gas cylinder" → "Gas cylinder"; "add rice, flour and oil to my shopping" →
+ * "Buy rice, flour and oil" (`list`); "I want to sleep early, remind me at 10 pm to put the phone away" → "Put the
+ * phone away". Anything else keeps the title the rules made.
+ */
+export function reframedTitle(text: string, title: string, opts: ExtractOptions): { title: string; list?: boolean } {
+  const t = text.trim();
+  const cap = (s: string) => {
+    const x = s.trim().replace(/^(?:the|my|a|an)\s+/i, "").replace(/[\s.!?]+$/, "");
+    return x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
+  };
+  const quoted = /^(?:please\s+)?(?:add|create|make)\s+(?:a\s+task\s+)?['"“‘]([^'"”’]{2,80})['"”’]/i.exec(t);
+  if (quoted) return { title: cap(quoted[1]) };
+  const alarm = /^(?:please\s+)?set\s+(?:an?\s+)?(?:alarm|reminder)\s+so\s+(?:that\s+)?i\s+(?:don'?t|do not|won'?t)\s+forget\s+(?:to\s+|about\s+)?(.+)$/i.exec(t);
+  if (alarm) return { title: cap(cleanTitle(extractEntities(alarm[1], opts).residual)) || title };
+  const list = /^(?:please\s+)?add\s+(.+?)\s+to\s+(?:my|the)\s+(?:shopping|grocery|groceries)(?:\s+list)?[.!]*$/i.exec(t);
+  if (list) return { title: `Buy ${list[1].trim()}`, list: true };
+  const tail = /[,;]\s*(?:and\s+|so\s+)?(?:please\s+)?remind me\b.*?\bto\s+(.+)$/i.exec(t);
+  if (tail) return { title: cap(cleanTitle(extractEntities(tail[1], opts).residual)) || title };
+  return { title };
 }
 
 /** Generic one-word titles ("study physics" is fine, "study" alone is not). */

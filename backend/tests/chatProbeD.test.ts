@@ -271,3 +271,44 @@ test("D5: questions and progress reports never create a task; requests (17) stil
     await c.done();
   }
 });
+
+test("D6: titles out of frames; 'again' is not part of a title; the vague-title question is 'What's the task?'", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  const titles = async () => (await prisma.task.findMany({ where: { userId: c.user.id, status: { not: "DELETED" } }, orderBy: { createdAt: "asc" }, select: { title: true } })).map((t) => t.title);
+  try {
+    await withFixes(async () => {
+      await c.send("add 'update the CV' as high priority, due Monday");
+      await c.send("set an alarm so I don't forget the visa form tomorrow");
+      await c.send("I'm going to bed early, remind me at 11 pm to switch off the router");
+      await c.send("water the plants again tomorrow");
+      assert.deepEqual(await titles(), ["Update the CV", "Visa form", "Switch off the router", "Water the plants"]);
+
+      const list = await c.send("add eggs, bread and butter to my shopping list");
+      assert.equal(list.intent, "review", "one list task, shown first");
+      assert.match(list.content, /Buy eggs, bread and butter/);
+      await c.send("yes");
+      assert.ok((await titles()).includes("Buy eggs, bread and butter"));
+
+      const vague = await c.send("that thing on friday");
+      assert.equal(vague.content, "What's the task?");
+      await c.send("buy a birthday card");
+      assert.ok((await titles()).includes("Buy a birthday card"), "the vague noun is replaced, not kept in front");
+
+      const hours = await c.send("remind me to stretch every 3 hours");
+      assert.equal(hours.intent, "unsupported_interval");
+      assert.ok(!(await titles()).some((t) => /stretch/i.test(t)), "nothing added");
+    });
+  } finally {
+    await c.done();
+  }
+});
+
+test("D6: flags off keeps the old titles (unchanged)", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  try {
+    const m = await c.send("add 'update the CV' as high priority, due Monday");
+    assert.notEqual(m.content.includes("Added: Update the CV due Monday"), true);
+  } finally {
+    await c.done();
+  }
+});

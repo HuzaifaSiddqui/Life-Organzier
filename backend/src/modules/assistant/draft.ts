@@ -9,6 +9,9 @@ import { chatFixesOn } from "./chatFixes.js";
 
 export const AUTO_CREATE_CLARITY = 95;
 
+/** PR D (CHAT_FIXES_V2): vague titles that are nouns, not verbs ("that thing", "stuff"). */
+const VAGUE_NOUN = /^(?:(?:the|that|this|some|my)\s+)?(?:thing|things|stuff|something|task|tasks|it|this|that|everything|anything)$/i;
+
 /** C2 (CHAT_FIXES_V2): a title that only says "remind me" names nothing; it is never saved. */
 export const PLACEHOLDER_TITLE = /^(?:(?:please\s+)?remind(?:\s+(?:me|us))?(?:\s+(?:to|about|of))?|(?:set\s+)?(?:a\s+)?reminder|about|to|of)$/i;
 const isPlaceholder = (title: string | null) => chatFixesOn() && Boolean(title && PLACEHOLDER_TITLE.test(title.trim()));
@@ -103,7 +106,9 @@ export function clarificationQuestion(d: TaskDraft, missing: TaskSlot[]): string
   const parts: string[] = [];
   const subject = d.title && !isVagueTitle(d.title) ? `"${d.title}"` : "it";
   if (missing.includes("title") && (d.askRemind || isPlaceholder(d.title))) return "What should I remind you about?";
-  if (missing.includes("title")) {
+  // PR D (CHAT_FIXES_V2): never "What exactly will you thing?"; the other missing details are still asked.
+  if (missing.includes("title") && chatFixesOn()) parts.push("What's the task?");
+  else if (missing.includes("title")) {
     const single = d.title && isVagueTitle(d.title) && d.title.trim().split(/\s+/).length === 1;
     parts.push(single ? `What exactly will you ${(d.title as string).toLowerCase()}?` : "What's the task, exactly?");
   }
@@ -168,7 +173,8 @@ export function fillDraft(draft: TaskDraft, awaiting: TaskSlot[], text: string, 
   if (awaiting.includes("title") && !/\?\s*$|^(?:what|when|where|why|how|who|hi|hello|hey|thanks)\b/i.test(text.trim())) {
     const residual = cleanTitle(e.residual).replace(/^(?:it'?s|its|it is|about|for|on)\s+/i, "");
     if (residual && residual.length >= 2 && !/^(?:yes|no|ok|okay|sure)$/i.test(residual)) {
-      const vagueVerb = draft.title && isVagueTitle(draft.title) && !isPlaceholder(draft.title) ? draft.title : null;
+      // "study" + "physics" → "Study physics"; a vague noun ("thing", "stuff") is replaced, never kept in front.
+      const vagueVerb = draft.title && isVagueTitle(draft.title) && !isPlaceholder(draft.title) && !(chatFixesOn() && VAGUE_NOUN.test(draft.title.trim())) ? draft.title : null;
       next.title = vagueVerb && !residual.toLowerCase().startsWith(vagueVerb.toLowerCase()) ? `${vagueVerb} ${residual}` : residual.charAt(0).toUpperCase() + residual.slice(1);
       filled = true;
     }
