@@ -997,7 +997,7 @@ export async function proceedWithDraft(
 
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
   if (shareNote) lines.unshift(shareNote);
-  if (draft.assumedEndOfDay && !draft.dueTime) lines.push("11:59 PM assumed. Say 'change time' to set another.");
+  if (draft.assumedEndOfDay && !draft.dueTime) lines.push("Due by the end of the day. I'll remind you earlier that day. Say 'change time' to set a time.");
   if (scheduleNote) lines.push(scheduleNote);
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
   // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.

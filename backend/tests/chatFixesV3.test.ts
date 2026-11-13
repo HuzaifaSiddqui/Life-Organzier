@@ -307,7 +307,7 @@ test("a deadline with a date but no time: created for the end of that day with a
   try {
     const added = await say("submit the lease form on thursday");
     assert.equal(added.intent, "task_created", added.content);
-    assert.match(added.content, /11:59 PM assumed\. Say 'change time' to set another\./);
+    assert.match(added.content, /Due by the end of the day\. I'll remind you earlier that day\. Say 'change time' to set a time\./);
     const task = await prisma.task.findFirstOrThrow({ where: { userId: user.id } });
     assert.equal(task.dueTime, null, "date only");
     assert.equal(localYmd(task.dueAt!, TZ), "2026-10-08");
