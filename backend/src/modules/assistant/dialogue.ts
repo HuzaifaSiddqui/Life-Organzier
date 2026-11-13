@@ -56,7 +56,7 @@ import {
 import { attachLocation, attachPlaceByName, findSavedPlace, isPersonalPlace, savedPlaceInTitle } from "../locations/locationService.js";
 import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
-import { createRoutine, mandatoryConflicts, markTodayDone, occurrencesForDay, updateRoutine } from "../routines/routineService.js";
+import { createRoutine, generateRoutineOccurrences, mandatoryConflicts, markTodayDone, occurrencesForDay, updateRoutine } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   createTask,
@@ -84,7 +84,7 @@ import { generateReply } from "./responder.js";
 import { shareAnswer, titleForShare } from "./shareIntent.js";
 import { createSharedTask, listConnections, whatsappCollabLine } from "../collab/collabService.js";
 import { HttpError } from "../../lib/http.js";
-import { handleIntent, handlePayload, resolveHandlerPending } from "./handlers.js";
+import { confirmSplit, handleIntent, handlePayload, lookupReply, resolveHandlerPending, splitPreview } from "./handlers.js";
 import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
 import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
@@ -430,6 +430,9 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
   // CHAT_FIXES_V2: questions about the assistant itself ("who made you?", "is my data private?"): a fixed, honest answer.
   const app = chatFixesOn() ? appQuestionReply(text) : null;
   if (app) return app;
+  // PR E (CHAT_FIXES_V2): "when is the school meeting?": from the user's tasks and routines (none: as today).
+  const looked = chatFixesOn() ? await lookupReply(turn, text) : null;
+  if (looked) return looked;
   if (chatFixesOn()) {
     const added = ADD_TO_IT_CUE.test(text) ? addToExistingReply(text, collabOn(), await connectionNames(turn.user.id)) : null;
     if (added) {
@@ -718,6 +721,26 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
     }
     case "decline_reason":
       return resolveDeclineReason(turn, text);
+    case "split_ask": {
+      // PR E: "outline, draft and review" → the preview; anything unusable drops the question.
+      turn.state.pending = null;
+      const parts = text.trim().replace(/[.!?]+$/, "").replace(/^(?:into|in)\s+/i, "").split(/\s*(?:,|;|\band\b|&|\+|\n)\s*/i).map((x) => x.trim()).filter((x) => x.length >= 2);
+      const task = parts.length ? await getTaskForUser(turn.user.id, p.taskId) : null;
+      return task ? splitPreview(turn, task, parts) : null;
+    }
+    case "split_preview": {
+      if (yes || /^(?:add them|add|split it|do it)\b/i.test(text.trim())) return confirmSplit(turn, p);
+      turn.state.pending = null;
+      if (no) return { content: "Okay, not split.", intent: "cancel" };
+      return null;
+    }
+    case "routine_preview": {
+      // PR E: "Add the routine …? Repeats every day until you stop it." — yes / save adds it; no / cancel drops it.
+      turn.state.pending = null;
+      if (yes || /^(?:save|add it|keep it)\b/i.test(text.trim())) return proceedWithRoutine(turn, p.draft);
+      if (no) return { content: "Okay, not added.", intent: "cancel" };
+      return null;
+    }
     case "routine_time": {
       // Asked once: a time or part of day ("evening", "shaam", "9:30 pm") sets it, "no reminder" clears it;
       // anything else drops the question and the default time stays.
@@ -1741,6 +1764,16 @@ export async function storeInfo(turn: Turn, text: string): Promise<Out> {
     actions: [{ label: "What do you know about me?", payload: { type: "navigate", screen: "Memory" } }],
     intent: "provide_info",
   };
+}
+
+/** PR E (CHAT_FIXES_V2): "Routines tomorrow: …" for a list of tomorrow's tasks. */
+export async function routinesTextFor(turn: Turn, ymd: string, label: string): Promise<string> {
+  // Tomorrow's occurrences may not be made yet (they are generated ahead); make them (idempotent) before reading.
+  await generateRoutineOccurrences(turn.user.id, turn.tz, 2, turn.now);
+  const occ = await occurrencesForDay(turn.user.id, turn.tz, ymd, turn.settings.currentContext);
+  const pending = occ.filter((o) => o.status === "PENDING");
+  if (!pending.length) return "";
+  return `${label}: ${listJoin(pending.slice(0, 4).map((o) => `${o.routine.title}${o.dueTime ? ` (${o.dueTime})` : ""}`))}.`;
 }
 
 export async function todayRoutinesText(turn: Turn): Promise<string> {

@@ -40,6 +40,7 @@ import {
   storeInfo,
   taskCard,
   taskById,
+  routinesTextFor,
   todayRoutinesText,
   dueLabel,
   extractOpts,
@@ -49,7 +50,7 @@ import {
   handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
-import { alreadyDoneTask, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
+import { alreadyDoneTask, coversAll, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
 import { progressReport } from "./appQuestions.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
@@ -151,6 +152,42 @@ function changeOrNew(turn: Turn, task: Task, text: string): Out {
     command: "update_task", // the question is about changing that task
   };
 }
+
+/**
+ * PR E (CHAT_FIXES_V2): "when is the school meeting?", "which days does the tuition pickup happen?": answered from the
+ * user's open tasks and active routines by title. Read-only. Several matches: up to 3, asking which. None: null (as today).
+ */
+const LOOKUP = /^(?:(?:so|ok|and|hey)[,\s]+)?(?:when(?:'s|s| is| are)|what (?:time|day) is|which days? (?:does|do|is|are))\s+(?:the\s+|my\s+|our\s+)?(.+?)(?:\s+(?:happen(?:ing)?|due|on|start(?:ing)?|scheduled|be))?\s*\??$/i;
+
+export async function lookupReply(turn: Turn, text: string): Promise<Out | null> {
+  const m = LOOKUP.exec(text.trim());
+  const ref = m?.[1]?.trim();
+  if (!ref || !contentTokens(ref).length) return null;
+  const tasks = await prisma.task.findMany({ where: { userId: turn.user.id, status: { in: ["PENDING", "IN_PROGRESS"] }, archived: false }, take: 300 });
+  const routines = await prisma.routine.findMany({ where: { userId: turn.user.id, active: true } });
+  const fits = (title: string) => coversAll(ref, title) || refScore(ref, title) >= 0.8;
+  const found = [...tasks.filter((t) => fits(t.title)).map((t) => ({ kind: "task" as const, t })), ...routines.filter((r) => fits(r.title)).map((r) => ({ kind: "routine" as const, r }))];
+  if (!found.length) return null;
+  const say = (x: (typeof found)[number]) => {
+    if (x.kind === "task") return x.t.dueAt ? `"${x.t.title}" is due ${dueLabel(x.t, turn)}.` : `"${x.t.title}" has no due date yet.`;
+    const days = daysOf(x.r);
+    const when = days.length === 7 ? "every day" : days.map((d) => DAY_SHORT[d]).join(", ");
+    return `"${x.r.title}": ${when}${x.r.dueTime ? ` at ${x.r.dueTime}` : ""}.`;
+  };
+  // command: "query_tasks" — a read-only question about the user's tasks and routines, like the other task questions.
+  if (found.length === 1) return { content: say(found[0]), intent: "lookup", command: "query_tasks" };
+  const shown = found.slice(0, 3);
+  const titleOf = (x: (typeof found)[number]) => (x.kind === "task" ? x.t.title : x.r.title);
+  return {
+    content: ["Which one do you mean?", ...shown.map((x) => `• ${titleOf(x)}`)].join("\n"),
+    actions: shown.map((x) => sayAction(truncate(titleOf(x), 28), "query_tasks", `when is ${titleOf(x)}`)),
+    intent: "lookup_choose",
+    command: "query_tasks",
+  };
+}
+
+/** PR E (CHAT_FIXES_V2): a repeat with a limit routines can't keep ("this week", "until friday", "for two weeks"). */
+const LIMITED_REPEAT = /\b(?:this|next|the)\s+(?:week|month)\b|\b(?:until|till)\b|\bfor\s+(?:a|one|two|three|four|\d+)\s+(?:weeks?|months?|days?)\b/i;
 
 /** PR D (CHAT_FIXES_V2): "every 2 hours", "every few hours": a repeat the routines can't do. */
 const EVERY_FEW_HOURS = /\bevery\s+(?:\d{1,2}|few|couple of|two|three|four|five|six)\s+(?:hours?|hrs?|minutes?|mins?)\b/i;
@@ -290,6 +327,18 @@ ${asked.content}` } : asked;
       if (chatFixesOn() && draft.title && !DUP_SKIP.test(text)) {
         const same = await routineDuplicate(turn.user.id, draft);
         if (same) return routineChangeOrNew(turn, same, text);
+      }
+      // PR E (CHAT_FIXES_V2): "every evening this week": a routine repeats until stopped; say so and ask before saving.
+      if (chatFixesOn() && LIMITED_REPEAT.test(text) && draft.title && draft.frequency) {
+        turn.state.pending = { kind: "routine_preview", draft };
+        return {
+          content: `Add the routine "${draft.title}"? Repeats every day until you stop it.`,
+          actions: [
+            { label: "Save", payload: { type: "confirm_pending" }, style: "primary" },
+            { label: "Cancel", payload: { type: "cancel_pending" } },
+          ],
+          intent: "routine_preview",
+        };
       }
       return proceedWithRoutine(turn, draft);
     }
@@ -734,7 +783,41 @@ async function doSplit(turn: Turn, task: Task, parts: string[]): Promise<Out> {
 async function splitIntent(turn: Turn, u: Understanding): Promise<Out> {
   const found = await chooseOrResolve(turn, u, "split", { parts: u.splitParts });
   if ("out" in found) return found.out;
+  if (chatFixesOn()) {
+    // PR E: never one junk subtask ("smaller tasks"): ask how; named (or counted) parts are shown before they are added.
+    if (!u.splitParts.length || u.splitParts.every((p) => GENERIC_PART.test(p.trim()))) {
+      focusOn(turn, found.task.id);
+      turn.state.pending = { kind: "split_ask", taskId: found.task.id };
+      return { content: "How should I split it? For example: outline, draft, review.", actions: [{ label: "Cancel", payload: { type: "cancel_pending" } }], intent: "split_ask" };
+    }
+    return splitPreview(turn, found.task, u.splitParts);
+  }
   return doSplit(turn, found.task, u.splitParts);
+}
+
+const GENERIC_PART = /^(?:(?:smaller|small|little|separate|more)\s+)?(?:tasks?|parts?|pieces?|chunks?|steps?|bits?|sub-?tasks?)$/i;
+
+/** PR E: the subtasks as a preview: [Add them] [Cancel]. */
+export function splitPreview(turn: Turn, task: Task, parts: string[]): Out {
+  const names = parts.map((p) => p.trim()).filter(Boolean).slice(0, 12).map((p) => p.charAt(0).toUpperCase() + p.slice(1));
+  focusOn(turn, task.id);
+  turn.state.pending = { kind: "split_preview", taskId: task.id, parts: names };
+  return {
+    content: [`Split "${task.title}" into ${names.length} ${names.length === 1 ? "part" : "parts"}?`, ...names.map((n) => `• ${n}`)].join("\n"),
+    actions: [
+      { label: "Add them", payload: { type: "confirm_pending" }, style: "primary" },
+      { label: "Cancel", payload: { type: "cancel_pending" } },
+    ],
+    intent: "split_preview",
+  };
+}
+
+/** PR E: "Add them" / yes to the split preview. */
+export async function confirmSplit(turn: Turn, p: { taskId: string; parts: string[] }): Promise<Out> {
+  turn.state.pending = null;
+  const task = await getTaskForUser(turn.user.id, p.taskId);
+  if (!task) return { content: "I couldn't find that task anymore.", intent: "not_found" };
+  return doSplit(turn, task, p.parts);
 }
 
 const ORDINAL_REF = /\bthe\s+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2}(?:st|nd|rd|th))(?:\s+(?:one|task|item))?\b/i;
@@ -746,7 +829,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   // Deterministic parse (English, Urdu, Roman Urdu) decides what is asked; the regexes below cover older English phrasing.
   const q = parseQuery(text);
   if (q?.kind === "classes" || q?.kind === "next_class" || q?.kind === "where_class") return classQuery(turn, q);
-  if (q?.kind === "urgent") return urgentQuery(turn);
+  if (q?.kind === "urgent") return urgentQuery(turn, chatFixesOn() ? topicOf(text) : null);
 
   // "my physics task" names the physics task: the word "task" is dropped, not a reason to list today.
   // CHAT_FIXES_V2: "what about the third one, when is it due?": a position in the last list shown (it stays shown).
@@ -799,7 +882,10 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
       const from = startOfLocalDay(r.from, turn.tz);
       const to = startOfLocalDay(addDaysYmd(r.to, 1), turn.tz);
       const list = visible.filter((t) => t.dueAt && t.dueAt >= from && t.dueAt < to).sort((a, b) => (a.dueAt?.getTime() ?? 0) - (b.dueAt?.getTime() ?? 0));
-      return taskListReply(turn, r.label.charAt(0).toUpperCase() + r.label.slice(1), list, "");
+      // PR E: tomorrow's list also names tomorrow's routines, like "Routines today".
+      const tomorrow = addDaysYmd(turn.todayYmd, 1);
+      const routines = r.from === tomorrow && r.to === tomorrow ? await routinesTextFor(turn, tomorrow, "Routines tomorrow") : "";
+      return taskListReply(turn, r.label.charAt(0).toUpperCase() + r.label.slice(1), list, routines);
     }
   }
   const range = q?.kind === "overdue" ? "overdue" : q?.kind === "due" ? q.range : null;
@@ -819,6 +905,14 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   } else if (!q && (/\b(?:all|pending|everything|left|remaining)\b/i.test(text) || (chatFixesOn() && NOT_DONE.test(text)))) {
     title = "All pending";
     list = visible;
+    // PR E (CHAT_FIXES_V2): "what's pending for the conference?": only the tasks about it.
+    const topic = chatFixesOn() ? topicOf(text) : null;
+    if (topic) {
+      const about = list.filter((t) => aboutTopic(t, topic));
+      if (!about.length) return { content: `Nothing pending about "${topic}".`, intent: "query_tasks", command: "query_tasks" };
+      title = `Pending: ${topic}`;
+      list = about;
+    }
   } else {
     const end = startOfLocalDay(addDaysYmd(turn.todayYmd, 1), turn.tz);
     list = visible.filter((t) => (t.dueAt && t.dueAt < end) || (t.scheduledStart && t.scheduledStart < end));
@@ -856,13 +950,37 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
 }
 
 /** "What's my most urgent task": overdue first, then due within 24 h, then priority; top 3. */
-async function urgentQuery(turn: Turn): Promise<Out> {
-  const top = mostUrgent(await listActiveTasks(turn.user.id), turn.now);
+/**
+ * PR E (CHAT_FIXES_V2): the topic a list question is about: "which of my assignments …", "pending for the conference".
+ * A plain word (not "tasks", "things", a day…); singular form.
+ */
+const NOT_TOPIC = new Set(["task", "thing", "todo", "item", "stuff", "work", "day", "week", "today", "tomorrow", "list", "plan", "deadline", "urgent", "important", "pending", "open", "remaining", "everything", "one", "it", "them", "me", "incomplete", "unfinished", "undone", "uncompleted", "completed", "complete", "done", "finished", "overdue", "upcoming", "current", "active", "other", "next", "left", "new", "old", "top", "priority", "priorities", "main", "biggest", "first", "most", "best", "highest", "current", "right"]);
+function topicOf(text: string): string | null {
+  const m = /\b(?:of my|my|for the|for my|for|about the|about|related to(?: the)?)\s+([a-z][a-z-]{2,})\b(?!\s+(?:tasks?|todos?|things|items?|work|stuff|ones?)\b)/i.exec(text);
+  const word = m?.[1]?.toLowerCase().replace(/(?<=[a-z]{3})s$/, "");
+  return word && !NOT_TOPIC.has(word) ? word : null;
+}
+function aboutTopic(t: Task, topic: string): boolean {
+  const said = [t.title, t.category ?? "", ...(Array.isArray(t.tags) ? (t.tags as string[]) : [])].join(" ").toLowerCase();
+  return new RegExp(`\\b${topic}`, "i").test(said);
+}
+
+async function urgentQuery(turn: Turn, topic: string | null = null): Promise<Out> {
+  const open = await listActiveTasks(turn.user.id);
+  const about = topic ? open.filter((t) => aboutTopic(t, topic)) : [];
+  if (topic && about.length) {
+    const top = mostUrgent(about, turn.now);
+    focusOn(turn, ...top.map((t) => t.id).reverse());
+    turn.state.listed = top.map((t) => t.id);
+    const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
+    return { content: [`Most urgent (${topic}):`, ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
+  }
+  const top = mostUrgent(open, turn.now);
   if (!top.length) return { content: "Nothing urgent. You have no pending tasks.", intent: "query_urgent" };
   focusOn(turn, ...top.map((t) => t.id).reverse());
   turn.state.listed = top.map((t) => t.id);
   const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
-  return { content: ["Most urgent:", ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
+  return { content: [...(topic ? [`No open tasks about "${topic}". Most urgent overall:`] : ["Most urgent:"]), ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
 }
 
 /** Class questions are answered from the user's routines (timetable), never from raw document text. */
@@ -886,6 +1004,20 @@ export async function planDay(turn: Turn, ymd: string | null): Promise<Out> {
   const target = ymd ?? turn.todayYmd;
   const plan = await dayPlan(turn.user.id, turn.settings, target, turn.now);
   const suggested = plan.blocks.filter((b) => b.kind === "suggested");
+  // PR E (CHAT_FIXES_V2): never "0 min of work": say nothing is due and name the most urgent open tasks instead.
+  if (chatFixesOn() && plan.load.minutes === 0 && !suggested.length) {
+    const day = plan.label === "today" ? "today" : plan.label;
+    const top = mostUrgent(await listActiveTasks(turn.user.id), turn.now);
+    if (!top.length) return { content: `Nothing is due ${day}, and you have no open tasks.`, intent: "plan_day" };
+    focusOn(turn, ...top.map((t) => t.id).reverse());
+    turn.state.listed = top.map((t) => t.id);
+    const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
+    return {
+      content: [`Nothing is due ${day}. Most urgent:`, ...lines].join("\n"),
+      cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }],
+      intent: "plan_day",
+    };
+  }
   const lines = [
     `Here's ${plan.label === "today" ? "today's" : `${plan.label}'s`} plan — ${formatDuration(plan.load.minutes)} of work against your ${formatDuration(plan.load.capacity)} capacity.`,
     ...plan.notes,
@@ -1033,6 +1165,11 @@ export async function handlePayload(turn: Turn, payload: ActionPayload): Promise
       const p = turn.state.pending;
       if (!p) return { content: "There's nothing waiting for confirmation.", intent: "noop" };
       if (p.kind === "task_review") return proceedWithDraft(turn, p.draft, p.source, { clarified: true, reviewed: true });
+      if (p.kind === "split_preview") return confirmSplit(turn, p);
+      if (p.kind === "routine_preview") {
+        turn.state.pending = null;
+        return proceedWithRoutine(turn, p.draft);
+      }
       if (p.kind === "confirm_delete") return confirmDelete(turn, p.taskId);
       if (p.kind === "confirm_command") return confirmPending(turn, p);
       if (p.kind === "mood_confirm" && isMood(p.mood)) return confirmMood(turn, p.mood, p.confidence);
