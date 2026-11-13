@@ -178,3 +178,34 @@ test("'my week' / 'the week' = this week (Mon–Sun); 'this coming week' = next 
   });
   assert.equal(r("what's my week like"), "unknown", "flag off: as before (the range reader is only used with the flag)");
 });
+
+test("bulk move: a named source day other than today moves that day's tasks (preview first), never today's", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([]);
+  const { createTask } = await import("../src/modules/tasks/taskService.js");
+  const { dueDateFromYmd } = await import("../src/lib/time.js");
+  const mk = (title: string, ymd: string) => createTask({ userId: c.user.id, tz: TZ, deviceId: null }, { title, priority: "MEDIUM", source: "MANUAL", dueDate: dueDateFromYmd(ymd, TZ), dueTime: "5:00 PM" } as never);
+  const dueOf = async (title: string) => (await prisma.task.findFirstOrThrow({ where: { userId: c.user.id, title } })).dueDate?.toISOString().slice(0, 10);
+  try {
+    await mk("Gym bag ready", "2026-11-12"); // today (Thu)
+    await mk("Send invoice", "2026-11-14"); // Saturday
+    await withFixes(async () => {
+      const preview = await c.send("shift everything from saturday to next monday");
+      assert.equal(preview.intent, "bulk_move_today_confirm");
+      assert.match(preview.content, /^Move 1 task from Saturday to Monday\?/);
+      assert.equal(await dueOf("Send invoice"), "2026-11-13", "nothing moves before the confirmation (stored as local midnight, UTC)");
+      const moved = await c.send("yes");
+      assert.equal(moved.intent, "bulk_moved");
+      assert.equal(await dueOf("Send invoice"), "2026-11-15", "Mon 16 Nov");
+      assert.equal(await dueOf("Gym bag ready"), "2026-11-11", "today's task is not touched");
+
+      const none = await c.send("move everything from sunday to tuesday");
+      assert.equal(none.intent, "bulk_nothing");
+      assert.match(none.content, /^Nothing is due or planned Sunday/);
+
+      const todayOnly = await c.send("move everything from today to friday");
+      assert.match(todayOnly.content, /^Move 1 task from today to tomorrow\?|^Move 1 task from today to Friday\?/);
+    });
+  } finally {
+    await c.done();
+  }
+});

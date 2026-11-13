@@ -49,6 +49,9 @@ const en = {
   // bulk
   bulkNothingToday: "Nothing is due or planned today, so there's nothing to move.",
   bulkMovePreview: (count: number, day: string) => `Move ${n(count, "task", "tasks")} from today to ${day}?`,
+  // C2 (CHAT_FIXES_V2): a named source day other than today. English only (Urdu copy after review).
+  bulkMovePreviewFrom: (count: number, from: string, day: string) => `Move ${n(count, "task", "tasks")} from ${from} to ${day}?`,
+  bulkNothingOn: (from: string) => `Nothing is due or planned ${from}, so there's nothing to move.`,
   bulkMoved: (count: number, day: string) => `Moved ${n(count, "task", "tasks")} to ${day}.`,
   bulkNoTag: (tag: string) => `No open tasks are tagged #${tag}.`,
   bulkTagPreview: (count: number, tag: string) => `Mark ${n(count, "task", "tasks")} tagged #${tag} as done?`,
@@ -110,6 +113,9 @@ const ur: Copy = {
   to: "سے",
   bulkNothingToday: "آج کچھ طے یا واجب نہیں، اس لیے منتقل کرنے کو کچھ نہیں۔",
   bulkMovePreview: (count, day) => `آج کے ${count} کام ${day} پر منتقل کر دوں؟`,
+  // English only until the Urdu copy is reviewed (C2, CHAT_FIXES_V2).
+  bulkMovePreviewFrom: (count, from, day) => `Move ${count} ${count === 1 ? "task" : "tasks"} from ${from} to ${day}?`,
+  bulkNothingOn: (from) => `Nothing is due or planned ${from}, so there's nothing to move.`,
   bulkMoved: (count, day) => `${count} کام ${day} پر منتقل کر دیے۔`,
   bulkNoTag: (tag) => `#${tag} والا کوئی کھلا کام نہیں۔`,
   bulkTagPreview: (count, tag) => `#${tag} والے ${count} کام مکمل کر دوں؟`,
