@@ -5,7 +5,9 @@ import { AiService, setAi } from "../src/ai/llm.js";
 import { prisma } from "../src/config/db.js";
 import "../src/modules/assistant/commands/registry.js";
 import { appQuestionReply } from "../src/modules/assistant/appQuestions.js";
+import { NOT_DONE } from "../src/modules/assistant/chatFixes.js";
 import { parseTwoTasks } from "../src/modules/assistant/commands/compound.js";
+import { parseFindQuery } from "../src/modules/assistant/commands/find.js";
 import { getCommand, parseCtx } from "../src/modules/assistant/commands/registry.js";
 import { handleAssistantMessage } from "../src/modules/assistant/dialogue.js";
 import { extractEntities } from "../src/modules/assistant/entities.js";
@@ -79,6 +81,28 @@ test("open tasks: 'not done', 'unfinished', 'remaining' list open tasks, never t
     assert.notEqual(rulesUnderstand("remind me to pay the remaining fees tomorrow", opts).intent, "query_tasks", "a task with 'remaining' is still a task");
   });
 });
+
+const NOT_DONE_NO = ["have I paid the fee yet?", "has she replied yet?", "is it Friday yet?", "hasn't she finished the report?", "didn't she reply yet?", "haven't they paid yet?"];
+const NOT_DONE_YES = ["what haven't I finished yet?", "tasks not done yet", "show me tasks that are not done", "what hasn't been done?", "I haven't started the lab yet, what's left?"];
+
+test("NOT_DONE: first person only; 'yet' only with 'I / we haven't / didn't'", async () => {
+  await withFixes(() => {
+    const ctx = parseCtx(opts);
+    const completed = getCommand("insights_completed")!;
+    for (const t of NOT_DONE_NO) {
+      assert.equal(NOT_DONE.test(t), false, t); // the gate of all four places (nlu.ts, queryTasks, find.ts, insights.ts)
+      assert.equal(OPEN_LIST_RULE(t), false, `${t}: nlu.ts open-tasks rule does not fire`);
+    }
+    for (const t of NOT_DONE_YES) {
+      assert.equal(NOT_DONE.test(t), true, t);
+      assert.equal(rulesUnderstand(t, opts).intent, "query_tasks", `${t}: nlu.ts`);
+      assert.equal(completed.parse(t, ctx), null, `${t}: insights.ts never the completed list`);
+      assert.notEqual(parseFindQuery(t, ctx)?.status, "completed", `${t}: find.ts never searches completed tasks`);
+    }
+  });
+});
+/** The nlu.ts open-tasks rule fires: an ask, and a "not done" word or pending / remaining / left. */
+const OPEN_LIST_RULE = (t: string) => NOT_DONE.test(t) || /\b(?:pending|remaining|left)\b/i.test(t);
 
 test("B5: priority words need 'priority' or a clear marker; a trailing feeling is a mood", async () => {
   await withFixes(() => {
@@ -163,6 +187,33 @@ test("through the chat: two tasks (one preview, one Undo), never a silent duplic
       const moved = await send("actually move dentist appointment to monday");
       assert.equal(moved.intent, "task_updated");
       assert.match(moved.content, /Dentist appointment/);
+    });
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("NOT_DONE through the chat: questions about others or 'yet' never get the open list; 'not done' lists open tasks only", { skip: !dbAvailable && "no database" }, async () => {
+  setAi(new AiService([]));
+  const user = await prisma.user.create({ data: { firebaseUid: `test-${randomUUID()}`, email: `ci-${randomUUID()}@example.test` } });
+  await prisma.userSettings.create({ data: { userId: user.id, timezone: TZ, tier: "PRO" } });
+  await prisma.task.create({ data: { userId: user.id, title: "Lab report" } });
+  await prisma.task.create({ data: { userId: user.id, title: "Old essay", status: "COMPLETED", completedAt: NOW, progress: 100 } });
+  const conversation = await prisma.conversation.create({ data: { userId: user.id, channel: "APP", title: "t" } });
+  const send = async (text: string) =>
+    (await handleAssistantMessage({ user, settings: await prisma.userSettings.findUniqueOrThrow({ where: { userId: user.id } }), deviceId: null, channel: "APP", conversationId: conversation.id, now: NOW, text, payload: null, label: null } as never)).message;
+  const titles = (m: { cards?: unknown[] }) => (m.cards ?? []).flatMap((c) => ((c as { tasks?: Array<{ title: string }> }).tasks ?? []).map((x) => x.title));
+  try {
+    await withFixes(async () => {
+      for (const t of NOT_DONE_NO) {
+        const m = await send(t);
+        assert.doesNotMatch(m.content, /^All pending/, `${t}: ${m.content}`);
+        assert.ok(!titles(m).includes("Old essay"), t);
+      }
+      for (const t of NOT_DONE_YES) {
+        const m = await send(t);
+        assert.ok(titles(m).includes("Lab report") && !titles(m).includes("Old essay"), `${t}: [${m.intent}] ${m.content} {${titles(m).join(", ")}}`);
+      }
     });
   } finally {
     await prisma.user.delete({ where: { id: user.id } });

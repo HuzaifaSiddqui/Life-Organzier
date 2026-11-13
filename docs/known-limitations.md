@@ -38,7 +38,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   last 7 days" stay rolling. Side effect: the same reader (`ranges.ts → resolveRange`) serves search (`find.ts`) and
   document instructions (`DOC_INSTRUCTIONS`), so with `CHAT_FIXES_V2` on, "only this week" on a document also keeps
   Monday to Sunday (on a Thursday that drops next Monday–Wednesday, which the rolling week kept); with the flag off it
-  stays today plus 6 days. "which X tasks are done?" answers with today's list (as before PR B). The alarm note ("I can't set phone alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is
+  stays today plus 6 days. "which X tasks are done?" answers with today's list (as before PR B).
+  "Not done" questions are read in the first person only ("what haven't I finished yet?"; "hasn't she finished the
+  report?" is not about the user's list). With a day in it, "what didn't I finish yesterday?" answers with the open
+  tasks that were due that day ("Nothing due yesterday." when none), not the tasks left unfinished on that day. The alarm note ("I can't set phone alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is
   built.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
