@@ -91,6 +91,10 @@ test("review #63 (2): \"can't\" is not a question; 'when I get home' answers a d
       assert.equal(isPlausibleAnswer(draft, t, ctx), true, t);
     }
     assert.equal(isNewRequest(draft, "when is my dentist appointment?", ctx), true, "with '?' it is a question");
+    for (const t of ["when is my dentist appointment", "when does the meeting start", "when can I do this", "when will it end", "when should I study"]) {
+      assert.equal(isNewRequest(draft, t, ctx), true, `${t}: a question without "?"`);
+      assert.equal(isPlausibleAnswer(draft, t, ctx), false, t);
+    }
     assert.equal(isNewRequest(confirm, "when I get home", ctx), true, "not a date question: a question as before");
   });
 });
@@ -149,6 +153,10 @@ test("A3 / review #63 (5): people on an existing task only for @name or a connec
     assert.doesNotMatch(r!.content, /people/, t);
   }
   assert.equal(addToExistingReply("add milk to it", true, people)?.item, "Milk");
+  // A field of the task is a change, not an item: left to the usual handling.
+  for (const t of ["add a reminder to it", "add 30 minutes to it", "add an hour to that task", "add a deadline to it", "add a due date to this", "add high priority to it", "add a note to it", "add #exam to it", "add a tag to that one", "add the time to it", "add 2 hrs to it"]) {
+    assert.equal(addToExistingReply(t, true, people), null, t);
+  }
   for (const t of ["add milk to the list", "add Sana's birthday", "share notes with Ali tomorrow", "add milk"]) assert.equal(addToExistingReply(t, true, people), null, t);
 });
 

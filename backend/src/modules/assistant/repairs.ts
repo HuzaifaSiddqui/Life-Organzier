@@ -28,6 +28,10 @@ const EXISTING = String.raw`(?:it|this|that|the\s+(?:above|previous|last|same)\s
 const SHARE_IT = new RegExp(String.raw`^(?:please\s+)?share\s+${EXISTING}\s+with\s+@?\w+`, "i");
 const ADD_TO_IT = new RegExp(String.raw`^(?:please\s+)?(?:add|invite|include|put)\s+(.+?)\s+(?:to|on|in|into)\s+${EXISTING}[\s.!]*$`, "i");
 
+/** A field of the task ("a reminder", "30 minutes", "a deadline", "high priority", "#exam"): not an item or a person. */
+const TASK_FIELD =
+  /^(?:(?:a|an|the|one|two|another|some|more|extra)\s+)?(?:(?:\d+|half an?|an?|one|two|three|four|five|ten|fifteen|twenty|thirty|forty five|sixty)\s*(?:-\s*)?(?:min(?:ute)?s?|h(?:ou)?rs?|hours?)|(?:high|low|medium|urgent|top)\s+priority|reminders?|alarm|deadline|due\s+(?:date|time)|date|time|duration|estimate|priority|tags?|labels?|#\w+|notes?|description|location|place)\b/i;
+
 export type AddToExisting = { content: string; intent: "share_existing" | "add_to_task"; item?: string };
 
 /**
@@ -45,6 +49,8 @@ export function addToExistingReply(text: string, collab: boolean, people: string
   const m = ADD_TO_IT.exec(t);
   if (!m) return null;
   const said = m[1].trim();
+  // "add a reminder to it", "add 30 minutes to it": a change to the task, left to the usual handling.
+  if (TASK_FIELD.test(said)) return null;
   const names = said.split(/\s*(?:,|\band\b|&)\s*/i).filter(Boolean);
   if (names.every((n) => /^@\w+$/.test(n) || people.includes(n.toLowerCase()))) return shareReply();
   const item = said.charAt(0).toUpperCase() + said.slice(1);

@@ -65,8 +65,11 @@ export function refersBack(p: Pending, text: string, ctx: ParseCtx, allowVerb = 
 const ACTION_START = /^(?:(?:please|ok(?:ay)?|also|and|now|so)[,\s]+)*(?:add|set|create|make|remind|book|call|move|change|update|delete|remove|complete|finish|mark|rename|share|schedule|cancel|plan|show|list|start)\b/i;
 /** A question ("what's due tomorrow?", "who made you?"); "can't" is not "can" (the apostrophe ends the word). */
 const QUESTION = /\?\s*$|^(?:what|when|where|who|why|how|can|could|is|are|(?:do|does)\s+(?:i|you|we|they|my))\b(?!['’])/i;
-/** To a date / time question, "when I get home", "after lunch", "by friday" (no "?") is the answer. */
-const WHEN_ANSWER = /^(?:when|after|before|by)\b(?!.*\?\s*$)/i;
+/**
+ * To a date / time question, "when I get home", "after lunch", "by friday" is the answer; not when it is a question:
+ * a "?", or "when" + is / does / can … ("when is my dentist appointment", "when can I do this").
+ */
+const WHEN_ANSWER = /^(?:when(?!\s+(?:is|are|was|were|do|does|did|will|can|could|should|would)\b)|after|before|by)\b(?!.*\?\s*$)/i;
 
 /** The open question asks for a date or time. */
 function asksDateOrTime(p: Pending): boolean {
