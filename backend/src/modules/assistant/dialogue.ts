@@ -99,7 +99,7 @@ import { recordUndo, resolveCommandPending, runCommand } from "./commands/runtim
 import { resolveDeclineReason } from "./commands/collab.js";
 import { parseMulti, runMulti } from "./commands/multi.js";
 import { answerPrompt, CANCEL_QUESTION, isNewRequest, isPlausibleAnswer } from "./commands/pendingAnswer.js";
-import type { ActionPayload, AssistantReply, Card, DialogueState, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
+import type { ActionPayload, AssistantReply, Card, DialogueState, Pending, QuickAction, RoutineDraft, TaskDraft } from "./types.js";
 
 export type { Channel } from "./channel.js";
 import type { Channel } from "./channel.js";
@@ -348,6 +348,25 @@ async function whichToMove(turn: Turn, text: string): Promise<Out> {
   };
 }
 
+const PICK_CHANGE = /^(?:1|one|first|the first one|change(?: it| that| the (?:existing|old) one)?|update(?: it)?|edit(?: it)?|open(?: routines)?)[.!]*$/i;
+const PICK_NEW = /^(?:2|two|second|the second one|(?:add|create|make)(?: it| a| the)?(?: new)?(?: one| task| routine)?(?: anyway)?|(?:a )?new(?: one| task| routine)?|yes,? add (?:it|a new one))[.!]*$/i;
+
+/** PR D: the typed answer to "Change X, or add a new task / routine?"; anything else drops the question. */
+async function answerChangeOrNew(turn: Turn, p: Extract<Pending, { kind: "change_or_new" }>, text: string): Promise<Out | null> {
+  const t = text.trim();
+  if (PICK_CHANGE.test(t)) {
+    turn.state.pending = null;
+    if (p.routine) return { content: `Open Routines to change "${p.ref}".`, actions: [{ label: "Open Routines", payload: { type: "navigate", screen: "Routines" } }], intent: "routine_open" };
+    return runCommand(turn, "update_task", { text: p.text, ref: p.ref }, { text: p.text });
+  }
+  if (PICK_NEW.test(t)) {
+    turn.state.pending = null;
+    return handleText(turn, `add ${p.routine ? "routine" : "task"}: ${p.text}`);
+  }
+  turn.state.pending = null;
+  return null;
+}
+
 /** "never mind", "cancel", "stop" (bare) to an open "which task?". */
 const CANCEL_CHOICE = /^(?:no[,.]?\s+)?(?:never ?mind|cancel|stop)[\s.!]*$/i;
 /** Only "add / share / invite / include / put … it|that|this …" can be about an existing task (saves the lookup). */
@@ -383,6 +402,12 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
 
   // PR B: "actually move it to friday", "ok add milk": a filler word in front of a command is not part of it.
   if (chatFixesOn()) text = text.replace(FILLER_LEAD, "");
+
+  // PR D (CHAT_FIXES_V2): "Change X, or add a new task?" answered in words ("1", "change it", "2", "add a new task").
+  if (chatFixesOn() && turn.state.pending?.kind === "change_or_new") {
+    const answered = await answerChangeOrNew(turn, turn.state.pending, text);
+    if (answered) return answered;
+  }
 
   // CHAT_FIXES_V2: "cancel that", "forget it" close whatever question is open (never a delete); so does "never mind"
   // to "which task?", which used to be asked again.

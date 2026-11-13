@@ -9,6 +9,9 @@ import { chatFixesOn } from "./chatFixes.js";
 
 export const AUTO_CREATE_CLARITY = 95;
 
+/** PR D (CHAT_FIXES_V2): vague titles that are nouns, not verbs ("that thing", "stuff"). */
+const VAGUE_NOUN = /^(?:(?:the|that|this|some|my)\s+)?(?:thing|things|stuff|something|task|tasks|it|this|that|everything|anything)$/i;
+
 /** C2 (CHAT_FIXES_V2): a title that only says "remind me" names nothing; it is never saved. */
 export const PLACEHOLDER_TITLE = /^(?:(?:please\s+)?remind(?:\s+(?:me|us))?(?:\s+(?:to|about|of))?|(?:set\s+)?(?:a\s+)?reminder|about|to|of)$/i;
 const isPlaceholder = (title: string | null) => chatFixesOn() && Boolean(title && PLACEHOLDER_TITLE.test(title.trim()));
@@ -103,7 +106,9 @@ export function clarificationQuestion(d: TaskDraft, missing: TaskSlot[]): string
   const parts: string[] = [];
   const subject = d.title && !isVagueTitle(d.title) ? `"${d.title}"` : "it";
   if (missing.includes("title") && (d.askRemind || isPlaceholder(d.title))) return "What should I remind you about?";
-  if (missing.includes("title")) {
+  // PR D (CHAT_FIXES_V2): never "What exactly will you thing?"; the other missing details are still asked.
+  if (missing.includes("title") && chatFixesOn()) parts.push("What's the task?");
+  else if (missing.includes("title")) {
     const single = d.title && isVagueTitle(d.title) && d.title.trim().split(/\s+/).length === 1;
     parts.push(single ? `What exactly will you ${(d.title as string).toLowerCase()}?` : "What's the task, exactly?");
   }
@@ -168,7 +173,8 @@ export function fillDraft(draft: TaskDraft, awaiting: TaskSlot[], text: string, 
   if (awaiting.includes("title") && !/\?\s*$|^(?:what|when|where|why|how|who|hi|hello|hey|thanks)\b/i.test(text.trim())) {
     const residual = cleanTitle(e.residual).replace(/^(?:it'?s|its|it is|about|for|on)\s+/i, "");
     if (residual && residual.length >= 2 && !/^(?:yes|no|ok|okay|sure)$/i.test(residual)) {
-      const vagueVerb = draft.title && isVagueTitle(draft.title) && !isPlaceholder(draft.title) ? draft.title : null;
+      // "study" + "physics" → "Study physics"; a vague noun ("thing", "stuff") is replaced, never kept in front.
+      const vagueVerb = draft.title && isVagueTitle(draft.title) && !isPlaceholder(draft.title) && !(chatFixesOn() && VAGUE_NOUN.test(draft.title.trim())) ? draft.title : null;
       next.title = vagueVerb && !residual.toLowerCase().startsWith(vagueVerb.toLowerCase()) ? `${vagueVerb} ${residual}` : residual.charAt(0).toUpperCase() + residual.slice(1);
       filled = true;
     }
@@ -328,6 +334,14 @@ export async function alreadyDoneTask(userId: string, ref: string): Promise<Task
   if (open && open.s >= 0.8) return null;
   const done = best(tasks.filter((t) => t.status === "COMPLETED"));
   return done && done.s >= 0.8 ? done.t : null;
+}
+
+/** PR D (CHAT_FIXES_V2): the open task a new one would duplicate (title score >= 0.8); completed tasks never count. */
+export async function openDuplicate(userId: string, title: string): Promise<Task | null> {
+  if (!title.trim()) return null;
+  const open = await prisma.task.findMany({ where: { userId, status: { in: ["PENDING", "IN_PROGRESS"] }, archived: false }, take: 300 });
+  const best = open.map((t) => ({ t, s: refScore(title, t.title) })).sort((a, b) => b.s - a.s)[0];
+  return best && best.s >= 0.8 ? best.t : null;
 }
 
 /** Words too common to identify a task by ("call", "pay", "today"): matching on them alone would pick the wrong one. */

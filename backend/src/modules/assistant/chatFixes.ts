@@ -70,7 +70,9 @@ export function applyChatFixes<T extends Decision>(text: string, e: Pick<Entitie
   if ((CREATES.has(rule.intent) || rule.intent === "complete_task") && ((QUESTION.test(t) && !POLITE_REQUEST.test(t)) || SHOW.test(t))) return { ...rule, intent: "query_tasks", confidence: 0.6, fix: "D" };
   if (!CREATES.has(rule.intent)) return rule;
   // E: a report of something done completes the matching item (looked up in the user's tasks and routines).
-  if (PAST.test(t) && !FUTURE.test(t)) return { ...rule, intent: "complete_task", confidence: 0.8, fix: "E" };
+  // PR D: "read" is also the imperative ("Read chapter 4 for an hour" is a task): a report only after a subject.
+  const bareRead = /^read\b/i.test(t);
+  if (PAST.test(t) && !FUTURE.test(t) && !bareRead) return { ...rule, intent: "complete_task", confidence: 0.8, fix: "E" };
   // H: not doing / skipping / stopping something is about an existing item: unsure, the rules do nothing.
   if (NEGATE.test(t)) return { ...rule, intent: "unclear", confidence: 0.5, fix: "H" };
   // I: a feeling is a mood report, even with "today"; an explicit time ("… at 5") keeps it a task.

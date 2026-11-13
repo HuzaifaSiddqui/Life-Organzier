@@ -68,6 +68,10 @@ const READ_BACK = /\b(?:read (?:back|out|aloud|me)|tell me my tasks out loud|rea
 const PLAN = /\b(?:plan (?:my|the) (?:day|week|tomorrow|morning|evening)|what should i (?:do|work on|focus on|start with)(?: now| next| today| first)?|schedule my (?:day|tasks)|organi[sz]e my (?:day|tasks)|make (?:me )?a plan|when should i (?:do|work on|study)|find (?:me )?(?:a )?(?:time|slot))\b/i;
 /** Asking for a list: "show / what / which …", a "?", or a bare "remaining tasks". */
 const OPEN_ASK = /\?\s*$|^(?:show|list|what(?:'s|s| is| are)?|which|any|tell me|do i have|give me)\b|^(?:my\s+)?(?:remaining|pending|unfinished|undone|incomplete|open)\s+(?:tasks?|to-?dos?|things|work)\b|^tasks?\b/i;
+/** PR D: a what / how / which / where / when / who question with should / can / could. */
+const ADVICE_QUESTION = /^(?:(?:so|ok|okay|and|hey)[,\s]+)?(?:what|how|which|where|when|who)\b[^.!]*\b(?:should|can|could|shall)\b/i;
+/** PR D: words that ask for a task or reminder outright. */
+export const EXPLICIT_ASK = /\b(?:remind (?:me|us)|add|create|new task|set (?:a |an )?(?:reminder|alarm)|schedule|make a task|don'?t forget|remember to)\b|\bput\b[^.!?]*\bon my\b/i;
 const PLAN_A_DAY = /\bplan\s+(?:out\s+)?(?:for\s+)?(?:my\s+)?(?:tomorrow|today|tonight)\b/i;
 const QUERY =
   /\b(?:what(?:'s| is| do i have| have i got| are my)|show(?: me)?|list|any|how many|do i have|anything)\b[^.?!]*\b(?:tasks?|to ?dos?|today|tonight|tomorrow|this week|week|due|overdue|pending|schedule|agenda|plans?|left|remaining|deadlines?)\b/i;
@@ -226,6 +230,9 @@ function rulesIntent(text: string, e: Entities, mood: MoodDetection | null): { i
     return { intent: "create_routine", confidence: 0.8 };
   }
   if (PROVIDE_INFO.test(t) && !e.date && !e.timeExplicit && !CREATE_CUE.test(t) && !IMPERATIVE_START.test(t)) return { intent: "provide_info", confidence: 0.8 };
+  // PR D (CHAT_FIXES_V2): "what should I cook tonight?", "how can I focus better?": a question for advice, never a task,
+  // unless it asks for one ("…, remind me to buy chicken at 6"). "should" alone is not a request.
+  if (chatFixesOn() && ADVICE_QUESTION.test(t) && !EXPLICIT_ASK.test(t)) return { intent: "smalltalk", confidence: 0.7 };
   // Questions are conversation, not tasks — unless they explicitly ask for one ("can you remind me…").
   if (QUESTION.test(t) && !CREATE_CUE.test(t) && !IMPERATIVE_START.test(t)) return { intent: "smalltalk", confidence: 0.7 };
   if (CREATE_CUE.test(t) || IMPERATIVE_START.test(t) || e.date || e.time || e.durationMinutes) {

@@ -240,6 +240,7 @@
    "lang": "en",
    "text": "dentist on friday at 3",
    "command": "create_task",
+   "alsoOk": ["update_task"],
    "source": "ai-written",
    "args": {
     "date": "2026-10-09",

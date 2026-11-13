@@ -49,20 +49,21 @@ import {
   handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
-import { alreadyDoneTask, resolveTaskRef } from "./draft.js";
+import { alreadyDoneTask, openDuplicate, refScore, resolveTaskRef } from "./draft.js";
+import { progressReport } from "./appQuestions.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
-import { parseLocationCommand } from "./entities.js";
+import { parseLocationCommand, reframedTitle } from "./entities.js";
 import { bareImperative, CHANGE_TIME, EDIT_EXISTING, feelingTail, IMPERATIVE_START } from "./nlu.js";
 import { chatFixesOn, NOT_DONE, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
-import { understand, type Understanding } from "./nlu.js";
+import { rulesUnderstand, understand, type Understanding } from "./nlu.js";
 import { proposeSubtasks } from "./responder.js";
-import type { ActionPayload, QuickAction } from "./types.js";
+import type { ActionPayload, QuickAction, RoutineDraft } from "./types.js";
 import { applyCommandUndo, commandUndoIsNewest, confirmPending, recordUndo, runCommand, snapshots, UNDO_ACTION } from "./commands/runtime.js";
 import { nonUrgentSoon, shiftTasks } from "./commands/bulk.js";
 import { capabilityReply, helpReply, unknownReply } from "./commands/capabilities.js";
@@ -141,11 +142,55 @@ const CHANGE_CUE = /\b(?:now|instead|anymore|moved|rescheduled|long)\b/i;
 /** "Change "X", or add a new task?": nothing changes until the user picks (CHAT_FIXES_V2). */
 function changeOrNew(turn: Turn, task: Task, text: string): Out {
   focusOn(turn, task.id);
+  // PR D: typed answers ("1", "change it", "2", "add a new task") work too (dialogue.ts answerChangeOrNew).
+  if (chatFixesOn()) turn.state.pending = { kind: "change_or_new", text: text.trim(), ref: task.title };
   return {
     content: `Change "${task.title}", or add a new task?`,
     actions: [commandAction(`Change "${truncate(task.title, 24)}"`, "update_task", { text, ref: task.title }, { text }), sayAction("Add a new task", "create_task", `add task: ${text.trim()}`)],
     intent: "change_or_new",
     command: "update_task", // the question is about changing that task
+  };
+}
+
+/** PR D (CHAT_FIXES_V2): "every 2 hours", "every few hours": a repeat the routines can't do. */
+const EVERY_FEW_HOURS = /\bevery\s+(?:\d{1,2}|few|couple of|two|three|four|five|six)\s+(?:hours?|hrs?|minutes?|mins?)\b/i;
+const EVERY_FEW_HOURS_REPLY = "I can't repeat a reminder every few hours yet. I can remind you once at a set time, or every day at the same time.";
+
+/** PR D (CHAT_FIXES_V2): the message says it is another one, or comes from the "Add a new …" button. */
+const DUP_SKIP = /\b(?:another|again|new|also|one more|second|extra)\b|^add (?:task|routine):/i;
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const daysOf = (r: { frequency: string | null; daysOfWeek: unknown }): number[] =>
+  r.frequency === "DAILY" || !Array.isArray(r.daysOfWeek) ? [0, 1, 2, 3, 4, 5, 6] : (r.daysOfWeek as number[]);
+
+/** PR D: an active routine named like the draft (title score >= 0.6) on at least one of the same days. */
+async function routineDuplicate(userId: string, draft: RoutineDraft): Promise<{ id: string; title: string; frequency: string; daysOfWeek: unknown } | null> {
+  const want = new Set(draft.frequency === "DAILY" || !draft.daysOfWeek?.length ? [0, 1, 2, 3, 4, 5, 6] : draft.daysOfWeek);
+  const routines = await prisma.routine.findMany({ where: { userId, active: true }, select: { id: true, title: true, frequency: true, daysOfWeek: true, dueTime: true } });
+  // A similar time too: within 3 hours, or no time on either side ("yoga in the evening" is not the 7 AM yoga).
+  const minutes = (clock: string | null) => {
+    const c = clock ? parseClock(clock) : null;
+    return c ? c.h * 60 + c.m : null;
+  };
+  const near = (a: number | null, b: number | null) => a === null || b === null || Math.min(Math.abs(a - b), 1440 - Math.abs(a - b)) <= 180;
+  const best = routines
+    .filter((r) => daysOf(r).some((d) => want.has(d)) && near(minutes(draft.dueTime), minutes(r.dueTime)))
+    .map((r) => ({ r, s: refScore(draft.title ?? "", r.title) }))
+    .sort((a, b) => b.s - a.s)[0];
+  return best && best.s >= 0.6 ? best.r : null;
+}
+
+function routineChangeOrNew(turn: Turn, r: { title: string; frequency: string; daysOfWeek: unknown }, text: string): Out {
+  turn.state.pending = { kind: "change_or_new", text: text.trim(), ref: r.title, routine: true };
+  const days = daysOf(r);
+  const when = days.length === 7 ? "every day" : days.map((d) => DAY_SHORT[d]).join(", ");
+  return {
+    content: `You already have the routine "${r.title}" (${when}). Change it, or add a new routine?`,
+    actions: [
+      { label: "Open Routines", payload: { type: "navigate", screen: "Routines" } },
+      sayAction("Add a new routine", "create_routine", `add routine: ${text.trim()}`),
+    ],
+    intent: "change_or_new",
   };
 }
 
@@ -184,13 +229,52 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       const parsed = getCommand("routine_reschedule_once")?.parse(text, parseCtx(extractOpts(turn))) ?? {};
       return runCommand(turn, "routine_reschedule_once", { ...parsed, routineId: routine.id, ref: routine.title }, { text });
     }
+    // PR D: "I read chapter 4 for an hour" with no such task or routine: a report of time spent, acknowledged.
+    const report = u.intent === "complete_task" ? progressReport(text, u.entities.durationMinutes) : null;
+    if (report) return { content: report, intent: "progress_noted" };
   }
   switch (u.intent) {
     case "create_task": {
+      // PR D (CHAT_FIXES_V2): the real title out of a frame ("add 'X' as …", "set an alarm so I don't forget X", …).
+      const framed = chatFixesOn() ? reframedTitle(text, u.title, extractOpts(turn)) : { title: u.title };
+      u = { ...u, title: framed.title };
+      // PR D: "remind me to drink water every 2 hours": repeats every few hours are not supported; say so, add nothing.
+      if (chatFixesOn() && EVERY_FEW_HOURS.test(text)) return { content: EVERY_FEW_HOURS_REPLY, intent: "unsupported_interval" };
+      // PR D (CHAT_FIXES_V2): an open task with (nearly) the same title: ask instead of adding a duplicate, unless the
+      // message says it is another one. Completed tasks never count.
+      // PR D (CHAT_FIXES_V2): "I studied for 2 hours today" would become a task: acknowledged instead. (A report that
+      // names a routine or task, "I read for half an hour", is a completion and never gets here.)
+      const report = chatFixesOn() ? progressReport(text, u.entities.durationMinutes) : null;
+      if (report) return { content: report, intent: "progress_noted" };
+      // PR D (CHAT_FIXES_V2): "I missed the quiz yesterday, add a retake for friday": the request after the explicit
+      // "add / remind me" is what is asked; its own (later) day wins over the past day in the story before it.
+      if (chatFixesOn() && u.entities.date && u.entities.date.ymd < turn.todayYmd) {
+        const cue = EXPLICIT_CREATE.exec(text);
+        if (cue && cue.index > 0) {
+          const ask = rulesUnderstand(text.slice(cue.index), extractOpts(turn));
+          if (ask.entities.date && ask.entities.date.ymd >= turn.todayYmd) {
+            const title = ask.title.replace(/^(?:add|create)\s+(?:a\s+|an\s+)?(?:task\s+(?:to\s+)?)?/i, "");
+            u = { ...u, entities: ask.entities, title: title ? title.charAt(0).toUpperCase() + title.slice(1) : ask.title };
+          }
+        }
+      }
+      // PR D (CHAT_FIXES_V2): a sentence about a past day ("I forgot what I asked you yesterday", "same as yesterday")
+      // starts no draft unless it asks for a task outright; it is conversation.
+      if (chatFixesOn() && u.entities.date && u.entities.date.ymd < turn.todayYmd && !EXPLICIT_CREATE.test(text)) return conversationalReply(turn, text, "chat");
+      if (chatFixesOn() && u.title && !DUP_SKIP.test(text)) {
+        const dup = await openDuplicate(turn.user.id, u.title);
+        if (dup) {
+          const asked = changeOrNew(turn, dup, text);
+          // h-11: "set an alarm so I don't forget …": the alarm note (OOS_NOTE) is said before the question too.
+          const note = cantDoNote(text);
+          return note ? { ...asked, content: `${note}
+${asked.content}` } : asked;
+        }
+      }
       if (u.mood?.explicit && !u.entities.date && !u.entities.time && !(chatFixesOn() && (TASK_CUE.test(text) || feelingTail(text)))) return askMoodConfirm(turn, u.mood.mood, u.mood.confidence, text);
       // Task collaboration: connected people named in the message, and whether it's for them too (shareIntent.ts).
-      const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text) };
-      const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: u.source === "llm" && u.confidence < 0.75 });
+      const draft = { ...startTaskDraft(turn, u, text), share: await detectShare(turn, text), ...(framed.list ? { listPreview: true, allowNoDate: true } : {}) };
+      const out = await proceedWithDraft(turn, draft, turn.source, { uncertainParse: (u.source === "llm" && u.confidence < 0.75) || Boolean(framed.list) });
       const note = cantDoNote(text);
       if (note && (out.intent === "task_created" || out.intent === "clarify" || out.intent === "past_date")) out.content = `${note}\n${out.content}`;
       if (u.mood?.explicit && out.intent === "task_created") {
@@ -200,8 +284,15 @@ async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promi
       }
       return out;
     }
-    case "create_routine":
-      return proceedWithRoutine(turn, routineDraftFrom(turn, u, text));
+    case "create_routine": {
+      const draft = routineDraftFrom(turn, u, text);
+      // PR D (CHAT_FIXES_V2): a routine like this already on those days: ask first.
+      if (chatFixesOn() && draft.title && !DUP_SKIP.test(text)) {
+        const same = await routineDuplicate(turn.user.id, draft);
+        if (same) return routineChangeOrNew(turn, same, text);
+      }
+      return proceedWithRoutine(turn, draft);
+    }
     case "update_task":
       // CHAT_FIXES_V2: "update the website" with no such task is a new to-do, as before (nlu.ts EDIT_EXISTING).
       if (chatFixesOn() && EDIT_EXISTING.test(text.trim())) {

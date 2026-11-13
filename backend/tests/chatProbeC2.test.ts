@@ -260,7 +260,7 @@ test("end of day also for until / till / before <day>; 'before <event>' asks; 'b
       const beforeClock = await c.send("print the handouts before 5 pm tomorrow");
       assert.equal(beforeClock.intent, "task_created");
       assert.equal((await task("Print the handouts"))?.dueTime, "5 PM");
-      const remindBy = await c.send("remind me to renew the parking permit by friday");
+      const remindBy = await c.send("remind me to renew the car registration by friday");
       assert.equal(remindBy.intent, "clarify", "'remind me … by <day>' still asks the time");
     });
   } finally {

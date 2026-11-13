@@ -52,6 +52,12 @@ const en = {
   // C2 (CHAT_FIXES_V2): a named source day other than today. English only (Urdu copy after review).
   bulkMovePreviewFrom: (count: number, from: string, day: string) => `Move ${n(count, "task", "tasks")} from ${from} to ${day}?`,
   bulkNothingOn: (from: string) => `Nothing is due or planned ${from}, so there's nothing to move.`,
+  // PR D (CHAT_FIXES_V2): complete / delete a named day's tasks. English only (Urdu copy after review).
+  bulkDayNothing: (day: string) => `Nothing is due or planned ${day}.`,
+  bulkDayCompletePreview: (count: number, day: string) => `Mark ${n(count, "task", "tasks")} from ${day} as done?`,
+  bulkDayDeletePreview: (count: number, day: string) => `Delete ${n(count, "task", "tasks")} from ${day}? You can undo this for 24 hours.`,
+  bulkDayCompleted: (count: number, day: string) => `Done: ${n(count, "task", "tasks")} from ${day}. Nice work!`,
+  bulkDayDeleted: (count: number, day: string) => `Deleted ${n(count, "task", "tasks")} from ${day}. You can undo this for 24 hours.`,
   bulkMoved: (count: number, day: string) => `Moved ${n(count, "task", "tasks")} to ${day}.`,
   bulkNoTag: (tag: string) => `No open tasks are tagged #${tag}.`,
   bulkTagPreview: (count: number, tag: string) => `Mark ${n(count, "task", "tasks")} tagged #${tag} as done?`,
@@ -116,6 +122,12 @@ const ur: Copy = {
   // English only until the Urdu copy is reviewed (C2, CHAT_FIXES_V2).
   bulkMovePreviewFrom: (count, from, day) => `Move ${count} ${count === 1 ? "task" : "tasks"} from ${from} to ${day}?`,
   bulkNothingOn: (from) => `Nothing is due or planned ${from}, so there's nothing to move.`,
+  // English only until the Urdu copy is reviewed (PR D, CHAT_FIXES_V2).
+  bulkDayNothing: (day) => `Nothing is due or planned ${day}.`,
+  bulkDayCompletePreview: (count, day) => `Mark ${count} ${count === 1 ? "task" : "tasks"} from ${day} as done?`,
+  bulkDayDeletePreview: (count, day) => `Delete ${count} ${count === 1 ? "task" : "tasks"} from ${day}? You can undo this for 24 hours.`,
+  bulkDayCompleted: (count, day) => `Done: ${count} ${count === 1 ? "task" : "tasks"} from ${day}. Nice work!`,
+  bulkDayDeleted: (count, day) => `Deleted ${count} ${count === 1 ? "task" : "tasks"} from ${day}. You can undo this for 24 hours.`,
   bulkMoved: (count, day) => `${count} کام ${day} پر منتقل کر دیے۔`,
   bulkNoTag: (tag) => `#${tag} والا کوئی کھلا کام نہیں۔`,
   bulkTagPreview: (count, tag) => `#${tag} والے ${count} کام مکمل کر دوں؟`,
