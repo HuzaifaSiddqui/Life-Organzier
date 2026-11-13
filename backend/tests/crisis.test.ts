@@ -112,6 +112,7 @@ const HOPELESS = [
   "i wanna disappear",
   "I wish I could disappear",
   "I'm tired of living",
+  "I'm so tired of living like this",
   "so tired of life",
   "I'm tired of being alive",
   "I wish I was gone",
@@ -153,6 +154,11 @@ test("crisis: hopelessness wording with an object is detected (English)", () => 
 
 test("crisis: hopelessness words without their object, negated, or about tasks are not flagged", () => {
   for (const p of NOT_HOPELESS) assert.equal(detectCrisis(p), false, `false positive: ${p}`);
+});
+
+test("crisis: 'don't want to wake up' fires, except about the alarm or the day", () => {
+  for (const p of ["I don't want to wake up", "I don't want to wake up tomorrow", "dont want to wake up anymore"]) assert.equal(detectCrisis(p), true, `missed: ${p}`);
+  for (const p of ["I don't want to wake up early tomorrow, move the alarm", "I don't want to wake up for the exam", "I don't want to wake up at 6", "I don't want to wake up before 8", "I don't want to wake up on time"]) assert.equal(detectCrisis(p), false, `false positive: ${p}`);
 });
 
 test("crisis: behaviour kept as before", () => {

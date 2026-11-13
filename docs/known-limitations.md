@@ -45,6 +45,10 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   built.
 - **The crisis check is a keyword list and will miss some wording.** Hopelessness wording is covered in English only;
   Roman Urdu and Urdu cover explicit self-harm wording only (`backend/src/modules/mood/crisis.ts`).
+- **Crisis messages are saved like any message.** In the app chat the message and the crisis reply go into the chat
+  history, so they can appear in later local-model context (the last messages sent with a later question, and the
+  conversation summaries made every 12 messages). `CLOUD_FALLBACK` must stay off while this is the case. The WhatsApp
+  paths store nothing.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
   for bare imperatives instead; questions like "what's the weather" are not covered by it.
