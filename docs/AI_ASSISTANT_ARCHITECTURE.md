@@ -69,6 +69,10 @@ Status: built and unit-tested on new sentences; turned on only after it passes o
 **Chat probe fixes, PR B (off by default; `CHAT_FIXES_V2`).** Same probe set, rules only:
 - *Week* (`ranges.ts`, `analytics → "calendar_week"`): "this week" is Monday to Sunday for due tasks and for completed
   tasks and time per category; "next week" the next Monday to Sunday; "the next 7 days" and "last 7 days" stay rolling.
+  The same reader serves search and document instructions ("only this week"), so they follow it with the flag on.
+- *Open tasks* (`chatFixes.ts → NOT_DONE`): "show me tasks that are not done", "what's unfinished", "remaining tasks",
+  "tasks I haven't done yet" list the open tasks; they never reach the completed-tasks answer, and in search "not
+  done" means open, not completed.
 - *Completed tasks* (`commands/insights.ts`): "what did I just complete?" names the most recent one; "what did I get
   done this week", "show me everything I finished this week", "my completed tasks" list them (most recent first)
   under the count. A correction to it ("I'm asking about my completed tasks") is answered the same way.
@@ -84,7 +88,8 @@ Status: built and unit-tested on new sentences; turned on only after it passes o
   "priority" or as the whole change ("make it high"); "call mom, feeling low today" is the task "Call mom" (today) and
   the mood, not "Call mom, feeling" at low priority.
 - *Weather* (`appQuestions.ts`): "I can't check the weather, so your weather app is the best place for that.", with
-  "in Lahore" only when the user named a place.
+  "in Lahore" only when the user named a place, capitalised. "temperature" alone is not a weather word ("what
+  temperature for baking?").
 - *Plan a day* (`nlu.ts`): "can you help me plan tomorrow?" plans that day.
 - Sharing an existing task: the collaboration service has no function for it, so the PR A how-to / "Sharing isn't
   available yet." stays.

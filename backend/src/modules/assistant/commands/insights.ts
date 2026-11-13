@@ -5,7 +5,7 @@ import { prisma } from "../../../config/db.js";
 import { addDaysYmd, dayName, formatClock, localParts, localYmd, relativeDayLabel, startOfLocalDay } from "../../../lib/time.js";
 import { formatDuration, plural } from "../../../lib/text.js";
 import { completionStreak, getAnalytics, mondayOf, timeByCategory } from "../../analytics/analyticsService.js";
-import { chatFixesOn } from "../chatFixes.js";
+import { chatFixesOn, NOT_DONE } from "../chatFixes.js";
 import { PREDEFINED_CATEGORIES } from "../../settings/settingsRoutes.js";
 import type { Out } from "../dialogue.js";
 import { has, norm } from "./lexicon.js";
@@ -129,7 +129,7 @@ const completed: Command = {
     const counted = has(t, HOW_MANY) && has(t, "complete|completed|finish|finished|done|did|kiye|kie|kar liye|kiye hain|mukammal|مکمل|کیے|کئے");
     const what = (chatFixesOn() ? /\bwhat (?:did|have) i (?:just |already |last )?(?:get done|got done|complete|completed|finish|finished|do|done)\b/ : /\bwhat (?:did|have) i (?:get done|got done|complete|completed|finish|finished|do|done)\b/).test(t);
     // CHAT_FIXES_V2: "show me everything I finished this week", "my completed tasks": the tasks themselves.
-    const shown = chatFixesOn() && !has(t, "delete|clear|remove|erase|undo") && (/\b(?:show|list|see|tell me)\b.*\b(?:finished|completed|done|got done)\b/.test(t) || /^(?:show\s+)?(?:my\s+)?(?:completed|finished|done)\s+tasks?$/.test(t));
+    const shown = chatFixesOn() && !has(t, "delete|clear|remove|erase|undo") && !NOT_DONE.test(t) && (/\b(?:show|list|see|tell me)\b.*\b(?:finished|completed|done|got done)\b/.test(t) || /^(?:show\s+)?(?:my\s+)?(?:completed|finished|done)\s+tasks?$/.test(t));
     if (!counted && !what && !shown) return null;
     return {
       range: range(t),

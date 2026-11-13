@@ -11,6 +11,7 @@ import { handleAssistantMessage } from "../src/modules/assistant/dialogue.js";
 import { extractEntities } from "../src/modules/assistant/entities.js";
 import { feelingTail, rulesUnderstand } from "../src/modules/assistant/nlu.js";
 import { resolveRange } from "../src/modules/assistant/ranges.js";
+import { readInstruction } from "../src/modules/documents/instructions.js";
 import { dbAvailable, TZ } from "./fixtures.js";
 
 /** PR B of the 29-message chat probe (CHAT_FIXES_V2). Thursday 12 Nov 2026, Asia/Karachi. */
@@ -42,6 +43,20 @@ test("week: 'this week' is Monday to Sunday; 'next week' the next Monday to Sund
   });
 });
 
+test("week: a document instruction 'only this week' follows the same week (Monday to Sunday with CHAT_FIXES_V2)", async () => {
+  await withFixes(() => {
+    const r = readInstruction("only this week", [], [], "2026-11-12");
+    assert.deepEqual(r.filter.dateRange, { from: "2026-11-09", to: "2026-11-15" });
+  });
+  const keep = process.env.CHAT_FIXES_V2;
+  delete process.env.CHAT_FIXES_V2;
+  try {
+    assert.deepEqual(readInstruction("only this week", [], [], "2026-11-12").filter.dateRange, { from: "2026-11-12", to: "2026-11-18" }, "flag off: as before");
+  } finally {
+    if (keep !== undefined) process.env.CHAT_FIXES_V2 = keep;
+  }
+});
+
 test("completed: 'just' = the latest; 'this week' = since Monday; 'last 7 days' stays rolling; names are listed", async () => {
   await withFixes(() => {
     const c = getCommand("insights_completed")!;
@@ -52,6 +67,16 @@ test("completed: 'just' = the latest; 'this week' = since Monday; 'last 7 days' 
     assert.deepEqual(p("how many tasks did I complete in the last 7 days?"), { range: "week" });
     assert.equal(p("show my completed tasks")?.list, true);
     assert.equal(p("delete all completed tasks"), null);
+  });
+});
+
+test("open tasks: 'not done', 'unfinished', 'remaining' list open tasks, never the completed ones", async () => {
+  await withFixes(() => {
+    for (const t of ["show me tasks that are not done", "what's unfinished", "show my incomplete tasks", "what tasks are pending", "tasks I haven't done yet", "show me undone tasks", "remaining tasks", "what haven't I finished yet?"]) {
+      assert.equal(rulesUnderstand(t, opts).intent, "query_tasks", t);
+      assert.equal(getCommand("insights_completed")!.parse(t, parseCtx(opts)), null, `${t}: not the completed list`);
+    }
+    assert.notEqual(rulesUnderstand("remind me to pay the remaining fees tomorrow", opts).intent, "query_tasks", "a task with 'remaining' is still a task");
   });
 });
 
@@ -88,7 +113,9 @@ test("B6: weather is out of scope; the place is named only when the user named o
   assert.equal(appQuestionReply("what's the weather like in Lahore?")?.content, "I can't check the weather in Lahore, so your weather app is the best place for that.");
   assert.equal(appQuestionReply("will it rain tomorrow?")?.content, "I can't check the weather, so your weather app is the best place for that.");
   assert.equal(appQuestionReply("what's the weather in the morning")?.content, "I can't check the weather, so your weather app is the best place for that.");
-  for (const t of ["remind me to check the weather tomorrow", "take an umbrella if it rains", "add weather report to slides"]) assert.equal(appQuestionReply(t), null, t);
+  for (const t of ["remind me to check the weather tomorrow", "take an umbrella if it rains", "add weather report to slides", "what temperature for baking?", "what temperature should the oven be"]) assert.equal(appQuestionReply(t), null, t);
+  assert.equal(appQuestionReply("what's the weather like in lahore?")?.content, "I can't check the weather, so your weather app is the best place for that.", "a place only when capitalised");
+  assert.equal(appQuestionReply("is it raining in Karachi?")?.content, "I can't check the weather in Karachi, so your weather app is the best place for that.");
 });
 
 test("#26: 'help me plan tomorrow' plans that day; a task about planning is still a task", async () => {
@@ -127,6 +154,12 @@ test("through the chat: two tasks (one preview, one Undo), never a silent duplic
       const which = await send("move it to tomorrow");
       if (which.intent === "choose_task") assert.ok(!(which.actions ?? []).some((a) => a.label === "Old essay"), "no completed task offered");
 
+      for (const t of ["show me tasks that are not done", "what's unfinished", "show my incomplete tasks"]) {
+        const list = await send(t);
+        const shown = (list.cards ?? []).flatMap((c) => ((c as { tasks?: Array<{ title: string }> }).tasks ?? []).map((x) => x.title));
+        assert.ok(shown.includes("Dentist appointment") && !shown.includes("Old essay"), `${t}: ${shown.join(", ")}`);
+        assert.equal(list.intent, "query_tasks", t);
+      }
       const moved = await send("actually move dentist appointment to monday");
       assert.equal(moved.intent, "task_updated");
       assert.match(moved.content, /Dentist appointment/);

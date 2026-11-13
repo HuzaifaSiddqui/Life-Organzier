@@ -77,3 +77,6 @@ export function applyChatFixes<T extends Decision>(text: string, e: Pick<Entitie
   if (rule.intent === "create_task" && mood && (STATE.test(t) || feelingOnly(e.residual)) && !CLOCK.test(t)) return { ...rule, intent: "log_mood", confidence: Math.max(0.75, mood.confidence), fix: "I" };
   return rule;
 }
+
+/** "not done", "unfinished", "haven't done yet": open tasks, never the completed ones. */
+export const NOT_DONE = /\b(?:not|never|yet to)\s+(?:been\s+)?(?:done|finished|completed|complete)\b|\b(?:unfinished|undone|incomplete|uncompleted)\b|\b(?:haven'?t|have not|didn'?t|did not)\s+(?:done|finished|completed|do|finish|complete)\b|\byet\b/i;

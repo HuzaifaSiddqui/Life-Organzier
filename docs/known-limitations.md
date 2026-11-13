@@ -33,9 +33,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   "when I get home" is taken as the answer to "When should … be done?" but has no date, so the question is asked
   again. Two tasks in one message are read only as exactly two parts ("add X <day> and <verb> Y <day>"); three or
   more, or a part without its own day, stay one task. When a part matches an open task nothing is added from that
-  message: each part is offered as its own message. The weather reply names a place only from "in / for / at <word>".
+  message: each part is offered as its own message. The weather reply names a place only from "in / for / at <Capitalised word>".
   "This week" is Monday to Sunday for due and completed tasks; "compare with last week" and replies that say "the
-  last 7 days" stay rolling. The alarm note ("I can't set phone alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is
+  last 7 days" stay rolling. Side effect: the same reader (`ranges.ts → resolveRange`) serves search (`find.ts`) and
+  document instructions (`DOC_INSTRUCTIONS`), so with `CHAT_FIXES_V2` on, "only this week" on a document also keeps
+  Monday to Sunday (on a Thursday that drops next Monday–Wednesday, which the rolling week kept); with the flag off it
+  stays today plus 6 days. "which X tasks are done?" answers with today's list (as before PR B). The alarm note ("I can't set phone alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is
   built.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"

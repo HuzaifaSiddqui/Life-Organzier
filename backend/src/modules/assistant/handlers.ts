@@ -56,7 +56,7 @@ import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAU
 import { APP_LIST_CAP, classesForDay, currentOrNextClass, isClassRoutine, moreLine, mostUrgent, WHATSAPP_LIST_CAP, type ClassSlot } from "./queryAnswers.js";
 import { parseLocationCommand } from "./entities.js";
 import { bareImperative, CHANGE_TIME, EDIT_EXISTING, feelingTail, IMPERATIVE_START } from "./nlu.js";
-import { chatFixesOn, TASK_CUE } from "./chatFixes.js";
+import { chatFixesOn, NOT_DONE, TASK_CUE } from "./chatFixes.js";
 import { attachGeoResult, detachLocation } from "../locations/locationService.js";
 import { RESPONSE_TEXT, STYLE_NAMES } from "../checkins/templates.js";
 import { parseCheckinStyle } from "../checkins/style.js";
@@ -716,7 +716,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
     const ymd = range === "tomorrow" ? addDaysYmd(turn.todayYmd, 1) : (u.entities.date?.ymd as string);
     title = relativeDayLabel(ymd, turn.todayYmd);
     list = visible.filter((t) => t.dueAt && localYmd(t.dueAt, turn.tz) === ymd);
-  } else if (!q && /\b(?:all|pending|everything|left|remaining)\b/i.test(text)) {
+  } else if (!q && (/\b(?:all|pending|everything|left|remaining)\b/i.test(text) || (chatFixesOn() && NOT_DONE.test(text)))) {
     title = "All pending";
     list = visible;
   } else {
