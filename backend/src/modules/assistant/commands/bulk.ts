@@ -79,15 +79,30 @@ const day = (turn: Turn, ymd: string) => dayLabelFor(turn.settings.language, rel
 const MOVE = `${MOVE_WORDS}|daal do|dal do|${DO_IT}|منتقل|ڈال دو`;
 const TODAY_SOURCE = /\b(?:today'?s|todays|today|tonight|from today|aaj\s+(?:ke|ki|ka)|aaj)\b|آج\s+(?:کے|کی|کا)|آج/gi;
 
+/** C2 (CHAT_FIXES_V2): the day the tasks are moved FROM, when it is named ("from tomorrow", "friday's tasks"). */
+const SOURCE_FROM = /\bfrom\s+((?:today|tonight|tomorrow|(?:this\s+|next\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day|the\s+\d{1,2}(?:st|nd|rd|th)?|\w+(?:\s+\w+)?))(?=\s+(?:to|till|until|onto)\b|\s*$)/i;
+const SOURCE_POSS = /\b(tomorrow|(?:mon|tues|wednes|thurs|fri|satur|sun)day)'?s\s+(?:tasks?|todos?|to dos?|stuff|work|list|plans?|schedule)\b/i;
+
 const moveToday: Command = {
   name: "bulk_move_today",
   category: "bulk",
   summary: "Move everything due today to another day (preview, one confirmation, undo)",
   examples: ["Move all of today's tasks to tomorrow", "aaj ke saare kaam kal kar do"],
-  schema: z.object({ toYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), taskIds: z.array(z.string()).optional() }).passthrough(),
+  schema: z.object({ toYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), fromYmd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), taskIds: z.array(z.string()).optional() }).passthrough(),
   undoable: true,
   parse(text, ctx) {
     const t = norm(text);
+    // C2 (CHAT_FIXES_V2): "move everything from tomorrow to monday" moves tomorrow's tasks, not today's. A source day
+    // this can't read ("from next week") does not run this command at all.
+    const src = chatFixesOn() && has(t, MOVE) ? SOURCE_FROM.exec(text) ?? SOURCE_POSS.exec(text) : null;
+    if (src && !groupIn(text) && !addBeforeMove(t) && /\b(?:everything|all|tasks?|todos?|stuff|work|list|plans?|schedule)\b/i.test(text)) {
+      const fromYmd = extractTargetDay(src[1], ctx.opts);
+      if (!fromYmd || fromYmd < ctx.todayYmd) return null;
+      if (fromYmd !== ctx.todayYmd) {
+        const target = extractTargetDay(text.replace(src[0], " "), ctx.opts);
+        return { fromYmd, toYmd: target && target !== fromYmd && target >= ctx.todayYmd ? target : addDaysYmd(fromYmd, 1) };
+      }
+    }
     const clear = /^(?:please )?(?:clear|free up|empty|cancel) (?:my |the )?(?:day|today|whole day|schedule today|plans today)$/.test(t);
     // CHAT_FIXES_V2: "move everything to tomorrow" means today's tasks even without the word "today".
     const everything = chatFixesOn() && has(t, MOVE) && /\b(?:everything|all of it|all of today|all my tasks|all tasks|all my stuff|today'?s? (?:tasks?|todos?|to dos?|stuff|work|list|plans?|schedule))\b/.test(t) && !groupIn(text);
@@ -98,19 +113,23 @@ const moveToday: Command = {
     return { toYmd };
   },
   async prepare(turn, args) {
-    const end = startOfLocalDay(addDaysYmd(turn.todayYmd, 1), turn.tz);
-    const start = startOfLocalDay(turn.todayYmd, turn.tz);
+    const fromYmd = typeof args.fromYmd === "string" ? args.fromYmd : turn.todayYmd;
+    const end = startOfLocalDay(addDaysYmd(fromYmd, 1), turn.tz);
+    const start = startOfLocalDay(fromYmd, turn.tz);
     const today = (await listActiveTasks(turn.user.id)).filter((t) => (t.dueAt && t.dueAt >= start && t.dueAt < end) || (t.scheduledStart && t.scheduledStart >= start && t.scheduledStart < end));
-    if (!today.length) return nothing(tx(turn).bulkNothingToday, "bulk_nothing");
+    const other = fromYmd !== turn.todayYmd;
+    if (!today.length) return nothing(other ? tx(turn).bulkNothingOn(day(turn, fromYmd)) : tx(turn).bulkNothingToday, "bulk_nothing");
     const toYmd = String(args.toYmd);
     const list = today.slice(0, BULK_CAP);
-    const p = preview(turn, tx(turn).bulkMovePreview(list.length, day(turn, toYmd)), list, today.length);
-    return "args" in p ? { ...p, args: { ...p.args, toYmd } } : p;
+    const question = other ? tx(turn).bulkMovePreviewFrom(list.length, day(turn, fromYmd), day(turn, toYmd)) : tx(turn).bulkMovePreview(list.length, day(turn, toYmd));
+    const p = preview(turn, question, list, today.length);
+    return "args" in p ? { ...p, args: { ...p.args, toYmd, ...(other ? { fromYmd } : {}) } } : p;
   },
   async execute(turn, args) {
     const tasks = await tasksByIds(turn, args);
     const toYmd = String(args.toYmd);
-    const moved = await shiftTasks(turn, tasks, diffDaysYmd(turn.todayYmd, toYmd), "bulk_move_today");
+    const fromYmd = typeof args.fromYmd === "string" ? args.fromYmd : turn.todayYmd;
+    const moved = await shiftTasks(turn, tasks, diffDaysYmd(fromYmd, toYmd), "bulk_move_today");
     recordUndo(turn, { kind: "tasks", op: "edit", taskIds: moved.map((t) => t.id), before: snapshots(tasks), label: `${plural(moved.length, "task")} moved` });
     return { content: tx(turn).bulkMoved(moved.length, day(turn, toYmd)), cards: [{ type: "task_list", title: tx(turn).cardMoved, tasks: moved.map((t) => serializeTask(t, turn.now)) }], actions: [undoAction(turn.settings.language)], intent: "bulk_moved" };
   },

@@ -8,7 +8,19 @@ import type { TaskDraft, TaskSlot } from "./types.js";
 import { chatFixesOn } from "./chatFixes.js";
 
 export const AUTO_CREATE_CLARITY = 95;
+
+/** C2 (CHAT_FIXES_V2): a title that only says "remind me" names nothing; it is never saved. */
+export const PLACEHOLDER_TITLE = /^(?:(?:please\s+)?remind(?:\s+(?:me|us))?(?:\s+(?:to|about|of))?|(?:set\s+)?(?:a\s+)?reminder|about|to|of)$/i;
+const isPlaceholder = (title: string | null) => chatFixesOn() && Boolean(title && PLACEHOLDER_TITLE.test(title.trim()));
 export const VERY_LOW_CLARITY = 20;
+
+/** C2: "before 12", "before noon", "before 5 pm", "before 9:30 am" (a bare 1–11 is left to ask: AM or PM?). */
+const BEFORE_CLOCK = /\bbefore\s+(?:(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|12(?::00)?(?!\s*(?:am|pm|:\d))\b|noon\b|midday\b)/i;
+/** C2: the words that make a date-only task a deadline due at the end of that day. */
+const DEADLINE_WORDING = /\b(?:by|due|submit|submission|deadline|hand in|turn in|until|till)\b/i;
+/** C2: "before friday", "before tomorrow", "before the 20th": a day, so a deadline (not an event to ask the time of). */
+const BEFORE_DAY =
+  /\bbefore\s+(?:(?:this|next)\s+)?(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|tomorrow|today|tonight|the\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}(?:st|nd|rd|th)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2})\b/i;
 
 export function draftFromEntities(text: string, title: string, e: Entities, todayYmd: string): TaskDraft {
   const taskType = classifyTaskType(text, e);
@@ -32,9 +44,26 @@ export function draftFromEntities(text: string, title: string, e: Entities, toda
     context: e.context,
     location: e.location,
   };
+  // C2: "remind me" alone: ask what about, never keep "Remind me" as the title.
+  if (isPlaceholder(draft.title) || (chatFixesOn() && !draft.title && /\bremind(?:er)?\b/i.test(text))) {
+    draft.title = null;
+    draft.askRemind = true;
+  }
+  // C2 (CHAT_FIXES_V2): "before 12" / "before noon" / "before 5 pm" is the due time, not part of the title.
+  if (chatFixesOn() && !draft.dueTime) {
+    const m = BEFORE_CLOCK.exec(text);
+    if (m) {
+      draft.dueTime = m[1] ? `${Number(m[1])}${m[2] ? `:${m[2]}` : ""} ${m[3].toUpperCase()}` : "12 PM";
+      if (draft.title) draft.title = draft.title.replace(BEFORE_CLOCK, "").replace(/\s+/g, " ").trim() || draft.title;
+    }
+  }
   // CHAT_FIXES_V2 (deliberate FRD deviation from the FR-TM-001 Clarity Index): a deadline with a real date but no time
   // is not asked about; it is due at the end of that day and the reply says so. No date still asks.
-  if (chatFixesOn() && draft.taskType === TaskType.DEADLINE && draft.dueYmd && !draft.dueTime && !e.date?.fuzzy) {
+  // C2: only with deadline wording (by / due / submit / deadline / until / till / before <day>); "remind me …" and
+  // "before <event>" ask the time ("before <clock time>" has set the time above).
+  const beforeEvent = /\bbefore\b/i.test(text) && !BEFORE_DAY.test(text);
+  const endOfDayOk = !chatFixesOn() || ((DEADLINE_WORDING.test(text) || BEFORE_DAY.test(text)) && !/\bremind\b/i.test(text) && !beforeEvent);
+  if (chatFixesOn() && endOfDayOk && draft.taskType === TaskType.DEADLINE && draft.dueYmd && !draft.dueTime && !e.date?.fuzzy) {
     draft.allowNoTime = true;
     draft.assumedEndOfDay = true;
   }
@@ -55,8 +84,9 @@ function needsDuration(d: TaskDraft): boolean {
  */
 export function clarityOf(d: TaskDraft): { clarity: number; missing: TaskSlot[] } {
   const missing: TaskSlot[] = [];
-  const vague = isVagueTitle(d.title);
-  const titleScore = !d.title ? 0 : vague ? 0.4 : 1;
+  // A placeholder title ("Remind me") counts as no title, whatever else the draft has, so it is never saved.
+  const vague = isVagueTitle(d.title) || isPlaceholder(d.title);
+  const titleScore = !d.title || isPlaceholder(d.title) ? 0 : vague ? 0.4 : 1;
   if (!d.title || vague) missing.push("title");
   const dateScore = d.dueYmd ? (d.dateFuzzy ? 0.5 : 1) : d.allowNoDate ? 1 : 0;
   if ((!d.dueYmd && !d.allowNoDate) || d.dateFuzzy) missing.push("date");
@@ -72,6 +102,7 @@ export function clarityOf(d: TaskDraft): { clarity: number; missing: TaskSlot[] 
 export function clarificationQuestion(d: TaskDraft, missing: TaskSlot[]): string {
   const parts: string[] = [];
   const subject = d.title && !isVagueTitle(d.title) ? `"${d.title}"` : "it";
+  if (missing.includes("title") && (d.askRemind || isPlaceholder(d.title))) return "What should I remind you about?";
   if (missing.includes("title")) {
     const single = d.title && isVagueTitle(d.title) && d.title.trim().split(/\s+/).length === 1;
     parts.push(single ? `What exactly will you ${(d.title as string).toLowerCase()}?` : "What's the task, exactly?");
@@ -137,7 +168,7 @@ export function fillDraft(draft: TaskDraft, awaiting: TaskSlot[], text: string, 
   if (awaiting.includes("title") && !/\?\s*$|^(?:what|when|where|why|how|who|hi|hello|hey|thanks)\b/i.test(text.trim())) {
     const residual = cleanTitle(e.residual).replace(/^(?:it'?s|its|it is|about|for|on)\s+/i, "");
     if (residual && residual.length >= 2 && !/^(?:yes|no|ok|okay|sure)$/i.test(residual)) {
-      const vagueVerb = draft.title && isVagueTitle(draft.title) ? draft.title : null;
+      const vagueVerb = draft.title && isVagueTitle(draft.title) && !isPlaceholder(draft.title) ? draft.title : null;
       next.title = vagueVerb && !residual.toLowerCase().startsWith(vagueVerb.toLowerCase()) ? `${vagueVerb} ${residual}` : residual.charAt(0).toUpperCase() + residual.slice(1);
       filled = true;
     }
@@ -270,6 +301,35 @@ export function wordMatch(ref: string, title: string): number {
   return hits && covered * 2 >= r.length ? 0.45 + 0.35 * (hits / t.length) : 0;
 }
 
+/** C2 (CHAT_FIXES_V2): every distinctive word of the reference is in the title ("lab report" ⊄ "Submit FYP progress report"). */
+export function coversAll(ref: string, title: string): boolean {
+  const named = (w: string) => !GENERIC.has(w) && !/\d/.test(w);
+  const r = contentTokens(ref).filter(named);
+  const t = contentTokens(title).filter(named);
+  const same = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+  return r.length > 0 && t.length > 0 && r.every((w) => t.some((x) => same(w, x)));
+}
+
+/** How well a reference names a task (the scoring resolveTaskRef uses, without focus). */
+export function refScore(ref: string, title: string): number {
+  return Math.max(fuzzySimilarity(ref, title), chatFixesOn() ? wordMatch(ref, title) : 0);
+}
+
+/**
+ * C2 (CHAT_FIXES_V2): "done with the lab report" when no OPEN task is named well (< 0.8) but a COMPLETED one is
+ * (>= 0.8): that one, so the reply can say it is already done. An open task with the same title always wins.
+ */
+export async function alreadyDoneTask(userId: string, ref: string): Promise<Task | null> {
+  const cleaned = ref.trim();
+  if (!cleaned || PRONOUN.test(cleaned) || ordinalIndex(cleaned) !== null || !contentTokens(cleaned).length) return null;
+  const tasks = await prisma.task.findMany({ where: { userId, status: { in: ["PENDING", "IN_PROGRESS", "COMPLETED"] }, archived: false }, orderBy: { completedAt: { sort: "desc", nulls: "last" } }, take: 300 });
+  const best = (list: Task[]) => list.map((t) => ({ t, s: refScore(cleaned, t.title) })).sort((a, b) => b.s - a.s)[0];
+  const open = best(tasks.filter((t) => t.status !== "COMPLETED"));
+  if (open && open.s >= 0.8) return null;
+  const done = best(tasks.filter((t) => t.status === "COMPLETED"));
+  return done && done.s >= 0.8 ? done.t : null;
+}
+
 /** Words too common to identify a task by ("call", "pay", "today"): matching on them alone would pick the wrong one. */
 const GENERIC = new Set(
   ["call", "pay", "buy", "get", "go", "do", "make", "send", "book", "finish", "submit", "start", "meet", "move", "change", "update", "check", "take", "bring", "write", "read", "clean", "fix", "task", "thing", "stuff", "today", "tomorrow", "actual", "actually", "now", "instead", "please", "need", "want", "will", "still", "reschedule", "push", "shift", "postpone", "delay", "cancel", "delete", "remove", "mark", "done", "complete", "due", "by"].map((w) => contentTokens(w)[0] ?? w),
@@ -279,7 +339,7 @@ export async function resolveTaskRef(
   userId: string,
   ref: string,
   focus: string[],
-  opts: { includeCompleted?: boolean; listed?: string[] } = {},
+  opts: { includeCompleted?: boolean; listed?: string[]; strict?: boolean } = {},
 ): Promise<Resolution> {
   const statuses = opts.includeCompleted ? undefined : { in: ["PENDING", "IN_PROGRESS"] as Array<"PENDING" | "IN_PROGRESS"> };
   const tasks = await prisma.task.findMany({
@@ -308,7 +368,11 @@ export async function resolveTaskRef(
     .sort((a, b) => b.s - a.s);
   if (!scored.length) return { task: null, candidates: [], viaFocus: false };
   const [first, second] = scored;
-  if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12)) return { task: first.t, candidates: [], viaFocus: false };
+  // C2 (CHAT_FIXES_V2), strict (complete / delete): pick by itself only when every word of the reference is in the title
+  // or it is a near-exact typo (fuzzy above 0.9, no close second); half the words ("lab report" vs "Submit FYP progress
+  // report") or a looser typo asks "Which task?".
+  const sure = !(chatFixesOn() && opts.strict) || coversAll(cleaned, first.t.title) || fuzzySimilarity(cleaned, first.t.title) > 0.9;
+  if (first.s >= 0.5 && (!second || first.s - second.s >= 0.12) && sure) return { task: first.t, candidates: [], viaFocus: false };
   return { task: null, candidates: openFirst(scored.map((x) => x.t)).slice(0, 4), viaFocus: false };
 }
 

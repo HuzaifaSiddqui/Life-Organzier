@@ -333,6 +333,21 @@ async function otherOne(turn: Turn): Promise<Out> {
 const FILLER_LEAD =
   /^(?:(?:actually|just|please|ok(?:ay)?|so|well|um+|uh+|oh)[,!.]?\s+)+(?=(?:move|add|delete|remove|complete|finish|change|update|set|make|remind|share|rename|cancel|mark|push|postpone|reschedule|put)\b)/i;
 
+/** C2 (CHAT_FIXES_V2): a move with no task named ("can you move something", "postpone one to friday"). */
+const VAGUE_MOVE = /^(?:(?:can|could|would|will) you\s+|please\s+|i (?:need|want) to\s+)?(?:move|reschedule|postpone|push(?:\s+back)?|shift)\s+(?:something|a task|one|some(?:thing| task)?|anything|a thing)\b/i;
+
+async function whichToMove(turn: Turn, text: string): Promise<Out> {
+  const open = await prisma.task.findMany({ where: { userId: turn.user.id, status: { in: ["PENDING", "IN_PROGRESS"] }, archived: false }, orderBy: [{ dueAt: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }], take: 4 });
+  if (!open.length) return { content: "You have no open tasks to move.", intent: "not_found" };
+  turn.state.pending = { kind: "choose_task", purpose: "update", candidates: open.map((t) => t.id), data: { text, move: true } };
+  return {
+    content: "Which task do you want to move?",
+    actions: open.map((t, i) => answerAction(truncate(t.title, 32), "choose_task", `${i + 1}`)),
+    cards: [{ type: "task_list", title: "Your open tasks", tasks: open.map((t) => serializeTask(t)) }],
+    intent: "choose_task",
+  };
+}
+
 /** "never mind", "cancel", "stop" (bare) to an open "which task?". */
 const CANCEL_CHOICE = /^(?:no[,.]?\s+)?(?:never ?mind|cancel|stop)[\s.!]*$/i;
 /** Only "add / share / invite / include / put … it|that|this …" can be about an existing task (saves the lookup). */
@@ -397,6 +412,8 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
       return { content: added.content, actions, intent: added.intent };
     }
     if (OTHER_ONE.test(text.trim())) return otherOne(turn);
+    // C2: "can you move something", "reschedule a task": which one (buttons, soonest due first); a typed name works too.
+    if (VAGUE_MOVE.test(text.trim())) return whichToMove(turn, text);
     // "I am not asking about X, I am asking about Y", "no, I meant Y": answer Y.
     const fixed = correctionTarget(text, Boolean(turn.state.pending));
     if (fixed) return handleText(turn, fixed);
@@ -627,7 +644,8 @@ export async function resolvePending(turn: Turn, text: string, u: Understanding,
       }
       const { draft, filled } = fillDraft(p.draft, p.awaiting, text, extractOpts(turn));
       if (filled) {
-        if (p.awaiting.includes("title") && isVagueTitle(draft.title) && isVagueTitle(p.draft.title)) {
+        // C2: after "remind me", a date or time without the "what" keeps the date and asks "what" again.
+        if (p.awaiting.includes("title") && isVagueTitle(draft.title) && isVagueTitle(p.draft.title) && !draft.askRemind) {
           turn.state.pending = { kind: "clarify_intent", text };
           return {
             content: "I'm still not sure what you'd like to do. Do you want to:",
@@ -743,7 +761,7 @@ function reask(turn: Turn): Out | null {
   if (p.kind === "task_draft") {
     return {
       content: `Just to finish "${p.draft.title ?? "this task"}": ${clarificationQuestion(p.draft, p.awaiting)}`,
-      actions: [...slotChips(p.awaiting), { label: "Cancel", payload: { type: "cancel_pending" } }],
+      actions: [...slotChips(p.awaiting, p.draft.askRemind), { label: "Cancel", payload: { type: "cancel_pending" } }],
       intent: "clarify",
     };
   }
@@ -759,8 +777,10 @@ export function moodChips(): QuickAction[] {
   }));
 }
 
-function slotChips(awaiting: string[]): QuickAction[] {
+function slotChips(awaiting: string[], askRemind = false): QuickAction[] {
   const chip = (l: string) => answerAction(l, "task_draft", l);
+  // C2: "What should I remind you about?" is answered in words; no day chips under it.
+  if (askRemind && awaiting.includes("title")) return [];
   if (awaiting.includes("date")) return ["Today", "Tomorrow", "This Friday", "Next week", "No deadline"].map(chip);
   if (awaiting.includes("time")) return ["9 AM", "12 PM", "3 PM", "6 PM", "9 PM", "End of day"].map(chip);
   if (awaiting.includes("duration")) return ["30 min", "1 hour", "2 hours", "3 hours", "Not sure"].map(chip);
@@ -825,7 +845,8 @@ export async function proceedWithDraft(
   const { clarity, missing } = clarityOf(draft);
 
   // FR-EH-003: very low clarity → offer intents instead of guessing.
-  if (clarity < VERY_LOW_CLARITY && !opts.clarified) {
+  // C2: "remind me" alone is clear about what kind of thing it is; it goes on to "What should I remind you about?".
+  if (clarity < VERY_LOW_CLARITY && !opts.clarified && !draft.askRemind) {
     turn.state.pending = { kind: "clarify_intent", text: draft.title ?? "" };
     return {
       content: "I'm not sure what you mean. Do you want to:",
@@ -850,7 +871,7 @@ export async function proceedWithDraft(
       content: `${clarificationQuestion(draft, missing)}${priorityHint}`,
       cards: [await draftCard(turn, draft, clarity, missing)],
       actions: [
-        ...slotChips(missing),
+        ...slotChips(missing, draft.askRemind),
         ...(priorityHint ? (["Urgent", "High", "Low"] as const).map((p) => answerAction(p, "task_draft", `${p} priority`)) : []),
         { label: "Cancel", payload: { type: "cancel_pending" } },
       ],
@@ -997,7 +1018,7 @@ export async function proceedWithDraft(
 
   const lines = [`Added: ${draftSummary(draft, turn.todayYmd)}`];
   if (shareNote) lines.unshift(shareNote);
-  if (draft.assumedEndOfDay && !draft.dueTime) lines.push("11:59 PM assumed. Say 'change time' to set another.");
+  if (draft.assumedEndOfDay && !draft.dueTime) lines.push("Due by the end of the day. I'll remind you earlier that day. Say 'change time' to set a time.");
   if (scheduleNote) lines.push(scheduleNote);
   // FR-LB-001: Pro users get the named place as an arrival reminder (others keep the text context only).
   // No place named as such: a saved place mentioned in the title ("Print notes at uni") is attached too.
@@ -1657,6 +1678,13 @@ const OFFER_TIME = /\s*\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi;
  */
 export function acceptOffer(opts: ExtractOptions, offer: string, text: string): string | null {
   const lead = YES_LEAD.exec(text.trim());
+  // C2: "When should I move it to?" takes a day ("to friday", "next monday", "tomorrow at 5").
+  if (chatFixesOn() && offer === "move it") {
+    const rest = text.trim().replace(YES_LEAD, "").replace(/[.!]+$/, "").trim();
+    const e = extractEntities(rest, opts);
+    const leftover = e.residual.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w && !OFFER_FILLER.has(w) && w !== "move" && w !== "to");
+    return (e.date || e.timeExplicit) && !leftover.length ? `move it to ${rest.replace(/^(?:move it\s+)?(?:to\s+)?/i, "")}` : null;
+  }
   // CHAT_FIXES_V2: the "change time" question takes a bare time ("5 pm", "at 6") as its answer.
   if (!lead && chatFixesOn() && offer === "change time") {
     const e = extractEntities(text, opts);

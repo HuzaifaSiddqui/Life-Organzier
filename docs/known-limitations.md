@@ -49,6 +49,12 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   history, so they can appear in later local-model context (the last messages sent with a later question, and the
   conversation summaries made every 12 messages). `CLOUD_FALLBACK` must stay off while this is the case. The WhatsApp
   paths store nothing.
+- **A date-only task gets one reminder at the start of the productive window.** "Remind me to call the bank tomorrow"
+  is saved without a time; its reminder comes at the start of the user's productive window that day (9 AM by default),
+  not at a chosen time. Deadline wording ("submit the form by Friday") is due at the end of that day with the same
+  morning reminder (`CHAT_FIXES_V2`).
+- **Bulk move from a named day replies in English only.** "Move N tasks from <day> to <day>?" and "Nothing is due or
+  planned <day>" (`CHAT_FIXES_V2`) have no Urdu copy yet.
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
   for bare imperatives instead; questions like "what's the weather" are not covered by it.

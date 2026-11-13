@@ -49,7 +49,7 @@ import {
   handleText,
 } from "./dialogue.js";
 import { findReply, parseFindQuery, resolveRange } from "./commands/find.js";
-import { resolveTaskRef } from "./draft.js";
+import { alreadyDoneTask, resolveTaskRef } from "./draft.js";
 import { parseQuery } from "./queries.js";
 import { snoozeRoutineOccurrence } from "../whatsappAgent/reminders.js";
 import { MAX_SNOOZES_PER_TASK, parseSnooze, recentlyRemindedTaskId, SNOOZE_DEFAULT_MINUTES, snoozeTask } from "../whatsapp/snooze.js";
@@ -409,7 +409,16 @@ async function chooseOrResolve(
   purpose: "update" | "complete" | "delete" | "progress" | "split" | "query_progress",
   data: Record<string, unknown> = {},
 ): Promise<{ task: Task } | { out: Out }> {
-  const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress", listed: turn.state.listed });
+  // C2 (CHAT_FIXES_V2): "done with the lab report" when that one is already done: say so, change nothing.
+  if (chatFixesOn() && purpose === "complete") {
+    const done = await alreadyDoneTask(turn.user.id, u.targetRef);
+    if (done) {
+      const day = done.completedAt ? ` (${relativeDayLabel(localYmd(done.completedAt, turn.tz), turn.todayYmd)})` : "";
+      return { out: { content: `"${done.title}" is already done${day}.`, intent: "already_done" } };
+    }
+  }
+  const strict = chatFixesOn() && (purpose === "complete" || purpose === "delete");
+  const r = await resolveTaskRef(turn.user.id, u.targetRef, turn.state.focus, { includeCompleted: purpose === "update" || purpose === "query_progress", listed: turn.state.listed, strict });
   if (r.task) return { task: r.task };
   if (r.candidates.length) {
     // PR B (CHAT_FIXES_V2): keep the whole message, so after the pick "move it to friday" still moves it to Friday
@@ -739,7 +748,9 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
   if (!chatFixesOn() || shown.length) turn.state.listed = shown.map((t) => t.id);
   const more = moreLine(list.length, shown.length);
   const overdue = list.filter((t) => t.dueAt && t.dueAt < turn.now).length;
-  const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${label.toLowerCase()}`}.`;
+  // C2 (CHAT_FIXES_V2): "Nothing due in the next 7 days." (not "due next 7 days").
+  const span = chatFixesOn() && /^next \d+ days$/i.test(label) ? `in the ${label.toLowerCase()}` : label.toLowerCase();
+  const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${span}`}.`;
   const content = !list.length
     ? [empty, routines].filter(Boolean).join(" ")
     : whatsapp
@@ -895,6 +906,15 @@ export async function resolveHandlerPending(turn: Turn, text: string, u: Underst
       default: {
         const again = await understand(String(p.data.text ?? original), { now: turn.now, tz: turn.tz, history: [], allowLlm: false });
         const { changes, summary } = changesFromUnderstanding(turn, chosen, again, String(p.data.text ?? ""));
+        // C2: a vague "move something" with no day yet: ask when; "to friday" then moves it (dialogue.ts acceptOffer).
+        if (!summary.length && chatFixesOn() && p.data.move) {
+          turn.state.pending = { kind: "offer", text: "move it" };
+          return {
+            content: `When should I move "${chosen.title}" to?`,
+            actions: ["Tomorrow", "This Friday", "Next week"].map((d) => commandAction(d, "update_task", { text: `move it to ${d.toLowerCase()}`, ref: chosen.title }, { text: `move it to ${d.toLowerCase()}` })),
+            intent: "update_ask",
+          };
+        }
         if (!summary.length) return { content: `What should I change about "${chosen.title}"?`, intent: "update_ask" };
         return applyUpdate(turn, chosen, changes, summary);
       }
