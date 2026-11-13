@@ -40,6 +40,7 @@ import {
   storeInfo,
   taskCard,
   taskById,
+  routinesTextFor,
   todayRoutinesText,
   dueLabel,
   extractOpts,
@@ -828,7 +829,7 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   // Deterministic parse (English, Urdu, Roman Urdu) decides what is asked; the regexes below cover older English phrasing.
   const q = parseQuery(text);
   if (q?.kind === "classes" || q?.kind === "next_class" || q?.kind === "where_class") return classQuery(turn, q);
-  if (q?.kind === "urgent") return urgentQuery(turn);
+  if (q?.kind === "urgent") return urgentQuery(turn, chatFixesOn() ? topicOf(text) : null);
 
   // "my physics task" names the physics task: the word "task" is dropped, not a reason to list today.
   // CHAT_FIXES_V2: "what about the third one, when is it due?": a position in the last list shown (it stays shown).
@@ -881,7 +882,10 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
       const from = startOfLocalDay(r.from, turn.tz);
       const to = startOfLocalDay(addDaysYmd(r.to, 1), turn.tz);
       const list = visible.filter((t) => t.dueAt && t.dueAt >= from && t.dueAt < to).sort((a, b) => (a.dueAt?.getTime() ?? 0) - (b.dueAt?.getTime() ?? 0));
-      return taskListReply(turn, r.label.charAt(0).toUpperCase() + r.label.slice(1), list, "");
+      // PR E: tomorrow's list also names tomorrow's routines, like "Routines today".
+      const tomorrow = addDaysYmd(turn.todayYmd, 1);
+      const routines = r.from === tomorrow && r.to === tomorrow ? await routinesTextFor(turn, tomorrow, "Routines tomorrow") : "";
+      return taskListReply(turn, r.label.charAt(0).toUpperCase() + r.label.slice(1), list, routines);
     }
   }
   const range = q?.kind === "overdue" ? "overdue" : q?.kind === "due" ? q.range : null;
@@ -901,6 +905,14 @@ async function queryTasks(turn: Turn, u: Understanding, text: string): Promise<O
   } else if (!q && (/\b(?:all|pending|everything|left|remaining)\b/i.test(text) || (chatFixesOn() && NOT_DONE.test(text)))) {
     title = "All pending";
     list = visible;
+    // PR E (CHAT_FIXES_V2): "what's pending for the conference?": only the tasks about it.
+    const topic = chatFixesOn() ? topicOf(text) : null;
+    if (topic) {
+      const about = list.filter((t) => aboutTopic(t, topic));
+      if (!about.length) return { content: `Nothing pending about "${topic}".`, intent: "query_tasks", command: "query_tasks" };
+      title = `Pending: ${topic}`;
+      list = about;
+    }
   } else {
     const end = startOfLocalDay(addDaysYmd(turn.todayYmd, 1), turn.tz);
     list = visible.filter((t) => (t.dueAt && t.dueAt < end) || (t.scheduledStart && t.scheduledStart < end));
@@ -938,13 +950,37 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
 }
 
 /** "What's my most urgent task": overdue first, then due within 24 h, then priority; top 3. */
-async function urgentQuery(turn: Turn): Promise<Out> {
-  const top = mostUrgent(await listActiveTasks(turn.user.id), turn.now);
+/**
+ * PR E (CHAT_FIXES_V2): the topic a list question is about: "which of my assignments …", "pending for the conference".
+ * A plain word (not "tasks", "things", a day…); singular form.
+ */
+const NOT_TOPIC = new Set(["task", "thing", "todo", "item", "stuff", "work", "day", "week", "today", "tomorrow", "list", "plan", "deadline", "urgent", "important", "pending", "open", "remaining", "everything", "one", "it", "them", "me"]);
+function topicOf(text: string): string | null {
+  const m = /\b(?:of my|my|for the|for my|for|about the|about|related to(?: the)?)\s+([a-z][a-z-]{2,})\b/i.exec(text);
+  const word = m?.[1]?.toLowerCase().replace(/(?<=[a-z]{3})s$/, "");
+  return word && !NOT_TOPIC.has(word) ? word : null;
+}
+function aboutTopic(t: Task, topic: string): boolean {
+  const said = [t.title, t.category ?? "", ...(Array.isArray(t.tags) ? (t.tags as string[]) : [])].join(" ").toLowerCase();
+  return new RegExp(`\\b${topic}`, "i").test(said);
+}
+
+async function urgentQuery(turn: Turn, topic: string | null = null): Promise<Out> {
+  const open = await listActiveTasks(turn.user.id);
+  const about = topic ? open.filter((t) => aboutTopic(t, topic)) : [];
+  if (topic && about.length) {
+    const top = mostUrgent(about, turn.now);
+    focusOn(turn, ...top.map((t) => t.id).reverse());
+    turn.state.listed = top.map((t) => t.id);
+    const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
+    return { content: [`Most urgent (${topic}):`, ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
+  }
+  const top = mostUrgent(open, turn.now);
   if (!top.length) return { content: "Nothing urgent. You have no pending tasks.", intent: "query_urgent" };
   focusOn(turn, ...top.map((t) => t.id).reverse());
   turn.state.listed = top.map((t) => t.id);
   const lines = top.map((t, i) => `${i + 1}) ${t.title} (${t.dueAt && t.dueAt < turn.now ? "overdue, was due " : ""}${dueLabel(t, turn)})`);
-  return { content: ["Most urgent:", ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
+  return { content: [...(topic ? [`No open tasks about "${topic}". Most urgent overall:`] : ["Most urgent:"]), ...lines].join("\n"), cards: [{ type: "task_list", title: "Most urgent", tasks: top.map((t) => serializeTask(t, turn.now)), emptyText: "Nothing here" }], intent: "query_urgent" };
 }
 
 /** Class questions are answered from the user's routines (timetable), never from raw document text. */

@@ -145,3 +145,30 @@ test("E11: 'when is …' / 'which days does … happen' from tasks and routines;
     await c.done();
   }
 });
+
+test("E9: a topic word filters the urgent and pending lists; 'tomorrow' also names tomorrow's routines", { skip: !dbAvailable && "no database" }, async () => {
+  const c = await chatWith([["Library fine", "2026-11-13"], ["Statistics assignment 2", "2026-11-14"], ["Databases assignment", "2026-11-17"], ["Workshop slides", "2026-11-18"], ["Book hotel for the workshop", null]]);
+  try {
+    const { createRoutine } = await import("../src/modules/routines/routineService.js");
+    const swim = await createRoutine(c.user.id, TZ, { title: "Swimming", frequency: "WEEKLY", daysOfWeek: [5], dueTime: "7:00 AM" } as never, NOW); // Fridays
+    // The test clock (12 Nov) is before the real creation time; occurrences are only made from the creation day on.
+    await prisma.routine.update({ where: { id: swim.id }, data: { createdAt: new Date("2026-11-01T00:00:00Z") } });
+    await withFixes(async () => {
+      const urgent = await c.send("which of my assignments is most urgent?");
+      assert.match(urgent.content, /^Most urgent \(assignment\):\n1\) Statistics assignment 2/);
+      assert.doesNotMatch(urgent.content, /Library fine/, "the library fine is not an assignment");
+
+      const none = await c.send("which of my essays is most urgent?");
+      assert.match(none.content, /^No open tasks about "essay"\. Most urgent overall:/);
+
+      const pending = await c.send("what's pending for the workshop?");
+      const titles = (pending.cards ?? []).flatMap((x) => ((x as { tasks?: Array<{ title: string }> }).tasks ?? []).map((t) => t.title));
+      assert.deepEqual(titles.sort(), ["Book hotel for the workshop", "Workshop slides"]);
+
+      const tomorrow = await c.send("what's on tomorrow");
+      assert.match(tomorrow.content, /Routines tomorrow: Swimming \(7:00 AM\)\./);
+    });
+  } finally {
+    await c.done();
+  }
+});

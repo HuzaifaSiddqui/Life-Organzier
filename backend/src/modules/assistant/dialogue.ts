@@ -56,7 +56,7 @@ import {
 import { attachLocation, attachPlaceByName, findSavedPlace, isPersonalPlace, savedPlaceInTitle } from "../locations/locationService.js";
 import { notifyAddedFromWhatsapp } from "../push/pushService.js";
 import { getEstimateSuggestion, getPatterns } from "../patterns/patternService.js";
-import { createRoutine, mandatoryConflicts, markTodayDone, occurrencesForDay, updateRoutine } from "../routines/routineService.js";
+import { createRoutine, generateRoutineOccurrences, mandatoryConflicts, markTodayDone, occurrencesForDay, updateRoutine } from "../routines/routineService.js";
 import { autoScheduleSlot, dayLoad, loadScheduleContext, movableTasksOn, suggestSlot } from "../scheduling/schedulingService.js";
 import {
   createTask,
@@ -1764,6 +1764,16 @@ export async function storeInfo(turn: Turn, text: string): Promise<Out> {
     actions: [{ label: "What do you know about me?", payload: { type: "navigate", screen: "Memory" } }],
     intent: "provide_info",
   };
+}
+
+/** PR E (CHAT_FIXES_V2): "Routines tomorrow: …" for a list of tomorrow's tasks. */
+export async function routinesTextFor(turn: Turn, ymd: string, label: string): Promise<string> {
+  // Tomorrow's occurrences may not be made yet (they are generated ahead); make them (idempotent) before reading.
+  await generateRoutineOccurrences(turn.user.id, turn.tz, 2, turn.now);
+  const occ = await occurrencesForDay(turn.user.id, turn.tz, ymd, turn.settings.currentContext);
+  const pending = occ.filter((o) => o.status === "PENDING");
+  if (!pending.length) return "";
+  return `${label}: ${listJoin(pending.slice(0, 4).map((o) => `${o.routine.title}${o.dueTime ? ` (${o.dueTime})` : ""}`))}.`;
 }
 
 export async function todayRoutinesText(turn: Turn): Promise<string> {
