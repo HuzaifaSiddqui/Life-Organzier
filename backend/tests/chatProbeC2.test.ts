@@ -161,3 +161,20 @@ test("vague 'move something': which task (open, soonest due first), then when; a
     await c.done();
   }
 });
+
+test("'my week' / 'the week' = this week (Mon–Sun); 'this coming week' = next 7 days", async () => {
+  const { resolveRange } = await import("../src/modules/assistant/ranges.js");
+  const { parseCtx } = await import("../src/modules/assistant/commands/registry.js");
+  const ctx = parseCtx({ now: NOW, tz: TZ });
+  const r = (t: string) => {
+    const x = resolveRange(t, ctx);
+    return x && x !== "unknown" ? [x.from, x.to, x.label] : x;
+  };
+  await withFixes(() => {
+    assert.deepEqual(r("what's my week like"), ["2026-11-09", "2026-11-15", "This week"]);
+    assert.deepEqual(r("anything on for the week?"), ["2026-11-09", "2026-11-15", "This week"]);
+    assert.deepEqual(r("what do I have this coming week"), ["2026-11-12", "2026-11-19", "Next 7 days"]);
+    assert.deepEqual(r("plans for the weekend"), ["2026-11-14", "2026-11-15", "This weekend"], "the weekend is unchanged");
+  });
+  assert.equal(r("what's my week like"), "unknown", "flag off: as before (the range reader is only used with the flag)");
+});

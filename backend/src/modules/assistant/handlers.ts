@@ -748,7 +748,9 @@ function taskListReply(turn: Turn, label: string, list: Task[], routines: string
   if (!chatFixesOn() || shown.length) turn.state.listed = shown.map((t) => t.id);
   const more = moreLine(list.length, shown.length);
   const overdue = list.filter((t) => t.dueAt && t.dueAt < turn.now).length;
-  const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${label.toLowerCase()}`}.`;
+  // C2 (CHAT_FIXES_V2): "Nothing due in the next 7 days." (not "due next 7 days").
+  const span = chatFixesOn() && /^next \d+ days$/i.test(label) ? `in the ${label.toLowerCase()}` : label.toLowerCase();
+  const empty = `Nothing ${label === "Overdue" ? "overdue" : `due ${span}`}.`;
   const content = !list.length
     ? [empty, routines].filter(Boolean).join(" ")
     : whatsapp

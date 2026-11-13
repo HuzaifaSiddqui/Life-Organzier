@@ -41,7 +41,10 @@ export function resolveRange(text: string, ctx: ParseCtx): DayRange | "unknown" 
   if (/\b(?:this |the )?weekend\b/.test(t)) return { from: dow === 0 ? today : thisSat, to: dow === 0 ? today : addDaysYmd(thisSat, 1), label: "This weekend" };
   // PR B (CHAT_FIXES_V2): this week = Monday to Sunday, here for chat, search (find.ts) and document instructions
   // (DOC_INSTRUCTIONS) alike; "the next 7 days" is read above as a rolling span. Flag off: from today, 7 days.
-  if (/\b(?:this week|is hafte|is haftay)\b/.test(t)) {
+  // C2 (CHAT_FIXES_V2): "this coming week" is the next 7 days, read like "the next 7 days" above.
+  if (chatFixesOn() && /\bthis coming week\b/.test(t)) return { from: today, to: plus(7), label: "Next 7 days" };
+  // C2 (CHAT_FIXES_V2): "my week", "the week" are this week too ("what's my week looking like").
+  if (/\b(?:this week|is hafte|is haftay)\b/.test(t) || (chatFixesOn() && /\b(?:my|the) week\b/.test(t))) {
     return chatFixesOn() ? { from: plus(dow === 0 ? -6 : 1 - dow), to: plus(dow === 0 ? 0 : 7 - dow), label: "This week" } : { from: today, to: plus(6), label: "This week" };
   }
   const [y, mo] = today.split("-").map(Number);
