@@ -43,6 +43,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   report?" is not about the user's list). With a day in it, "what didn't I finish yesterday?" answers with the open
   tasks that were due that day ("Nothing due yesterday." when none), not the tasks left unfinished on that day. The alarm note ("I can't set phone alarms…", `OOS_NOTE`) goes away once ALARM_STYLE is
   built.
+- **The crisis check is a keyword list and will miss some wording.** Hopelessness wording is covered in English only;
+  Roman Urdu and Urdu cover explicit self-harm wording only (`backend/src/modules/mood/crisis.ts`).
 - **Out-of-scope requests can become tasks.** "Book me a taxi", "call my mother", "order a pizza" are created as
   tasks or routines (6 of 10 out-of-scope rows acted on). `OOS_CONFIRM=on` (off by default) asks "Add it as a task?"
   for bare imperatives instead; questions like "what's the weather" are not covered by it.
