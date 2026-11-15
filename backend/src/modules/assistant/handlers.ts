@@ -960,9 +960,10 @@ function topicOf(text: string): string | null {
   const word = m?.[1]?.toLowerCase().replace(/(?<=[a-z]{3})s$/, "");
   return word && !NOT_TOPIC.has(word) ? word : null;
 }
-function aboutTopic(t: Task, topic: string): boolean {
+export function aboutTopic(t: Pick<Task, "title" | "category" | "tags">, topic: string): boolean {
   const said = [t.title, t.category ?? "", ...(Array.isArray(t.tags) ? (t.tags as string[]) : [])].join(" ").toLowerCase();
-  return new RegExp(`\\b${topic}`, "i").test(said);
+  // The topic is the user's word: escaped, so "c++" or "(urgent)" is matched as text, never as a pattern.
+  return new RegExp(`(?:^|\\W)${topic.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(said);
 }
 
 async function urgentQuery(turn: Turn, topic: string | null = null): Promise<Out> {

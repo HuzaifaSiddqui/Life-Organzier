@@ -6,6 +6,7 @@ import { prisma } from "../src/config/db.js";
 import { dueDateFromYmd } from "../src/lib/time.js";
 import "../src/modules/assistant/commands/registry.js";
 import { handleAssistantMessage } from "../src/modules/assistant/dialogue.js";
+import { aboutTopic } from "../src/modules/assistant/handlers.js";
 import { createTask } from "../src/modules/tasks/taskService.js";
 import { dbAvailable, TZ } from "./fixtures.js";
 
@@ -171,8 +172,28 @@ test("E9: a topic word filters the urgent and pending lists; 'tomorrow' also nam
       assert.doesNotMatch(status.content, /Nothing pending about/, "a status word is not a topic");
       const tomorrow = await c.send("what's on tomorrow");
       assert.match(tomorrow.content, /Routines tomorrow: Swimming \(7:00 AM\)\./);
+      const occurrences = () => prisma.routineOccurrence.count({ where: { routineId: swim.id } });
+      const before = await occurrences();
+      const again = await c.send("what's on tomorrow");
+      assert.equal(again.content, tomorrow.content);
+      assert.equal(await occurrences(), before, "asking twice makes no extra routine occurrences");
+
+      for (const say of ["what's pending for c++?", "anything about (urgent)?"]) {
+        const m = await c.send(say);
+        assert.ok(m.content, `${say}: answered, no throw`);
+      }
     });
   } finally {
     await c.done();
   }
+});
+
+test("E9: a topic with regex characters is matched as plain text", () => {
+  const task = (title: string) => ({ title, category: null, tags: [] }) as never;
+  assert.equal(aboutTopic(task("Revise C++ pointers"), "c++"), true);
+  assert.equal(aboutTopic(task("Revise C pointers"), "c++"), false);
+  assert.equal(aboutTopic(task("Email (urgent) to Sir Ali"), "(urgent)"), true);
+  assert.equal(aboutTopic(task("Statistics assignment 2"), "assignment"), true);
+  assert.equal(aboutTopic(task("Reassignment form"), "assignment"), false, "start of a word, as before");
+  assert.doesNotThrow(() => aboutTopic(task("x"), "[a-"));
 });
