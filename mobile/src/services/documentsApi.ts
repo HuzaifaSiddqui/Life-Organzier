@@ -125,7 +125,8 @@ export type DocumentSummary = {
 /** A document sent in chat: the server writes "file + request" and its summary into this conversation. */
 export type ChatUpload = { conversationId: string | null };
 export type ChatMessageRow = { id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; metadata: unknown; createdAt: string };
-export type UploadResult = ProcessResult & { chat?: { conversationId: string; messages: ChatMessageRow[] } };
+/** `learning`: DOC_KNOWLEDGE is reading it for facts in the background; poll documentLearning(). */
+export type UploadResult = ProcessResult & { chat?: { conversationId: string; messages: ChatMessageRow[]; learning?: boolean } };
 
 export async function uploadDocument(
   file: PickedFile,
@@ -189,6 +190,16 @@ export async function uploadDocument(
   void syncNow();
   scheduleReminderSync();
   return body.data;
+}
+
+/** DOC_KNOWLEDGE: keep the ticked facts from a document (an empty list keeps none). */
+export function keepDocumentFacts(id: string, keep: string[]): Promise<{ kept: number }> {
+  return apiPost<{ kept: number }>(`/documents/${id}/facts`, { keep });
+}
+
+/** DOC_KNOWLEDGE: whether reading a chat document for facts has finished. */
+export function documentLearning(id: string): Promise<{ status: "none" | "pending" | "done"; messageId: string | null }> {
+  return apiGet(`/documents/${id}/learning`);
 }
 
 /** A saved document's reading, in the upload's shape (the review screen, from a chat card or My documents). */

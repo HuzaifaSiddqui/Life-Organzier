@@ -1,3 +1,6 @@
+import { background } from "../../lib/background.js";
+import { keepFacts, learnFromDocument } from "./knowledge.js";
+import { docKnowledgeOn } from "./knowledgeRules.js";
 import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import multer from "multer";
@@ -86,7 +89,10 @@ documentRouter.post(
       ...(docInstructionsOn() && body.instruction?.trim() ? { instruction: body.instruction } : {}),
     }));
     const chat = body.chat === "true" ? await recordUploadInChat(req.user.id, req.settings.language, body.conversationId || null, result, body.instruction ?? null) : null;
-    sendSuccess(res, { ...result, ...(chat ? { chat } : {}) }, "Document processed", 201);
+    // DOC_KNOWLEDGE: read it for search and for facts about the user after answering (the app polls /:id/learning).
+    const learning = Boolean(chat && docKnowledgeOn());
+    if (chat && learning) background(learnFromDocument(req.user.id, result.document.id, chat.conversationId, req.settings.language));
+    sendSuccess(res, { ...result, ...(chat ? { chat: { ...chat, learning } } : {}) }, "Document processed", 201);
   }),
 );
 
@@ -157,6 +163,28 @@ documentRouter.delete(
     const result = await prisma.document.deleteMany({ where: { id: req.params.id, userId: req.user.id } });
     if (!result.count) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
     sendSuccess(res, {}, "Document deleted");
+  }),
+);
+
+/** DOC_KNOWLEDGE: whether reading a chat document for facts has finished, and the chat message it added (if any). */
+documentRouter.get(
+  "/:id/learning",
+  handle(async (req, res) => {
+    const doc = await prisma.document.findFirst({ where: { id: String(req.params.id), userId: req.user.id }, select: { knowledge: true } });
+    if (!doc) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    const k = doc.knowledge as { status?: string; messageId?: string } | null;
+    sendSuccess(res, { status: k?.status ?? "none", messageId: k?.messageId ?? null });
+  }),
+);
+
+/** DOC_KNOWLEDGE: the facts the user ticked on the chat card go into memory. */
+documentRouter.post(
+  "/:id/facts",
+  handle(async (req, res) => {
+    const body = parseBody(z.object({ keep: z.array(z.string().min(1).max(20)).max(10) }), req.body);
+    const r = await keepFacts(req.user.id, String(req.params.id), body.keep);
+    if (!r) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    sendSuccess(res, r, r.kept ? `Remembered ${r.kept}` : "Nothing remembered");
   }),
 );
 

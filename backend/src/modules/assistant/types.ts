@@ -1,3 +1,4 @@
+import type { DocumentFactsCard } from "../documents/knowledge.js";
 import type { DocumentChatCard } from "../documents/chatUpload.js";
 import type { Priority, RoutineFrequency, RoutinePriority, TaskType } from "@prisma/client";
 import type { CrisisPayload, MoodRecommendation, Suggestion } from "../mood/moodService.js";
@@ -205,7 +206,9 @@ export type Card =
   /** CALENDAR_SYNC: filled in on the phone from its own calendar (nothing from it reaches the server). */
   | { type: "calendar"; kind: "agenda" | "free" | "add" | "new"; date: string; taskId?: string; title?: string }
   /** A document sent in chat (documents/chatUpload.ts): what was found and added; Review opens the usual review. */
-  | DocumentChatCard;
+  | DocumentChatCard
+  /** DOC_KNOWLEDGE: facts about the user proposed from a document; the user ticks which to keep. */
+  | DocumentFactsCard;
 
 export type AssistantMessageMeta = {
   cards?: Card[];

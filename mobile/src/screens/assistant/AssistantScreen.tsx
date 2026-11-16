@@ -1,8 +1,8 @@
 import { ComposerPlusMenu } from "../../components/assistant/ComposerPlusMenu";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { isOnline, pickChatDocument, type PickedDoc } from "../../services/chatDocuments";
-import { uploadDocument } from "../../services/documentsApi";
-import { toChat, type RawMessage } from "../../services/assistantApi";
+import { documentLearning, uploadDocument } from "../../services/documentsApi";
+import { loadConversationMessages, toChat, type RawMessage } from "../../services/assistantApi";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -236,6 +236,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           setConversationId(r.chat.conversationId);
           const added = r.chat.messages.map((x) => toChat(x as RawMessage));
           setMessages((m) => [...m.filter((x) => x.id !== tempId), ...added]);
+          if (r.chat.learning) void watchLearning(r.document.id, r.chat.conversationId);
         } else {
           setMessages((m) => m.map((x) => (x.id === tempId ? { ...x, pending: false } : x)));
         }
@@ -253,6 +254,28 @@ export function AssistantScreen({ navigation, route }: Props) {
     },
     [busy, conversationId, scrollToEnd, t],
   );
+
+  /**
+   * DOC_KNOWLEDGE: the server keeps reading a sent document for facts about the user. Check every few seconds (up to 3
+   * minutes, while this screen is open); when it added a "Tick the ones I should remember" message, show it.
+   */
+  const mountedRef = useRef(true);
+  useEffect(() => () => void (mountedRef.current = false), []);
+  const watchLearning = useCallback(async (documentId: string, convId: string) => {
+    for (let i = 0; i < 45 && mountedRef.current; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const s = await documentLearning(documentId).catch(() => null);
+      if (!s || s.status === "pending") continue;
+      if (s.messageId) {
+        const all = await loadConversationMessages(convId).catch(() => null);
+        if (all && mountedRef.current) {
+          setMessages((m) => [...m, ...all.filter((x) => !m.some((y) => y.id === x.id))]);
+          scrollToEnd();
+        }
+      }
+      return;
+    }
+  }, [scrollToEnd]);
 
   /** The send button and the keyboard's send: a document if one is attached, otherwise a normal message. */
   const submit = useCallback(() => {

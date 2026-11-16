@@ -1,3 +1,4 @@
+import { DocumentFactsCard } from "./DocumentFactsCard";
 import { DocumentCard } from "./DocumentCard";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, palette, radii } from "../../constants/theme";
@@ -222,6 +223,8 @@ export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction, onO
             return <CalendarClashCard key={i} card={card} onAction={onAction} />;
           case "document":
             return <DocumentCard key={i} card={card} onOpen={onOpenDocument} />;
+          case "document_facts":
+            return <DocumentFactsCard key={i} card={card} />;
           default:
             return null;
         }
