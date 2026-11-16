@@ -1,3 +1,4 @@
+import { guestModeOn } from "./modules/guest/guestRules.js";
 import cors, { type CorsOptions } from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { chainConfigured, getChains } from "./ai/chains.js";
@@ -55,7 +56,8 @@ export function createApp() {
   app.get("/health", (_req, res) => {
     const models = getModelStatus();
     const available = getAi().available && models.chat !== false;
-    res.json({ ok: true, ai: { enabled: getAi().enabled, available, models, gemini: getAi().providerStatus("gemini") } });
+    // `guestMode`: whether the app offers "Continue as guest" (FR-OB-003, GUEST_MODE).
+    res.json({ ok: true, guestMode: guestModeOn(), ai: { enabled: getAi().enabled, available, models, gemini: getAi().providerStatus("gemini") } });
 
 /**
  * Hosted model providers: each job's chain (empty = the baseline Ollama path) and each provider's state

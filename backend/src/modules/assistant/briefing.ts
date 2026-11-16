@@ -281,8 +281,10 @@ export async function getBriefing(user: User, settings: UserSettings, now = new 
   const load = dayLoad(ctx, todayYmd);
   const peak = peakWindowsFrom(patterns);
   const hour = localParts(now, tz).h;
-  const name = user.displayName?.split(/\s+/)[0] ?? user.email.split("@")[0];
-  const greeting = `${hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${name}`;
+  // A guest (FR-OB-003) may have no name or email yet: just the greeting.
+  const name = user.displayName?.split(/\s+/)[0] ?? user.email?.split("@")[0] ?? null;
+  const part = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greeting = name ? `${part}, ${name}` : part;
 
   const rank = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 } as const;
   const inPeakNow = peak.windows.some((w) => hour >= w.start && hour < w.end);

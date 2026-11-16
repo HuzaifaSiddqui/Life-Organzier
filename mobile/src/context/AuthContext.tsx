@@ -19,6 +19,7 @@ import type { User } from "../types/models";
 import { syncPendingTasks } from "../services/tasksApi";
 import { clearUserCache } from "../services/localCache";
 import { clearOutbox } from "../services/outbox";
+import { canUseApp } from "../utils/guest";
 
 type AuthContextValue = {
   firebaseUser: FirebaseUser | null;
@@ -32,6 +33,12 @@ type AuthContextValue = {
   refreshProfile: () => Promise<void>;
   /** Changes the profile on screen (and its saved copy) at once, e.g. a new display name before the server answers. */
   patchDbUser: (patch: Partial<User>) => void;
+  /**
+   * Re-reads the signed-in Firebase user after it changed in place (a guest linked an email, FR-OB-003): Firebase
+   * keeps the same object, so screens wouldn't see the change otherwise.
+   */
+  refreshAuthUser: () => void;
+  authVersion: number;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -93,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const syncProfile = useCallback(async () => {
     const user = auth.currentUser;
-    if (!user || !user.emailVerified) return;
+    if (!user || !canUseApp(user)) return;
     setBootstrapping(true);
     try {
       const reachable = await resolveAndApplyApiBase();
@@ -116,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (!auth.currentUser || !auth.currentUser.emailVerified) {
+    if (!canUseApp(auth.currentUser)) {
       setDbUser(null);
       return;
     }
@@ -148,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       // Wait for email verification before syncing with the API (Firebase sends the link from console).
-      if (!user.emailVerified) {
+      if (!canUseApp(user)) {
         setDbUser(null);
         setBootstrapping(false);
         setAuthReady(true);
@@ -168,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Back online, or back in the app: retry if the server profile hasn't been fetched yet.
   useEffect(() => {
     const retry = () => {
-      if (!auth.currentUser?.emailVerified) return;
+      if (!canUseApp(auth.currentUser)) return;
       if (profileSyncedRef.current) {
         void syncPendingTasks();
       } else {
@@ -186,6 +193,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       app.remove();
     };
   }, [syncProfile]);
+
+  const [authVersion, setAuthVersion] = useState(0);
+  const refreshAuthUser = useCallback(() => {
+    setFirebaseUser(auth.currentUser);
+    setAuthVersion((v) => v + 1);
+    if (!canUseApp(auth.currentUser)) setDbUser(null);
+  }, []);
 
   const patchDbUser = useCallback((patch: Partial<User>) => {
     const uid = auth.currentUser?.uid;
@@ -206,8 +220,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       apiEndpointsReady,
       refreshProfile,
       patchDbUser,
+      refreshAuthUser,
+      // `authVersion` changes the value object when the same Firebase user changed in place.
+      authVersion,
     }),
-    [firebaseUser, dbUser, bootstrapping, authReady, apiEndpointsReady, refreshProfile, patchDbUser]
+    [firebaseUser, dbUser, bootstrapping, authReady, apiEndpointsReady, refreshProfile, patchDbUser, refreshAuthUser, authVersion]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

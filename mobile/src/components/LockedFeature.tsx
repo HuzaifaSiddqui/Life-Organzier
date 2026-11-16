@@ -20,7 +20,8 @@ export function useFeatureLock(): (feature: Feature) => LockReason | null {
 }
 
 /**
- * Explains a locked feature: "Try Pro" (→ Settings, where the plan is chosen) or "Create an account" (guests).
+ * Explains a locked feature: "Try Pro" (→ Settings, where the plan is chosen) or "Create an account" (guests → the
+ * Create account screen).
  * Cancel keeps the user where they are.
  */
 export function promptUnlock(reason: LockReason, featureName: string, t: (key: StringKey, vars?: Record<string, string | number>) => string): void {
@@ -33,7 +34,7 @@ export function promptUnlock(reason: LockReason, featureName: string, t: (key: S
   }
   showAlert(t("lock.guest.title"), t("lock.guest.body", { feature: featureName }), [
     { text: t("common.cancel"), style: "cancel" },
-    { text: t("lock.guest.go"), onPress: () => openAppScreen("Settings") },
+    { text: t("lock.guest.go"), onPress: () => openAppScreen("CreateAccount") },
   ]);
 }
 

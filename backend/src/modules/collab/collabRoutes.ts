@@ -1,7 +1,7 @@
 import { Priority, SharedTaskKind, TaskType } from "@prisma/client";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import { handle, HttpError, parseBody, requireUser, type UserRequest } from "../../lib/http.js";
+import { handle, HttpError, parseBody, requireAccount, requireUser, type UserRequest } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendError, sendSuccess } from "../../utils/apiResponse.js";
 import { serializeTask } from "../tasks/taskService.js";
@@ -45,6 +45,8 @@ collabRouter.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 collabRouter.use(requireFirebaseUser, requireUser);
+// Guests (FR-OB-003) can't be found by others: only the summary (GET /me, so the app can show People dimmed) is open to them.
+collabRouter.use((req, res, next) => (req.method === "GET" && req.path === "/me" ? next() : requireAccount(req, res, next)));
 
 const isoOrNull = z
   .string()

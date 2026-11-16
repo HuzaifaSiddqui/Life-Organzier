@@ -56,7 +56,7 @@ export async function buildAssistantContext(args: {
   const todayYmd = localYmd(now, tz);
   const dueToday = tasks.filter((t) => t.dueAt && localYmd(t.dueAt, tz) === todayYmd);
   const overdue = tasks.filter((t) => isTaskOverdue(t, now));
-  const displayName = user.displayName?.split(/\s+/)[0] ?? user.email.split("@")[0];
+  const displayName = user.displayName?.split(/\s+/)[0] ?? user.email?.split("@")[0] ?? "the user";
 
   const lines: string[] = [];
   lines.push(`User: ${displayName}. Now: ${dayName(local.weekday)} ${formatClock(local.h, local.mi)} (${tz}).${settings.currentContext ? ` Current context: ${settings.currentContext}.` : ""}`);

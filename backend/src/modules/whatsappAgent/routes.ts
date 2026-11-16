@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 import { setBounded } from "../../lib/boundedMap.js";
-import { handle, parseBody, requireUser, type UserRequest } from "../../lib/http.js";
+import { handle, parseBody, requireAccount, requireUser, type UserRequest } from "../../lib/http.js";
 import { requireFirebaseUser, type AuthRequest } from "../../middleware/authMiddleware.js";
 import { sendError, sendSuccess } from "../../utils/apiResponse.js";
 import { agentStatus, connectAgent, disconnectAgent, requireAgentFeature, sendTestMessage, updateAgentSettings } from "./service.js";
@@ -13,6 +13,8 @@ import { agentStatus, connectAgent, disconnectAgent, requireAgentFeature, sendTe
  */
 export const whatsappAgentRouter = Router();
 whatsappAgentRouter.use(requireFirebaseUser, requireUser);
+// Guests (FR-OB-003) may read the status, so the app can show the card dimmed; everything else needs an account.
+whatsappAgentRouter.use((req, res, next) => (req.method === "GET" && req.path === "/status" ? next() : requireAccount(req, res, next)));
 
 // ponytail: in-memory per server process, like the Twilio notice throttle; enough for one instance.
 const hits = new Map<string, number[]>();

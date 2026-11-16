@@ -96,7 +96,14 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 | **File** | `backend/src/modules/auth/authRoutes.ts` |
 | **Middleware** | `requireFirebaseUser` |
 | **Service** | `syncUserFromFirebase` in `backend/src/modules/users/userService.ts` |
-| **Purpose** | Upsert `User` in Postgres from Firebase claims (email required). |
+| **Purpose** | Upsert `User` in Postgres from Firebase claims. Email required, except a Firebase anonymous sign-in with `GUEST_MODE=on`, which makes a guest (`isGuest: true`, no email; FR-OB-003). A guest whose Firebase account has since been linked to an email becomes a normal account here, same user and data. Anonymous with guest mode off: 403 `GUEST_MODE_OFF`. |
+
+### Guest mode (FR-OB-003, `GUEST_MODE`)
+
+- `GET /health` includes `guestMode: true|false`; the app shows "Continue as guest" only when it is true.
+- Guests are refused with **403 `ACCOUNT_REQUIRED`** (`requireAccount` in `lib/http.ts`) on: `POST /whatsapp/link/start`, every `/whatsapp-agent` route except `GET /status`, every `/collab` route except `GET /me`, and `PUT /settings` with `tier: "PRO"` or `notificationDevices: "WHATSAPP"`.
+- `POST /api/account/guest/discard`: deletes the guest's user (and all its data, by cascade) and its Firebase account at once. Accounts get 403 `NOT_GUEST`. Used by "Start fresh" and by a guest signing out.
+- The hourly maintenance job deletes guests whose `lastSeenAt` (or, never seen, `createdAt`) is older than 60 days. `lastSeenAt` is written by `requireUser` at most every 6 hours.
 
 **Mobile usage:** `api.post("/auth/sync-user", {})` in `mobile/src/context/AuthContext.tsx` (after sign-in / profile refresh).
 

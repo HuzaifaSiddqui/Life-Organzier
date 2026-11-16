@@ -14,7 +14,12 @@ datasource db {
 model User {
   id                  String    @id @default(uuid())
   firebaseUid         String    @unique
-  email               String    @unique
+  /// Null only for guests (FR-OB-003, GUEST_MODE): a Firebase anonymous account has no email until it is converted.
+  email               String?   @unique
+  /// Guest mode (FR-OB-003): a Firebase anonymous account. Converting links an email to the same account.
+  isGuest             Boolean   @default(false)
+  /// Last request (updated at most every few hours). Guests unused for 60 days are deleted.
+  lastSeenAt          DateTime?
   displayName         String?
   photoUrl            String?
   /// WhatsApp number (E.164). Set only by the LINK flow, together with phoneVerifiedAt.

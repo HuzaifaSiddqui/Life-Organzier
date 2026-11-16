@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../config/db.js";
-import { handle, parseBody, requireUser } from "../../lib/http.js";
+import { handle, HttpError, parseBody, requireUser } from "../../lib/http.js";
+import { getFirebaseAuth } from "../../config/firebase.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { exportCsv } from "../analytics/analyticsService.js";
@@ -36,6 +37,23 @@ accountRouter.get(
   "/export",
   handle(async (req, res) => {
     sendSuccess(res, { filename: `life-organizer-data-${new Date().toISOString().slice(0, 10)}.csv`, csv: await exportCsv(req.user.id) });
+  }),
+);
+
+/**
+ * Guest mode (FR-OB-003): a guest who chooses "Start fresh" when creating an account, or signs out, loses their
+ * guest data at once (there is no account to recover it with). The Firebase guest account goes too. Accounts can't
+ * use this: they have the 30-day deletion below.
+ */
+accountRouter.post(
+  "/guest/discard",
+  handle(async (req, res) => {
+    if (!req.user.isGuest) throw new HttpError(403, "NOT_GUEST", "Only a guest account can be discarded this way.");
+    await prisma.user.delete({ where: { id: req.user.id } });
+    await getFirebaseAuth()
+      .deleteUser(req.user.firebaseUid)
+      .catch((error: unknown) => console.warn("Could not delete Firebase guest", error instanceof Error ? error.message : error));
+    sendSuccess(res, {}, "Guest data deleted");
   }),
 );
 

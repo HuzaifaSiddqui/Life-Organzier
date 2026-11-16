@@ -1,3 +1,4 @@
+import { CreateAccountScreen } from "../screens/auth/CreateAccountScreen";
 import { StyleSheet, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 import { Sidebar } from "../components/Sidebar";
@@ -58,6 +59,8 @@ export type MainStackParamList = {
   /** edit: the owner changes a shared task; accept: a member accepts it for their own date/time. */
   SharedTaskEdit: { id: string; mode: "edit" | "accept" | "decline" };
   Notifications: undefined;
+  /** Guest mode (FR-OB-003): a guest creates an account (keep the data or start fresh). */
+  CreateAccount: undefined;
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -119,6 +122,7 @@ function Screens() {
       <Stack.Screen name="Collab" component={CollabScreen} />
       <Stack.Screen name="SharedTaskEdit" component={SharedTaskEditScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
     </Stack.Navigator>
   );
 }

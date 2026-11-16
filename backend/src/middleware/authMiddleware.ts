@@ -3,7 +3,8 @@ import { getFirebaseAuth } from "../config/firebase.js";
 import { sendError } from "../utils/apiResponse.js";
 
 export type AuthRequest = Request & {
-  firebase?: { uid: string; email?: string; name?: string; picture?: string };
+  /** `provider`: how they signed in ("password", "anonymous" for guests, FR-OB-003). */
+  firebase?: { uid: string; email?: string; name?: string; picture?: string; provider?: string };
 };
 
 export async function requireFirebaseUser(
@@ -30,6 +31,7 @@ export async function requireFirebaseUser(
       email: decoded.email,
       name: decoded.name,
       picture: decoded.picture,
+      provider: decoded.firebase?.sign_in_provider,
     };
     next();
   } catch {

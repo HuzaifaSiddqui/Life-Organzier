@@ -10,7 +10,8 @@ export type Feature =
   | "whatsappReminders" // "Notify on: WhatsApp only"
   | "locationReminders" // FR-LB-001
   | "analyticsExport" // Insights → Export CSV
-  | "sharing"; // People / shared tasks (needs a real account: others must be able to find you)
+  | "sharing" // People / shared tasks (needs a real account: others must be able to find you)
+  | "proPlan"; // switching to Pro (needs an account to keep it on)
 
 /** "pro": free users see "Try Pro"; "account": guests see "Create an account". */
 const RULES: Record<Feature, { pro: boolean; account: boolean }> = {
@@ -20,6 +21,7 @@ const RULES: Record<Feature, { pro: boolean; account: boolean }> = {
   locationReminders: { pro: true, account: true },
   analyticsExport: { pro: true, account: true },
   sharing: { pro: false, account: true },
+  proPlan: { pro: false, account: true },
 };
 
 export type LockReason = "pro" | "guest";

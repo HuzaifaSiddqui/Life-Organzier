@@ -1,3 +1,4 @@
+import { canUseApp } from "../utils/guest";
 import { OutboxNotices } from "../components/OutboxNotices";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -160,7 +161,7 @@ export function RootNavigator() {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!firebaseUser ? (
             <Stack.Screen name="Auth" component={AuthStack} />
-          ) : !firebaseUser.emailVerified ? (
+          ) : !canUseApp(firebaseUser) ? (
             <Stack.Screen name="VerifyEmail" component={EmailVerificationScreen} />
           ) : firstSync ? (
             <Stack.Screen name="Boot">
@@ -174,10 +175,10 @@ export function RootNavigator() {
             <Stack.Screen name="App" component={MainStack} />
           )}
         </Stack.Navigator>
-        {firebaseUser?.emailVerified && !firstSync ? <CheckinSheet /> : null}
-        {firebaseUser?.emailVerified && !firstSync ? <LocationSnackbar /> : null}
-        {firebaseUser?.emailVerified && !firstSync ? <CalendarChangesSnackbar /> : null}
-        {firebaseUser?.emailVerified && !firstSync ? <OutboxNotices /> : null}
+        {canUseApp(firebaseUser) && !firstSync ? <CheckinSheet /> : null}
+        {canUseApp(firebaseUser) && !firstSync ? <LocationSnackbar /> : null}
+        {canUseApp(firebaseUser) && !firstSync ? <CalendarChangesSnackbar /> : null}
+        {canUseApp(firebaseUser) && !firstSync ? <OutboxNotices /> : null}
         {Platform.OS === "web" ? <DialogHost /> : null}
       </NavigationContainer>
     </KeyboardPad>

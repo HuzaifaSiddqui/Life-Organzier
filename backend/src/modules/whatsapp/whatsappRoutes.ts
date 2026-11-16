@@ -1,5 +1,5 @@
 import express, { Router, type Request, type Response } from "express";
-import { handle, HttpError, requireUser } from "../../lib/http.js";
+import { handle, HttpError, requireAccount, requireUser } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { EMPTY_TWIML, enqueue, processInbound, recordInbound, twilioSignatureValid } from "./inbound.js";
@@ -53,6 +53,7 @@ whatsappRouter.post(
   "/link/start",
   requireFirebaseUser,
   requireUser,
+  requireAccount,
   handle(async (req, res) => {
     if (req.settings.tier !== "PRO") throw new HttpError(403, "PRO_REQUIRED", "WhatsApp is part of Pro");
     const { code, expiresAt } = await startLink(req.user.id);
