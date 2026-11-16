@@ -6,7 +6,7 @@ export function isWideWidth(width: number): boolean {
   return width >= layout.wideMin;
 }
 
-export type SidebarRoute = "Dashboard" | "Assistant" | "TaskList" | "Routines" | "Documents" | "Insights" | "Mood" | "Collab" | "Profile";
+export type SidebarRoute = "Dashboard" | "Assistant" | "TaskList" | "Routines" | "Insights" | "Mood" | "Collab" | "Profile";
 export type SidebarIcon = "home" | "assistant" | "tasks" | "repeat" | "doc" | "insights" | "pulse" | "people" | "user";
 
 export const SIDEBAR_ITEMS: ReadonlyArray<{ route: SidebarRoute; icon: SidebarIcon; label: StringKey }> = [
@@ -14,7 +14,6 @@ export const SIDEBAR_ITEMS: ReadonlyArray<{ route: SidebarRoute; icon: SidebarIc
   { route: "Assistant", icon: "assistant", label: "nav.assistant" },
   { route: "TaskList", icon: "tasks", label: "nav.tasks" },
   { route: "Routines", icon: "repeat", label: "nav.routines" },
-  { route: "Documents", icon: "doc", label: "nav.documents" },
   { route: "Insights", icon: "insights", label: "nav.insights" },
   { route: "Mood", icon: "pulse", label: "nav.mood" },
   { route: "Collab", icon: "people", label: "nav.people" },
@@ -31,6 +30,10 @@ const PARENT: Record<string, SidebarRoute> = {
   Settings: "Profile",
   SavedPlaces: "Profile",
   Notifications: "Profile",
+  // Documents are sent in chat; My documents and a document's review live under Me.
+  Documents: "Profile",
+  DocumentReview: "Profile",
+  CreateAccount: "Profile",
   Onboarding: "Dashboard",
 };
 

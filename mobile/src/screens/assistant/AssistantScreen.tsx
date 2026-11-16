@@ -1,3 +1,8 @@
+import { ComposerPlusMenu } from "../../components/assistant/ComposerPlusMenu";
+import { useLocale } from "../../i18n/LocaleProvider";
+import { isOnline, pickChatDocument, type PickedDoc } from "../../services/chatDocuments";
+import { uploadDocument } from "../../services/documentsApi";
+import { toChat, type RawMessage } from "../../services/assistantApi";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -68,6 +73,11 @@ export function AssistantScreen({ navigation, route }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const voiceTurnRef = useRef(false);
   const handledParamsRef = useRef<string | null>(null);
+  const { t } = useLocale();
+  /** A document attached to the next message ("+" in the composer); sent with the typed text as its request. */
+  const [attachment, setAttachment] = useState<PickedDoc | null>(null);
+  /** Seconds a document has been reading (the "Reading your document…" bubble). */
+  const [readingFor, setReadingFor] = useState<number | null>(null);
 
   useEffect(() => {
     if (settings) setSpeakReplies(settings.ttsEnabled);
@@ -190,6 +200,72 @@ export function AssistantScreen({ navigation, route }: Props) {
     if (!ok) voiceTurnRef.current = false;
   }, [settings?.language, start]);
 
+  /** "+": pick a PDF, image or DOCX to send in this chat. */
+  const pickAttachment = useCallback(async () => {
+    const picked = await pickChatDocument();
+    if (picked === "too_large") {
+      setNotice(t("chatDoc.tooLarge"));
+      return;
+    }
+    if (picked) setAttachment(picked);
+  }, [t]);
+
+  /**
+   * Sends the attached document with the typed text as its request. The server reads it like any upload and writes
+   * "file + request" and its summary (with a Review card) into this chat; those replace the temporary bubbles.
+   */
+  const sendDocument = useCallback(
+    async (doc: PickedDoc, text: string) => {
+      if (busy) return;
+      setNotice(null);
+      if (!(await isOnline())) {
+        setNotice(t("chatDoc.offline"));
+        return;
+      }
+      setBusy(true);
+      setAttachment(null);
+      setDraft("");
+      const tempId = `tmp-doc-${Date.now()}`;
+      setMessages((m) => [...m, { id: tempId, role: "USER", content: text || doc.name, createdAt: new Date().toISOString(), pending: true, attachment: { fileName: doc.name } }]);
+      scrollToEnd();
+      setReadingFor(0);
+      const timer = setInterval(() => setReadingFor((s) => (s ?? 0) + 1), 1000);
+      try {
+        const r = await uploadDocument(doc, "AUTO", "eng", undefined, text || undefined, { conversationId });
+        if (r.chat) {
+          setConversationId(r.chat.conversationId);
+          const added = r.chat.messages.map((x) => toChat(x as RawMessage));
+          setMessages((m) => [...m.filter((x) => x.id !== tempId), ...added]);
+        } else {
+          setMessages((m) => m.map((x) => (x.id === tempId ? { ...x, pending: false } : x)));
+        }
+      } catch (e) {
+        setMessages((m) => m.filter((x) => x.id !== tempId));
+        setAttachment(doc);
+        setDraft(text);
+        setNotice(getApiErrorMessage(e, t("chatDoc.failed")));
+      } finally {
+        clearInterval(timer);
+        setReadingFor(null);
+        setBusy(false);
+        scrollToEnd();
+      }
+    },
+    [busy, conversationId, scrollToEnd, t],
+  );
+
+  /** The send button and the keyboard's send: a document if one is attached, otherwise a normal message. */
+  const submit = useCallback(() => {
+    const text = draft.trim();
+    if (attachment) {
+      void sendDocument(attachment, text);
+      return;
+    }
+    if (!text) return;
+    setDraft("");
+    void send({ text });
+  }, [attachment, draft, send, sendDocument]);
+
   // Entry points: voice mode, prefilled text, or a one-tap action from another screen.
   useEffect(() => {
     if (loading) return;
@@ -201,7 +277,8 @@ export function AssistantScreen({ navigation, route }: Props) {
     else if (p.prefill && p.autoSend) void send({ text: p.prefill });
     else if (p.prefill) setDraft(p.prefill);
     if (p.voice && speechSupported) void startVoice();
-  }, [loading, route.params, send, speechSupported, startVoice]);
+    if (p.attach) void pickAttachment();
+  }, [loading, route.params, send, speechSupported, startVoice, pickAttachment]);
 
   const onAction = useCallback(
     (action: QuickAction | { payload: ActionPayload; label: string }) => {
@@ -291,7 +368,15 @@ export function AssistantScreen({ navigation, route }: Props) {
           messages.map((m) => (
             <View key={m.id} style={[styles.msgRow, m.role === "USER" ? styles.right : styles.left]}>
               <View style={[styles.bubble, m.role === "USER" ? styles.userBubble : styles.aiBubble, m.pending && { opacity: 0.6 }]}>
-                <Text style={[styles.msgText, m.role === "USER" && { color: colors.bg }]}>{m.content}</Text>
+                {m.attachment ? (
+                  <View style={styles.attachLine}>
+                    <Icon name="doc" size={16} color={m.role === "USER" ? colors.bg : colors.text} />
+                    <Text style={[styles.attachName, m.role === "USER" && { color: colors.bg }]} numberOfLines={1}>
+                      {m.attachment.fileName}
+                    </Text>
+                  </View>
+                ) : null}
+                {!m.attachment || m.content !== m.attachment.fileName ? <Text style={[styles.msgText, m.role === "USER" && { color: colors.bg }]}>{m.content}</Text> : null}
               </View>
               {m.role === "ASSISTANT" && m.cards?.length ? (
                 <View style={styles.cards}>
@@ -300,6 +385,7 @@ export function AssistantScreen({ navigation, route }: Props) {
                     onOpenTask={(taskId) => navigation.navigate("TaskDetail", { taskId })}
                     onOpenRoutine={(routineId) => navigation.navigate("Routines", { routineId })}
                     onAction={(payload, label) => onAction({ payload, label })}
+                    onOpenDocument={(documentId) => navigation.navigate("DocumentReview", { documentId })}
                   />
                 </View>
               ) : null}
@@ -335,7 +421,7 @@ export function AssistantScreen({ navigation, route }: Props) {
           <View style={[styles.msgRow, styles.left]}>
             <View style={[styles.bubble, styles.aiBubble, styles.typing]}>
               <ActivityIndicator size="small" color={palette.muted} />
-              <Text style={styles.typingText}>Thinking…</Text>
+              <Text style={styles.typingText}>{readingFor !== null ? t("chatDoc.reading", { seconds: String(readingFor) }) : "Thinking…"}</Text>
             </View>
           </View>
         ) : null}
@@ -354,22 +440,29 @@ export function AssistantScreen({ navigation, route }: Props) {
         ) : (
           <>
           <MentionPicker text={draft} onPick={setDraft} />
+          {attachment ? (
+            <View style={styles.attachChip}>
+              <Icon name="doc" size={16} color={colors.text} />
+              <Text style={styles.attachChipText} numberOfLines={1}>
+                {attachment.name}
+              </Text>
+              <Pressable onPress={() => setAttachment(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("chatDoc.remove", { name: attachment.name })}>
+                <Icon name="close" size={16} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : null}
+          {attachment ? <Text style={styles.attachHint}>{t("chatDoc.hint")}</Text> : null}
           <View style={styles.inputRow}>
+            <ComposerPlusMenu disabled={busy} items={[{ key: "upload", icon: "upload", label: "chatPlus.upload", onPress: () => void pickAttachment() }]} />
             <TextInput
               style={styles.input}
               value={draft}
               onChangeText={setDraft}
-              placeholder="Tell me anything…"
+              placeholder={attachment ? t("chatDoc.placeholder") : "Tell me anything…"}
               placeholderTextColor={palette.muted}
               multiline
               maxLength={2000}
-              onSubmitEditing={() => {
-                const t = draft.trim();
-                if (t) {
-                  setDraft("");
-                  void send({ text: t });
-                }
-              }}
+              onSubmitEditing={submit}
             />
             {speechSupported ? (
               <Pressable onPress={() => void startVoice()} style={styles.micBtn} accessibilityLabel="Speak">
@@ -377,14 +470,9 @@ export function AssistantScreen({ navigation, route }: Props) {
               </Pressable>
             ) : null}
             <Pressable
-              onPress={() => {
-                const t = draft.trim();
-                if (!t) return;
-                setDraft("");
-                void send({ text: t });
-              }}
-              disabled={busy || !draft.trim()}
-              style={[styles.sendBtn, (busy || !draft.trim()) && { opacity: 0.5 }]}
+              onPress={submit}
+              disabled={busy || (!draft.trim() && !attachment)}
+              style={[styles.sendBtn, (busy || (!draft.trim() && !attachment)) && { opacity: 0.5 }]}
               accessibilityLabel="Send"
             >
               <SendIcon size={18} />
@@ -454,6 +542,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surface,
   },
+  attachLine: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  attachName: { flexShrink: 1, fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.text },
+  attachChip: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 12, paddingVertical: 8, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, marginBottom: 6 },
+  attachChipText: { flexShrink: 1, fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.text },
+  attachHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted, marginBottom: 6 },
   micBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.text, alignItems: "center", justifyContent: "center" },
   listening: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },

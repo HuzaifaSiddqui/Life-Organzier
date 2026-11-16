@@ -335,7 +335,7 @@ export function DashboardScreen({ navigation }: Props) {
 
           <View style={[styles.row, { gap: spacing.sm }]}>
             <Button title={t("home.quick.task")} kind="tonal" size="sm" accessibilityLabel={t("home.quick.taskA11y")} onPress={() => navigation.navigate("AddTask")} style={styles.flex} />
-            <Button title={t("home.quick.upload")} kind="secondary" size="sm" accessibilityLabel={t("home.quick.uploadA11y")} onPress={() => navigation.navigate("Documents")} style={styles.flex} />
+            <Button title={t("home.quick.upload")} kind="secondary" size="sm" accessibilityLabel={t("home.quick.uploadA11y")} onPress={() => navigation.navigate("Assistant", { attach: true, nonce: Date.now() })} style={styles.flex} />
           </View>
 
           {b && b.contexts.length ? (

@@ -1,3 +1,4 @@
+import { DocumentReviewScreen } from "../screens/documents/DocumentReviewScreen";
 import { CreateAccountScreen } from "../screens/auth/CreateAccountScreen";
 import { StyleSheet, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
@@ -39,7 +40,8 @@ export type TaskFormPrefill = {
 
 export type MainStackParamList = {
   Dashboard: undefined;
-  Assistant: { voice?: boolean; prefill?: string; autoSend?: boolean; payload?: ActionPayload; label?: string; nonce?: number } | undefined;
+  /** attach: open the file picker (send a document in chat). */
+  Assistant: { voice?: boolean; prefill?: string; autoSend?: boolean; payload?: ActionPayload; label?: string; nonce?: number; attach?: boolean } | undefined;
   TaskList: { toast?: string; toastTone?: "success" | "warning"; /** A share just made from the task form: the toast offers Undo. */ undoShare?: { id: string; taskId: string | null }; filter?: "overdue" | "today" | "tomorrow"; /** Only these tasks (e.g. from a location reminder). */ ids?: string[] } | undefined;
   TaskDetail: { taskId: string };
   AddTask: { prefill?: TaskFormPrefill } | undefined;
@@ -61,6 +63,8 @@ export type MainStackParamList = {
   Notifications: undefined;
   /** Guest mode (FR-OB-003): a guest creates an account (keep the data or start fresh). */
   CreateAccount: undefined;
+  /** The review of one document's reading (from its chat card or My documents). */
+  DocumentReview: { documentId: string };
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -123,6 +127,7 @@ function Screens() {
       <Stack.Screen name="SharedTaskEdit" component={SharedTaskEditScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
+      <Stack.Screen name="DocumentReview" component={DocumentReviewScreen} />
     </Stack.Navigator>
   );
 }

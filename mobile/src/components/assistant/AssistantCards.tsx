@@ -1,3 +1,4 @@
+import { DocumentCard } from "./DocumentCard";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, palette, radii } from "../../constants/theme";
 import type { ActionPayload, AssistantCard, DayPlan, Task } from "../../types/models";
@@ -17,6 +18,8 @@ type Handlers = {
   onOpenTask: (taskId: string) => void;
   onOpenRoutine?: (routineId: string) => void;
   onAction: (payload: ActionPayload, label: string) => void;
+  /** A document card's Review button. */
+  onOpenDocument?: (documentId: string) => void;
 };
 
 function MiniTask({ task, onPress }: { task: Task; onPress: () => void }) {
@@ -80,7 +83,7 @@ function PlanTimeline({ plan }: { plan: DayPlan }) {
   );
 }
 
-export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction }: { cards: AssistantCard[] } & Handlers) {
+export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction, onOpenDocument }: { cards: AssistantCard[] } & Handlers) {
   return (
     <View style={{ gap: 8 }}>
       {cards.map((card, i) => {
@@ -217,6 +220,8 @@ export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction }: {
             return <CalendarCard key={i} card={card} onAction={onAction} />;
           case "calendar_clash":
             return <CalendarClashCard key={i} card={card} onAction={onAction} />;
+          case "document":
+            return <DocumentCard key={i} card={card} onOpen={onOpenDocument} />;
           default:
             return null;
         }

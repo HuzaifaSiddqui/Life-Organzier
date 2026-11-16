@@ -222,7 +222,11 @@ export type AssistantCard =
   /** CALENDAR_SYNC: filled in on the phone from its own calendars. */
   | { type: "calendar"; kind: "agenda" | "free" | "add" | "new"; date: string; taskId?: string; title?: string }
   /** Added on the phone (never sent by the server): a chat-created task overlaps an event on another calendar. */
-  | { type: "calendar_clash"; taskId: string; title: string; time: string; more: number };
+  | { type: "calendar_clash"; taskId: string; title: string; time: string; more: number }
+  /** A document sent in chat: what was found and added; Review opens the review screen. */
+  | DocumentChatCard;
+
+export type DocumentChatCard = { type: "document"; documentId: string; fileName: string; deadlines: number; schedules: number; added: number; toReview: number; warning: string | null; reused: boolean };
 
 export type ChatMessage = {
   id: string;
@@ -235,6 +239,8 @@ export type ChatMessage = {
   speak?: string;
   memoriesUsed?: number;
   learned?: string[];
+  /** A document the user sent with this message (chat upload). */
+  attachment?: { documentId?: string; fileName: string };
   /** Client-only: optimistic message awaiting the server. */
   pending?: boolean;
 };

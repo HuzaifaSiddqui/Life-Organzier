@@ -1,3 +1,4 @@
+import type { DocumentChatCard } from "../documents/chatUpload.js";
 import type { Priority, RoutineFrequency, RoutinePriority, TaskType } from "@prisma/client";
 import type { CrisisPayload, MoodRecommendation, Suggestion } from "../mood/moodService.js";
 import type { DayPlan } from "../scheduling/schedulingService.js";
@@ -196,7 +197,9 @@ export type Card =
   /** In-chat Location reminders toggle, then "Set <place> on the map" when the place isn't saved yet. */
   | { type: "location_setup"; taskId: string; place: string; saved: boolean; remindersOn: boolean }
   /** CALENDAR_SYNC: filled in on the phone from its own calendar (nothing from it reaches the server). */
-  | { type: "calendar"; kind: "agenda" | "free" | "add" | "new"; date: string; taskId?: string; title?: string };
+  | { type: "calendar"; kind: "agenda" | "free" | "add" | "new"; date: string; taskId?: string; title?: string }
+  /** A document sent in chat (documents/chatUpload.ts): what was found and added; Review opens the usual review. */
+  | DocumentChatCard;
 
 export type AssistantMessageMeta = {
   cards?: Card[];

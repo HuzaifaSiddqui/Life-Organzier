@@ -98,6 +98,18 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 | **Service** | `syncUserFromFirebase` in `backend/src/modules/users/userService.ts` |
 | **Purpose** | Upsert `User` in Postgres from Firebase claims. Email required, except a Firebase anonymous sign-in with `GUEST_MODE=on`, which makes a guest (`isGuest: true`, no email; FR-OB-003). A guest whose Firebase account has since been linked to an email becomes a normal account here, same user and data. Anonymous with guest mode off: 403 `GUEST_MODE_OFF`. |
 
+### Documents sent in chat
+
+- `POST /api/documents` (multipart) also takes `chat=true` and an optional `conversationId`. The server reads the file as usual,
+  then writes two messages into that app conversation (or the current one): the user's request (or the file name) with
+  `metadata.attachment = { documentId, fileName }`, and the assistant's fixed-text summary with a `document` card
+  (`{ type: "document", documentId, fileName, deadlines, schedules, added, toReview, warning, reused }`). The response adds
+  `chat: { conversationId, messages }` (`documents/chatUpload.ts`).
+- `docType` may be `AUTO`: the type is decided from the text by rules (`documents/docTypeGuess.ts`: SYLLABUS / SCHEDULE / OTHER,
+  never NOTES). The stored type is always the decided one.
+- `GET /api/documents/:id` adds `result`: the saved reading in the upload's response shape (created / existing flags as of
+  now), used by the review screen.
+
 ### Guest mode (FR-OB-003, `GUEST_MODE`)
 
 - `GET /health` includes `guestMode: true|false`; the app shows "Continue as guest" only when it is true.

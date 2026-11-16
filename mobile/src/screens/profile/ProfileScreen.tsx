@@ -64,7 +64,7 @@ export function ProfileScreen({ navigation }: Props) {
         { icon: "memory", title: "What the assistant knows", subtitle: "Memories and learned patterns", go: () => navigation.navigate("Memory") },
         { icon: "repeat", title: "Routines", subtitle: "Recurring habits and classes", go: () => navigation.navigate("Routines") },
         { icon: "pulse", title: "Mood", subtitle: "Check-ins and history", go: () => navigation.navigate("Mood") },
-        { icon: "doc", title: "Documents", subtitle: "Syllabi, timetables and notes", go: () => navigation.navigate("Documents") },
+        { icon: "doc", title: t("docs.title"), subtitle: t("docs.subtitle"), go: () => navigation.navigate("Documents") },
         { icon: "insights", title: "Insights", subtitle: "Productivity analytics", go: () => navigation.navigate("Insights") },
       ],
     },
