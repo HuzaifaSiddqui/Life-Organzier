@@ -8,9 +8,9 @@ import { calendarSyncActive } from "./calendar";
 
 const CONVERSATION_KEY = "life-organizer:conversation:v2";
 
-type RawMessage = { id: string; role: ChatMessage["role"]; content: string; metadata: Record<string, unknown> | null; createdAt: string };
+export type RawMessage = { id: string; role: ChatMessage["role"]; content: string; metadata: Record<string, unknown> | null; createdAt: string };
 
-function toChat(m: RawMessage): ChatMessage {
+export function toChat(m: RawMessage): ChatMessage {
   const meta = (m.metadata ?? {}) as Partial<ChatMessage>;
   return {
     id: m.id,
@@ -23,6 +23,7 @@ function toChat(m: RawMessage): ChatMessage {
     speak: meta.speak,
     memoriesUsed: meta.memoriesUsed,
     learned: meta.learned,
+    attachment: meta.attachment,
   };
 }
 

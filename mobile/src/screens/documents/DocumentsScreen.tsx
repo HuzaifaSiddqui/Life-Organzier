@@ -1,126 +1,30 @@
-import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import * as DocumentPicker from "expo-document-picker";
-import * as Network from "expo-network";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { DeadlineReviewItem, type ReviewFlags } from "../../components/DeadlineReviewItem";
-import { InstructionInput, InstructionPanel } from "../../components/DocumentInstruction";
-import { DocumentTextView } from "../../components/DocumentTextView";
+import { useCallback, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { Icon } from "../../components/icons/Icon";
-import { colors, palette } from "../../constants/theme";
+import { Button, Card, EmptyState, IconButton, Snackbar, Text } from "../../components/ui";
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useLocale } from "../../i18n/LocaleProvider";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
-import {
-  applyDocument,
-  deleteDocument,
-  DOC_KINDS,
-  listDocuments,
-  pickLines,
-  processText,
-  reextractDocument,
-  setDocumentInstruction,
-  uploadDocument,
-  type DocKind,
-  type DocType,
-  type ExtractedDeadline,
-  type DocumentSummary,
-  type ProcessResult,
-} from "../../services/documentsApi";
-import { WEEKDAYS_SHORT } from "../../utils/format";
 import { showAlert } from "../../services/dialog";
+import { deleteDocument, listDocuments, type DocumentSummary } from "../../services/documentsApi";
+import { useTheme } from "../../theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Documents">;
 
-const TYPES: Array<{ key: DocType; label: string }> = [
-  { key: "SYLLABUS", label: "Syllabus" },
-  { key: "SCHEDULE", label: "Schedule / timetable" },
-  { key: "NOTES", label: "Notes" },
-  { key: "OTHER", label: "Other" },
-];
-const LANGS = [
-  { key: "eng", label: "English" },
-  { key: "urd", label: "Urdu" },
-  { key: "ara", label: "Arabic" },
-];
-const MAX_BYTES = 10 * 1024 * 1024;
-
-/** `file`: the browser File on web / desktop (uploaded as is; see utils/uploadPart). */
-type Picked = { uri: string; name: string; mimeType: string; size: number; file?: Blob | null };
-/** filteredOut: DOC_INSTRUCTIONS, left out by the user's request (hidden unless "Show everything", never pre-ticked). */
-type EditableDeadline = { index: number; title: string; date: string; time: string; confidence: number; include: boolean; created: boolean; existing: boolean; source: string; flags: ReviewFlags; filteredOut: boolean };
-type EditableSchedule = { index: number; title: string; room: string; roomCheck: boolean; days: number[]; time: string; durationMinutes: number | null; confidence: number; include: boolean; created: boolean; existing: boolean; filteredOut: boolean };
-
 /**
- * Staged status, in the order the server works (upload → read the text → find dates). The server doesn't report
- * its stage, so after the upload the switch from "Reading" to "Finding dates" is timed, not measured.
+ * My documents (under Me): what has been uploaded, the space it uses, and delete. Documents are sent in the
+ * assistant chat ("+" in the message box); tapping one here opens its review.
  */
-function processingStage(progress: number, elapsedS: number): string {
-  if (progress < 1) return `Uploading… ${Math.round(progress * 100)}%`;
-  return elapsedS < 8 ? "Reading the document…" : "Finding dates and classes…";
-}
-
-function confColor(c: number): string {
-  return c >= 90 ? palette.success : c >= 80 ? palette.warning : palette.danger;
-}
-
-function toEditable(d: ExtractedDeadline): EditableDeadline {
-  return {
-    index: d.index,
-    title: d.title,
-    date: d.date ?? "",
-    time: d.time ?? "",
-    confidence: d.confidence,
-    // Pre-ticked only when the rules were fairly sure and there is a date; AI-only items wait for the user.
-    include: !d.created && d.confidence >= 80 && Boolean(d.date) && !d.aiOnly && !d.removedSinceUpload && !d.filteredOut,
-    created: Boolean(d.created),
-    existing: Boolean(d.existing),
-    // DOC_EVIDENCE: the document line it came from, when the server checked it.
-    source: d.evidence ?? d.source,
-    flags: { assumedTime: d.assumedTime, needsSemesterStart: d.needsSemesterStart, aiOnly: d.aiOnly, rangeStart: d.rangeStart, yearInferred: d.yearInferred, yearCorrected: d.yearCorrected, removedSinceUpload: d.removedSinceUpload, verified: d.verified, modelsAgree: d.modelsAgree },
-    filteredOut: Boolean(d.filteredOut),
-  };
-}
-
 export function DocumentsScreen({ navigation }: Props) {
   const { t } = useLocale();
-  const [picked, setPicked] = useState<Picked | null>(null);
-  const [docType, setDocType] = useState<DocType | null>(null);
-  const [lang, setLang] = useState("eng");
-  const [progress, setProgress] = useState<number | null>(null);
-  const [result, setResult] = useState<ProcessResult | null>(null);
-  const [deadlines, setDeadlines] = useState<EditableDeadline[]>([]);
-  const [schedules, setSchedules] = useState<EditableSchedule[]>([]);
-  const [pasteMode, setPasteMode] = useState(false);
-  const [pasted, setPasted] = useState("");
-  const [docs, setDocs] = useState<DocumentSummary[]>([]);
+  const { colors, spacing } = useTheme();
+  const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [usedBytes, setUsedBytes] = useState(0);
-  const [applying, setApplying] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  /** DOC_ROUTING "Wrong type?" re-read, or DOC_FALLBACK_UI "Pick lines", in progress. */
-  const [rereading, setRereading] = useState(false);
-  /** DOC_INSTRUCTIONS: the server reads requests; the request typed before upload; whether left-out items are shown. */
-  const [requests, setRequests] = useState(false);
-  const [instruction, setInstruction] = useState("");
-  const [showAll, setShowAll] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-  const [elapsed, setElapsed] = useState(0);
-  const busy = progress !== null;
-  /** Seconds on the busy timer when the upload finished (the server's work is timed from there). */
-  const uploadedAt = useRef<number | null>(null);
-  if (busy && progress! >= 1 && uploadedAt.current === null) uploadedAt.current = elapsed;
-  useEffect(() => {
-    if (!busy) return;
-    setElapsed(0);
-    uploadedAt.current = null;
-    const id = setInterval(() => setElapsed((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, [busy]);
-  const resultsY = useRef(0);
 
   const cached = useCacheLoader();
   const load = useCallback(async () => {
@@ -128,10 +32,9 @@ export function DocumentsScreen({ navigation }: Props) {
       await cached("documents", listDocuments, (r) => {
         setDocs(r.documents);
         setUsedBytes(r.usedBytes);
-        setRequests(Boolean(r.features?.instructions));
       });
     } catch {
-      // offline: the saved list stays on screen
+      setDocs((d) => d ?? []); // offline with nothing saved yet
     }
   }, [cached]);
 
@@ -141,410 +44,62 @@ export function DocumentsScreen({ navigation }: Props) {
     }, [load]),
   );
 
-  const showResult = (r: ProcessResult) => {
-    setResult(r);
-    // Fast extractions finish in under a second — say so and scroll to the results, or it looks like nothing happened.
-    const { deadlines: d, schedules: s } = r.extracted;
-    setToast(
-      r.reused
-        ? "You uploaded this file earlier, so here's what I found then. Nothing was added twice."
-        : d.length || s.length
-          ? `Found ${d.length} deadline${d.length === 1 ? "" : "s"} and ${s.length} schedule${s.length === 1 ? "" : "s"}`
-          : "No deadlines or classes found in this file",
-    );
-    setTimeout(() => scrollRef.current?.scrollTo({ y: resultsY.current, animated: true }), 300);
-    showItems(r.extracted);
-    void load();
-  };
+  const remove = (d: DocumentSummary) =>
+    showAlert(t("docs.deleteTitle"), t("docs.deleteBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("docs.delete"),
+        style: "destructive",
+        onPress: async () => {
+          const before = docs;
+          setDocs((list) => (list ?? []).filter((x) => x.id !== d.id));
+          try {
+            await deleteDocument(d.id);
+            void load();
+          } catch (e) {
+            setDocs(before);
+            setToast(getApiErrorMessage(e));
+          }
+        },
+      },
+    ]);
 
-  /** The review rows for what the server extracted (and, with a request, what it leaves out). */
-  const showItems = (extracted: ProcessResult["extracted"]) => {
-    setShowAll(false);
-    setDeadlines(extracted.deadlines.map(toEditable));
-    setSchedules(
-      extracted.schedules.map((s) => ({
-        index: s.index,
-        title: s.title,
-        room: s.room ?? "",
-        roomCheck: Boolean(s.roomCheck),
-        days: s.daysOfWeek,
-        time: s.time ?? "",
-        durationMinutes: s.durationMinutes,
-        confidence: s.confidence,
-        include: !s.created && s.daysOfWeek.length > 0 && !s.filteredOut,
-        created: Boolean(s.created),
-        existing: Boolean(s.existing),
-        filteredOut: Boolean(s.filteredOut),
-      })),
-    );
-  };
-
-  /** DOC_INSTRUCTIONS: a changed request, or the person picked for "which one?". Re-filters what was read. */
-  const changeRequest = async (text: string, person?: string) => {
-    if (!result) return;
-    setRereading(true);
-    try {
-      const r = await setDocumentInstruction(result.document.id, text, person);
-      setResult({ ...result, extracted: r.extracted, reused: false });
-      showItems(r.extracted);
-    } catch (e) {
-      setToast(getApiErrorMessage(e));
-    } finally {
-      setRereading(false);
-    }
-  };
-
-  /** DOC_ROUTING: read the same document again as the type the user picked. */
-  const reread = async (kind: DocKind) => {
-    if (!result) return;
-    setRereading(true);
-    try {
-      const r = await reextractDocument(result.document.id, kind);
-      showResult({ ...result, extracted: r.extracted, reused: false });
-    } catch (e) {
-      setToast(getApiErrorMessage(e));
-    } finally {
-      setRereading(false);
-    }
-  };
-
-  /** DOC_FALLBACK_UI: picked lines become review items (ticked only when they have a date). */
-  const addPicked = async (lines: string[]) => {
-    if (!result) return;
-    setRereading(true);
-    try {
-      const r = await pickLines(result.document.id, lines);
-      setDeadlines((l) => {
-        const base = Math.max(-1, ...l.map((d) => d.index)) + 1;
-        return [...l, ...r.deadlines.map((d, i) => ({ ...toEditable({ ...d, index: base + i }), include: Boolean(d.date) }))];
-      });
-      setToast(`Added ${r.deadlines.length} item${r.deadlines.length === 1 ? "" : "s"} for review`);
-    } catch (e) {
-      setToast(getApiErrorMessage(e));
-    } finally {
-      setRereading(false);
-    }
-  };
-
-  const pick = async () => {
-    const res = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-      copyToCacheDirectory: true,
-    });
-    if (res.canceled || !res.assets[0]) return;
-    const a = res.assets[0];
-    if ((a.size ?? 0) > MAX_BYTES) {
-      showAlert("File too large", "The maximum size is 10 MB per file.");
-      return;
-    }
-    setPicked({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? "application/octet-stream", size: a.size ?? 0, file: a.file ?? null });
-    setResult(null);
-    setDocType(null);
-  };
-
-  const upload = async (language = lang) => {
-    if (!picked || !docType) return;
-    const net = await Network.getNetworkStateAsync();
-    if (!net.isConnected || net.isInternetReachable === false) {
-      setToast("No internet. Upload the file when you're online.");
-      return;
-    }
-    setProgress(0);
-    try {
-      showResult(await uploadDocument(picked, docType, language, setProgress, requests ? instruction : undefined));
-    } catch (e) {
-      setToast(getApiErrorMessage(e, "Upload failed — please retry."));
-    } finally {
-      setProgress(null);
-    }
-  };
-
-  const submitPaste = async () => {
-    if (pasted.trim().length < 10 || !docType) return;
-    setProgress(1);
-    try {
-      showResult(await processText(pasted, docType, "Pasted text", requests ? instruction : undefined));
-      setPasteMode(false);
-      setPasted("");
-    } catch (e) {
-      setToast(getApiErrorMessage(e));
-    } finally {
-      setProgress(null);
-    }
-  };
-
-  const apply = async () => {
-    if (!result) return;
-    const ds = deadlines.filter((d) => d.include && !d.created);
-    const ss = schedules.filter((s) => s.include && !s.created);
-    if (ds.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d.date))) {
-      setToast("Each selected deadline needs a date (YYYY-MM-DD).");
-      return;
-    }
-    setApplying(true);
-    try {
-      const r = await applyDocument(result.document.id, {
-        deadlines: ds.map((d) => ({ title: d.title, date: d.date, time: d.time || null })),
-        schedules: ss.filter((s) => s.days.length).map((s) => ({ title: s.title, daysOfWeek: s.days, time: s.time || null, durationMinutes: s.durationMinutes, location: s.room.trim() || null })),
-      });
-      setToast(`Created ${r.tasks.length} task${r.tasks.length === 1 ? "" : "s"} and ${r.routines.length} routine${r.routines.length === 1 ? "" : "s"}`);
-      setDeadlines((l) => l.map((d) => (d.include ? { ...d, created: true, include: false } : d)));
-      setSchedules((l) => l.map((s) => (s.include ? { ...s, created: true, include: false } : s)));
-    } catch (e) {
-      setToast(getApiErrorMessage(e));
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  const course = result?.extracted.course;
-  // DOC_INSTRUCTIONS: items the request leaves out stay hidden until "Show everything".
-  const shownDeadlines = deadlines.filter((d) => showAll || !d.filteredOut);
-  const shownSchedules = schedules.filter((s) => showAll || !s.filteredOut);
-  const hiddenCount = showAll ? 0 : deadlines.length + schedules.length - shownDeadlines.length - shownSchedules.length;
-  const pending = deadlines.filter((d) => d.include && !d.created).length + schedules.filter((s) => s.include && !s.created).length;
+  const upload = () => navigation.navigate("Assistant", { attach: true, nonce: Date.now() });
 
   return (
-    <View style={ui.screen}>
-      <ScreenHeader title="Documents" onBack={() => navigation.goBack()} />
-      <ScrollView ref={scrollRef} contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
-        <TutorialTip id="documents" title="Upload a syllabus or timetable" text="1. Select a file  2. Choose its type  3. I'll extract deadlines and classes — high-confidence ones are added automatically, the rest you confirm." />
-
-        <Card style={{ gap: 12 }}>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <Button title={picked ? "Choose another file" : "Select file"} disabled={busy} onPress={() => void pick()} style={{ flex: 1 }} />
-            <Button title="Paste text" kind="secondary" disabled={busy} onPress={() => setPasteMode((v) => !v)} />
-          </View>
-          <Text style={styles.meta}>PDF, JPG, PNG or DOCX · up to 10 MB · {(usedBytes / 1024 / 1024).toFixed(1)} MB used</Text>
-          {picked ? <Text style={ui.body}>{picked.name} ({(picked.size / 1024).toFixed(0)} KB)</Text> : null}
-          {pasteMode ? (
-            <TextInput
-              style={[ui.input, { minHeight: 120, textAlignVertical: "top" }]}
-              value={pasted}
-              onChangeText={setPasted}
-              multiline
-              placeholder="Paste syllabus or schedule text here"
-              placeholderTextColor={palette.muted}
-            />
-          ) : null}
-          {picked || pasteMode ? (
-            <>
-              <Text style={ui.label}>What type of document is this?</Text>
-              <View style={ui.wrap}>
-                {TYPES.map((t) => (
-                  <Chip key={t.key} small label={t.label} selected={docType === t.key} onPress={() => !busy && setDocType(t.key)} />
-                ))}
-              </View>
-              {picked && /image/.test(picked.mimeType) ? (
-                <>
-                  <Text style={ui.label}>Language</Text>
-                  <View style={ui.wrap}>
-                    {LANGS.map((l) => (
-                      <Chip key={l.key} small label={l.label} selected={lang === l.key} onPress={() => setLang(l.key)} />
-                    ))}
-                  </View>
-                </>
-              ) : null}
-              {requests ? <InstructionInput value={instruction} onChange={setInstruction} disabled={busy} /> : null}
-              {busy ? (
-                <View style={styles.busy}>
-                  <View style={styles.rowBetween}>
-                    <ActivityIndicator color={palette.ai} />
-                    <Text style={[ui.body, { flex: 1 }]}>{processingStage(progress!, elapsed - (uploadedAt.current ?? elapsed))}</Text>
-                    <Text style={styles.meta}>{elapsed}s</Text>
-                  </View>
-                  {/* A real percentage only while uploading; the server's work has no honest percentage. */}
-                  {progress! < 1 ? <ProgressBar value={Math.round(progress! * 100)} color={palette.ai} /> : null}
-                  {progress! >= 1 && elapsed - (uploadedAt.current ?? elapsed) >= 20 ? (
-                    <Text style={styles.meta}>Photos and scanned PDFs are read with OCR and checked again; this can take up to 2½ minutes. Please keep the app open.</Text>
-                  ) : null}
-                </View>
-              ) : (
-                <>
-                  {!docType ? <Text style={styles.meta}>Choose the document type above to enable Extract.</Text> : null}
-                  <Button title="Extract" kind="tonal" disabled={!docType} onPress={() => void (pasteMode && !picked ? submitPaste() : upload())} />
-                </>
-              )}
-            </>
-          ) : null}
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+      <ScreenHeader title={t("docs.title")} onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl }}>
+        <Card style={{ gap: spacing.sm }}>
+          <Text variant="body">{t("docs.intro")}</Text>
+          <Text variant="caption" color="secondary">
+            {t("docs.space", { used: (usedBytes / 1024 / 1024).toFixed(1) })}
+          </Text>
+          <Button title={t("docs.sendInChat")} kind="tonal" icon={<Icon name="assistant" size={18} color={colors.accent} />} onPress={upload} />
         </Card>
-
-        {result ? (
-          <>
-            <View onLayout={(e) => (resultsY.current = e.nativeEvent.layout.y)} />
-            {!result.text && !result.extracted.deadlines.length && !result.extracted.schedules.length && !result.extracted.warning ? (
-              <Card tone="warning" style={{ gap: 6 }}>
-                <Text style={ui.body}>I couldn't find any dated deadlines or class times in this file.</Text>
-                <Text style={styles.meta}>Make sure it has dates like "Oct 20, 2026" or class times like "Mon 9:00 AM", or try "Paste text".</Text>
-              </Card>
-            ) : null}
-            {result.extracted.warning ? (
-              <Card tone="warning" style={{ gap: 8 }}>
-                <Text style={ui.body}>{result.extracted.warning}</Text>
-                {result.extracted.needsLanguage ? (
-                  <View style={ui.wrap}>
-                    {LANGS.filter((l) => l.key !== "eng").map((l) => (
-                      <Chip key={l.key} small label={`Retry as ${l.label}`} onPress={() => { setLang(l.key); void upload(l.key); }} />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.meta}>Try uploading a clearer image — or review the results below anyway.</Text>
-                )}
-              </Card>
-            ) : null}
-            {result.extracted.method === "ocr" ? <Text style={styles.meta}>OCR confidence {result.extracted.ocrConfidence}%</Text> : null}
-            {result.extracted.kind ? (
-              <Card style={{ gap: 8 }}>
-                <Text style={ui.body}>{t("docRoute.readAs", { kind: t(`docRoute.kind.${result.extracted.kind.kind}`) })}</Text>
-                {result.extracted.kind.kind === "other" ? <Text style={styles.meta}>{t("docRoute.otherNote")}</Text> : null}
-                <Text style={styles.meta}>{t("docRoute.wrongType")}</Text>
-                <View style={ui.wrap}>
-                  {DOC_KINDS.filter((k) => k !== result.extracted.kind?.kind).map((k) => (
-                    <Chip key={k} small label={t(`docRoute.kind.${k}`)} onPress={rereading ? undefined : () => void reread(k)} />
-                  ))}
-                </View>
-              </Card>
-            ) : null}
-            {result.extracted.instruction ? (
-              <InstructionPanel
-                key={`${result.document.id}:${result.extracted.instruction.instruction}:${result.extracted.instruction.status}`}
-                result={result.extracted.instruction}
-                showAll={showAll}
-                busy={rereading}
-                onToggleShowAll={() => setShowAll((v) => !v)}
-                onChange={(text, person) => void changeRequest(text, person)}
-              />
-            ) : null}
-            {result.text ? (
-              <DocumentTextView
-                key={result.document.id}
-                text={result.text}
-                empty={!deadlines.length && !schedules.length}
-                busy={rereading}
-                onPick={(lines) => void addPicked(lines)}
-                onAddManually={() => navigation.navigate("AddTask")}
-              />
-            ) : null}
-
-            <SectionTitle title={`Extracted deadlines (${shownDeadlines.length})`} />
-            {shownDeadlines.length ? (
-              shownDeadlines.map((d) => (
-                <Card key={d.index} style={{ gap: 8, opacity: d.created ? 0.7 : 1 }}>
-                  <View style={styles.rowBetween}>
-                    <Pressable
-                      disabled={d.created}
-                      onPress={() => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, include: !x.include } : x)))}
-                      style={[styles.box, (d.include || d.created) && styles.boxOn]}
-                    >
-                      {d.include || d.created ? <Icon name="check" size={14} color={colors.surface} /> : null}
-                    </Pressable>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={d.title} editable={!d.created} onChangeText={(title) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, title } : x)))} />
-                  </View>
-                  <DeadlineReviewItem
-                    date={d.date}
-                    time={d.time}
-                    source={d.source}
-                    flags={d.created ? { assumedTime: false } : d.flags}
-                    disabled={d.created}
-                    onChangeDate={(date) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, date, include: true, flags: { ...x.flags, needsSemesterStart: false } } : x)))}
-                    onChangeTime={(time) => setDeadlines((l) => l.map((x) => (x.index === d.index ? { ...x, time, flags: { ...x.flags, assumedTime: false } } : x)))}
-                  />
-                  <Text style={[styles.meta, { color: confColor(d.confidence) }]}>
-                    {d.existing ? "Already in your tasks · " : d.created ? "Added automatically · " : ""}Confidence {d.confidence}%
-                  </Text>
-                </Card>
-              ))
-            ) : (
-              <Text style={styles.meta}>No deadlines found.</Text>
-            )}
-
-            <SectionTitle title={`Extracted schedules (${shownSchedules.length})`} />
-            {shownSchedules.length > 5 ? <Text style={styles.meta}>Found {shownSchedules.length} classes — choose which to create.</Text> : null}
-            {shownSchedules.length ? (
-              shownSchedules.map((s) => (
-                <Card key={s.index} style={{ gap: 8, opacity: s.created ? 0.7 : 1 }}>
-                  <View style={styles.rowBetween}>
-                    <Pressable
-                      disabled={s.created}
-                      onPress={() => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, include: !x.include } : x)))}
-                      style={[styles.box, (s.include || s.created) && styles.boxOn]}
-                    >
-                      {s.include || s.created ? <Icon name="check" size={14} color={colors.surface} /> : null}
-                    </Pressable>
-                    <TextInput style={[ui.input, { flex: 1, paddingVertical: 8 }]} value={s.title} editable={!s.created} onChangeText={(title) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, title } : x)))} />
-                  </View>
-                  <View style={ui.wrap}>
-                    {WEEKDAYS_SHORT.map((label, d) => (
-                      <Chip
-                        key={label}
-                        small
-                        label={label}
-                        selected={s.days.includes(d)}
-                        onPress={s.created ? undefined : () => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, days: x.days.includes(d) ? x.days.filter((y) => y !== d) : [...x.days, d].sort() } : x)))}
-                      />
-                    ))}
-                  </View>
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.time} placeholder="Time, e.g. 10 AM" placeholderTextColor={palette.muted} editable={!s.created} onChangeText={(time) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, time } : x)))} />
-                  {/* Room only as read from the document (empty when the document has none); the user may correct it. */}
-                  <TextInput style={[ui.input, { paddingVertical: 8 }]} value={s.room} placeholder="Room (if on the timetable)" placeholderTextColor={palette.muted} editable={!s.created} onChangeText={(room) => setSchedules((l) => l.map((x) => (x.index === s.index ? { ...x, room, roomCheck: false } : x)))} accessibilityLabel="Room" />
-                  {/* Read from an image and not shaped like a room code: ask, don't guess. Editing it clears the note. */}
-                  {s.roomCheck && !s.created ? <Text style={[styles.meta, { color: palette.warning }]}>{t("docReview.checkRoom")}</Text> : null}
-                  <Text style={[styles.meta, { color: confColor(s.confidence) }]}>
-                    {s.existing ? "Already in your routines · " : s.created ? "Added automatically · " : ""}Confidence {s.confidence}%{!s.days.length ? " · pick the days" : ""}
-                  </Text>
-                </Card>
-              ))
-            ) : (
-              <Text style={styles.meta}>No class schedules found.</Text>
-            )}
-
-            {hiddenCount ? <Text style={styles.meta}>{t("docInstr.hiddenNote", { count: String(hiddenCount) })}</Text> : null}
-            {pending ? <Button title={`Create ${pending} selected`} onPress={() => void apply()} loading={applying} /> : null}
-
-            {course && (course.code || course.name || course.topics.length) ? (
-              <>
-                <SectionTitle title="Course info" />
-                <Card style={{ gap: 6 }}>
-                  <Text style={ui.h2}>{[course.code, course.name].filter(Boolean).join(" · ")}</Text>
-                  {course.instructor ? <Text style={ui.body}>Instructor: {course.instructor}</Text> : null}
-                  {course.prerequisites.length ? <Text style={ui.body}>Prerequisites: {course.prerequisites.join(", ")}</Text> : null}
-                  {course.topics.length ? <Text style={ui.body}>Topics: {course.topics.join(", ")}</Text> : null}
-                  {course.objectives.length ? <Text style={ui.body}>Objectives: {course.objectives.slice(0, 4).join("; ")}</Text> : null}
-                  {course.grading.length ? <Text style={ui.body}>Grading: {course.grading.map((g) => `${g.item} ${g.weight}%`).join(", ")}</Text> : null}
-                  {course.resources.length ? <Text style={ui.body}>Resources: {course.resources.slice(0, 4).join("; ")}</Text> : null}
-                  <Text style={styles.meta}>I'll use this as context — e.g. checking prerequisites when you plan related study.</Text>
-                </Card>
-              </>
-            ) : null}
-          </>
+        {docs && !docs.length ? (
+          <EmptyState icon={<Icon name="doc" size={32} color={colors.textTertiary} />} title={t("docs.emptyTitle")} text={t("docs.emptyText")} />
         ) : null}
-
-        {docs.length ? (
-          <>
-            <SectionTitle title="Your documents" />
-            {docs.map((d) => (
-              <Card key={d.id} style={styles.docRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={ui.body} numberOfLines={1}>{d.fileName}</Text>
-                  <Text style={styles.meta}>
-                    {d.docType.toLowerCase()} · {new Date(d.createdAt).toLocaleDateString()} · {d.extracted?.deadlines.length ?? 0} deadlines · {d.extracted?.schedules.length ?? 0} schedules
+        {(docs ?? []).map((d) => {
+          const deadlines = d.extracted?.deadlines.length ?? 0;
+          const classes = d.extracted?.schedules.length ?? 0;
+          return (
+            <Card key={d.id} onPress={() => navigation.navigate("DocumentReview", { documentId: d.id })} accessibilityLabel={t("docs.open", { name: d.fileName })}>
+              <View style={[styles.row, { gap: spacing.md }]}>
+                <Icon name="doc" size={22} color={colors.textSecondary} />
+                <View style={styles.flex}>
+                  <Text variant="body" numberOfLines={1}>
+                    {d.fileName}
+                  </Text>
+                  <Text variant="caption" color="secondary">
+                    {t("docs.meta", { date: new Date(d.createdAt).toLocaleDateString(), deadlines: String(deadlines), classes: String(classes) })}
                   </Text>
                 </View>
-                <Pressable
-                  onPress={() =>
-                    showAlert("Delete document?", "Tasks created from it are kept.", [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Delete", style: "destructive", onPress: () => void deleteDocument(d.id).then(load) },
-                    ])
-                  }
-                  hitSlop={8}
-                >
-                  <Text style={{ color: palette.danger, fontFamily: "Inter_600SemiBold" }}>Delete</Text>
-                </Pressable>
-              </Card>
-            ))}
-          </>
-        ) : null}
+                <IconButton icon={<Icon name="trash" size={18} color={colors.danger.fg} />} accessibilityLabel={t("docs.deleteNamed", { name: d.fileName })} onPress={() => remove(d)} />
+              </View>
+            </Card>
+          );
+        })}
       </ScrollView>
       <Snackbar text={toast} onHide={() => setToast(null)} />
     </View>
@@ -552,10 +107,6 @@ export function DocumentsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
-  busy: { gap: 8, padding: 12, borderRadius: 12, backgroundColor: palette.aiSoft },
-  rowBetween: { flexDirection: "row", alignItems: "center", gap: 10 },
-  box: { width: 26, height: 26, borderRadius: 7, borderWidth: 2, borderColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  boxOn: { backgroundColor: colors.primary },
-  docRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  row: { flexDirection: "row", alignItems: "center" },
+  flex: { flex: 1 },
 });

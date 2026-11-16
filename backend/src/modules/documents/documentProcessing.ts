@@ -1,3 +1,4 @@
+import { guessDocType } from "./docTypeGuess.js";
 import crypto from "node:crypto";
 import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
 import { AiService, getAi, OllamaProvider } from "../../ai/llm.js";
@@ -15,6 +16,9 @@ import { extractText } from "./textExtraction.js";
 import { applyInstruction, docInstructionsOn, enrichItems, modelInstruction, peopleIn, readInstruction, withModel, type FilterResult, type ItemMeta } from "./instructions.js";
 
 export const DOC_TYPES = ["SYLLABUS", "SCHEDULE", "NOTES", "OTHER"] as const;
+/** What an upload may ask for: a type, or AUTO (documents sent in chat; decided from the text, docTypeGuess.ts). */
+export const DOC_INPUT_TYPES = [...DOC_TYPES, "AUTO"] as const;
+export type DocInputType = (typeof DOC_INPUT_TYPES)[number];
 
 /**
  * Re-uploading the same file (or a newer version of it) must not create every task and routine
@@ -86,7 +90,7 @@ export type AnalyzeInput = {
   text?: string;
   fileName: string;
   mimeType: string;
-  docType: (typeof DOC_TYPES)[number];
+  docType: DocInputType;
   language: string;
   tz: string;
   now?: Date;
@@ -109,6 +113,8 @@ export type Analysis = {
   grid: boolean;
   /** DOC_ROUTING (or DOC_AGREE): the detected or picked document type. */
   kind?: KindResult;
+  /** The type it was read as (AUTO resolved). */
+  docType: (typeof DOC_TYPES)[number];
 };
 
 /**
@@ -139,11 +145,12 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   const table = docFlag("DOC_LAYOUT") && "words" in raw && raw.words?.length ? layoutRows(raw.words) : null;
   const text = maskPersonalNumbers(cleanDocumentText(table ?? raw.text));
   const now = input.now ?? new Date();
-  let deadlines = input.docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
-  let schedules = input.docType === "NOTES" ? [] : extractSchedules(text, now, tz);
+  const docType = input.docType === "AUTO" ? guessDocType(text, input.fileName) : input.docType;
+  let deadlines = docType === "NOTES" ? [] : extractDeadlines(text, now, tz);
+  let schedules = docType === "NOTES" ? [] : extractSchedules(text, now, tz);
   // Grid timetables lose their layout as plain text; read them by position instead.
   let grid = false;
-  if (input.docType !== "NOTES" && input.buffer && /pdf/i.test(input.mimeType)) {
+  if (docType !== "NOTES" && input.buffer && /pdf/i.test(input.mimeType)) {
     const fromGrid = await gridSchedulesFromPdf(input.buffer).catch((error) => {
       console.warn("Grid timetable parse failed", error instanceof Error ? error.message : error);
       return [];
@@ -152,7 +159,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
       schedules = fromGrid;
       grid = true;
     }
-  } else if (input.docType !== "NOTES" && input.buffer && /^image\//i.test(input.mimeType) && hasClockGrid(raw.text)) {
+  } else if (docType !== "NOTES" && input.buffer && /^image\//i.test(input.mimeType) && hasClockGrid(raw.text)) {
     // A photo or screenshot of a grid timetable: plain OCR text loses which class sits in which day and slot.
     const deadline = started + (input.timeLimitMs ?? DOCUMENT_TIME_LIMIT_MS);
     let fromGrid = await gridSchedulesFromImage(input.buffer, input.language, deadline).catch((error) => {
@@ -174,7 +181,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   // AI pass on every document when AI is on (masked text only), merged with the rules.
   let aiNote: string | null = null;
   const todayYmd = localYmd(now, tz);
-  if (input.docType !== "NOTES" && !raw.needsLanguage) {
+  if (docType !== "NOTES" && !raw.needsLanguage) {
     const aiOn = getAi().enabled && getAi().available;
     const pass = aiOn && left() >= MIN_AI_MS ? await aiDeadlines(text, todayYmd, tz, { budgetMs: left() }) : { items: [], cutShort: aiOn };
     timedOut = pass.cutShort;
@@ -193,7 +200,7 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   capOcrConfidence(deadlines, raw.method, raw.confidence);
   let kind: KindResult | undefined;
   const routing = docFlag("DOC_ROUTING");
-  if (input.docType !== "NOTES" && (routing || docFlag("DOC_AGREE"))) {
+  if (docType !== "NOTES" && (routing || docFlag("DOC_AGREE"))) {
     const found = { deadlines, schedules, grid };
     kind = input.kind ? { kind: input.kind, confidence: 1, via: "user" } : routing && left() >= MIN_AI_MS ? await classifyDocument(text, found, Math.min(15000, left())) : kindByRules(text, found);
   }
@@ -210,17 +217,17 @@ export async function analyzeDocument(input: AnalyzeInput): Promise<Analysis> {
   if (routing && kind) ({ deadlines, schedules } = routeItems(kind.kind, deadlines, schedules));
   // A grid lists many courses — picking one as "the course" would store a wrong memory.
   const course = extractCourseInfo(grid ? "" : text);
-  if (input.docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200 && left() >= MIN_AI_MS) course.topics = await llmTopics(text, Math.min(45000, left()));
+  if (docType === "SYLLABUS" && !grid && !course.topics.length && text.length > 200 && left() >= MIN_AI_MS) course.topics = await llmTopics(text, Math.min(45000, left()));
   if (course.code) {
     for (const s of schedules) {
       if (/^(?:lectures?|class(?:es)?|labs?|tutorials?|sessions?|sections?)$/i.test(s.title)) s.title = `${course.code} ${s.title}`;
     }
   }
-  const intervalNote = input.docType !== "NOTES" && extractInterval(text) ? INTERVAL_WARNING : null;
-  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : intervalNote ?? aiNote), needsLanguage: raw.needsLanguage, method: grid ? (/pdf/i.test(input.mimeType) ? "pdf-grid" : "image-grid") : raw.method, grid, ...(kind ? { kind } : {}) };
+  const intervalNote = docType !== "NOTES" && extractInterval(text) ? INTERVAL_WARNING : null;
+  return { text, deadlines, schedules, course, ocrConfidence: raw.confidence, warning: raw.warning ?? (timedOut ? TIME_LIMIT_WARNING : intervalNote ?? aiNote), needsLanguage: raw.needsLanguage, method: grid ? (/pdf/i.test(input.mimeType) ? "pdf-grid" : "image-grid") : raw.method, grid, docType, ...(kind ? { kind } : {}) };
 }
 
-type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: (typeof DOC_TYPES)[number]; language: string; autoCreate: boolean; instruction?: string | null };
+type ProcessInput = { buffer?: Buffer; text?: string; fileName: string; mimeType: string; docType: DocInputType; language: string; autoCreate: boolean; instruction?: string | null };
 
 /**
  * DOC_INSTRUCTIONS: the items' structured fields (computed once from the stored text, then kept) and the instruction
@@ -302,6 +309,25 @@ async function reuseOrProcess(user: User, settings: UserSettings, input: Process
 }
 
 /**
+ * A saved document's reading in the upload's response shape, for the review screen (opened from a chat card or from
+ * My documents). Created / existing flags are as of now (withCurrentState). Null when it has no reading yet.
+ */
+export async function reviewResult(userId: string, document: { text: string; extracted: unknown } & Record<string, unknown>) {
+  if (!document.extracted) return null;
+  const { text, ...doc } = document;
+  const extracted = await withCurrentState(userId, document.extracted as unknown as Extracted);
+  return {
+    document: doc,
+    extracted,
+    createdTasks: [] as ReturnType<typeof serializeTask>[],
+    createdRoutines: [] as Awaited<ReturnType<typeof createRoutine>>[],
+    textPreview: text.slice(0, 1500),
+    ...(docFlag("DOC_FALLBACK_UI") ? { text: text.slice(0, TEXT_FOR_VIEW) } : {}),
+    reused: false,
+  };
+}
+
+/**
  * A saved result's created / existing flags as of now: an item whose task or routine was deleted (or archived)
  * since is offered again (not created, no id, removedSinceUpload) instead of claiming a task that is gone.
  * Nothing is re-created automatically: the user deleted it, so they decide.
@@ -337,7 +363,7 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
       fileName: input.fileName.slice(0, 200),
       mimeType: input.mimeType,
       sizeBytes: input.buffer?.length ?? Buffer.byteLength(input.text ?? ""),
-      docType: input.docType,
+      docType: a.docType,
       language: input.language,
       text: text.slice(0, 200000),
       ocrConfidence: a.ocrConfidence,

@@ -7,7 +7,8 @@ import { handle, HttpError, parseBody, requireUser } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { applyDocumentItems } from "./applyItems.js";
-import { analyzeDocument, DOC_TYPES, EXTRACTOR_VERSION, processDocument, withInstruction } from "./documentProcessing.js";
+import { analyzeDocument, DOC_INPUT_TYPES, DOC_TYPES, EXTRACTOR_VERSION, processDocument, reviewResult, withInstruction } from "./documentProcessing.js";
+import { recordUploadInChat } from "./chatUpload.js";
 import { docInstructionsOn } from "./instructions.js";
 import { localYmd } from "../../lib/time.js";
 import { extractDeadlines } from "./extraction.js";
@@ -56,7 +57,15 @@ documentRouter.post(
       throw new HttpError(415, "UNSUPPORTED_FILE", "Supported formats: PDF, JPG, PNG, DOCX");
     }
     const body = parseBody(
-      z.object({ docType: z.enum(DOC_TYPES).default("OTHER"), language: z.enum(LANGS).default("eng"), autoCreate: z.enum(["true", "false"]).default("true"), instruction: z.string().max(300).optional() }),
+      z.object({
+        docType: z.enum(DOC_INPUT_TYPES).default("OTHER"),
+        language: z.enum(LANGS).default("eng"),
+        autoCreate: z.enum(["true", "false"]).default("true"),
+        instruction: z.string().max(300).optional(),
+        // Sent from the assistant chat: the exchange is written into that conversation ("" = the current one).
+        chat: z.enum(["true", "false"]).default("false"),
+        conversationId: z.string().max(60).optional(),
+      }),
       req.body,
     );
     // React Native percent-encodes non-ASCII file names in multipart uploads ("%E2%80%94" for "—").
@@ -76,7 +85,8 @@ documentRouter.post(
       // DOC_INSTRUCTIONS: "What do you need from this document?" (read only with the flag on).
       ...(docInstructionsOn() && body.instruction?.trim() ? { instruction: body.instruction } : {}),
     }));
-    sendSuccess(res, result, "Document processed", 201);
+    const chat = body.chat === "true" ? await recordUploadInChat(req.user.id, req.settings.language, body.conversationId || null, result, body.instruction ?? null) : null;
+    sendSuccess(res, { ...result, ...(chat ? { chat } : {}) }, "Document processed", 201);
   }),
 );
 
@@ -84,7 +94,7 @@ documentRouter.post(
   "/text",
   handle(async (req, res) => {
     const body = parseBody(
-      z.object({ text: z.string().min(10).max(200000), docType: z.enum(DOC_TYPES).default("OTHER"), title: z.string().max(120).default("Pasted text"), autoCreate: z.boolean().default(true), instruction: z.string().max(300).optional() }),
+      z.object({ text: z.string().min(10).max(200000), docType: z.enum(DOC_INPUT_TYPES).default("OTHER"), title: z.string().max(120).default("Pasted text"), autoCreate: z.boolean().default(true), instruction: z.string().max(300).optional() }),
       req.body,
     );
     const result = await processDocument(req.user, req.settings, {
@@ -136,7 +146,8 @@ documentRouter.get(
   handle(async (req, res) => {
     const document = await prisma.document.findFirst({ where: { id: req.params.id, userId: req.user.id } });
     if (!document) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
-    sendSuccess(res, { document });
+    // `result`: the saved reading in the upload's shape, for the review screen (opened from chat or My documents).
+    sendSuccess(res, { document, result: await reviewResult(req.user.id, document) });
   }),
 );
 

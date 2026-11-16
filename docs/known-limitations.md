@@ -85,6 +85,18 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   settings change). If the app isn't opened for days, later reminders may be missing until it is.
 - Reminders are planned 7 days ahead; the WhatsApp reminder job only runs when Twilio is configured.
 
+## Documents in chat
+
+- **Documents are sent in the assistant chat** ("+" next to the message box), with an optional message that says what
+  is needed. That message filters the items only when `DOC_INSTRUCTIONS=on`; otherwise it is kept in the chat as written.
+- **The document type is guessed by rules** (syllabus / timetable words, `docTypeGuess.ts`). A wrong guess only
+  changes whether course topics are read; deadlines and classes are looked for either way. With `DOC_ROUTING=on` the
+  review still offers "Wrong type?".
+- **Language:** chat uploads are read with English OCR. A photo in another script gets the usual warning; the user
+  sends it again and says the language (the old per-upload language chips are gone).
+- **Pasting text** for extraction is no longer a separate box; paste it into the chat as a message.
+- **My documents** (under Me) lists, reviews and deletes files. Documents is no longer in the sidebar / main navigation.
+
 ## Plans and locked features
 
 - **Locked features stay visible.** Pro features (WhatsApp, WhatsApp Agent, WhatsApp-only reminders, location

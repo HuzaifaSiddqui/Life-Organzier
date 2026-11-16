@@ -6,7 +6,8 @@ import { syncNow } from "./syncEngine";
 import { scheduleReminderSync } from "./reminders";
 import { uploadPart, type PickedFile } from "../utils/uploadPart";
 
-export type DocType = "SYLLABUS" | "SCHEDULE" | "NOTES" | "OTHER";
+/** AUTO: the server decides from the text (documents sent in chat). The stored type is always one of the other four. */
+export type DocType = "SYLLABUS" | "SCHEDULE" | "NOTES" | "OTHER" | "AUTO";
 
 /** DOC_INSTRUCTIONS: an item's structured fields, and whether the user's request leaves it out. */
 export type ItemMeta = { person: string | null; courseCode: string | null; course: string | null; kind: "class" | "exam" | "quiz" | "assignment" | "other"; days: number[]; room: string | null };
@@ -121,13 +122,19 @@ export type DocumentSummary = {
   extracted: ProcessResult["extracted"] | null;
 };
 
+/** A document sent in chat: the server writes "file + request" and its summary into this conversation. */
+export type ChatUpload = { conversationId: string | null };
+export type ChatMessageRow = { id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; metadata: unknown; createdAt: string };
+export type UploadResult = ProcessResult & { chat?: { conversationId: string; messages: ChatMessageRow[] } };
+
 export async function uploadDocument(
   file: PickedFile,
   docType: DocType,
   language: string,
   onProgress?: (fraction: number) => void,
   instruction?: string,
-): Promise<ProcessResult> {
+  chat?: ChatUpload,
+): Promise<UploadResult> {
   const form = new FormData();
   const part = uploadPart(file);
   if (part instanceof Blob) form.append("file", part, file.name);
@@ -136,12 +143,16 @@ export async function uploadDocument(
   form.append("language", language);
   form.append("autoCreate", "true");
   if (instruction?.trim()) form.append("instruction", instruction.trim());
+  if (chat) {
+    form.append("chat", "true");
+    if (chat.conversationId) form.append("conversationId", chat.conversationId);
+  }
   // Plain XMLHttpRequest: it's the only client here that sends React Native's { uri, name, type } file parts.
   // axios mangles them, and Expo's global fetch throws "Unsupported FormDataPart implementation".
   // No Content-Type header — the native layer adds the multipart boundary.
   const token = await auth.currentUser?.getIdToken();
   const deviceId = await getDeviceId();
-  const send = () => new Promise<{ success: boolean; data: ProcessResult; message?: string }>((resolve, reject) => {
+  const send = () => new Promise<{ success: boolean; data: UploadResult; message?: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${api.defaults.baseURL}/documents`);
     // The server spends at most 150 s on a document (DOCUMENT_TIME_LIMIT_MS: OCR + AI) and then answers with
@@ -178,6 +189,11 @@ export async function uploadDocument(
   void syncNow();
   scheduleReminderSync();
   return body.data;
+}
+
+/** A saved document's reading, in the upload's shape (the review screen, from a chat card or My documents). */
+export async function getDocumentReview(id: string): Promise<ProcessResult | null> {
+  return (await apiGet<{ result: ProcessResult | null }>(`/documents/${id}`)).result;
 }
 
 export async function processText(text: string, docType: DocType, title: string, instruction?: string): Promise<ProcessResult> {
