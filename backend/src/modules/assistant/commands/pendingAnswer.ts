@@ -22,7 +22,7 @@ export const YES_NO =
 const CONTROL = /^(?:done|ok done|that'?s it|that'?s all|skip|later|not now|bas|ho gaya|hogaya|agla|next|back|any|none|neither|both|first|second|third|last)[\s.!]*$/i;
 const NUMBER = /^\s*#?\d{1,2}\s*[.)]?\s*$/;
 
-const CONFIRM_KINDS = new Set<Pending["kind"]>(["confirm_command", "confirm_delete", "confirm_update", "mood_confirm", "typo", "prereq", "task_review", "clarify_intent"]);
+const CONFIRM_KINDS = new Set<Pending["kind"]>(["routine_preview", "split_preview", "confirm_command", "confirm_delete", "confirm_update", "mood_confirm", "typo", "prereq", "task_review", "clarify_intent"]);
 const SLOT_KINDS = new Set<Pending["kind"]>(["task_draft", "routine_draft", "past_date", "capacity", "conflict", "task_review", "routine_time"]);
 
 /** The names offered: command / location choices carry them; for "which task?" the caller passes the task titles. */
@@ -128,6 +128,8 @@ export function isPlausibleAnswer(p: Pending, text: string, ctx: ParseCtx, title
     if (p.kind === "routine_draft" && p.awaiting.includes("title")) return words <= 6 && !matchCommand(t, ctx);
     return /^(?:pick another day|another (?:day|date|time)|different day|add anyway|anyway|move (?:flexible )?tasks|keep the routine|do the task anyway|later today|end of day|no deadline|not sure|flexible|no reminders?|without (?:a )?reminder|don'?t remind me|bina reminder|reminder (?:nahi|nahin|mat))\b/i.test(t);
   }
+  // PR E: "How should I split it?": the names ("outline, draft, review"), unless it is a command.
+  if (p.kind === "split_ask") return words <= 20 && !matchCommand(t, ctx);
   // "Why are you declining?": a quick-pick number, cancel, or a short reason that isn't itself a command.
   if (p.kind === "decline_reason") return words <= 25 && !matchCommand(t, ctx);
   // "Share this with @ali?": together / only for them / just me, or a person's name when one name fits two people.
