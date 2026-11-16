@@ -93,8 +93,22 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   to the foreground. Exception: the first sign-in on a device has no cached profile, so it waits for that one
   sync (the server must create the account first); if the server can't be reached, the app opens anyway and
   server-backed screens fill in once it can.
-- **Only tasks sync offline.** Routines, mood logs, memories, documents and settings call the API directly and
-  need a connection.
+- **Saved copies and instant changes.** Every screen shows the last copy it got from the server at once, also
+  offline, and refreshes it in the background (`services/localCache.ts`, `hooks/useCachedQuery.ts`). Changes to
+  settings, profile name, routines, routine done / skipped, mood check-ins without a note, memories, suggestions,
+  categories and tags show on screen first and are sent at once, or kept in a queue while offline and sent on
+  reconnect (`services/outbox.ts`; rules in `utils/outbox.ts`). Tasks keep their own queue (sync engine).
+- **A refused change is undone.** If the server refuses a change (for example a value it doesn't accept), the screen
+  puts the old value back and says so; for a change made offline this happens when it is sent, with an app-wide
+  notice. Server errors are tried 8 times, then given up.
+- **Still need a connection:** assistant chat, document upload, sharing / People actions, WhatsApp linking, data
+  export, account deletion and password change.
+- **A mood log with a written note waits for the server**, because the note is checked for a crisis on the server
+  (deterministic safety, never skipped). A one-tap mood without a note works offline.
+- **New routines, memories and categories made offline** show at once with a temporary id; the next refresh after
+  they reach the server replaces them with the real ones (the routine's days and reminders appear then).
+- **Signing out** sends waiting changes first if it can; changes that still can't be sent are dropped with the
+  rest of that account's data on the device.
 - **Conflicts compare device clocks.** A true conflict (both sides changed the same field) is resolved by the newer
   `clientModifiedAt`, which comes from the device clock. A phone with a wrong clock can win or lose conflicts
   incorrectly. Fields changed on only one side always merge correctly.

@@ -15,19 +15,16 @@ import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
 import {
-  createCategory,
-  deleteCategory,
-  deleteTag,
   exportAllData,
   getAccount,
   getCategories,
   getTags,
   recoverAccount,
   requestAccountDeletion,
-  setDnd,
-  updateProfile,
   type AccountInfo,
 } from "../../services/settingsApi";
+import { OutboxRefused, send } from "../../services/outbox";
+import { useCachedQuery } from "../../hooks/useCachedQuery";
 import { resetLocalData, syncNow } from "../../services/syncEngine";
 import { LocationOnboardingSheet } from "../../components/LocationOnboardingSheet";
 import { CalendarSettingsCard } from "../../components/CalendarSettingsCard";
@@ -63,8 +60,8 @@ function to12h(hhmm: string): string {
 }
 
 export function SettingsScreen({ navigation }: Props) {
-  const { refreshProfile, firebaseUser } = useAuth();
-  const { settings, update, categories, setCategories, reload } = usePreferences();
+  const { firebaseUser, dbUser, patchDbUser } = useAuth();
+  const { settings, update, categories, setCategories } = usePreferences();
   const { t } = useLocale();
   const [toast, setToast] = useState<string | null>(null);
   // Task collaboration (COLLAB_TASKS): the email switch shows only when the server has the feature on.
@@ -73,12 +70,15 @@ export function SettingsScreen({ navigation }: Props) {
     void getCollabSummary().then((s) => setCollabAvailable(Boolean(s)), () => undefined);
   }, []);
   const [toastAction, setToastAction] = useState<{ label: string; onPress: () => void } | undefined>(undefined);
-  const [account, setAccount] = useState<AccountInfo | null>(null);
-  const [name, setName] = useState("");
+  // Saved copies first (also offline), refreshed in the background.
+  const accountQuery = useCachedQuery<AccountInfo>("account", getAccount);
+  const account = accountQuery.data;
+  const tagsQuery = useCachedQuery<Array<{ tag: string; count: number }>>("tags", getTags);
+  const tags = tagsQuery.data ?? [];
+  const [name, setName] = useState(dbUser?.displayName ?? "");
   const [newContext, setNewContext] = useState("");
   const [catName, setCatName] = useState("");
   const [catColor, setCatColor] = useState(COLORS[0]);
-  const [tags, setTags] = useState<Array<{ tag: string; count: number }>>([]);
   const [pw, setPw] = useState({ current: "", next: "" });
   const [locationOn, setLocationOn] = useState(false);
   const [placeCount, setPlaceCount] = useState(0);
@@ -86,13 +86,6 @@ export function SettingsScreen({ navigation }: Props) {
   const isPro = settings?.tier === "PRO";
 
   useEffect(() => {
-    getAccount()
-      .then((a) => {
-        setAccount(a);
-        setName(a.user.displayName ?? "");
-      })
-      .catch(() => undefined);
-    getTags().then(setTags).catch(() => undefined);
     void isLocationRemindersEnabled().then(setLocationOn);
     listPlaces().then((p) => setPlaceCount(p.length), () => undefined);
   }, []);
@@ -118,9 +111,10 @@ export function SettingsScreen({ navigation }: Props) {
     );
   }
 
+  // The change shows at once; it is sent now or as soon as the device is online again.
   const save = async (patch: Partial<UserSettings>, message = "Saved") => {
     const next = await update(patch);
-    setToast(next ? message : "Couldn't save — are you online?");
+    setToast(next ? message : t("offline.refused"));
   };
 
   const dndActive = settings.dndUntil && Date.parse(settings.dndUntil) > Date.now();
@@ -137,12 +131,17 @@ export function SettingsScreen({ navigation }: Props) {
             <Chip
               label="Save"
               onPress={async () => {
+                const displayName = name.trim();
+                const before = dbUser?.displayName ?? null;
+                patchDbUser({ displayName });
+                setToast("Profile updated");
                 try {
-                  await updateProfile(name);
-                  await refreshProfile();
-                  setToast("Profile updated");
+                  await send({ method: "PUT", path: "/account/profile", body: { displayName }, key: "profile", label: "Profile" });
                 } catch (e) {
-                  setToast(getApiErrorMessage(e));
+                  if (!(e instanceof OutboxRefused)) throw e;
+                  patchDbUser({ displayName: before });
+                  setName(before ?? "");
+                  setToast(e.message);
                 }
               }}
             />
@@ -239,13 +238,10 @@ export function SettingsScreen({ navigation }: Props) {
                 small
                 label={String(l)}
                 onPress={async () => {
-                  try {
-                    await setDnd(Number(m));
-                    await reload();
-                    setToast(Number(m) ? "Do Not Disturb on" : "Do Not Disturb off");
-                  } catch (e) {
-                    setToast(getApiErrorMessage(e));
-                  }
+                  // Shown at once (the server works out the same end time); sent now or when back online.
+                  const minutes = Number(m);
+                  const ok = await update({ dndUntil: minutes ? new Date(Date.now() + minutes * 60000).toISOString() : null });
+                  setToast(!ok ? t("offline.refused") : minutes ? "Do Not Disturb on" : "Do Not Disturb off");
                 }}
               />
             ))}
@@ -366,8 +362,15 @@ export function SettingsScreen({ navigation }: Props) {
                   c.predefined
                     ? undefined
                     : async () => {
-                        await deleteCategory(c.id).catch(() => undefined);
-                        setCategories(await getCategories());
+                        const before = categories;
+                        setCategories(categories.filter((x) => x.id !== c.id));
+                        try {
+                          await send({ method: "DELETE", path: `/categories/${c.id}`, key: `category:${c.id}`, label: "Category" });
+                        } catch (e) {
+                          if (!(e instanceof OutboxRefused)) throw e;
+                          setCategories(before);
+                          setToast(e.message);
+                        }
                       }
                 }
               />
@@ -380,12 +383,17 @@ export function SettingsScreen({ navigation }: Props) {
               onPress={async () => {
                 const n = catName.trim();
                 if (!n) return;
+                // Shown at once; it gets its real id from the next refresh (now, or when back online).
+                const before = categories;
+                setCatName("");
+                setCategories([...categories, { id: `local-${Date.now()}`, name: n, color: catColor, predefined: false } as (typeof categories)[number]]);
                 try {
-                  await createCategory(n, catColor);
-                  setCatName("");
-                  setCategories(await getCategories());
+                  const saved = await send({ method: "POST", path: "/categories", body: { name: n, color: catColor }, label: "Category" });
+                  if (saved) setCategories(await getCategories().catch(() => categories));
                 } catch (e) {
-                  setToast(getApiErrorMessage(e));
+                  if (!(e instanceof OutboxRefused)) throw e;
+                  setCategories(before);
+                  setToast(e.message);
                 }
               }}
             />
@@ -409,9 +417,15 @@ export function SettingsScreen({ navigation }: Props) {
                   leading={<Icon name="close" size={12} color={colors.textMuted} />}
                   accessibilityLabel={`Remove tag ${t.tag}`}
                   onPress={async () => {
-                    await deleteTag(t.tag).catch(() => undefined);
-                    setTags(await getTags());
-                    void syncNow();
+                    tagsQuery.mutate((prev) => (prev ?? []).filter((x) => x.tag !== t.tag));
+                    try {
+                      const sent = await send({ method: "DELETE", path: `/tags/${encodeURIComponent(t.tag)}`, key: `tag:${t.tag}`, label: "Tag" });
+                      if (sent) void syncNow();
+                    } catch (e) {
+                      if (!(e instanceof OutboxRefused)) throw e;
+                      void tagsQuery.reload();
+                      setToast(e.message);
+                    }
                   }}
                 />
               ))}
@@ -502,7 +516,7 @@ export function SettingsScreen({ navigation }: Props) {
                 title="Keep my account"
                 onPress={async () => {
                   await recoverAccount();
-                  setAccount(await getAccount());
+                  await accountQuery.reload();
                   setToast("Account recovered");
                 }}
               />
@@ -520,7 +534,7 @@ export function SettingsScreen({ navigation }: Props) {
                     onPress: async () => {
                       try {
                         await requestAccountDeletion();
-                        setAccount(await getAccount());
+                        await accountQuery.reload();
                       } catch (e) {
                         setToast(getApiErrorMessage(e));
                       }

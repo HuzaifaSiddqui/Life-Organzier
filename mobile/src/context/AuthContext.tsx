@@ -17,6 +17,8 @@ import { api } from "../services/api";
 import { applyLastGoodApiBase, resolveAndApplyApiBase } from "../services/apiResolver";
 import type { User } from "../types/models";
 import { syncPendingTasks } from "../services/tasksApi";
+import { clearUserCache } from "../services/localCache";
+import { clearOutbox } from "../services/outbox";
 
 type AuthContextValue = {
   firebaseUser: FirebaseUser | null;
@@ -28,6 +30,8 @@ type AuthContextValue = {
   /** False until the first API probe pass finishes (success or not). Informational only. */
   apiEndpointsReady: boolean;
   refreshProfile: () => Promise<void>;
+  /** Changes the profile on screen (and its saved copy) at once, e.g. a new display name before the server answers. */
+  patchDbUser: (patch: Partial<User>) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -80,6 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [apiEndpointsReady, setApiEndpointsReady] = useState(false);
   /** True once the server profile has been fetched this session (cached copies don't count). */
   const profileSyncedRef = useRef(false);
+  /** The signed-in uid, so sign-out can remove that user's saved copies and unsent changes. */
+  const lastUidRef = useRef<string | null>(null);
 
   /**
    * Background: find the server, sync the profile, flush the offline queue. Failures keep the
@@ -125,7 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       profileSyncedRef.current = false;
+      if (user) lastUidRef.current = user.uid;
       if (!user) {
+        const previous = lastUidRef.current;
+        lastUidRef.current = null;
+        if (previous) {
+          void clearUserCache(previous);
+          void clearOutbox(previous);
+        }
         setDbUser(null);
         setBootstrapping(false);
         setAuthReady(true);
@@ -174,6 +187,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [syncProfile]);
 
+  const patchDbUser = useCallback((patch: Partial<User>) => {
+    const uid = auth.currentUser?.uid;
+    setDbUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      if (uid) void saveCachedUser(uid, next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       firebaseUser,
@@ -182,8 +205,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authReady,
       apiEndpointsReady,
       refreshProfile,
+      patchDbUser,
     }),
-    [firebaseUser, dbUser, bootstrapping, authReady, apiEndpointsReady, refreshProfile]
+    [firebaseUser, dbUser, bootstrapping, authReady, apiEndpointsReady, refreshProfile, patchDbUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

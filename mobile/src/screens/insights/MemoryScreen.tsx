@@ -1,3 +1,5 @@
+import { OutboxRefused, send, type SendInput } from "../../services/outbox";
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
@@ -6,8 +8,8 @@ import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, ConfidenceMeter, EmptyState, HelpButton, SectionTitle, Snackbar, ui } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { getApiErrorMessage } from "../../services/api";
-import { addMemory, editMemory, forgetEverything, forgetMemory, getMemory } from "../../services/insightsApi";
+import { getApiErrorMessage, isNetworkError } from "../../services/api";
+import { getMemory } from "../../services/insightsApi";
 import type { MemoryItem, Pattern } from "../../types/models";
 import { relativeTime } from "../../utils/format";
 import { showAlert } from "../../services/dialog";
@@ -36,16 +38,32 @@ export function MemoryScreen({ navigation }: Props) {
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const cached = useCacheLoader();
+  /** Memory changes show at once; sent now or when back online. A refusal reloads the server's copy. */
+  const sendChange = async (input: SendInput) => {
+    try {
+      const sent = await send(input);
+      if (sent) void load();
+    } catch (e) {
+      if (!(e instanceof OutboxRefused)) throw e;
+      setToast(e.message);
+      void load();
+    }
+  };
+
   const load = useCallback(async () => {
     try {
-      const r = await getMemory();
-      setMemories(r.memories);
-      setPatterns(r.patterns);
+      await cached("memory", getMemory, (r) => {
+        setMemories(r.memories);
+        setPatterns(r.patterns);
+      });
     } catch (e) {
+      // Offline: the saved copy stays on screen.
+      if (isNetworkError(e)) return;
       setToast(getApiErrorMessage(e));
-      setMemories([]);
+      setMemories((m) => m ?? []);
     }
-  }, []);
+  }, [cached]);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,14 +101,11 @@ export function MemoryScreen({ navigation }: Props) {
             onPress={async () => {
               const text = draft.trim();
               if (text.length < 3) return;
-              try {
-                await addMemory(text, kind);
-                setDraft("");
-                setToast("Got it — I'll remember that.");
-                void load();
-              } catch (e) {
-                setToast(getApiErrorMessage(e));
-              }
+              const now = new Date().toISOString();
+              setMemories((list) => [{ id: `local-${Date.now()}`, kind, content: text, importance: 0.5, reinforcedCount: 1, source: "user", createdAt: now, updatedAt: now }, ...(list ?? [])]);
+              setDraft("");
+              setToast("Got it — I'll remember that.");
+              await sendChange({ method: "POST", path: "/memory", body: { content: text, kind }, label: "Memory" });
             }}
           />
         </Card>
@@ -126,13 +141,10 @@ export function MemoryScreen({ navigation }: Props) {
                           selected
                           label="Save"
                           onPress={async () => {
-                            try {
-                              await editMemory(m.id, editing.text);
-                              setEditing(null);
-                              void load();
-                            } catch (e) {
-                              setToast(getApiErrorMessage(e));
-                            }
+                            const content = editing.text;
+                            setMemories((list) => (list ?? []).map((x) => (x.id === m.id ? { ...x, content, updatedAt: new Date().toISOString() } : x)));
+                            setEditing(null);
+                            await sendChange({ method: "PUT", path: `/memory/${m.id}`, body: { content }, key: `memory:${m.id}`, label: "Memory" });
                           }}
                         />
                         <Chip small label="Cancel" onPress={() => setEditing(null)} />
@@ -152,8 +164,8 @@ export function MemoryScreen({ navigation }: Props) {
                           </Pressable>
                           <Pressable
                             onPress={async () => {
-                              await forgetMemory(m.id).catch(() => undefined);
-                              void load();
+                              setMemories((list) => (list ?? []).filter((x) => x.id !== m.id));
+                              await sendChange({ method: "DELETE", path: `/memory/${m.id}`, key: `memory:${m.id}`, label: "Memory" });
                             }}
                             hitSlop={8}
                           >
@@ -180,8 +192,9 @@ export function MemoryScreen({ navigation }: Props) {
                   text: "Forget",
                   style: "destructive",
                   onPress: async () => {
-                    await forgetEverything().catch(() => undefined);
-                    void load();
+                    setMemories([]);
+                    setPatterns([]);
+                    await sendChange({ method: "DELETE", path: "/memory", key: "memory:all", label: "Memory" });
                   },
                 },
               ])

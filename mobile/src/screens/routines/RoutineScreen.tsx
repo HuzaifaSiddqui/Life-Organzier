@@ -1,6 +1,9 @@
+import { OutboxRefused, send, type SendInput } from "../../services/outbox";
+import { readCache, writeCache } from "../../services/localCache";
+import { scheduleReminderSync } from "../../services/reminders";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
@@ -9,14 +12,10 @@ import { useLocale } from "../../i18n/LocaleProvider";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { apiErrorCode, getApiErrorMessage } from "../../services/api";
+import { getApiErrorMessage, isNetworkError } from "../../services/api";
 import {
-  createRoutine,
-  deleteRoutine,
   getRoutines,
   getTodayOccurrences,
-  updateRoutine,
-  updateRoutineOccurrence,
   type RoutineInput,
 } from "../../services/routinesApi";
 import type { Routine, RoutineFrequency, RoutineOccurrence, RoutinePriority } from "../../types/models";
@@ -86,11 +85,27 @@ export function RoutineScreen({ navigation, route }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const cacheKey = `routines:${showAll ? "all" : "active"}`;
+
+  // The saved copy first (also offline); the server's copy replaces it when it arrives.
+  useEffect(() => {
+    let live = true;
+    void readCache<{ routines: Routine[]; today: Array<RoutineOccurrence & { routine: Routine }> }>(cacheKey).then((saved) => {
+      if (!live || !saved) return;
+      setRoutines(saved.routines);
+      setToday(saved.today);
+    });
+    return () => {
+      live = false;
+    };
+  }, [cacheKey]);
+
   const load = useCallback(async () => {
     try {
       const [r, t] = await Promise.all([getRoutines(showAll), getTodayOccurrences()]);
       setRoutines(r.routines);
       setToday(t);
+      void writeCache(cacheKey, { routines: r.routines, today: t });
       // Opened for one routine (tapped in chat): show it, once.
       const openId = route.params?.routineId;
       if (openId) {
@@ -100,10 +115,25 @@ export function RoutineScreen({ navigation, route }: Props) {
         else setToast("That routine no longer exists");
       }
     } catch (e) {
-      setToast(getApiErrorMessage(e));
+      // Offline: the saved copy stays on screen.
+      if (!isNetworkError(e)) setToast(getApiErrorMessage(e));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAll, route.params?.routineId]);
+
+  /** Sends a routine change (now, or when back online); a refusal reloads the server's copy and says why. */
+  const sendChange = async (input: SendInput, done?: string) => {
+    if (done) setToast(done);
+    try {
+      const sent = await send(input);
+      scheduleReminderSync();
+      if (sent) void load();
+    } catch (e) {
+      if (!(e instanceof OutboxRefused)) throw e;
+      setToast(e.message);
+      void load();
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -112,20 +142,19 @@ export function RoutineScreen({ navigation, route }: Props) {
   );
 
   const setOccurrence = async (o: RoutineOccurrence & { routine: Routine }, status: "COMPLETED" | "SKIPPED", confirm = false) => {
-    try {
-      await updateRoutineOccurrence(o.id, status, confirm);
-      setToast(status === "COMPLETED" ? `${o.routine.title} done` : `Skipped ${o.routine.title}`);
-      await load();
-    } catch (e) {
-      if (apiErrorCode(e) === "MANDATORY_CONFIRMATION_REQUIRED") {
-        showAlert("Mandatory routine", getApiErrorMessage(e), [
-          { text: "Keep it", style: "cancel" },
-          { text: "Skip anyway", style: "destructive", onPress: () => void setOccurrence(o, status, true) },
-        ]);
-        return;
-      }
-      setToast(getApiErrorMessage(e));
+    // Asked here (same rule as the server) so skipping works offline too.
+    if (status === "SKIPPED" && o.routine.priority === "MANDATORY" && !confirm) {
+      showAlert("Mandatory routine", `"${o.routine.title}" is mandatory. Are you sure you want to skip it?`, [
+        { text: "Keep it", style: "cancel" },
+        { text: "Skip anyway", style: "destructive", onPress: () => void setOccurrence(o, status, true) },
+      ]);
+      return;
     }
+    setToday((list) => list.map((x) => (x.id === o.id ? { ...x, status } : x)));
+    await sendChange(
+      { method: "PATCH", path: `/routines/occurrences/${o.id}`, body: { status, confirmMandatory: confirm }, key: `occurrence:${o.id}`, label: "Routine" },
+      status === "COMPLETED" ? `${o.routine.title} done` : `Skipped ${o.routine.title}`,
+    );
   };
 
   const save = async () => {
@@ -157,17 +186,16 @@ export function RoutineScreen({ navigation, route }: Props) {
       timeLocked: Boolean(form.dueTime) && form.timeLocked,
       locationContext: form.locationContext,
     };
-    try {
-      if (form.id) await updateRoutine(form.id, payload);
-      else await createRoutine(payload);
-      setToast(form.id ? "Routine updated" : `Created ${payload.title}`);
-      setForm(null);
-      await load();
-    } catch (e) {
-      setFormError(getApiErrorMessage(e));
-    } finally {
-      setSaving(false);
-    }
+    // Shown in the list at once; the server fills in the days and times when it answers (now or when online).
+    const id = form.id;
+    if (id) setRoutines((list) => list.map((r) => (r.id === id ? { ...r, ...payload, daysOfWeek: payload.daysOfWeek ?? null, dayOfMonth: payload.dayOfMonth ?? null } : r)));
+    else setRoutines((list) => [...list, { ...payload, id: `local-${Date.now()}`, description: null, daysOfWeek: payload.daysOfWeek ?? null, dayOfMonth: payload.dayOfMonth ?? null, dueTime: payload.dueTime ?? null, durationMinutes: payload.durationMinutes ?? null, category: payload.category ?? null, locationContext: payload.locationContext ?? null, active: true, occurrences: [] }]);
+    setForm(null);
+    setSaving(false);
+    await sendChange(
+      id ? { method: "PUT", path: `/routines/${id}`, body: payload, key: `routine:${id}`, merge: true, label: "Routine" } : { method: "POST", path: "/routines", body: payload, label: "Routine" },
+      id ? "Routine updated" : `Created ${payload.title}`,
+    );
   };
 
   const contexts = settings?.contexts ?? [];
@@ -230,7 +258,13 @@ export function RoutineScreen({ navigation, route }: Props) {
                       
                       {r.title}
                     </Text>
-                    <Switch value={r.active} onValueChange={(active) => void updateRoutine(r.id, { active }).then(load)} />
+                    <Switch
+                      value={r.active}
+                      onValueChange={(active) => {
+                        setRoutines((list) => list.map((x) => (x.id === r.id ? { ...x, active } : x)));
+                        void sendChange({ method: "PUT", path: `/routines/${r.id}`, body: { active }, key: `routine:${r.id}`, merge: true, label: "Routine" });
+                      }}
+                    />
                   </View>
                   <Text style={styles.meta}>
                     {freqLabel(r)} · {r.dueTime ?? "no reminder"}
@@ -396,9 +430,11 @@ export function RoutineScreen({ navigation, route }: Props) {
                         text: "Delete",
                         style: "destructive",
                         onPress: async () => {
-                          await deleteRoutine(form.id as string);
+                          const id = form.id as string;
+                          setRoutines((list) => list.filter((r) => r.id !== id));
+                          setToday((list) => list.filter((o) => o.routine.id !== id));
                           setForm(null);
-                          void load();
+                          await sendChange({ method: "DELETE", path: `/routines/${id}`, key: `routine-delete:${id}`, label: "Routine" }, "Routine deleted");
                         },
                       },
                     ])

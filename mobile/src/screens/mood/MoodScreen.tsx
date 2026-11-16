@@ -1,3 +1,5 @@
+import { OutboxRefused, send, type SendInput } from "../../services/outbox";
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
@@ -36,15 +38,17 @@ export function MoodScreen({ navigation }: Props) {
   const [byWeekday, setByWeekday] = useState<Array<{ weekday: number; count: number; avgScore: number | null }>>([]);
   const [toast, setToast] = useState<string | null>(null);
 
+  const cached = useCacheLoader();
   const load = useCallback(async () => {
     try {
-      const r = await getMoodHistory(30);
-      setLogs(r.logs);
-      setByWeekday(r.byWeekday);
+      await cached("mood-history", () => getMoodHistory(30), (r) => {
+        setLogs(r.logs);
+        setByWeekday(r.byWeekday);
+      });
     } catch {
-      // offline: history just stays empty
+      // offline: the saved history stays on screen
     }
-  }, []);
+  }, [cached]);
 
   useFocusEffect(
     useCallback(() => {
@@ -54,6 +58,26 @@ export function MoodScreen({ navigation }: Props) {
 
   const save = async () => {
     if (score === null && !mood) return;
+    // Without a note there is nothing to check for a crisis: shown at once, sent now or when back online.
+    // With a note the server's crisis check must answer first (CLAUDE.md: safety stays deterministic, server-side).
+    if (!note.trim()) {
+      const m = mood ?? defaultMood(score ?? 5);
+      setLogs((list) => [{ id: `local-${Date.now()}`, mood: m, score, source: "MANUAL", note: null, createdAt: new Date().toISOString() }, ...list]);
+      setToast(t("offline.moodSaved"));
+      try {
+        const r = await send<{ recommendation: MoodRecommendation; crisis: CrisisPayload | null }>({ method: "POST", path: "/mood", body: { mood: m, score: score ?? undefined, source: "MANUAL" }, label: "Mood" });
+        if (r) {
+          setRec(r.crisis ? null : r.recommendation);
+          setCrisis(r.crisis ?? null);
+          void load();
+        }
+      } catch (e) {
+        if (!(e instanceof OutboxRefused)) throw e;
+        setToast(e.message);
+        void load();
+      }
+      return;
+    }
     setBusy(true);
     try {
       const m = mood ?? defaultMood(score ?? 5);

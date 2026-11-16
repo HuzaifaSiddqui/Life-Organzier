@@ -1,3 +1,4 @@
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -66,21 +67,37 @@ export function CollabScreen({ navigation, route }: Props) {
     if (route.params?.tab) setTab(route.params.tab);
   }, [route.params?.tab]);
 
+  const cached = useCacheLoader();
   const load = useCallback(async () => {
     try {
-      const summary = await getCollabSummary();
-      if (!summary) {
+      let off = false;
+      let unread = 0;
+      await cached(
+        "collab",
+        async () => {
+          const summary = await getCollabSummary();
+          if (!summary) {
+            off = true;
+            return null;
+          }
+          unread = summary.unread;
+          const [connections, tasks, notices] = await Promise.all([getConnections(), getSharedTasks(), getNotices()]);
+          return { summary, connections, cards: tasks.cards, shared: tasks.shared, notices };
+        },
+        (next) => {
+          if (next) setData(next);
+        },
+      );
+      if (off) {
         navigation.goBack(); // the server has collaboration off
         return;
       }
-      const [connections, tasks, notices] = await Promise.all([getConnections(), getSharedTasks(), getNotices()]);
-      setData({ summary, connections, cards: tasks.cards, shared: tasks.shared, notices });
       setFailed(null);
-      if (summary.unread) void markNoticesRead().catch(() => undefined);
+      if (unread) void markNoticesRead().catch(() => undefined);
     } catch (e) {
       setFailed(e);
     }
-  }, [navigation]);
+  }, [navigation, cached]);
 
   useFocusEffect(
     useCallback(() => {
