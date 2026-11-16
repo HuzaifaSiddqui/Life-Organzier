@@ -1748,17 +1748,24 @@ export function acceptOffer(opts: ExtractOptions, offer: string, text: string): 
   return `${offer.replace(OFFER_TIME, "").trim()} at ${e.time}`;
 }
 
+/** A stored memory as the assistant says it back: "User prefers …" → "you prefer …", "the user's" → "your". */
+export function spokenMemory(content: string): string {
+  return content
+    .replace(/^User's\s+/i, "your ")
+    .replace(/^User\s+/i, "you ")
+    .replace(/\bthe user's\b/gi, "your")
+    .replace(/\bthe user\b/gi, "you")
+    .replace(/\byou is\b/gi, "you are")
+    // The rule memories' verbs ("User prefers …"): "you prefer", never "you prefers".
+    .replace(/\byou (prefer|dislike|work|listen|like)s\b/gi, "you $1");
+}
+
 export async function storeInfo(turn: Turn, text: string): Promise<Out> {
   const rules = ruleBasedMemories(text);
   const stored = await extractAndStoreMemories(turn.user.id, text, { allowLlm: rules.length === 0, background: false, source: `${turn.channel.toLowerCase()}:${turn.conversation.id}` });
   turn.learned = stored.map((m) => m.content);
   if (!stored.length) return conversationalReply(turn, text, "chat");
-  const first = stored[0].content
-    .replace(/^User's\s+/i, "your ")
-    .replace(/^User\s+/i, "you ")
-    .replace(/the user's/gi, "your")
-    .replace(/the user/gi, "you")
-    .replace(/you is/gi, "you are");
+  const first = spokenMemory(stored[0].content);
   return {
     content: `Got it — I'll remember that ${first.charAt(0).toLowerCase()}${first.slice(1).replace(/\.$/, "")}.${stored.length > 1 ? ` (+${plural(stored.length - 1, "more thing")})` : ""} I'll use it when planning for you.`,
     actions: [{ label: "What do you know about me?", payload: { type: "navigate", screen: "Memory" } }],
