@@ -157,6 +157,8 @@ Rules:
 
 ### Touch targets
 
+Locked and disabled controls use `opacity.disabled` (0.45).
+
 Minimum **48 dp** (`touchTarget`). Smaller visuals reach it with `hitSlop`: IconButton is 40 visual, small Button 40, Chip 28/32.
 
 ### Desktop layout (`layout` token, `useLayout()`)
@@ -200,6 +202,7 @@ whatever the device.
 | `KeyboardPad` | Keeps content above the on-screen keyboard | `style` | Pads the bottom by the keyboard height (Android 15+ is edge-to-edge and no longer resizes the window). One wraps the whole app in `RootNavigator`, so screens need nothing. A `Modal` is a separate window: the routine form wraps its content in one; the place picker uses `KeyboardAvoidingView` |
 | `Skeleton` | Loading placeholder | `height`, `width`, `radius` | Compose skeletons that match the final layout. No bare spinners for content. Hidden from screen readers |
 | `Snackbar` | Transient feedback + Undo | `text`, `tone` `neutral · success · warning · danger`, `action`, `onHide` | Inverse surface, above bottom nav, polite live region. Use an Undo action for delete / complete / edit |
+| `LockedFeature` (`components/LockedFeature.tsx`) | A feature this user can't use yet | `feature` (`utils/featureAccess.ts`), `name` | Shows the real control dimmed (`opacity.disabled`, 0.45) with a lock badge at the top end; a tap anywhere opens "Try Pro" (free users; Continue opens Settings → Plan) or "Create a free account" (guests), each with Cancel. Never hide a feature only because of the plan. `promptUnlock()` gives the same prompt for a plain link / button |
 | `EmptyState` | Empty screen or section | `icon` (emoji or node), `title`, `text`, `action` | Short helpful copy that teaches by example ("Try typing 'Submit report Friday 3 PM'") plus one action |
 | `ErrorState` | Inline recoverable error | `error` (the caught value), `onRetry`, `assistant` | Copy comes from `friendlyError` kind; raw messages are never shown. `assistant` → "Assistant unavailable – your tasks still work" |
 | `SyncBadge` | Offline / pending / syncing / failed | — (subscribes to `syncEngine`) | Hidden when synced. Retry when failed or offline |

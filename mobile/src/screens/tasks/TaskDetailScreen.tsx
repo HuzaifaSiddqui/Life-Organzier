@@ -1,3 +1,4 @@
+import { LockedFeature } from "../../components/LockedFeature";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
@@ -135,7 +136,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           {Array.isArray(task.tags) && task.tags.length ? <Text style={styles.tags}>{task.tags.map((t) => `#${t}`).join("  ")}</Text> : null}
           {task.description ? <Text style={ui.body}>{task.description}</Text> : null}
           {task.source !== "MANUAL" ? <Text style={styles.meta}>Added via {task.source.toLowerCase()}</Text> : null}
-          {isPro && platformFeatures.locationReminders && !isLocalId(task.id) ? <TaskLocationsField key={task.updatedAt} taskId={task.id} initial={task.locations ?? []} showDistance /> : null}
+          {platformFeatures.locationReminders && !isLocalId(task.id) ? (
+            <LockedFeature feature="locationReminders" name={t("lock.name.location")}>
+              <TaskLocationsField key={task.updatedAt} taskId={task.id} initial={isPro ? (task.locations ?? []) : []} showDistance />
+            </LockedFeature>
+          ) : null}
         </Card>
         {task.sharedTaskId ? (
           <SharedTaskLink onPress={() => navigation.navigate("Collab", { tab: "shared" })} />

@@ -85,6 +85,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   settings change). If the app isn't opened for days, later reminders may be missing until it is.
 - Reminders are planned 7 days ahead; the WhatsApp reminder job only runs when Twilio is configured.
 
+## Plans and locked features
+
+- **Locked features stay visible.** Pro features (WhatsApp, WhatsApp Agent, WhatsApp-only reminders, location
+  reminders, analytics export) show dimmed with a lock for Free users; a tap offers "Try Pro", which opens Settings,
+  where the plan is a demo switch (payments are out of scope). The server refuses them anyway (`PRO_REQUIRED`).
+- **Rules in one place:** `mobile/src/utils/featureAccess.ts`. Guests (guest mode) are asked to create an account
+  instead.
+
 ## Offline sync
 
 - **Start-up never waits for the server.** The app opens on the dashboard as soon as Firebase restores the

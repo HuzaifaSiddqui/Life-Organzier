@@ -1,3 +1,4 @@
+import { LockedFeature } from "../../components/LockedFeature";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { useEffect, useState } from "react";
@@ -221,9 +222,15 @@ export function SettingsScreen({ navigation }: Props) {
           ) : null}
           <Text style={ui.label}>Devices</Text>
           <View style={ui.wrap}>
-            {([["ALL", "All devices"], ["PHONE", "Phone only"], ["DESKTOP", "Desktop only"], ["WHATSAPP", "WhatsApp only (Pro)"]] as const).map(([k, l]) => (
-              <Chip key={k} small label={l} selected={settings.notificationDevices === k} onPress={() => void save({ notificationDevices: k })} />
-            ))}
+            {([["ALL", "All devices"], ["PHONE", "Phone only"], ["DESKTOP", "Desktop only"], ["WHATSAPP", "WhatsApp only"]] as const).map(([k, l]) =>
+              k === "WHATSAPP" ? (
+                <LockedFeature key={k} feature="whatsappReminders" name={t("lock.name.whatsappReminders")}>
+                  <Chip small label={l} selected={settings.notificationDevices === k} onPress={() => void save({ notificationDevices: k })} />
+                </LockedFeature>
+              ) : (
+                <Chip key={k} small label={l} selected={settings.notificationDevices === k} onPress={() => void save({ notificationDevices: k })} />
+              ),
+            )}
           </View>
           <Text style={ui.label}>Do not disturb {dndActive ? `· on until ${new Date(settings.dndUntil as string).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}</Text>
           <View style={ui.wrap}>
@@ -292,11 +299,13 @@ export function SettingsScreen({ navigation }: Props) {
           ) : null}
           {platformFeatures.locationReminders ? (
           <>
-          <View style={styles.rowBetween}>
-            <Text style={[ui.body, { flex: 1 }]}>{t("settings.locationReminders")}</Text>
-            <Switch value={isPro && locationOn} disabled={!isPro} onValueChange={(on) => void toggleLocation(on)} accessibilityLabel={t("settings.locationReminders")} />
-          </View>
-          <Text style={ui.meta}>{isPro ? t("settings.locationRemindersHint") : t("settings.proFeature")}</Text>
+          <LockedFeature feature="locationReminders" name={t("lock.name.location")}>
+            <View style={styles.rowBetween}>
+              <Text style={[ui.body, { flex: 1 }]}>{t("settings.locationReminders")}</Text>
+              <Switch value={isPro && locationOn} onValueChange={(on) => void toggleLocation(on)} accessibilityLabel={t("settings.locationReminders")} />
+            </View>
+            <Text style={ui.meta}>{t("settings.locationRemindersHint")}</Text>
+          </LockedFeature>
           {isPro && (locationOn || placeCount > 0) ? (
             <Button title={t("settings.savedPlaces")} kind="ghost" onPress={() => navigation.navigate("SavedPlaces")} />
           ) : null}

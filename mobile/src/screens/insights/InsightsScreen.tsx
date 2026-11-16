@@ -1,3 +1,6 @@
+import { promptUnlock, useFeatureLock } from "../../components/LockedFeature";
+import { opacity } from "../../theme/tokens";
+import { Icon } from "../../components/icons/Icon";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { OutboxRefused, send, type SendInput } from "../../services/outbox";
 import { useCacheLoader } from "../../hooks/useCachedQuery";
@@ -51,7 +54,8 @@ function Metric({ label, value, delta }: { label: string; value: string; delta?:
 export function InsightsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { bottomPad } = useLayout();
-  const { categories, isPro } = usePreferences();
+  const { categories } = usePreferences();
+  const lockFor = useFeatureLock();
   const [range, setRange] = useState<Range>("month");
   const [data, setData] = useState<Analytics | null>(null);
   const [recs, setRecs] = useState<Recommendation[]>([]);
@@ -104,8 +108,9 @@ export function InsightsScreen({ navigation }: Props) {
   };
 
   const exportCsv = async () => {
-    if (!isPro) {
-      setToast("Export is a Pro feature — switch plans in Settings (demo).");
+    const lock = lockFor("analyticsExport");
+    if (lock) {
+      promptUnlock(lock, tr("lock.name.export"), tr);
       return;
     }
     try {
@@ -127,8 +132,9 @@ export function InsightsScreen({ navigation }: Props) {
       >
         <View style={styles.header}>
           <Text style={styles.h1}>Insights</Text>
-          <Pressable onPress={() => void exportCsv()}>
-            <Text style={styles.link}>{isPro ? "Export CSV" : "Export (Pro)"}</Text>
+          <Pressable onPress={() => void exportCsv()} style={[styles.exportBtn, lockFor("analyticsExport") ? { opacity: opacity.disabled } : null]}>
+            {lockFor("analyticsExport") ? <Icon name="lock" size={14} color={palette.ai} /> : null}
+            <Text style={styles.link}>Export CSV</Text>
           </Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -274,6 +280,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   h1: { fontSize: 26, fontFamily: "Inter_700Bold", color: colors.text },
   link: { color: palette.ai, fontFamily: "Inter_600SemiBold" },
+  exportBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
   meta: { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.textMuted },
   body: { fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, lineHeight: 20 },
   metrics: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
