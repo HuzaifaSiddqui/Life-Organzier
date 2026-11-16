@@ -97,6 +97,20 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Pasting text** for extraction is no longer a separate box; paste it into the chat as a message.
 - **My documents** (under Me) lists, reviews and deletes files. Documents is no longer in the sidebar / main navigation.
 
+## Documents teach the assistant (DOC_KNOWLEDGE, off by default)
+
+- **Only documents sent in chat** are read for facts and search (not those sent before this feature, not WhatsApp
+  uploads).
+- **Needs the language model** for facts and answers. Without it the pieces are still stored (hashed embeddings) but
+  no facts are offered and questions go on as before.
+- **Facts are offered, never saved on their own:** the user ticks them. A fact is offered only if its words appear in
+  the document; at most 6 per document, from its first 6,000 characters.
+- **Answers:** only for questions no command took; every number in an answer must appear in the piece it came from,
+  so a correct answer worded with different numbers (e.g. "Dec 1" vs "1/12") can be dropped. The file is named.
+- **Deleting a document** deletes its pieces; facts already kept stay in memory (Me → What I know).
+- **The phone checks for the facts card** every 4 seconds for 3 minutes while the chat is open; otherwise it appears
+  the next time the chat loads.
+
 ## Plans and locked features
 
 - **Locked features stay visible.** Pro features (WhatsApp, WhatsApp Agent, WhatsApp-only reminders, location

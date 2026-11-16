@@ -110,6 +110,17 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 - `GET /api/documents/:id` adds `result`: the saved reading in the upload's response shape (created / existing flags as of
   now), used by the review screen.
 
+### Documents teach the assistant (`DOC_KNOWLEDGE`)
+
+- After a chat upload (`chat=true`) the response has `chat.learning: true` and the server, in the background, cuts the
+  masked text into pieces with embeddings (`DocumentChunk`) and asks the model for facts about the user. Grounded facts
+  are offered in a new assistant message with a `document_facts` card (`{ documentId, fileName, facts: [{ id, kind, content }], kept? }`).
+- `GET /api/documents/:id/learning` → `{ status: "none" | "pending" | "done", messageId }` (the app polls it after a chat upload).
+- `POST /api/documents/:id/facts` `{ keep: string[] }` → the ticked facts go into memory (`rememberFact`, source
+  `document:<id>`); the card in the chat is updated with `kept`.
+- Questions in chat that no command takes (`smalltalk` / `unclear` and shaped like a question) are looked up in the user's
+  pieces; a grounded answer is returned with the file name (intent `document_answer`), otherwise the chat goes on as before.
+
 ### Guest mode (FR-OB-003, `GUEST_MODE`)
 
 - `GET /health` includes `guestMode: true|false`; the app shows "Continue as guest" only when it is true.

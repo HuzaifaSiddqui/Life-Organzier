@@ -1,3 +1,5 @@
+import { answerFromDocuments } from "../documents/knowledge.js";
+import { docKnowledgeOn, isQuestion } from "../documents/knowledgeRules.js";
 import { isWhatsapp } from "./channel.js";
 import { detectShare } from "./shareIntent.js";
 import { Priority, RoutineOccurrenceStatus, TaskStatus, TaskType, type Task } from "@prisma/client";
@@ -205,6 +207,12 @@ export async function handleIntent(turn: Turn, u: Understanding, text: string): 
 }
 
 async function dispatchIntent(turn: Turn, u: Understanding, text: string): Promise<Out> {
+  // DOC_KNOWLEDGE: a question no command took may be answered from the user's documents; otherwise nothing changes.
+  if ((u.intent === "smalltalk" || u.intent === "unclear") && docKnowledgeOn() && isQuestion(text)) {
+    const found = await answerFromDocuments(turn.user.id, text, turn.settings.language).catch(() => null);
+    if (found) return { content: `${found.answer}
+${turn.settings.language === "ur" ? "ماخذ" : "From"}: ${found.fileName}`, intent: "document_answer" };
+  }
   if (u.intent === "create_task" || u.intent === "create_routine") {
     const ask = outOfScopeConfirm(u, text);
     if (ask) return ask;

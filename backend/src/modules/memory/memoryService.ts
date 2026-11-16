@@ -22,7 +22,7 @@ export type RetrievedMemory = { id: string; kind: string; content: string; score
 const DEDUP_THRESHOLD_EMBED = 0.9;
 const DEDUP_THRESHOLD_FUZZY = 0.82;
 
-function relevanceFloor(model: string): number {
+export function relevanceFloor(model: string): number {
   return model === HASH_EMBED_MODEL ? 0.12 : 0.5;
 }
 
@@ -293,10 +293,10 @@ const LLM_JSON_SCHEMA = {
 const SELF_DISCLOSURE = /\b(i|i'm|im|i am|my|me|myself|mine)\b/i;
 
 /** One-off states and task progress are not long-term memories. */
-const TRANSIENT = /\d+\s*%|\b(?:due|deadline|today|tomorrow|tonight|yesterday|this week|right now|currently|at the moment|done with|finished|is working on|has a task|assignment is)\b/i;
+export const TRANSIENT = /\d+\s*%|\b(?:due|deadline|today|tomorrow|tonight|yesterday|this week|right now|currently|at the moment|done with|finished|is working on|has a task|assignment is)\b/i;
 
 /** Small models can invent facts; a memory must be supported by the user's own words. */
-function isGrounded(memory: string, source: string): boolean {
+export function isGrounded(memory: string, source: string): boolean {
   const words = memory
     .toLowerCase()
     .replace(/^user('s)?\s+/, "")

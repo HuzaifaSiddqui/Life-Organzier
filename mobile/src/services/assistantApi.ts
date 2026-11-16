@@ -58,6 +58,12 @@ export async function loadCurrentConversation(): Promise<{ conversationId: strin
   return { conversationId: data.conversation.id, messages: data.messages.map(toChat) };
 }
 
+/** One conversation's messages (e.g. after the server added a message on its own). */
+export async function loadConversationMessages(conversationId: string): Promise<ChatMessage[]> {
+  const { messages } = await apiGet<{ messages: RawMessage[] }>(`/assistant/conversations/${conversationId}/messages`);
+  return messages.map(toChat);
+}
+
 export async function startNewConversation(): Promise<string> {
   const data = await apiPost<{ conversation: { id: string } }>("/assistant/conversations/new");
   await storeConversationId(data.conversation.id);

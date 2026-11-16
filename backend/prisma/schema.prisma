@@ -502,9 +502,12 @@ model Document {
   extracted     Json?
   /// sha256 of the file (or pasted text) + docType + language: a retry of the same upload reuses this document.
   contentHash   String?
+  /// DOC_KNOWLEDGE: facts about the user suggested from this document and what the user kept (status, facts, messageId).
+  knowledge     Json?
   createdAt     DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks DocumentChunk[]
 
   @@index([userId, createdAt])
   @@index([userId, contentHash])
@@ -729,4 +732,22 @@ model WhatsAppProcessedUpdate {
 
   @@unique([connectionId, updateId])
   @@index([processedAt, createdAt])
+}
+
+/// DOC_KNOWLEDGE: a document's (masked) text in pieces with embeddings, so the assistant can answer questions from it.
+/// Deleted with the document.
+model DocumentChunk {
+  id             String   @id @default(uuid())
+  documentId     String
+  userId         String
+  idx            Int
+  text           String
+  embedding      Float[]
+  embeddingModel String
+  createdAt      DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([documentId, idx])
 }

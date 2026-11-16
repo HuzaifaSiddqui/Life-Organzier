@@ -224,7 +224,11 @@ export type AssistantCard =
   /** Added on the phone (never sent by the server): a chat-created task overlaps an event on another calendar. */
   | { type: "calendar_clash"; taskId: string; title: string; time: string; more: number }
   /** A document sent in chat: what was found and added; Review opens the review screen. */
-  | DocumentChatCard;
+  | DocumentChatCard
+  /** DOC_KNOWLEDGE: facts about the user proposed from a document; the user ticks which to keep. */
+  | DocumentFactsChatCard;
+
+export type DocumentFactsChatCard = { type: "document_facts"; documentId: string; fileName: string; facts: Array<{ id: string; kind: string; content: string }>; kept?: string[] };
 
 export type DocumentChatCard = { type: "document"; documentId: string; fileName: string; deadlines: number; schedules: number; added: number; toReview: number; warning: string | null; reused: boolean };
 
