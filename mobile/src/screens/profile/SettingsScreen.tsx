@@ -1,3 +1,4 @@
+import { signOutGuest } from "../../services/guest";
 import { LockedFeature } from "../../components/LockedFeature";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
@@ -85,6 +86,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [placeCount, setPlaceCount] = useState(0);
   const [onboarding, setOnboarding] = useState(false);
   const isPro = settings?.tier === "PRO";
+  const isGuest = Boolean(firebaseUser?.isAnonymous);
 
   useEffect(() => {
     void isLocationRemindersEnabled().then(setLocationOn);
@@ -154,7 +156,9 @@ export function SettingsScreen({ navigation }: Props) {
         <Card style={{ gap: 8 }}>
           <View style={styles.row}>
             <Chip label="Free" selected={settings.tier === "FREE"} onPress={() => void save({ tier: "FREE" }, "Switched to Free")} />
-            <Chip label="Pro" tone="accent" selected={settings.tier === "PRO"} onPress={() => void save({ tier: "PRO" }, "Pro enabled")} />
+            <LockedFeature feature="proPlan" name="Pro">
+              <Chip label="Pro" tone="accent" selected={settings.tier === "PRO"} onPress={() => void save({ tier: "PRO" }, "Pro enabled")} />
+            </LockedFeature>
           </View>
           <Text style={styles.meta}>Pro adds deeper AI conversations for emotional support, WhatsApp reminders and analytics export. (Demo switch — payments are out of scope.)</Text>
         </Card>
@@ -257,7 +261,7 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={[ui.body, { flex: 1 }]}>Critical reminders break through DND</Text>
             <Switch value={settings.criticalOverridesDnd} onValueChange={(criticalOverridesDnd) => void save({ criticalOverridesDnd })} />
           </View>
-          {collabAvailable ? (
+          {collabAvailable && !isGuest ? (
             <>
               <View style={styles.rowBetween}>
                 <Text style={[ui.body, { flex: 1 }]}>{t("collab.email.setting")}</Text>
@@ -496,6 +500,11 @@ export function SettingsScreen({ navigation }: Props) {
               ])
             }
           />
+          {/* A guest has no email or password yet (FR-OB-003): they create an account instead. */}
+          {isGuest ? (
+            <Button title={t("guest.createAccount")} onPress={() => navigation.navigate("CreateAccount")} />
+          ) : (
+          <>
           <Text style={ui.label}>Change password</Text>
           <TextInput style={ui.input} value={pw.current} onChangeText={(current) => setPw({ ...pw, current })} placeholder="Current password" placeholderTextColor={palette.muted} secureTextEntry />
           <TextInput style={ui.input} value={pw.next} onChangeText={(next) => setPw({ ...pw, next })} placeholder="New password (8+ characters)" placeholderTextColor={palette.muted} secureTextEntry />
@@ -518,7 +527,20 @@ export function SettingsScreen({ navigation }: Props) {
               }
             }}
           />
-          {account?.deletion ? (
+          </>
+          )}
+          {isGuest ? (
+            <Button
+              title={t("guest.delete")}
+              kind="danger"
+              onPress={() =>
+                showAlert(t("guest.signOut.title"), t("guest.signOut.body"), [
+                  { text: t("common.cancel"), style: "cancel" },
+                  { text: t("guest.signOut.confirm"), style: "destructive", onPress: () => void signOutGuest() },
+                ])
+              }
+            />
+          ) : account?.deletion ? (
             <Card tone="danger" style={{ gap: 8 }}>
               <Text style={ui.body}>Your account is scheduled for deletion on {new Date(account.deletion.permanentAt).toLocaleDateString()}.</Text>
               <Button

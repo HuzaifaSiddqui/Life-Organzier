@@ -93,6 +93,19 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Rules in one place:** `mobile/src/utils/featureAccess.ts`. Guests (guest mode) are asked to create an account
   instead.
 
+## Guest mode (GUEST_MODE, off by default)
+
+- **Needs Firebase:** turn on Authentication → Sign-in method → **Anonymous** in the Firebase console, and set
+  `GUEST_MODE=on` on the server. Otherwise "Continue as guest" doesn't appear.
+- **One device only.** A guest account can't be signed back into: signing out (after a warning) or uninstalling
+  loses the data; the server deletes guests unused for 60 days.
+- **Not for guests:** WhatsApp, WhatsApp Agent, WhatsApp-only reminders, Pro, People / sharing, password change and
+  email invites. They show dimmed with "Create a free account".
+- **Creating an account** from a guest needs a connection and then email verification, as a normal sign-up. "Keep
+  my data" links the email to the same account; an email that already has an account can't be linked (the user
+  signs out and logs in with it instead).
+- **Guest data is on the server**, not only on the phone (FRD deviation, `frd-deviations.md`).
+
 ## Offline sync
 
 - **Start-up never waits for the server.** The app opens on the dashboard as soon as Firebase restores the

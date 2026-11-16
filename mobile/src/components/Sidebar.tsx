@@ -1,3 +1,5 @@
+import { promptUnlock, useFeatureLock } from "./LockedFeature";
+import { opacity } from "../theme/tokens";
 import { useEffect, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
@@ -44,6 +46,7 @@ function useShortcuts(): void {
  */
 export function Sidebar() {
   const { t } = useLocale();
+  const lockFor = useFeatureLock();
   const { colors, spacing, radii } = useTheme();
   const active = activeSidebarRoute(useCurrentRouteName());
   useShortcuts();
@@ -64,21 +67,24 @@ export function Sidebar() {
         {SIDEBAR_ITEMS.map((item) => {
           const on = item.route === active;
           const label = t(item.label);
+          // Guests (FR-OB-003) see People dimmed; a tap explains that sharing needs an account.
+          const lock = item.route === "Collab" ? lockFor("sharing") : null;
           return (
             <PressableScale
               key={item.route}
               scale={false}
-              onPress={() => openAppScreen(item.route)}
+              onPress={() => (lock ? promptUnlock(lock, t("lock.name.sharing"), t) : openAppScreen(item.route))}
               accessibilityRole="menuitem"
               accessibilityState={{ selected: on }}
               accessibilityLabel={label}
-              style={[styles.item, { gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: on ? colors.accentSoft : "transparent" }]}
+              style={[styles.item, { gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: on ? colors.accentSoft : "transparent" }, lock ? { opacity: opacity.disabled } : null]}
               pressedStyle={{ backgroundColor: colors.accentSoft }}
             >
               <Icon name={item.icon} size={20} color={on ? colors.accent : colors.textSecondary} strokeWidth={on ? 2.1 : 1.8} />
-              <Text variant={on ? "bodyStrong" : "body"} color={on ? "accent" : "primary"} numberOfLines={1}>
+              <Text variant={on ? "bodyStrong" : "body"} color={on ? "accent" : "primary"} numberOfLines={1} style={styles.flex}>
                 {label}
               </Text>
+              {lock ? <Icon name="lock" size={14} color={colors.textSecondary} /> : null}
             </PressableScale>
           );
         })}
@@ -91,4 +97,5 @@ const styles = StyleSheet.create({
   root: { borderEndWidth: StyleSheet.hairlineWidth },
   brand: { flexDirection: "row", alignItems: "center" },
   item: { flexDirection: "row", alignItems: "center", minHeight: touchTarget },
+  flex: { flex: 1 },
 });

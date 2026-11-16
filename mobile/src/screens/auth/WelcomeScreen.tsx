@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { useLocale } from "../../i18n/LocaleProvider";
+import { continueAsGuest, guestModeAvailable } from "../../services/guest";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -18,6 +21,30 @@ const features = [
 ];
 
 export function WelcomeScreen({ navigation }: Props) {
+  const { t } = useLocale();
+  // Guest mode (FR-OB-003): offered only when the server has GUEST_MODE on.
+  const [guestOn, setGuestOn] = useState(false);
+  const [guestBusy, setGuestBusy] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void guestModeAvailable().then((on) => live && setGuestOn(on));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const startGuest = async () => {
+    setGuestBusy(true);
+    setGuestError(null);
+    try {
+      await continueAsGuest();
+    } catch {
+      setGuestError(t("guest.continueFailed"));
+    } finally {
+      setGuestBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
       <ScrollView
@@ -66,6 +93,18 @@ export function WelcomeScreen({ navigation }: Props) {
             >
               <Text style={styles.secondaryText}>Create account</Text>
             </Pressable>
+            {guestOn ? (
+              <Pressable
+                style={({ pressed }) => [styles.guest, pressed && styles.btnPressed]}
+                onPress={() => void startGuest()}
+                disabled={guestBusy}
+                accessibilityRole="button"
+                accessibilityHint={t("guest.continueHint")}
+              >
+                <Text style={styles.guestText}>{guestBusy ? "…" : t("guest.continue")}</Text>
+              </Pressable>
+            ) : null}
+            {guestError ? <Text style={styles.guestError}>{guestError}</Text> : null}
           </View>
         </View>
       </ScrollView>
@@ -74,6 +113,9 @@ export function WelcomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  guest: { alignItems: "center", justifyContent: "center", minHeight: 48 },
+  guestText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.textMuted, textDecorationLine: "underline" },
+  guestError: { fontSize: 13, color: colors.danger, textAlign: "center" },
   safe: {
     flex: 1,
     backgroundColor: colors.bg,

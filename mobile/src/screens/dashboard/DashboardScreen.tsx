@@ -1,3 +1,4 @@
+import { GuestBanner } from "../../components/GuestBanner";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -304,6 +305,8 @@ export function DashboardScreen({ navigation }: Props) {
             </Text>
           ) : null}
         </View>
+
+        <GuestBanner />
 
         {/* Ask */}
         <View style={{ gap: spacing.md }}>

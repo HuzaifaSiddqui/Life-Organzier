@@ -72,6 +72,10 @@ settingsRouter.put(
   "/",
   handle(async (req, res) => {
     const body = parseBody(settingsSchema, req.body);
+    // Guests (FR-OB-003): Pro and WhatsApp reminders need an account first.
+    if (req.user.isGuest && (body.tier === "PRO" || body.notificationDevices === "WHATSAPP")) {
+      throw new HttpError(403, "ACCOUNT_REQUIRED", "Create a free account to use this.");
+    }
     const data: Prisma.UserSettingsUpdateInput = {
       ...body,
       quietStart: normalizeClock(body.quietStart),

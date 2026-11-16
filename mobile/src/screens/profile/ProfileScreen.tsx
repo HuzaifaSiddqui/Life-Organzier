@@ -1,3 +1,9 @@
+import { GuestBanner } from "../../components/GuestBanner";
+import { promptUnlock, useFeatureLock } from "../../components/LockedFeature";
+import { signOutGuest } from "../../services/guest";
+import { showAlert } from "../../services/dialog";
+import { opacity } from "../../theme/tokens";
+import type { LockReason } from "../../utils/featureAccess";
 import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -35,7 +41,9 @@ export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { bottomPad } = useLayout();
   const { colors, spacing } = useTheme();
-  const { dbUser } = useAuth();
+  const { dbUser, firebaseUser } = useAuth();
+  const isGuest = Boolean(firebaseUser?.isAnonymous);
+  const lockFor = useFeatureLock();
   const { settings, isPro } = usePreferences();
   const name = dbUser?.displayName ?? dbUser?.email?.split("@")[0] ?? "Account";
   const { t } = useLocale();
@@ -49,7 +57,7 @@ export function ProfileScreen({ navigation }: Props) {
   );
   const waitingForMe = collab ? collab.requests + collab.cards : 0;
 
-  const groups: Array<{ title: string; items: Array<{ icon: IconName; title: string; subtitle: string; go: () => void }> }> = [
+  const groups: Array<{ title: string; items: Array<{ icon: IconName; title: string; subtitle: string; go: () => void; lock?: LockReason | null }> }> = [
     {
       title: "Your data",
       items: [
@@ -69,7 +77,13 @@ export function ProfileScreen({ navigation }: Props) {
                 icon: "people" as IconName,
                 title: t("collab.title"),
                 subtitle: waitingForMe ? t("collab.profile.waiting", { count: waitingForMe }) : t("collab.profile.subtitle"),
-                go: () => navigation.navigate("Collab", waitingForMe ? { tab: "requests" } : undefined),
+                // Guests (FR-OB-003): dimmed with a lock; a tap explains that sharing needs an account.
+                lock: lockFor("sharing"),
+                go: () => {
+                  const lock = lockFor("sharing");
+                  if (lock) promptUnlock(lock, t("lock.name.sharing"), t);
+                  else navigation.navigate("Collab", waitingForMe ? { tab: "requests" } : undefined);
+                },
               },
             ],
           },
@@ -101,17 +115,19 @@ export function ProfileScreen({ navigation }: Props) {
           </View>
           <View style={styles.flex}>
             <Text variant="headline" numberOfLines={1}>
-              {name}
+              {isGuest && !dbUser?.displayName ? t("guest.name") : name}
             </Text>
             <Text variant="callout" color="secondary" numberOfLines={1}>
-              {dbUser?.email}
+              {isGuest ? t("guest.notBackedUp") : dbUser?.email}
             </Text>
             <Text variant="caption" color="tertiary" style={{ marginTop: 2 }}>
-              {isPro ? "Pro plan" : "Free plan"}
+              {isGuest ? t("guest.plan") : isPro ? "Pro plan" : "Free plan"}
               {settings?.currentContext ? ` · ${settings.currentContext}` : ""}
             </Text>
           </View>
         </Card>
+
+        <GuestBanner />
 
         {groups.map((g) => (
           <View key={g.title}>
@@ -126,7 +142,7 @@ export function ProfileScreen({ navigation }: Props) {
                     onPress={item.go}
                     accessibilityRole="button"
                     accessibilityLabel={`${item.title}, ${item.subtitle}`}
-                    style={({ pressed }) => [styles.item, pressed && { backgroundColor: colors.accentSoft }]}
+                    style={({ pressed }) => [styles.item, pressed && { backgroundColor: colors.accentSoft }, item.lock ? { opacity: opacity.disabled } : null]}
                   >
                     <Icon name={item.icon} color={colors.textSecondary} />
                     <View style={styles.flex}>
@@ -135,7 +151,7 @@ export function ProfileScreen({ navigation }: Props) {
                         {item.subtitle}
                       </Text>
                     </View>
-                    <Icon name="chevron" size={16} color={colors.textTertiary} />
+                    <Icon name={item.lock ? "lock" : "chevron"} size={16} color={colors.textTertiary} />
                   </Pressable>
                 </View>
               ))}
@@ -147,9 +163,18 @@ export function ProfileScreen({ navigation }: Props) {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              void Promise.all([flushOutbox(), clearAllReminders(), clearGeofenceData(), unregisterPush()]).finally(() => {
-                void signOut(auth);
-              });
+              const leave = (end: () => Promise<void>) =>
+                void Promise.all([flushOutbox(), clearAllReminders(), clearGeofenceData(), unregisterPush()]).finally(() => void end());
+              // A guest has no account to come back to: signing out deletes the guest data (FR-OB-003 §4 warning).
+              if (isGuest) {
+                showAlert(t("guest.signOut.title"), t("guest.signOut.body"), [
+                  { text: t("common.cancel"), style: "cancel" },
+                  { text: t("guest.createAccount"), onPress: () => navigation.navigate("CreateAccount") },
+                  { text: t("guest.signOut.confirm"), style: "destructive", onPress: () => leave(signOutGuest) },
+                ]);
+                return;
+              }
+              leave(() => signOut(auth));
             }}
             style={({ pressed }) => [styles.item, pressed && { backgroundColor: colors.danger.bg }]}
           >

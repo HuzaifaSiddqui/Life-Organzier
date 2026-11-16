@@ -5,6 +5,7 @@ import { prisma } from "../config/db.js";
 import type { AuthRequest } from "../middleware/authMiddleware.js";
 import { sendError } from "../utils/apiResponse.js";
 import { isValidTimeZone } from "./time.js";
+import { shouldTouchLastSeen } from "../modules/guest/guestRules.js";
 
 export type UserRequest = AuthRequest & {
   user: User;
@@ -75,6 +76,11 @@ export async function requireUser(req: AuthRequest, res: Response, next: NextFun
       settings = await prisma.userSettings.update({ where: { userId: user.id }, data: { timezone: tzHeader } });
       onTimezoneChanged?.(user.id, tzHeader);
     }
+    // When the account was last used (guests unused for 60 days are deleted). At most every few hours, never awaited.
+    const now = new Date();
+    if (shouldTouchLastSeen(user.lastSeenAt, now)) {
+      prisma.user.updateMany({ where: { id: user.id }, data: { lastSeenAt: now } }).catch(() => undefined);
+    }
     const r = req as UserRequest;
     r.user = user;
     r.settings = settings;
@@ -84,6 +90,18 @@ export async function requireUser(req: AuthRequest, res: Response, next: NextFun
     console.error("Could not load database user", error);
     sendError(res, "Database is temporarily unavailable", "DATABASE_UNAVAILABLE", 503);
   }
+}
+
+/**
+ * For features that need a real account (FR-OB-003): a guest is refused with ACCOUNT_REQUIRED, and the app offers
+ * "Create a free account". Use after requireUser.
+ */
+export function requireAccount(req: AuthRequest, res: Response, next: NextFunction): void {
+  if ((req as UserRequest).user?.isGuest) {
+    sendError(res, "Create a free account to use this.", "ACCOUNT_REQUIRED", 403);
+    return;
+  }
+  next();
 }
 
 /** Wraps an async handler so thrown errors become consistent JSON responses. */

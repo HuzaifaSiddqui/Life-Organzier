@@ -1,3 +1,4 @@
+import { staleGuestCutoff } from "../modules/guest/guestRules.js";
 import { TaskStatus } from "@prisma/client";
 import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
@@ -27,8 +28,21 @@ export async function runMaintenance(now = new Date()): Promise<void> {
       console.warn("Could not delete Firebase user", user.firebaseUid, error instanceof Error ? error.message : error);
     }
   }
-  if (purgedTasks.count || purgedVersions.count || expired.length) {
-    console.info(`Maintenance: purged ${purgedTasks.count} tasks, ${purgedVersions.count} versions, ${expired.length} accounts`);
+  // Guest mode (FR-OB-003): guests unused for 60 days (usually an uninstalled app) are deleted with their data.
+  const cutoff = staleGuestCutoff(now);
+  const staleGuests = await prisma.user.findMany({
+    where: { isGuest: true, OR: [{ lastSeenAt: { lt: cutoff } }, { lastSeenAt: null, createdAt: { lt: cutoff } }] },
+    select: { id: true, firebaseUid: true },
+    take: 500,
+  });
+  for (const guest of staleGuests) {
+    await prisma.user.delete({ where: { id: guest.id } });
+    await getFirebaseAuth()
+      .deleteUser(guest.firebaseUid)
+      .catch((error: unknown) => console.warn("Could not delete Firebase guest", error instanceof Error ? error.message : error));
+  }
+  if (purgedTasks.count || purgedVersions.count || expired.length || staleGuests.length) {
+    console.info(`Maintenance: purged ${purgedTasks.count} tasks, ${purgedVersions.count} versions, ${expired.length} accounts, ${staleGuests.length} unused guests`);
   }
 }
 
