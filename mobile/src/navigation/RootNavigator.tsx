@@ -1,3 +1,4 @@
+import { OutboxNotices } from "../components/OutboxNotices";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
@@ -176,6 +177,7 @@ export function RootNavigator() {
         {firebaseUser?.emailVerified && !firstSync ? <CheckinSheet /> : null}
         {firebaseUser?.emailVerified && !firstSync ? <LocationSnackbar /> : null}
         {firebaseUser?.emailVerified && !firstSync ? <CalendarChangesSnackbar /> : null}
+        {firebaseUser?.emailVerified && !firstSync ? <OutboxNotices /> : null}
         {Platform.OS === "web" ? <DialogHost /> : null}
       </NavigationContainer>
     </KeyboardPad>

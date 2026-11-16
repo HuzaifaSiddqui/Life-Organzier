@@ -1,3 +1,4 @@
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
@@ -27,16 +28,17 @@ export function NotificationsScreen({ navigation }: Props) {
   const [failed, setFailed] = useState<unknown>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const cached = useCacheLoader();
   const load = useCallback(async () => {
     try {
-      setNotices(await getNotices());
+      await cached("notices", getNotices, setNotices);
       setFailed(null);
     } catch (e) {
       setFailed(e);
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [cached]);
   useFocusEffect(
     useCallback(() => {
       void load();

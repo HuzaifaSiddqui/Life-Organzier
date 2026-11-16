@@ -1,8 +1,10 @@
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { unregisterPush } from "../../services/push";
 import { signOut } from "firebase/auth";
+import { flushOutbox } from "../../services/outbox";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
@@ -39,10 +41,11 @@ export function ProfileScreen({ navigation }: Props) {
   const { t } = useLocale();
   // Task collaboration: shown only when the server has it on (null = off or not reachable yet).
   const [collab, setCollab] = useState<Summary | null>(null);
+  const cached = useCacheLoader();
   useFocusEffect(
     useCallback(() => {
-      getCollabSummary().then(setCollab, () => undefined);
-    }, []),
+      cached("collab-summary", getCollabSummary, setCollab).catch(() => undefined);
+    }, [cached]),
   );
   const waitingForMe = collab ? collab.requests + collab.cards : 0;
 
@@ -144,7 +147,7 @@ export function ProfileScreen({ navigation }: Props) {
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              void Promise.all([clearAllReminders(), clearGeofenceData(), unregisterPush()]).finally(() => {
+              void Promise.all([flushOutbox(), clearAllReminders(), clearGeofenceData(), unregisterPush()]).finally(() => {
                 void signOut(auth);
               });
             }}

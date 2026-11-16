@@ -20,12 +20,13 @@ import type { MainStackParamList } from "../../navigation/MainStack";
 import { hapticDone, hapticTap } from "../../services/haptics";
 import { getApiErrorMessage } from "../../services/api";
 import { getBriefing, sendToAssistant } from "../../services/assistantApi";
-import { acceptInsight, dismissInsight, logMood } from "../../services/insightsApi";
-import { cancelTaskSnooze, snoozeTaskReminder } from "../../services/reminders";
-import { updateRoutineOccurrence } from "../../services/routinesApi";
+import { cancelTaskSnooze, scheduleReminderSync, snoozeTaskReminder } from "../../services/reminders";
+import { OutboxRefused, send } from "../../services/outbox";
+import { readCache, writeCache } from "../../services/localCache";
+import { useAuth } from "../../context/AuthContext";
 import { subscribeTasks } from "../../services/syncEngine";
 import { useTheme } from "../../theme/ThemeProvider";
-import type { ActionPayload, AttentionItem, Briefing, Mood, QuickAction, Task } from "../../types/models";
+import type { ActionPayload, AttentionItem, Briefing, Mood, QuickAction, RoutineOccurrenceStatus, Task } from "../../types/models";
 import { formatDuration, formatTime } from "../../utils/format";
 import { isEvening, moodCaption, routinesCaption, summaryParts, thenUp, tomorrowPreview } from "../../utils/homeCards";
 import { getCachedTasks } from "../../services/tasksApi";
@@ -62,12 +63,16 @@ const ICON = {
   memory: "M12 3a6 6 0 0 0-6 6c0 2.2 1.2 3.6 2 4.5.6.7 1 1.5 1 2.5v1h6v-1c0-1 .4-1.8 1-2.5.8-.9 2-2.3 2-4.5a6 6 0 0 0-6-6ZM9.5 21h5",
 };
 
-function greetingFor(b: Briefing | null): string {
+/** The name comes from the saved profile first, so it shows at once and offline. */
+function greetingFor(b: Briefing | null, profileName: string | null | undefined): string {
   const h = new Date().getHours();
   const part = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const name = auth.currentUser?.displayName?.trim().split(/\s+/)[0] ?? b?.greeting.split(",")[1]?.trim();
+  const name =
+    profileName?.trim().split(/\s+/)[0] || auth.currentUser?.displayName?.trim().split(/\s+/)[0] || b?.greeting.split(",")[1]?.trim();
   return name ? `${part}, ${name}` : part;
 }
+
+const CACHE_BRIEFING = "briefing";
 
 export function DashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -75,6 +80,7 @@ export function DashboardScreen({ navigation }: Props) {
   const { colors, spacing, radii } = useTheme();
   const { t } = useLocale();
   const { settings, update } = usePreferences();
+  const { dbUser } = useAuth();
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [aiOnline, setAiOnline] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -94,6 +100,7 @@ export function DashboardScreen({ navigation }: Props) {
       if (isEvening()) void getCachedTasks().then((all) => setTomorrow(tomorrowPreview(all)), () => undefined);
       const res = await getBriefing();
       setBriefing(res.briefing);
+      void writeCache(CACHE_BRIEFING, res.briefing);
       setAiOnline(res.ai.available);
       setError(null);
     } catch (e) {
@@ -102,6 +109,15 @@ export function DashboardScreen({ navigation }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
+  }, []);
+
+  // Yesterday's copy of the day is better than a blank screen: show the saved one, then refresh it.
+  useEffect(() => {
+    void readCache<Briefing>(CACHE_BRIEFING).then((saved) => {
+      if (!saved) return;
+      setBriefing((now) => now ?? saved);
+      setLoading(false);
+    });
   }, []);
 
   useFocusEffect(
@@ -166,19 +182,22 @@ export function DashboardScreen({ navigation }: Props) {
     });
   };
 
+  // A one-tap check-in has no text to check for a crisis, so it is shown at once and sent now or when back online.
   const checkIn = async (m: (typeof MOODS)[number]) => {
-    setBusyAction(`mood-${m.mood}`);
+    hapticTap();
+    setBriefing((prev) => (prev ? { ...prev, mood: { ...prev.mood, latest: { mood: m.mood, score: m.score, at: new Date().toISOString() }, checkinDue: false } } : prev));
+    setToast(t("offline.moodSaved"));
+    if (["stressed", "overwhelmed", "sad", "anxious"].includes(m.mood)) {
+      navigation.navigate("Assistant", { payload: { type: "log_mood", mood: m.mood, score: m.score }, label: `I'm feeling ${m.label.toLowerCase()}`, nonce: Date.now() });
+    }
     try {
-      const res = await logMood({ mood: m.mood, score: m.score, source: "CHECKIN" });
-      setToast(res.recommendation.message);
-      if (["stressed", "overwhelmed", "sad", "anxious"].includes(m.mood)) {
-        navigation.navigate("Assistant", { payload: { type: "log_mood", mood: m.mood, score: m.score }, label: `I'm feeling ${m.label.toLowerCase()}`, nonce: Date.now() });
-      }
-      await load(true);
+      const res = await send<{ recommendation: { message: string } }>({ method: "POST", path: "/mood", body: { mood: m.mood, score: m.score, source: "CHECKIN" }, label: "Mood" });
+      if (res) setToast(res.recommendation.message);
+      void load(true);
     } catch (e) {
-      setToast(getApiErrorMessage(e));
-    } finally {
-      setBusyAction(null);
+      if (!(e instanceof OutboxRefused)) throw e;
+      setToast(e.message);
+      void load(true);
     }
   };
 
@@ -187,13 +206,34 @@ export function DashboardScreen({ navigation }: Props) {
     await load(true);
   };
 
-  const completeRoutine = async (id: string) => {
+  // The suggestion goes at once; the choice is sent now or when back online. A refusal brings it back.
+  const decideInsight = async (id: string, choice: "accept" | "dismiss") => {
+    setBriefing((prev) => (prev ? { ...prev, recommendations: prev.recommendations.filter((r) => r.id !== id) } : prev));
     try {
-      await updateRoutineOccurrence(id, "COMPLETED");
-      hapticDone();
-      void load(true);
+      const res = await send<{ message: string }>({ method: "POST", path: `/insights/${encodeURIComponent(id)}/${choice}`, key: `insight:${id}`, label: "Suggestion" });
+      if (res?.message) setToast(res.message);
+      if (res) void load(true);
     } catch (e) {
-      setToast(getApiErrorMessage(e));
+      if (!(e instanceof OutboxRefused)) throw e;
+      setToast(e.message);
+      void load(true);
+    }
+  };
+
+  // Ticked at once; sent now or when back online. A refusal puts it back.
+  const completeRoutine = async (id: string) => {
+    hapticDone();
+    const setStatus = (status: RoutineOccurrenceStatus) =>
+      setBriefing((prev) => (prev ? { ...prev, today: { ...prev.today, routines: prev.today.routines.map((r) => (r.id === id ? { ...r, status } : r)) } } : prev));
+    setStatus("COMPLETED");
+    try {
+      const sent = await send({ method: "PATCH", path: `/routines/occurrences/${id}`, body: { status: "COMPLETED", confirmMandatory: false }, key: `occurrence:${id}`, label: "Routine" });
+      scheduleReminderSync();
+      if (sent) void load(true);
+    } catch (e) {
+      if (!(e instanceof OutboxRefused)) throw e;
+      setStatus("PENDING");
+      setToast(e.message);
     }
   };
 
@@ -242,7 +282,7 @@ export function DashboardScreen({ navigation }: Props) {
             <SyncBadge />
             <NotificationBell onPress={() => navigation.navigate("Notifications")} />
           </View>
-          <Text variant="title1">{greetingFor(b)}</Text>
+          <Text variant="title1">{greetingFor(b, dbUser?.displayName)}</Text>
           {b ? (
             <Text variant="callout" color="secondary" tabular accessibilityLabel={summaryParts(b.stats).map((p) => t(p.key as StringKey, p.vars)).join(", ")}>
               {summaryParts(b.stats).map((p, i) => (
@@ -559,27 +599,13 @@ export function DashboardScreen({ navigation }: Props) {
                             title="Not now"
                             size="sm"
                             kind="ghost"
-                            onPress={async () => {
-                              await dismissInsight(r.id).catch(() => undefined);
-                              void load(true);
-                            }}
+                            onPress={() => void decideInsight(r.id, "dismiss")}
                           />
                           <Button
                             title={r.acceptLabel}
                             size="sm"
                             kind="secondary"
-                            loading={busyAction === r.id}
-                            onPress={async () => {
-                              setBusyAction(r.id);
-                              try {
-                                setToast(await acceptInsight(r.id));
-                                await load(true);
-                              } catch (e) {
-                                setToast(getApiErrorMessage(e));
-                              } finally {
-                                setBusyAction(null);
-                              }
-                            }}
+                            onPress={() => void decideInsight(r.id, "accept")}
                           />
                         </View>
                       </View>

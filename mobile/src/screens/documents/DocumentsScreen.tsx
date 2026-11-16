@@ -1,3 +1,4 @@
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
@@ -121,16 +122,18 @@ export function DocumentsScreen({ navigation }: Props) {
   }, [busy]);
   const resultsY = useRef(0);
 
+  const cached = useCacheLoader();
   const load = useCallback(async () => {
     try {
-      const r = await listDocuments();
-      setDocs(r.documents);
-      setUsedBytes(r.usedBytes);
-      setRequests(Boolean(r.features?.instructions));
+      await cached("documents", listDocuments, (r) => {
+        setDocs(r.documents);
+        setUsedBytes(r.usedBytes);
+        setRequests(Boolean(r.features?.instructions));
+      });
     } catch {
-      // offline
+      // offline: the saved list stays on screen
     }
-  }, []);
+  }, [cached]);
 
   useFocusEffect(
     useCallback(() => {

@@ -1,3 +1,4 @@
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
@@ -30,14 +31,15 @@ export function SavedPlacesScreen({ navigation }: Props) {
   const [adding, setAdding] = useState(false);
   const overview = places?.length ? centerForPlaces(places, distanceM) : null;
 
+  const cached = useCacheLoader();
   const load = useCallback(async () => {
     try {
-      setPlaces(await listPlaces());
+      await cached("places", listPlaces, setPlaces);
       setFailed(null);
     } catch (e) {
       setFailed(e);
     }
-  }, []);
+  }, [cached]);
 
   useFocusEffect(
     useCallback(() => {

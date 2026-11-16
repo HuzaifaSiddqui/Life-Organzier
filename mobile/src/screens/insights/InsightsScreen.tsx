@@ -1,3 +1,6 @@
+import { useLocale } from "../../i18n/LocaleProvider";
+import { OutboxRefused, send, type SendInput } from "../../services/outbox";
+import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
@@ -9,8 +12,8 @@ import { Card, Chip, ConfidenceMeter, ProgressBar, SectionTitle, Snackbar, Tutor
 import { colors, palette, radii } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { getApiErrorMessage } from "../../services/api";
-import { acceptInsight, dismissInsight, exportAnalyticsCsv, getAnalytics, getInsights, type Analytics } from "../../services/insightsApi";
+import { getApiErrorMessage, isNetworkError } from "../../services/api";
+import { exportAnalyticsCsv, getAnalytics, getInsights, type Analytics } from "../../services/insightsApi";
 import { shareText } from "../../services/share";
 import type { Pattern, Recommendation } from "../../types/models";
 import { categoryColor } from "../../utils/priorityColors";
@@ -54,25 +57,29 @@ export function InsightsScreen({ navigation }: Props) {
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
+  const { t: tr } = useLocale();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const cached = useCacheLoader();
   const load = useCallback(
     async (r: Range, refresh = false) => {
       try {
-        const [a, i] = await Promise.all([getAnalytics(r), getInsights(refresh)]);
-        setData(a);
-        setRecs(i.recommendations);
-        setPatterns(i.patterns);
+        // The saved copy of this range shows first (also offline), then the server's.
+        await cached(`insights:${r}`, () => Promise.all([getAnalytics(r), getInsights(refresh)]), ([a, i]) => {
+          setData(a);
+          setRecs(i.recommendations);
+          setPatterns(i.patterns);
+        });
         setError(null);
       } catch (e) {
-        setError(getApiErrorMessage(e, "Analytics will appear after your tasks sync."));
+        if (!isNetworkError(e)) setError(getApiErrorMessage(e, "Analytics will appear after your tasks sync."));
       } finally {
         setRefreshing(false);
       }
     },
-    [],
+    [cached],
   );
 
   useFocusEffect(
@@ -80,6 +87,21 @@ export function InsightsScreen({ navigation }: Props) {
       void load(range);
     }, [load, range]),
   );
+
+  // The card goes at once; the choice is sent now or when back online. A refusal brings it back.
+  const decide = async (r: Recommendation, choice: "accept" | "dismiss") => {
+    setRecs((list) => list.filter((x) => x.id !== r.id));
+    try {
+      const res = await send<{ message: string }>({ method: "POST", path: `/insights/${encodeURIComponent(r.id)}/${choice}`, key: `insight:${r.id}`, label: "Suggestion" });
+      if (res?.message) setToast(res.message);
+      else if (!res) setToast(tr("offline.queued"));
+      if (res) void load(range);
+    } catch (e) {
+      if (!(e instanceof OutboxRefused)) throw e;
+      setToast(e.message);
+      void load(range);
+    }
+  };
 
   const exportCsv = async () => {
     if (!isPro) {
@@ -230,18 +252,8 @@ export function InsightsScreen({ navigation }: Props) {
                 <Text style={styles.body}>{r.text}</Text>
                 <ConfidenceMeter value={r.confidence} label={r.confidenceText} />
                 <View style={{ flexDirection: "row", gap: 8 }}>
-                  <Chip small tone="accent" selected label={r.acceptLabel} onPress={async () => {
-                    try {
-                      setToast(await acceptInsight(r.id));
-                      void load(range);
-                    } catch (e) {
-                      setToast(getApiErrorMessage(e));
-                    }
-                  }} />
-                  <Chip small label="Dismiss" onPress={async () => {
-                    await dismissInsight(r.id).catch(() => undefined);
-                    void load(range);
-                  }} />
+                  <Chip small tone="accent" selected label={r.acceptLabel} onPress={() => void decide(r, "accept")} />
+                  <Chip small label="Dismiss" onPress={() => void decide(r, "dismiss")} />
                 </View>
               </Card>
             ))}
