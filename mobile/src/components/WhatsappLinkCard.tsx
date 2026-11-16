@@ -1,3 +1,4 @@
+import { LockedFeature, useFeatureLock } from "./LockedFeature";
 import { useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { usePreferences } from "../context/PreferencesContext";
@@ -15,7 +16,8 @@ import { showAlert } from "../services/dialog";
 export function WhatsappLinkCard() {
   const { t } = useLocale();
   const { colors, spacing, radii } = useTheme();
-  const { isPro, whatsapp, reload } = usePreferences();
+  const { whatsapp, reload } = usePreferences();
+  const lockFor = useFeatureLock();
   const [link, setLink] = useState<{ code: string; botNumber: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -44,17 +46,17 @@ export function WhatsappLinkCard() {
       { text: t("whatsapp.unlink"), style: "destructive", onPress: () => void unlinkWhatsapp().then(reload, () => setNote(t("whatsapp.error"))) },
     ]);
 
-  if (!isPro) {
+  // Not on this plan: the real card, dimmed; a tap explains how to unlock it.
+  if (lockFor("whatsapp")) {
     return (
-      <Card style={{ gap: spacing.sm }}>
-        <View style={styles.row}>
-          <Icon name="lock" color={colors.textSecondary} />
-          <Text variant="bodyStrong">{t("whatsapp.proLocked")}</Text>
-        </View>
-        <Text variant="caption" color="secondary">
-          {t("whatsapp.body")}
-        </Text>
-      </Card>
+      <LockedFeature feature="whatsapp" name={t("lock.name.whatsapp")}>
+        <Card style={{ gap: spacing.sm }}>
+          <Text variant="caption" color="secondary">
+            {t("whatsapp.body")}
+          </Text>
+          <Button title={t("whatsapp.getCode")} kind="secondary" size="sm" onPress={() => undefined} style={{ alignSelf: "flex-start" }} />
+        </Card>
+      </LockedFeature>
     );
   }
 

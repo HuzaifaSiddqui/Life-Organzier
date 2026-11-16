@@ -1,3 +1,4 @@
+import { LockedFeature, useFeatureLock } from "./LockedFeature";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Switch, TextInput, View } from "react-native";
 import { usePreferences } from "../context/PreferencesContext";
@@ -23,6 +24,7 @@ export function WhatsappAgentCard() {
   const { colors, spacing, radii, type } = useTheme();
   // Same Pro source as the rest of Settings, so switching to Pro on this screen unlocks the card at once.
   const { isPro } = usePreferences();
+  const lockFor = useFeatureLock();
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [key, setKey] = useState("");
@@ -111,19 +113,25 @@ export function WhatsappAgentCard() {
     </Text>
   ) : null;
 
-  if (!isPro) {
+  // Not on this plan: the real card's first part, dimmed; a tap explains how to unlock it.
+  if (lockFor("whatsappAgent")) {
     return (
-      <Card style={{ gap: spacing.sm }}>
-        <View style={styles.row}>
-          <Icon name="lock" color={colors.textSecondary} />
-          <Text variant="bodyStrong" style={styles.flex}>
-            {t("waAgent.proLocked")}
+      <LockedFeature feature="whatsappAgent" name={t("lock.name.whatsappAgent")}>
+        <Card style={{ gap: spacing.md }}>
+          {header}
+          <Text variant="caption" color="secondary">
+            {t("waAgent.body")}
           </Text>
-        </View>
-        <Text variant="caption" color="secondary">
-          {t("waAgent.body")}
-        </Text>
-      </Card>
+          <View style={{ gap: spacing.xs }}>
+            {(["waAgent.step1", "waAgent.step2", "waAgent.step3", "waAgent.step4"] as const).map((k) => (
+              <Text key={k} variant="callout">
+                {t(k)}
+              </Text>
+            ))}
+          </View>
+          <Button title={t("waAgent.connect")} onPress={() => undefined} />
+        </Card>
+      </LockedFeature>
     );
   }
 

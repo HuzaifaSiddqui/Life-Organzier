@@ -1,3 +1,4 @@
+import { LockedFeature } from "../../components/LockedFeature";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -494,14 +495,16 @@ export function TaskForm({
               ))}
             </View>
           </View>
-          {isPro && platformFeatures.locationReminders ? (
-            <View>
-              <Text style={ui.label}>{t("location.sectionTitle")}</Text>
-              <TaskLocationsField taskId={taskId ?? null} initial={initialLocations ?? []} onPendingChange={(places) => {
-                setPlaceCount(places.length);
-                onPendingPlaces?.(places);
-              }} />
-            </View>
+          {platformFeatures.locationReminders ? (
+            <LockedFeature feature="locationReminders" name={t("lock.name.location")}>
+              <View>
+                <Text style={ui.label}>{t("location.sectionTitle")}</Text>
+                <TaskLocationsField taskId={taskId ?? null} initial={initialLocations ?? []} onPendingChange={(places) => {
+                  setPlaceCount(places.length);
+                  onPendingPlaces?.(places);
+                }} />
+              </View>
+            </LockedFeature>
           ) : null}
           {editing ? (
             <View>
