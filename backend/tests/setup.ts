@@ -14,6 +14,7 @@
  * - No real model: AI is switched off (AI_ENABLED=false, as in CI) and GEMINI_API_KEY is blanked, so the
  *   provider chain is empty and replies come from the rules. Requests to Gemini or Ollama throw too. A test
  *   that needs a model injects a fake one with setAi(new AiService([...])).
+ * - Test env files must never contain SMTP_*, AWS_*, Twilio or Bedrock keys, so tests can't send real mail or spend money.
  * Scripts that are meant to use the real model (scripts/e2e-conversation.ts, scripts/model-benchmark.ts)
  * load .env themselves and never run this file.
  */
