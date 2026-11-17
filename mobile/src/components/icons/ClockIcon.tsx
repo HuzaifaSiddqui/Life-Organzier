@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import Svg, { Circle, Path } from "react-native-svg";
 import { colors } from "../../constants/theme";
 

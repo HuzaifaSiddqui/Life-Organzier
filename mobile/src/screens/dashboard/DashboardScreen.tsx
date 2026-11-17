@@ -30,7 +30,7 @@ import { OutboxRefused, send } from "../../services/outbox";
 import { cancelTaskSnooze, scheduleReminderSync, snoozeTaskReminder } from "../../services/reminders";
 import { getCachedTasks, setTaskStatus } from "../../services/tasksApi";
 import { useTheme } from "../../theme/ThemeProvider";
-import { tabBar, withAlpha } from "../../theme/tokens";
+import { palettes, tabBar, withAlpha } from "../../theme/tokens";
 import { useLayout } from "../../theme/useLayout";
 import type { ActionPayload, AttentionItem, Briefing, Mood, QuickAction, Task } from "../../types/models";
 import { formatDuration, formatTime } from "../../utils/format";
@@ -419,7 +419,8 @@ export function DashboardScreen({ navigation }: Props) {
         {b?.nextUp ? (
           <Animated.View entering={enter(2)} layout={layout}>
             <PressableScale onPress={() => navigation.navigate("TaskDetail", { taskId: b.nextUp!.id })} accessibilityRole="button" accessibilityLabel={`${t("home.next.title")}: ${b.nextUp.title}`} style={[styles.hero, { borderRadius: radii.xl }]}>
-              <LinearGradient colors={[colors.accent, colors.accentStrong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              {/* The brand's deep blues in both themes, so white text keeps its contrast in dark mode too. */}
+              <LinearGradient colors={[palettes.light.accent, palettes.light.accentStrong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
               <View style={[styles.row, { gap: spacing.sm }]}>
                 <Text variant="label" style={{ color: colors.onBrand, opacity: 0.85 }}>
                   {t("home.next.title").toUpperCase()}
@@ -595,7 +596,8 @@ export function DashboardScreen({ navigation }: Props) {
 /** A button on the Next up gradient: white fill for the main action, translucent for the others. */
 function HeroButton({ label, icon, onPress, primary }: { label: string; icon: "play" | "check" | "clock"; onPress: () => void; primary?: boolean }) {
   const { colors, radii } = useTheme();
-  const fg = primary ? colors.accentStrong : colors.onBrand;
+  // On the always-deep-blue card: the white pill keeps the light theme's dark blue text in both themes.
+  const fg = primary ? palettes.light.accentStrong : colors.onBrand;
   return (
     <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.heroBtn, { borderRadius: radii.pill, backgroundColor: primary ? colors.onBrand : withAlpha(colors.onBrand, 0.18) }]}>
       <Icon name={icon} size={16} color={fg} strokeWidth={2.2} />

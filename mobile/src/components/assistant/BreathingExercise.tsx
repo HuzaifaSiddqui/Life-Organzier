@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, palette } from "../../constants/theme";
@@ -10,6 +11,8 @@ const PHASES = [
 
 /** Guided 4-4-6 breathing (FR-MH-002 stress relief). */
 export function BreathingExercise({ minutes }: { minutes: number }) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const [running, setRunning] = useState(false);
   const [phase, setPhase] = useState(0);
   const [remaining, setRemaining] = useState(minutes * 60);
@@ -63,7 +66,7 @@ export function BreathingExercise({ minutes }: { minutes: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   wrap: { alignItems: "center", gap: 8, paddingVertical: 8 },
   stage: { width: 150, height: 150, alignItems: "center", justifyContent: "center" },
   circle: { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: palette.aiSoft },

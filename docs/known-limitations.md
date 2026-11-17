@@ -815,4 +815,7 @@ The desktop app is the phone app built for the web inside an Electron shell ([de
 - **Plan shows routines** for about three weeks around today (the server sends that window); further months show tasks.
 - **"Grant location access" at app start** appears at most every 3 days; right after adding a task with a place it
   can appear at once.
-- **Dark mode stays off** until the remaining screens on the legacy palette are migrated (docs/design.md migration log).
+- **Dark mode** follows Settings → Language, look and help → Appearance (System / Light / Dark); the choice is kept on
+  the device, not synced. Android notifications and the home-screen icon keep their own colours. Screens still written
+  with the legacy names follow the theme through `theme/legacy.ts` (same colours, built per theme), not yet the
+  primitives.

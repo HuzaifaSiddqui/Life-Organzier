@@ -1,3 +1,4 @@
+import { legacyColors, legacyPalette } from "../theme/legacy";
 import { palettes } from "../theme/tokens";
 
 const light = palettes.light;
@@ -16,22 +17,10 @@ export const blue = {
 } as const;
 
 /**
- * @deprecated Legacy names mapped onto light-theme tokens (src/theme/tokens.ts) so unmigrated
- * screens pick up the new palette. Migrated screens must use useTheme() instead.
+ * @deprecated Legacy names on the light palette, for module-level use only. Inside components use `useLegacy()`
+ * (src/theme/legacy.ts), which follows the current theme; new code uses useTheme().
  */
-export const colors = {
-  bg: light.canvas,
-  surface: light.surface,
-  surfaceSoft: light.accentSoft,
-  text: light.text,
-  textMuted: light.textSecondary,
-  primary: light.accentStrong,
-  primaryDark: light.accentStrong,
-  border: light.hairline,
-  success: light.success.fg,
-  danger: light.danger.fg,
-  focusRing: light.accentFocus,
-};
+export const colors = legacyColors(light);
 
 export const radii = {
   xl: 20,
@@ -67,20 +56,6 @@ export const shadowTile = {
 } as const;
 
 /** @deprecated See `colors`. One accent: the old assistant purple now maps to the brand accent. */
-export const palette = {
-  ai: light.accentStrong,
-  aiSoft: light.accentSoft,
-  aiDark: light.accentStrong,
-  warning: light.warning.fg,
-  warningSoft: light.warning.bg,
-  danger: light.danger.fg,
-  dangerSoft: light.danger.bg,
-  success: light.success.fg,
-  successSoft: light.success.bg,
-  info: light.info.fg,
-  infoSoft: light.info.bg,
-  muted: light.textTertiary,
-  ink: light.text,
-} as const;
+export const palette = legacyPalette(light);
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 } as const;

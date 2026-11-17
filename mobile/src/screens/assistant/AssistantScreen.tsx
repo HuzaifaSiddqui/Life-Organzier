@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { palettes } from "../../theme/tokens";
 import { LinearGradient } from "expo-linear-gradient";
 import { scheduleReminderSync } from "../../services/reminders";
@@ -67,6 +68,8 @@ const CLIENT_SCREENS: Record<string, keyof MainStackParamList> = {
 };
 
 export function AssistantScreen({ navigation, route }: Props) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const insets = useSafeAreaInsets();
   const { settings, reload } = usePreferences();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -522,7 +525,7 @@ export function AssistantScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: "row",

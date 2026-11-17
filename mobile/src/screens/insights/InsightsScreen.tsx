@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { promptUnlock, useFeatureLock } from "../../components/LockedFeature";
 import { opacity } from "../../theme/tokens";
 import { Icon } from "../../components/icons/Icon";
@@ -38,6 +39,8 @@ function hourLabel(h: number): string {
 }
 
 function Metric({ label, value, delta }: { label: string; value: string; delta?: number | null }) {
+  const { palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   return (
     <View style={styles.metric}>
       <Text style={styles.metricValue}>{value}</Text>
@@ -52,6 +55,8 @@ function Metric({ label, value, delta }: { label: string; value: string; delta?:
 }
 
 export function InsightsScreen({ navigation }: Props) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const insets = useSafeAreaInsets();
   const { bottomPad } = useLayout();
   const { categories } = usePreferences();
@@ -275,7 +280,7 @@ export function InsightsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, gap: 12 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { OutboxRefused, send, type SendInput } from "../../services/outbox";
 import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
@@ -12,7 +13,7 @@ import { withAlpha } from "../../theme/tokens";
 import { hapticTap } from "../../services/haptics";
 import { BarChart } from "../../components/charts/Charts";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
+import { Button, Card, Chip, SectionTitle, Snackbar, TutorialTip, ui, useUi } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -30,6 +31,9 @@ function defaultMood(score: number): Mood {
 }
 
 export function MoodScreen({ navigation }: Props) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
+  const ui = useUi();
   const [score, setScore] = useState<number | null>(null);
   const [mood, setMood] = useState<Mood | null>(null);
   const [note, setNote] = useState("");
@@ -220,7 +224,7 @@ export function MoodScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   scale: { flexDirection: "row", justifyContent: "space-between" },
   scaleBtn: { alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 14, borderWidth: 1.5 },
   scaleEnds: { flexDirection: "row", justifyContent: "space-between", marginTop: -4 },

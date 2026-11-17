@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -27,6 +28,8 @@ type FormValues = z.infer<typeof schema>;
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
 export function LoginScreen({ navigation }: Props) {
+  const { palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { control, handleSubmit } = useForm<FormValues>({
@@ -138,7 +141,7 @@ export function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "transparent",

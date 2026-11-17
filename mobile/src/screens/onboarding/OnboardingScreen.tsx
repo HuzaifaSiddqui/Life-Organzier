@@ -1,9 +1,10 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
-import { Button, Card, Chip, ProgressBar, ui } from "../../components/ui";
+import { Button, Card, Chip, ProgressBar, ui, useUi } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -21,6 +22,9 @@ const LANGS = [
 const SUGGESTED_CONTEXTS = ["At Home", "At Work", "At University", "In Village", "Traveling"];
 
 export function OnboardingScreen({ navigation }: Props) {
+  const { palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
+  const ui = useUi();
   const insets = useSafeAreaInsets();
   const { settings, update } = usePreferences();
   const [step, setStep] = useState(0);
@@ -179,7 +183,7 @@ export function OnboardingScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", padding: 24, gap: 16 },
   title: { fontSize: 26, fontFamily: "Inter_700Bold", color: colors.text, textAlign: "center" },
   text: { fontFamily: "Inter_400Regular", fontSize: 15, color: colors.textMuted, textAlign: "center", lineHeight: 22 },

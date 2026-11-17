@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { colors } from "../constants/theme";
 import { ForgotPasswordScreen } from "../screens/auth/ForgotPasswordScreen";
@@ -15,6 +16,7 @@ export type AuthStackParamList = {
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export function AuthStack() {
+  const { colors } = useLegacy();
   return (
     <Stack.Navigator
       screenOptions={{

@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { LinearGradient } from "expo-linear-gradient";
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from "react-native";
 import { shadow, colors } from "../constants/theme";
@@ -20,6 +21,8 @@ export function GradientPrimaryButton({
   style,
   height = 56,
 }: Props) {
+  const { colors } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   return (
     <Pressable
       onPress={onPress}
@@ -45,7 +48,7 @@ export function GradientPrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   pressable: {
     borderRadius: 16,
     overflow: "hidden",

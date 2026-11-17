@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text as RNText, View, type StyleProp, type ViewStyle } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
-import { taskFormStyles } from "../screens/tasks/taskFormStyles";
+import { useTaskFormStyles } from "../screens/tasks/taskFormStyles";
 import { useTheme } from "../theme/ThemeProvider";
 import { parseYmd } from "../utils/pickers";
 import { addDays, sameDay, startOfDay } from "../utils/timeline";
@@ -45,6 +45,7 @@ function Field({ icon, value, placeholder, onPress, label, style }: { icon: "cal
 }
 
 export function TaskFormDueDateRow({ valueYmd, onChangeYmd, onClear, label = "Due date" }: { valueYmd: string; onChangeYmd: (ymd: string) => void; onClear?: () => void; label?: string }) {
+  const taskFormStyles = useTaskFormStyles();
   const { t } = useLocale();
   const [show, setShow] = useState(false);
   return (
@@ -70,6 +71,7 @@ export function TaskFormDueTimeRow({
   quickTimes?: readonly string[];
 }) {
   const { t } = useLocale();
+  const taskFormStyles = useTaskFormStyles();
   const [show, setShow] = useState(false);
   return (
     <View style={taskFormStyles.field}>

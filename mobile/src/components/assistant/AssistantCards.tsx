@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { DocumentFactsCard } from "./DocumentFactsCard";
 import { DocumentCard } from "./DocumentCard";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -24,6 +25,8 @@ type Handlers = {
 };
 
 function MiniTask({ task, onPress }: { task: Task; onPress: () => void }) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const done = task.status === "COMPLETED";
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.mini, pressed && { opacity: 0.8 }]}>
@@ -48,6 +51,8 @@ function MiniTask({ task, onPress }: { task: Task; onPress: () => void }) {
 }
 
 function PlanTimeline({ plan }: { plan: DayPlan }) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   if (!plan.blocks.length) return <Text style={styles.meta}>Nothing scheduled yet — your day is open.</Text>;
   const pct = Math.min(100, Math.round((plan.load.minutes / Math.max(1, plan.load.capacity)) * 100));
   return (
@@ -85,6 +90,8 @@ function PlanTimeline({ plan }: { plan: DayPlan }) {
 }
 
 export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction, onOpenDocument }: { cards: AssistantCard[] } & Handlers) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   return (
     <View style={{ gap: 8 }}>
       {cards.map((card, i) => {
@@ -234,6 +241,8 @@ export function AssistantCards({ cards, onOpenTask, onOpenRoutine, onAction, onO
 }
 
 function Field({ label, value, missing }: { label: string; value: string | null | undefined; missing?: boolean }) {
+  const { palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -242,7 +251,7 @@ function Field({ label, value, missing }: { label: string; value: string | null 
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   mini: {
     flexDirection: "row",
     gap: 10,

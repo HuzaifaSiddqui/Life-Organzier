@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { colors } from "../constants/theme";
@@ -5,6 +6,7 @@ import { colors } from "../constants/theme";
 const BAR_COUNT = 5;
 
 export function ListeningWaveform() {
+  const styles = useLegacyStyles(make_styles);
   const anims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.35))).current;
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export function ListeningWaveform() {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   wrap: {
     flexDirection: "row",
     alignItems: "flex-end",

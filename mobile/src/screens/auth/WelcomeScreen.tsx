@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { useEffect, useState } from "react";
 import { useLocale } from "../../i18n/LocaleProvider";
@@ -22,6 +23,8 @@ const features = [
 ];
 
 export function WelcomeScreen({ navigation }: Props) {
+  const { colors } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const { t } = useLocale();
   // Guest mode (FR-OB-003): offered only when the server has GUEST_MODE on.
   const [guestOn, setGuestOn] = useState(false);
@@ -114,7 +117,7 @@ export function WelcomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   guest: { alignItems: "center", justifyContent: "center", minHeight: 48 },
   guestText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.textMuted, textDecorationLine: "underline" },
   guestError: { fontSize: 13, color: colors.danger, textAlign: "center" },
