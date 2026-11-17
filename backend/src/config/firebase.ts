@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import type { Auth } from "firebase-admin/auth";
+import type { Messaging } from "firebase-admin/messaging";
 
 let initialized = false;
 
@@ -30,6 +31,12 @@ let testAuth: Pick<Auth, "verifyIdToken"> | null = null;
 export function useTestAuth(auth: Pick<Auth, "verifyIdToken"> | null): void {
   if (process.env.NODE_ENV !== "test") throw new Error("useTestAuth is for tests only");
   testAuth = auth;
+}
+
+/** Firebase Cloud Messaging (push to phones that registered an FCM device token). */
+export function getFirebaseMessaging(): Messaging {
+  if (!initialized) initFirebase();
+  return admin.messaging();
 }
 
 export function getFirebaseAuth(): Auth {

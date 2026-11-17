@@ -1,3 +1,4 @@
+import { scheduleSyncPush } from "../push/pushService.js";
 import { isWhatsapp } from "./channel.js";
 import { chatFixesOn } from "./chatFixes.js";
 import { guardModelChoice, type GuardVerdict } from "./guards.js";
@@ -271,6 +272,8 @@ export async function handleAssistantMessage(input: {
 
   // Learning happens after the reply so it never adds latency.
   void learnInBackground(turn, userMessage?.id ?? null, text, out.intent ?? "");
+  // WhatsApp changed something: the phones re-plan their reminders now (silent push; app requests are covered in app.ts).
+  if (input.channel.startsWith("WHATSAPP") && !CHAT_ONLY_INTENTS.has(out.intent ?? "")) scheduleSyncPush(input.user.id, null);
 
   return {
     conversationId: conversation.id,
@@ -278,6 +281,9 @@ export async function handleAssistantMessage(input: {
     message: { id: assistantMessage.id, role: "ASSISTANT", content: out.content, createdAt: assistantMessage.createdAt.toISOString(), ...meta },
   };
 }
+
+/** Replies that changed nothing (no push needed after them). */
+const CHAT_ONLY_INTENTS = new Set(["chat", "chat_fallback", "smalltalk", "support", "greeting", "thanks", "help", "unclear", "document_answer", "capabilities"]);
 
 /** Only conversational turns can carry durable personal facts; commands never do. */
 const LLM_EXTRACTION_INTENTS = new Set(["support", "smalltalk", "unclear", "mood_logged", "mood_confirm", "chat", "chat_fallback"]);

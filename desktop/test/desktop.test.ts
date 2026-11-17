@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { APP_ID, APP_NAME, relaunchCommand, windowsIdentity } from "../src/appIdentity";
+import { GOOGLE_REDIRECT, googleAuthUrl, readGoogleRedirect } from "../src/googleAuth";
 import { APP_ORIGIN, isExternalAllowed, resolveAppFile } from "../src/appProtocol";
 import { IPC } from "../src/bridge";
 import { LATE_GRACE_MS, MAX_ITEMS, planTimers, sanitizeReminders } from "../src/reminderScheduler";
@@ -94,5 +95,29 @@ describe("Windows identity", () => {
     assert.ok(id.shortcut?.includes(path.join("Start Menu", "Programs")));
     assert.equal(id.icon, path.join(base.appPath, "build", "icon.ico"));
     assert.equal(relaunchCommand(id), `"${base.execPath}" "${base.appPath}"`);
+  });
+});
+
+describe("Google sign-in", () => {
+  const clientId = "123-abc.apps.googleusercontent.com";
+  const expected = { nonce: "n1", state: "s1", clientId };
+  const jwt = (claims: Record<string, unknown>) => `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
+
+  it("asks Google for an id token for this client, redirecting to the local address", () => {
+    const url = new URL(googleAuthUrl(clientId, "n1", "s1"));
+    assert.equal(url.searchParams.get("client_id"), clientId);
+    assert.equal(url.searchParams.get("redirect_uri"), GOOGLE_REDIRECT);
+    assert.equal(url.searchParams.get("response_type"), "id_token");
+    assert.equal(url.searchParams.get("nonce"), "n1");
+  });
+
+  it("takes the token from the redirect only when state, nonce and client match", () => {
+    const good = jwt({ nonce: "n1", aud: clientId });
+    assert.deepEqual(readGoogleRedirect(`${GOOGLE_REDIRECT}#state=s1&id_token=${good}`, expected), { idToken: good });
+    assert.deepEqual(readGoogleRedirect(`${GOOGLE_REDIRECT}#state=other&id_token=${good}`, expected), { error: "state_mismatch" });
+    assert.deepEqual(readGoogleRedirect(`${GOOGLE_REDIRECT}#state=s1&id_token=${jwt({ nonce: "old", aud: clientId })}`, expected), { error: "token_mismatch" });
+    assert.deepEqual(readGoogleRedirect(`${GOOGLE_REDIRECT}#state=s1&id_token=${jwt({ nonce: "n1", aud: "someone-else" })}`, expected), { error: "token_mismatch" });
+    assert.deepEqual(readGoogleRedirect(`${GOOGLE_REDIRECT}?error=access_denied&state=s1`, expected), { error: "access_denied" });
+    assert.equal(readGoogleRedirect("https://accounts.google.com/signin/v2", expected), null, "Google's own pages are not the redirect");
   });
 });

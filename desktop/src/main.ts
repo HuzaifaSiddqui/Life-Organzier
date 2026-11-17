@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { googleAuthUrl, readGoogleRedirect } from "./googleAuth";
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, shell, Tray } from "electron";
 import fs from "node:fs";
 import path from "node:path";
@@ -154,6 +156,47 @@ function schedule(items: DesktopReminder[]): void {
   arm();
 }
 
+/* ------------------------------------------------------------ google login */
+
+/**
+ * "Continue with Google" (googleAuth.ts): Google's sign-in page in a small window of its own; the redirect to
+ * GOOGLE_REDIRECT is caught before it loads and the id token handed back. Closing the window resolves null.
+ */
+function googleSignIn(clientId: string): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const nonce = randomUUID();
+    const state = randomUUID();
+    const popup = new BrowserWindow({
+      parent: win ?? undefined,
+      modal: Boolean(win),
+      width: 480,
+      height: 640,
+      title: "Sign in with Google",
+      icon: windowIcon(),
+      autoHideMenuBar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, partition: "google-auth" },
+    });
+    let done = false;
+    const finish = (url: string, e?: { preventDefault: () => void }) => {
+      const r = readGoogleRedirect(url, { nonce, state, clientId });
+      if (!r) return;
+      e?.preventDefault();
+      done = true;
+      popup.destroy();
+      if ("idToken" in r) resolve(r.idToken);
+      else if (r.error === "access_denied") resolve(null);
+      else reject(new Error(r.error));
+    };
+    popup.webContents.on("will-redirect", (e, url) => finish(url, e));
+    popup.webContents.on("will-navigate", (e, url) => finish(url, e));
+    popup.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    popup.on("closed", () => {
+      if (!done) resolve(null);
+    });
+    void popup.loadURL(googleAuthUrl(clientId, nonce, state));
+  });
+}
+
 /* -------------------------------------------------------------------- tray */
 
 function launchAtLogin(): boolean {
@@ -247,6 +290,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle(IPC.clear, () => schedule([]));
     ipcMain.handle(IPC.getLogin, () => launchAtLogin());
     ipcMain.handle(IPC.setLogin, (_e, on: unknown) => setLaunchAtLogin(on === true));
+    ipcMain.handle(IPC.google, (_e, clientId: unknown) => (typeof clientId === "string" && /^[\w.-]+\.apps\.googleusercontent\.com$/.test(clientId) ? googleSignIn(clientId) : null));
 
     if (!DEV_URL) Menu.setApplicationMenu(null);
     paused = readJson<{ paused?: boolean }>("settings.json", {}).paused === true;

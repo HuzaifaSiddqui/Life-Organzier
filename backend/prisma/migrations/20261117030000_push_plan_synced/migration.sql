@@ -1,0 +1,1 @@
+ALTER TABLE "PushToken" ADD COLUMN "planSyncedAt" TIMESTAMP(3);

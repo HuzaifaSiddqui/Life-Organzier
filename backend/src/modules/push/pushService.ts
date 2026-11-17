@@ -1,3 +1,5 @@
+import { getFirebaseMessaging } from "../../config/firebase.js";
+import { fcmMessage, fcmTokenGone, isExpoToken } from "./pushRules.js";
 import { prisma } from "../../config/db.js";
 import { setBounded } from "../../lib/boundedMap.js";
 import { background } from "../../lib/background.js";
@@ -7,7 +9,8 @@ import { background } from "../../lib/background.js";
  * at once: the push tells the app to sync, and the sync schedules the local alarms. Tokens are never logged.
  */
 
-export type PushMessage = { to: string; title: string; body: string; data?: Record<string, unknown> };
+/** `notify`: FCM only, shown by Android itself (reminders the phone missed; push/missedReminders.ts). */
+export type PushMessage = { to: string; title: string; body: string; data?: Record<string, unknown>; notify?: { channelId: string; tag: string } };
 /** One per message, in order: a ticket id to check later, or an error (e.g. DeviceNotRegistered). */
 export type PushTicket = { id?: string; error?: string };
 
@@ -38,7 +41,7 @@ export class ExpoPushProvider implements PushProvider {
     const out: PushTicket[] = [];
     for (let i = 0; i < messages.length; i += BATCH) {
       const chunk = messages.slice(i, i + BATCH);
-      const json = (await this.post("send", chunk.map((m) => ({ ...m, sound: "default", channelId: ANDROID_CHANNEL, priority: "high" })))) as {
+      const json = (await this.post("send", chunk.map(({ notify: _notify, ...m }) => ({ ...m, sound: "default", channelId: ANDROID_CHANNEL, priority: "high" })))) as {
         data?: Array<{ status: string; id?: string; details?: { error?: string } }>;
       };
       for (const t of json.data ?? []) out.push(t.status === "ok" ? { id: t.id } : { error: t.details?.error ?? "Unknown" });
@@ -59,7 +62,60 @@ export class ExpoPushProvider implements PushProvider {
 /** The app's existing Android channel (mobile/src/services/reminders.ts DEFAULT_CHANNEL_ID). */
 const ANDROID_CHANNEL = "lo-sound-vibrate";
 
-let provider: PushProvider = new ExpoPushProvider();
+/**
+ * Firebase Cloud Messaging through firebase-admin (the backend's existing service account; no Expo account needed).
+ * Data-only, high priority: the phone's background task syncs, re-plans its alarms and shows a visible notification
+ * itself when the message has a title (mobile/src/services/notificationActions.ts). Delivery is known at once, so
+ * there are no receipts to check later.
+ */
+export class FcmPushProvider implements PushProvider {
+  async send(messages: PushMessage[]): Promise<PushTicket[]> {
+    const messaging = getFirebaseMessaging();
+    return Promise.all(
+      messages.map(async (m): Promise<PushTicket> => {
+        try {
+          const id = await messaging.send(fcmMessage(m));
+          return { id: `fcm:${id}` };
+        } catch (error) {
+          const code = (error as { code?: string }).code;
+          return { error: fcmTokenGone(code) ? "DeviceNotRegistered" : (code ?? "FcmError") };
+        }
+      }),
+    );
+  }
+
+  async receipts(): Promise<Record<string, string | null>> {
+    return {};
+  }
+}
+
+/** Expo tokens through Expo, FCM device tokens through Firebase; results in the same order as `messages`. */
+export class RoutingPushProvider implements PushProvider {
+  constructor(
+    private readonly expo: PushProvider = new ExpoPushProvider(),
+    private readonly fcm: PushProvider = new FcmPushProvider(),
+  ) {}
+
+  async send(messages: PushMessage[]): Promise<PushTicket[]> {
+    const expoIdx = messages.map((m, i) => (isExpoToken(m.to) ? i : -1)).filter((i) => i >= 0);
+    const fcmIdx = messages.map((m, i) => (isExpoToken(m.to) ? -1 : i)).filter((i) => i >= 0);
+    const [e, f] = await Promise.all([
+      expoIdx.length ? this.expo.send(expoIdx.map((i) => messages[i])) : Promise.resolve([] as PushTicket[]),
+      fcmIdx.length ? this.fcm.send(fcmIdx.map((i) => messages[i])) : Promise.resolve([] as PushTicket[]),
+    ]);
+    const out: PushTicket[] = new Array(messages.length);
+    expoIdx.forEach((i, k) => (out[i] = e[k] ?? { error: "Unknown" }));
+    fcmIdx.forEach((i, k) => (out[i] = f[k] ?? { error: "Unknown" }));
+    return out;
+  }
+
+  async receipts(ids: string[]): Promise<Record<string, string | null>> {
+    const expoIds = ids.filter((id) => !id.startsWith("fcm:"));
+    return expoIds.length ? this.expo.receipts(expoIds) : {};
+  }
+}
+
+let provider: PushProvider = new RoutingPushProvider();
 /** Test hook. */
 export function setPushProvider(p: PushProvider): void {
   provider = p;
@@ -96,6 +152,60 @@ export async function unregisterPushToken(userId: string, token: string): Promis
  */
 export async function unregisterDeviceToken(token: string, deviceId: string): Promise<boolean> {
   return (await prisma.pushToken.deleteMany({ where: { token, deviceId } })).count > 0;
+}
+
+/**
+ * A silent "sync" push to the user's phones that registered an FCM token, except the device that made the change:
+ * the phone's background task syncs and re-plans its reminders without opening the app. Expo tokens are skipped (Expo
+ * pushes are always visible). Coalesced per user for a few seconds so a burst of changes sends one push.
+ */
+const syncTimers = new Map<string, { timer: NodeJS.Timeout; except: Set<string | null> }>();
+const SYNC_PUSH_DELAY_MS = 2500;
+
+export function scheduleSyncPush(userId: string, exceptDeviceId: string | null): void {
+  const pending = syncTimers.get(userId);
+  if (pending) {
+    // Two devices changed things: neither is excluded any more (each needs the other's change).
+    if (!pending.except.has(exceptDeviceId)) pending.except = new Set([null]);
+    return;
+  }
+  const entry = {
+    except: new Set([exceptDeviceId]),
+    timer: setTimeout(() => {
+      syncTimers.delete(userId);
+      background(sendSyncPush(userId, [...entry.except].filter((d): d is string => Boolean(d))));
+    }, SYNC_PUSH_DELAY_MS),
+  };
+  entry.timer.unref?.();
+  syncTimers.set(userId, entry);
+}
+
+async function sendSyncPush(userId: string, exceptDeviceIds: string[]): Promise<void> {
+  try {
+    const rows = await prisma.pushToken.findMany({ where: { userId, ...(exceptDeviceIds.length ? { OR: [{ deviceId: null }, { deviceId: { notIn: exceptDeviceIds } }] } : {}) }, select: { token: true } });
+    const tokens = rows.map((r) => r.token).filter((t) => !isExpoToken(t));
+    if (!tokens.length) return;
+    const tickets = await provider.send(tokens.map((to) => ({ to, title: "", body: "", data: { type: "sync" } })));
+    const dead = tokens.filter((_t, i) => tickets[i]?.error === "DeviceNotRegistered");
+    if (dead.length) await prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
+  } catch (error) {
+    console.warn("Sync push failed:", error instanceof Error ? error.message : error);
+  }
+}
+
+/** Sends prepared messages (each to one token); dead tokens are removed. Returns how many were accepted. Never throws. */
+export async function sendPushMessages(messages: PushMessage[]): Promise<number> {
+  try {
+    const tickets = await provider.send(messages);
+    const dead = messages.filter((_m, i) => tickets[i]?.error === "DeviceNotRegistered").map((m) => m.to);
+    if (dead.length) await prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
+    const failed = tickets.filter((t) => t.error && t.error !== "DeviceNotRegistered");
+    if (failed.length) console.warn(`Push: ${failed.length} of ${tickets.length} not accepted (${failed[0].error})`);
+    return tickets.filter((t) => t.id).length;
+  } catch (error) {
+    console.warn("Push failed:", error instanceof Error ? error.message : error);
+    return 0;
+  }
 }
 
 /** Sends to every phone of the user. Never throws (a push must not break the caller). */

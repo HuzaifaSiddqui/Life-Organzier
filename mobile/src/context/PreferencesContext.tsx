@@ -115,8 +115,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const stopOutbox = startOutbox();
     void configureReminders();
     trackAppOpen();
-    // Push registration waits for the reminder sync, which asks for notification permission the first time.
-    void syncNow().then(() => syncReminders()).then(() => registerForPush());
+    // Push registration waits for the reminder sync (it asks for notification permission the first time), but never
+    // depends on it: a failed or slow sync must not leave the phone without push.
+    const ready = syncNow()
+      .then(() => syncReminders())
+      .catch(() => undefined);
+    void Promise.race([ready, new Promise((r) => setTimeout(r, 15000))]).then(() => registerForPush());
     const stopResponses = startReminderResponses((target) => {
       if (target.taskId) openAppScreen("TaskDetail", { taskId: target.taskId });
       else if (target.taskIds?.length) openAppScreen("TaskList", { ids: target.taskIds });

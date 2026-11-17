@@ -1,3 +1,4 @@
+import { palettes } from "../theme/tokens";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
@@ -236,6 +237,8 @@ async function handleGeofenceEnter(savedLocationId: string): Promise<void> {
         title: await tr("location.notifTitle"),
         body,
         categoryIdentifier: CATEGORY_LOCATION,
+        subtitle: await tr("notif.place"),
+        color: palettes.light.accent,
         data: { kind: "lo-location", savedLocationId, taskIds: due.map((t) => t.taskId) },
         ...(Platform.OS === "android" ? { priority: Notifications.AndroidNotificationPriority.HIGH } : {}),
       },

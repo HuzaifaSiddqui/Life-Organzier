@@ -76,7 +76,10 @@ folder. It is not code-signed, so Windows SmartScreen asks for confirmation once
   - The schedule is saved, so reminders also fire after a restart before the app is online again.
   - After the PC wakes, reminders missed by up to 15 min fire late. Older ones are dropped.
   - Windows notifications have no action buttons. A click opens the task (or the check-in sheet) in the app.
-- **Sign-in:** email and password through Firebase, kept in the app's own storage.
+- **Sign-in:** email and password through Firebase, kept in the app's own storage, or **Continue with Google**: the shell
+  opens Google's sign-in in a window of its own and catches the redirect to `http://localhost:53682/google-auth`
+  (`src/googleAuth.ts`, tested); the id token signs in to Firebase. The redirect address must be listed on the OAuth
+  Web client (known-limitations.md → Google sign-in).
 - **Name and icon in Windows:** Windows takes the name and icon of notifications, the taskbar button and the
   notification settings from the Start Menu shortcut that carries the app's id (`com.lifeorganizer.desktop`). It
   also starts that shortcut when a notification is clicked after the app has quit.

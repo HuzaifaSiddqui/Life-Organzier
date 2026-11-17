@@ -7,6 +7,12 @@ export function getPrimaryApiBaseUrl(): string {
   return trim(process.env.EXPO_PUBLIC_API_BASE_URL) || "http://localhost:5050/api";
 }
 
+/**
+ * "Continue with Google": the OAuth Web client ID from Firebase console → Authentication → Sign-in method → Google
+ * (Web SDK configuration). Empty = the Google button is hidden.
+ */
+export const GOOGLE_WEB_CLIENT_ID = trim(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+
 /** Legacy export — same as primary (axios initial default before resolution runs). */
 export const API_BASE_URL = getPrimaryApiBaseUrl();
 

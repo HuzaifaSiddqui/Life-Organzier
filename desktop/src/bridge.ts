@@ -21,4 +21,5 @@ export const IPC = {
   click: "reminders:click",
   getLogin: "app:get-launch-at-login",
   setLogin: "app:set-launch-at-login",
+  google: "auth:google",
 } as const;
