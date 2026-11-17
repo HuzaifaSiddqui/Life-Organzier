@@ -48,7 +48,7 @@ export function OnboardingScreen({ navigation }: Props) {
     await update({ ...draft, ...patch, onboardingCompleted: true });
     setSaving(false);
     void syncReminders();
-    navigation.replace("Dashboard");
+    navigation.replace("Tabs");
   };
 
   // Save progress after every step (FR-OB-001 §4).

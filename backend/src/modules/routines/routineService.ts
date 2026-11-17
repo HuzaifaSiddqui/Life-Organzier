@@ -300,11 +300,14 @@ export async function updateOccurrence(
   return updated;
 }
 
-/** Moves a flexible occurrence to another day/time (user-confirmed, FR-RM-003 §2). */
-export async function rescheduleOccurrence(userId: string, tz: string, occurrenceId: string, ymd: string, time: string | null) {
+/**
+ * Moves one occurrence to another day/time (user-confirmed, FR-RM-003 §2). A time-locked routine's occurrence moves only
+ * with `confirmLocked` (the user said "move just this one", e.g. dragging it on Plan); the routine keeps its time.
+ */
+export async function rescheduleOccurrence(userId: string, tz: string, occurrenceId: string, ymd: string, time: string | null, confirmLocked = false) {
   const occurrence = await prisma.routineOccurrence.findFirst({ where: { id: occurrenceId, userId }, include: { routine: true } });
   if (!occurrence) return null;
-  if (occurrence.routine.timeLocked) {
+  if (occurrence.routine.timeLocked && !confirmLocked) {
     throw new HttpError(400, "ROUTINE_TIME_LOCKED", "Time-locked routines can't be moved — the next occurrence is already scheduled.");
   }
   const target = startOfLocalDay(ymd, tz);

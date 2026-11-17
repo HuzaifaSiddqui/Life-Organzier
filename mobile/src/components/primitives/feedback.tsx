@@ -5,15 +5,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { plural, useLocale } from "../../i18n/LocaleProvider";
 import { getSyncStatus, retrySync, subscribeSync, type SyncStatus } from "../../services/syncEngine";
 import { useTheme } from "../../theme/ThemeProvider";
-import { layout, radii, spacing, typeScale } from "../../theme/tokens";
+import { layout, radii, spacing, typeScale, tabBar } from "../../theme/tokens";
 import { useLayout } from "../../theme/useLayout";
 import { friendlyError } from "../../utils/friendlyError";
 import { Button, Dot, PressableScale } from "./controls";
 import { Sheet } from "./surfaces";
 import { Text } from "./Text";
 
-/** Space reserved for the floating bottom nav so snackbars sit above it. */
-const BOTTOM_NAV_CLEARANCE = 80;
+/**
+ * Space reserved below snackbars (UI v3): the floating tab bar (`tabBar.height` + 8) and the "+" above it (56 + 20), so a
+ * notice never covers either; it sits above the "+" as Material does.
+ */
+const BOTTOM_NAV_CLEARANCE = tabBar.height + 8 + 76;
 
 /**
  * Transient message with optional action (use "Undo" for delete / complete / edit).

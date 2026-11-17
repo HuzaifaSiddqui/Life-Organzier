@@ -1,3 +1,5 @@
+import { palettes } from "../../theme/tokens";
+import { LinearGradient } from "expo-linear-gradient";
 import { scheduleReminderSync } from "../../services/reminders";
 import { syncNow } from "../../services/syncEngine";
 import { ComposerPlusMenu } from "../../components/assistant/ComposerPlusMenu";
@@ -36,12 +38,11 @@ import { clashCardFor } from "../../services/calendar";
 import { speak, stopSpeaking } from "../../services/speech";
 import { readTasks } from "../../services/syncEngine";
 import { normalizeSpelled, VOICE_MIN_RUN } from "../../utils/spelled";
-import { speechHints } from "../../utils/speechHints";
+import { SPEECH_LANG, speechHints } from "../../utils/speechHints";
 import type { ActionPayload, ChatMessage, QuickAction } from "../../types/models";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Assistant">;
 
-const SPEECH_LANG: Record<string, string> = { en: "en-US", ur: "ur-PK", ar: "ar-SA", es: "es-ES", fr: "fr-FR", zh: "zh-CN", hi: "hi-IN" };
 
 const STARTERS = [
   "What should I work on now?",
@@ -348,9 +349,14 @@ export function AssistantScreen({ navigation, route }: Props) {
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Icon name="back" size={24} color={colors.text} />
         </Pressable>
+        {/* UI v3: the assistant's mark, the same gradient as its button in the tab bar. */}
+        <View style={styles.avatar}>
+          <LinearGradient colors={[palettes.light.brand, palettes.light.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 18 }]} />
+          <Icon name="sparkle" size={18} color={palettes.light.onBrand} strokeWidth={2} />
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Assistant</Text>
-          <Text style={styles.subtitle}>{busy ? "Thinking…" : "Remembers your context across chats"}</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>{busy ? "Thinking…" : "Remembers your context"}</Text>
         </View>
         <Pressable
           onPress={() => {
@@ -541,16 +547,17 @@ const styles = StyleSheet.create({
   msgRow: { gap: 6, maxWidth: "100%" },
   left: { alignItems: "flex-start" },
   right: { alignItems: "flex-end" },
-  bubble: { maxWidth: "88%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
-  userBubble: { backgroundColor: colors.text, borderBottomRightRadius: 4 },
-  aiBubble: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
+  bubble: { maxWidth: "88%", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 11 },
+  userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 6 },
+  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  aiBubble: { backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderBottomLeftRadius: 6 },
   msgText: { fontSize: 15, lineHeight: 22, fontFamily: "Inter_400Regular", color: colors.text },
   cards: { width: "92%" },
   memoryRow: { paddingLeft: 4 },
   memoryText: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.textMuted },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, maxWidth: "95%" },
   action: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
-  actionPrimary: { backgroundColor: colors.text, borderColor: colors.text },
+  actionPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
   actionDanger: { backgroundColor: palette.danger, borderColor: palette.danger },
   actionText: { fontSize: 13, fontFamily: "Inter_500Medium", color: colors.text },
   typing: { flexDirection: "row", gap: 8, alignItems: "center" },

@@ -1,3 +1,4 @@
+import { useTheme } from "../../theme/ThemeProvider";
 import { LockedFeature } from "../../components/LockedFeature";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -321,6 +322,7 @@ export function TaskForm({
   // UI v2: advanced fields start collapsed; the summary lists any that have a value.
   const [showMore, setShowMore] = useState(false);
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const [placeCount, setPlaceCount] = useState(initialLocations?.length ?? 0);
   const summary = moreSummary(v, { editing, places: placeCount });
 
@@ -329,10 +331,18 @@ export function TaskForm({
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* UI v2: the essentials first; Planned start and Type (Fixed time) stay visible */}
         <Card style={{ gap: 14 }}>
-          <View>
-            <Text style={ui.label}>Title</Text>
-            <TextInput style={ui.input} value={v.title} onChangeText={(t) => set("title", t)} placeholder="What do you need to do?" placeholderTextColor={palette.muted} />
-          </View>
+          {/* UI v3: the title is the form's headline, focused at once for a new task. */}
+          <TextInput
+            style={[styles.title, { color: colors.text }]}
+            value={v.title}
+            onChangeText={(t) => set("title", t)}
+            placeholder="What do you need to do?"
+            placeholderTextColor={palette.muted}
+            autoFocus={!editing && !v.title}
+            multiline
+            maxLength={200}
+            accessibilityLabel="Title"
+          />
           <TaskFormDueDateRow valueYmd={v.dueYmd} onChangeYmd={(ymd) => set("dueYmd", ymd)} onClear={() => set("dueYmd", "")} />
           <TaskFormDueTimeRow valueTime={v.dueTime} onChangeTime={(t) => set("dueTime", t)} baseYmd={v.dueYmd || undefined} quickTimes={["9:00 AM", "12:00 PM", "3:00 PM", "6:00 PM", "11:59 PM"]} />
 
@@ -521,7 +531,7 @@ export function TaskForm({
       </ScrollView>
 
       {/* Save stays in reach: pinned under the form */}
-      <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.bg, paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={[styles.footer, theme.elevation(2), { paddingBottom: Math.max(insets.bottom, 16), borderTopLeftRadius: theme.radii.xl, borderTopRightRadius: theme.radii.xl }]}>
         {error ? <Text style={ui.error}>{error}</Text> : null}
         <Button title={submitLabel} onPress={() => void submit()} loading={busy} />
       </View>
@@ -532,7 +542,8 @@ export function TaskForm({
 const styles = StyleSheet.create({
   content: { padding: 16, gap: 14, paddingBottom: 24 },
   moreRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48 },
-  footer: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16, gap: 8, borderTopWidth: 1 },
+  footer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 8 },
+  title: { fontFamily: "Inter_700Bold", fontSize: 24, lineHeight: 30, letterSpacing: -0.4, paddingVertical: 4, minHeight: 44 },
   suggest: { color: palette.ai, fontFamily: "Inter_600SemiBold", marginTop: 8 },
   hint: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, marginTop: 6 },
 });

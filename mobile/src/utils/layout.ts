@@ -6,8 +6,8 @@ export function isWideWidth(width: number): boolean {
   return width >= layout.wideMin;
 }
 
-export type SidebarRoute = "Dashboard" | "Assistant" | "TaskList" | "Routines" | "Insights" | "Mood" | "Collab" | "Profile";
-export type SidebarIcon = "home" | "assistant" | "tasks" | "repeat" | "doc" | "insights" | "pulse" | "people" | "user";
+export type SidebarRoute = "Dashboard" | "Plan" | "Assistant" | "TaskList" | "Routines" | "Insights" | "Mood" | "Collab" | "Profile";
+export type SidebarIcon = "today" | "plan" | "sparkle" | "home" | "assistant" | "tasks" | "repeat" | "doc" | "insights" | "pulse" | "people" | "user";
 
 export const SIDEBAR_ITEMS: ReadonlyArray<{ route: SidebarRoute; icon: SidebarIcon; label: StringKey }> = [
   { route: "Dashboard", icon: "home", label: "nav.home" },

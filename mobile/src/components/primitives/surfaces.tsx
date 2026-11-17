@@ -1,3 +1,4 @@
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useEffect, useState, type ReactNode } from "react";
 import { Keyboard, Modal, Platform, Pressable, StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedKeyboard, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
@@ -144,7 +145,8 @@ function BottomSheet({ visible, onClose, title, children }: { visible: boolean; 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       {/* Bottom-anchored flex child (not position: absolute) so the sheet re-measures when its content changes. */}
-      <View style={styles.sheetRoot}>
+      {/* Android: gestures inside a Modal need their own root (the date picker's month swipe). */}
+      <GestureHandlerRootView style={styles.sheetRoot}>
         <Pressable style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t("common.close")} />
         <Animated.View
           accessibilityViewIsModal
@@ -158,7 +160,7 @@ function BottomSheet({ visible, onClose, title, children }: { visible: boolean; 
           ) : null}
           {children}
         </Animated.View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -172,7 +174,7 @@ export function Dialog({ visible, onClose, title, children }: { visible: boolean
   const { t } = useLocale();
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.dialogRoot}>
+      <GestureHandlerRootView style={styles.dialogRoot}>
         <Pressable style={[styles.scrim, { backgroundColor: colors.scrim }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t("common.close")} />
         <View accessibilityViewIsModal accessibilityRole="alert" style={[styles.dialog, elevation(2)]}>
           {title ? (
@@ -182,7 +184,7 @@ export function Dialog({ visible, onClose, title, children }: { visible: boolean
           ) : null}
           {children}
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

@@ -24,6 +24,8 @@ export type Palette = {
   accentStrong: string;
   /** The logo's bright blue: illustration and brand marks only, never text or a fill behind text (2.98:1). */
   brand: string;
+  /** Icons on the brand gradient (the assistant button): white in both themes. */
+  onBrand: string;
   /** Accent at state opacities — pressed / selected / focus are all variations of the one accent. */
   accentSoft: string;
   accentPressed: string;
@@ -58,6 +60,7 @@ const light: Palette = {
   onAccent: "#FFFFFF",
   accentStrong: "#005BB5",
   brand: "#1D99FF",
+  onBrand: "#FFFFFF",
   accentSoft: "rgba(10, 111, 214, 0.10)",
   accentPressed: "rgba(10, 111, 214, 0.16)",
   accentFocus: "rgba(10, 111, 214, 0.40)",
@@ -88,6 +91,7 @@ const dark: Palette = {
   onAccent: "#04111F",
   accentStrong: "#4DB0FF",
   brand: "#1D99FF",
+  onBrand: "#FFFFFF",
   accentSoft: "rgba(77, 176, 255, 0.14)",
   accentPressed: "rgba(77, 176, 255, 0.22)",
   accentFocus: "rgba(77, 176, 255, 0.50)",
@@ -109,7 +113,8 @@ export const palettes: Record<ColorScheme, Palette> = { light, dark };
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 } as const;
 
-export const radii = { sm: 8, md: 12, lg: 20, pill: 999 } as const;
+/** UI v3 adds xl (hero cards, the tab bar, sheets). */
+export const radii = { sm: 8, md: 12, lg: 20, xl: 28, pill: 999 } as const;
 
 /** Disabled controls and locked features (shown dimmed, components/LockedFeature.tsx). */
 export const opacity = { disabled: 0.45 } as const;
@@ -199,9 +204,27 @@ export const motion = {
   spring: {
     press: { damping: 22, stiffness: 340, mass: 0.6 },
     gentle: { damping: 20, stiffness: 180, mass: 1 },
+    /** UI v3: the tab indicator, segmented controls, a dragged tile settling. */
+    snappy: { damping: 18, stiffness: 260, mass: 0.7 },
   },
   /** How long a snackbar stays; longer when it offers Undo. */
   snackbar: { plain: 3500, withAction: 6000 },
   /** First-render list entrance: fade + translateY, first N items only. */
   stagger: { step: 40, maxItems: 8, offsetY: 8 },
 } as const;
+
+/**
+ * UI v3 Plan timeline (docs/design.md "Plan"): height of an hour, the hours gutter, the smallest tile, the hour the
+ * day scrolls to when "now" isn't on it, and how long a press lifts a tile to drag it.
+ */
+export const timeline = { hourHeight: 64, gutter: 56, minTile: 22, firstHour: 7, liftDelay: 280 } as const;
+
+/** UI v3 tab bar: the floating bar's height and the raised assistant button in its centre. */
+export const tabBar = { height: 64, center: 58, margin: 12 } as const;
+
+/** A hex colour with alpha (tile fills from category / priority colours). */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}

@@ -9,6 +9,9 @@ const COURSE_CODE = /\b[A-Z]{2,5}[-\s]?\d{3}[A-Z]?\b/g;
  * course codes and tags of open tasks. Case-insensitive, no repeats. Never task titles: the hints go to the
  * OS speech service, and a title can hold personal or health details ("Call mom's doctor about results").
  */
+/** Recogniser language per app language. */
+export const SPEECH_LANG: Record<string, string> = { en: "en-US", ur: "ur-PK", ar: "ar-SA", es: "es-ES", fr: "fr-FR", zh: "zh-CN", hi: "hi-IN" };
+
 export function speechHints(tasks: Task[], max = MAX_SPEECH_HINTS): string[] {
   const open = tasks.filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS");
   const places = open.flatMap((t) => (t.locations ?? []).map((l) => l.name));

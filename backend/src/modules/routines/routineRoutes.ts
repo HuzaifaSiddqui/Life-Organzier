@@ -108,10 +108,10 @@ routineRouter.post(
   "/occurrences/:id/reschedule",
   handle(async (req, res) => {
     const body = parseBody(
-      z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), time: z.string().refine((v) => parseClock(v) !== null).nullable().optional() }),
+      z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), time: z.string().refine((v) => parseClock(v) !== null).nullable().optional(), confirmLocked: z.boolean().optional() }),
       req.body,
     );
-    const occurrence = await rescheduleOccurrence(req.user.id, req.settings.timezone, req.params.id, body.date, body.time ?? null);
+    const occurrence = await rescheduleOccurrence(req.user.id, req.settings.timezone, req.params.id, body.date, body.time ?? null, body.confirmLocked ?? false);
     if (!occurrence) throw new HttpError(404, "OCCURRENCE_NOT_FOUND", "Occurrence not found");
     sendSuccess(res, { occurrence }, "Occurrence rescheduled");
   }),

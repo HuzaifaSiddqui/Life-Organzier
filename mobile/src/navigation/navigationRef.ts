@@ -2,6 +2,9 @@ import { createNavigationContainerRef } from "@react-navigation/native";
 
 export const navigationRef = createNavigationContainerRef();
 
+/** Kept in step with TAB_ROUTES in MainStack.tsx (not imported: that file imports every screen). */
+const TAB_NAMES = new Set(["Dashboard", "Plan", "TaskList", "Profile"]);
+
 let pending: { screen: string; params?: Record<string, unknown> } | null = null;
 
 /**
@@ -13,7 +16,9 @@ export function openAppScreen(screen: string, params?: Record<string, unknown>):
     pending = { screen, params };
     return;
   }
-  (navigationRef.navigate as (name: string, params?: object) => void)("App", { screen, params });
+  // The tab screens (Today, Plan, Insights, Me) live inside "Tabs".
+  const inner = TAB_NAMES.has(screen) ? { screen: "Tabs", params: { screen, params } } : { screen, params };
+  (navigationRef.navigate as (name: string, params?: object) => void)("App", inner);
 }
 
 /** Called from NavigationContainer onReady. */

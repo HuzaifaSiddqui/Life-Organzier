@@ -117,7 +117,7 @@ Fonts: **Inter** (400/500/600/700) and **Noto Nastaliq Urdu** (400/700), loaded 
 
 ### Radii
 
-`sm 8` (small buttons, skeletons) · `md 12` (cards, buttons, inputs, snackbar) · `lg 20` (sheet top corners) · `pill 999` (chips, icon buttons, badges).
+`sm 8` (small buttons, skeletons, timeline tiles + 2) · `md 12` (cards, buttons, inputs, snackbar) · `lg 20` (sheet top corners, the tab pill) · `xl 28` (UI v3: the tab bar, hero cards) · `pill 999` (chips, icon buttons, badges, segmented control).
 
 ### Elevation (`useTheme().elevation(level)`)
 
@@ -184,6 +184,162 @@ whatever the device.
 - **Keyboard shortcuts (web):** Ctrl/⌘+N new task, Ctrl/⌘+K assistant (`shortcutFor`, tested). Esc closes dialogs.
 - **Phone-only controls are hidden on web** (`constants/platformFeatures`): voice input, location reminders, map.
   The phone calendar card hides itself because its feature reports off.
+
+### UI v3 tokens (17 Nov 2026)
+
+| Token | Value | Use |
+|---|---|---|
+| `onBrand` (palette) | `#FFFFFF` both themes | Icons on the brand gradient (the assistant button) |
+| `motion.spring.snappy` | damping 18, stiffness 260, mass 0.7 | Tab pill, segmented thumb, a dragged tile settling |
+| `timeline` | hourHeight 64, gutter 56, minTile 22, firstHour 7, liftDelay 280 ms | Plan time grid |
+| `tabBar` | height 64, center 58, margin 12 | Floating tab bar and its raised assistant button |
+| `withAlpha(hex, a)` | helper | Tile fills from category colours (0.16; done / skipped 0.08) |
+
+### Navigation (UI v3)
+
+```
+┌────────────────────────────────────────────┐
+│  Today    Plan     ( ✦ )    Insights    Me  │  floating bar, radii.xl, elevation 2
+└────────────────────────────────────────────┘
+```
+
+- A real tab navigator (`@react-navigation/bottom-tabs`, `MainStack.tsx` → `MainTabs`): tabs keep their screens and
+  scroll position, cross-fade on switch, and Back leaves the app from a tab instead of walking through tab history.
+- `TabBar` (`components/TabBar.tsx`): an `accentSoft` pill slides to the active tab (`spring.snappy`); active icon +
+  label `accentStrong`, others `textTertiary`; label `label` 11 sp capped at 1.15×. Centre: the assistant, a 58 dp
+  circle with the logo gradient (`brand` → `accent`), a 3 dp `surface` ring and a `sparkle` icon; tap opens the chat,
+  hold opens it listening. The bar hides (fade + slide) while the keyboard is up; on wide windows the Sidebar replaces it.
+- Opened on top of the tabs: detail screens slide in from the right; the assistant and Add task slide up.
+- The task list (`TaskList`) is no longer a tab: Plan's list icon and Today open it (with a back button).
+
+### Plan (UI v3)
+
+The user's time, calendar style (`screens/plan/PlanScreen.tsx`, rules in `utils/timeline.ts`, tested).
+
+```
+ November ⌄                     (sync) [Today] (≡)
+ [  Day  |  Week  |  Month  ]          segmented, thumb springs
+  M   T   W   T   F   S   S            week strip: swipe = other week
+ 16 (17) 18  19  20  21  22            chosen day filled, today ringed, dot = something open (red = overdue)
+ ANY TIME  [Pay fees] [Call bank]      untimed items of the day (chips)
+ ─────────────────────────────────
+  9 AM ┃ Physics lecture   9–10:30     tiles: category tint + 3 dp bar; routines violet with a repeat icon
+ 10 AM ┃
+ 11 AM ●━━━━━━━━━━━━━━━━━━━━━━━━━━     now line (danger), moves every minute
+       ┆ Free 11:00 AM – 2:00 PM ┆     dashed hint inside the working day (Day view)
+  2 PM ┃ Report  Due 2:00 PM  ═       bottom handle = drag the length
+```
+
+- **Tiles**: tap opens the task (or the routine); hold ~0.3 s lifts it (scale 1.03, shadow) and it follows the finger,
+  snapping to 15 minutes, and to days in Week view, with a light tick each step and the new time in a dark badge above
+  it. Release saves at once (local first) and shows "Moved to 10:15 AM" with Undo. A task's bottom edge drags its
+  length (deadline tasks: their duration; planned blocks: their end). Overlaps sit side by side. Done = struck through
+  and faded; overdue = red bar. Screen readers: adjustable (±15 min), activate opens.
+- **Fixed-time routines** show a `lock` instead of `repeat`; dropping one asks "“DevOps” has a fixed time — Move just
+  this one to Tue 2:00 PM?" (Move this one / Cancel); Cancel or a failure glides the block back (`resetKey`). Very
+  narrow tiles (< 30 dp, many overlaps in Week view) show only their colour; resizing is Day view only.
+- **Empty slot**: tap = Add task at that half hour on that day. `+` adds on the chosen day.
+- **Week view untimed items**: a small `accentSoft` count pill under each day ("2"); tap = that day in Day view.
+- **Week**: seven columns, today's column lightly tinted; tiles show titles only when narrow.
+- **Month**: six weeks; up to three items per day as coloured bars and "+N more"; overdue dates red; tap = that day.
+  Swipe sideways for another month; the title (month ⌄) toggles Month too.
+- Offline: tasks come from the phone's store, routines from the last saved copy (`useCachedQuery`).
+
+### Today (UI v3)
+
+What now, and what's left today (`DashboardScreen`, rules in `utils/today.ts`, tested).
+
+- Header on a soft logo-blue wash: date, greeting (`title1`, one line, shrinks to fit; first name capitalised), `DayRing` (progress ring,
+  300 ms ease-out, green when all done) with "N left today" and "Xh still planned"; chips for the place ("At University", opens a sheet of places) and the learned focus peak.
+- Decisions, not paragraphs (UI v3.1): shared-task invitations; one **Catch up** card for everything overdue ("33 tasks
+  slipped — Sort them in a minute", danger tone, opens Catch up); then **one nudge at a time** (`NudgeCard`: icon
+  square in the tone's colour, bold one-line title, at most two lines, one main action + "Not now", a "1/3" badge when
+  more wait). Left out: missed fixed-time routines (an FYI; the next one is planned) and per-task overdue rows (Catch
+  up). Rules in `utils/today.ts` (`nudgesFrom`, tested).
+- Next up: one card on the accent → accentStrong gradient (`radii.xl`), white title, and one row of three equal pills:
+  Start (white), Done, Later (translucent; Later = remind in 1 h); "then: …".
+- Today's agenda: the same items as Plan (`useDayData`), in time order with a red "Now · 1:05 PM" divider between what
+  has started and what's next, then "Any time". `AgendaRow`: time column, colour bar (Plan's colour), title + meta, a
+  28 dp round tick with a 48 dp target (pops on tick); tasks save in the phone's store, routines through the outbox,
+  both with Undo.
+- Check-in card (mood chips) when due; Suggestions as `NudgeCard`s ("An idea from your patterns", the confidence as a
+  badge, accept / Not now; at most 3); Tomorrow (evening).
+
+### Catch up (UI v3.1)
+
+Overdue tasks sorted one at a time (`CatchUpScreen`, rules in `utils/catchUp.ts`, tested). Opens sliding up.
+- Top: close, "Catch up", "8 of 33" and a success-coloured progress bar.
+- A deck: the current card (elevation 2, `radii.xl`: priority, category pill, `display` title, "Was due …" in danger,
+  notes) over the next one (scaled 0.94, lifting to full size as the top card is dragged) and a third ghost card.
+- Drag: the card follows and tilts (±12°); a green "DONE" stamp fades in to the right, an amber "TOMORROW" stamp to the
+  left; past 110 dp (or a fling) it flies off and the choice is saved; otherwise it springs back.
+- Buttons: Today, Tomorrow, Next week, Pick a date (2 × 2, icon + label), then Drop it (ghost, danger icon), Skip
+  (moves the card to the end), Done (primary). Non-swipe choices drop the card downwards.
+- Today keeps the time if it's still ahead, else any time today; other dates keep the time; a stale planned block is
+  cleared. Every choice: Snackbar with Undo (the card comes back).
+- Finish: a success circle pops in (`ZoomIn` spring), "You're all caught up", "Back to Today".
+- Removed from v2: the ask bar and Task / Upload buttons (the ✦ button and "+" do this), QuickTiles, Organize.
+
+### Tasks (UI v3)
+
+Everything, dated or not (`TaskListScreen`, rules in `utils/taskViews.ts`, tested).
+
+- Header: title, search icon (expands into a pill field), filter icon with a count badge (sheet: sort, categories with
+  colour dots, tags with Match all / any, Clear all, "Show N tasks").
+- Smart views (chips with counts): All, Today (with overdue), Upcoming, No date, Overdue (danger, only when any),
+  Done; plus the place chip.
+- Sections in cards: Overdue, Today, Tomorrow, This week, Later, No date, Done (counts on the right).
+- `TaskRow`: round tick (done), title (search highlights), one meta line (when · length · category · steps, red when
+  overdue), thin progress bar, priority flag for urgent / high, a small Start. Swipe right = Done (green), left =
+  Tomorrow (amber) with `ReanimatedSwipeable` (the icon grows with the drag); hold = action sheet (Done, Move to
+  tomorrow, Edit, Find time / Archive, Delete). Screen readers get the same actions.
+
+### Task detail (UI v3)
+
+Top bar (back, edit, ⋯). Priority + status pill, `display` title; a facts card (icon squares: due — red when overdue —,
+planned, length, category, type, place, tags, difficulty, source); notes; the overdue choices card; progress (big %,
+bar, 0–100 chips); steps (tick list + "Add a step" field, "Split into steps"); Find time (Book it / Not now). A bottom
+bar (elevation 2, `radii.xl` top corners) holds Start and Mark done / Reopen. ⋯ opens a sheet: Undo last change,
+Ask the assistant, Archive, Delete.
+
+### Me (UI v3)
+
+Avatar with a gradient ring, name, email, plan pill; "Your week" card (done count, on-time %, a bar per day, best hour;
+opens Insights); "Your things" 2 × 2 tiles (Routines, Mood, Documents, What I know); People & sharing (badge for what
+waits), Settings, Saved places; Sign out (outlined, danger).
+
+### Settings (UI v3)
+
+A hub of six rows (`SettingsHub`), each with an icon square, its name and a live summary: Account, Reminders,
+Connected apps, Your day and places, Categories and tags, Language and help. A row opens that group on its own page
+(`Settings` with `section`); the groups reuse the existing controls unchanged.
+
+### Hold-to-talk (UI v3)
+
+The ✦ button in the tab bar (`components/assistant/HoldToTalk.tsx`): **tap** opens the chat; **hold** (220 ms) listens
+in place: the button grows to 1.22× (spring), turns to a danger → brand gradient with a `mic` icon, and two `brand`
+rings pulse out from it (1.2 s, repeating; none with reduce motion). A card (`VoiceBubble`, elevation 2, `radii.xl`)
+rises above the bar: "Listening… let go to send" and the words as they come; on release "Working on it…", then the
+words in quotes and the assistant's reply with Close / Open chat (auto-hides after 9 s). Nothing heard: "Didn't catch
+that…". A crisis reply opens the chat.
+
+### Routines (UI v3)
+
+Top bar (back, title, help, "Add" `Button sm`). Today: a card list with the round tick (28 dp, 48 dp target), title,
+time · length, a `lock` for fixed-time routines, "Skip" (ghost). All routines: cards (`radii.lg`) with an icon square
+(`lock` or `repeat`), title, schedule in words, a 4 dp adherence bar (success ≥ 80 %, warning ≥ 50 %, else danger)
+with "Kept 86% of the last 14 · Reliable", and the on / off `Switch`. The routine form keeps its v2 layout.
+
+### Date and time pickers (UI v3)
+
+The system dialogs are replaced everywhere (`DueDateTimePickers` keep their props; `components/pickers`).
+- Field: icon + value in words ("Today", "Tue, 18 Nov", "9:00 AM") + chevron, 52 dp, hairline, `radii.md`.
+- Date sheet: quick chips (Today, Tomorrow, This weekend, Next week, No date), month with arrows and swipe, the chosen
+  day pops in (`ZoomIn` spring), today ringed, past days faded; a tap picks and closes.
+- Time sheet: the time in `display` type, quick chips (In 1 hour, Morning 9, Noon, Afternoon 3, Evening 6, Night 9),
+  three `Wheel`s (hour, minute in 5s keeping an off-step value, AM / PM) over an `accentSoft` band; rows curve
+  (rotateX ±24°/row, scale to 0.82, fade to 0.15), snap, and tick per row; Set / No time. Screen readers: adjustable.
+- Sheets have their own gesture root (`GestureHandlerRootView` in `Sheet` / `Dialog`) so swipes work inside the Modal.
 
 ## Components (`components/primitives`, re-exported from `components/ui`)
 
@@ -324,6 +480,18 @@ Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and 
 - **PR 1, colour (12 Nov 2026).** Only `theme/tokens.ts` holds colours. New tokens `accentStrong`, `brand`, `chartGrid`, `heat`. Use `colors.accent` for fills / borders / icons and `<Text color="accent">` (→ `accentStrong`) for text. Placeholders: `palette.muted` (legacy) or `colors.textTertiary`. Remove / tick marks are the `close` / `check` icons, never "✕" / "✓" text. Category colours offered in Settings are `palettes.light.category` (the curated 8). The native splash background (`app.json`, `#F6F5F2`) is unchanged: changing it needs a new build.
 
 ## Migration log
+
+**UI v3, phase 1 (navigation + Plan, 17 Nov 2026).** Real tab navigator with the floating `TabBar` (Today · Plan ·
+assistant · Insights · Me) replacing the per-screen `BottomNav` (deleted). New Plan screen (Day / Week / Month time
+grid, drag to move / resize with Undo, tap a slot to add). New primitive `Segmented`. New icons `sparkle`, `plan`,
+`today`, `list`, `grid`, `columns`, `chevronDown`, `drag`, `mic`. Tokens: `radii.xl`, `onBrand`, `spring.snappy`,
+`timeline`, `tabBar`, `withAlpha`. Sidebar gets Today and Plan. Copy `nav.today`, `nav.plan`, `plan.*` (en + ur).
+**UI v3, phase 2–4 (17 Nov 2026).** Tasks replaces Insights in the tab bar (Plan shows only dated items; Insights moves
+to Me's "Your week"). New Today, Tasks (+ `TaskRow`), Task detail, Me, Settings hub and custom pickers, all on
+primitives + `useTheme()` + `t()` (en + ur). New hooks / rules: `useDayData`, `utils/today.ts`, `utils/taskViews.ts`,
+`utils/pickers.ts` (tested). Icons: `more`, `flag`, `tag`, `undo`, `archive`, `layers`. Remaining legacy: the task form
+(Add / Edit), Routines, Mood, Insights, Memory, Assistant, Onboarding, auth screens, the Settings group pages' inner
+controls.
 
 **Desktop layout (12 Nov 2026).**
 - New tokens: `layout`, and web shadows in `elevation()`.

@@ -50,7 +50,8 @@ export async function updateRoutineOccurrence(id: string, status: RoutineOccurre
   scheduleReminderSync();
 }
 
-export async function rescheduleOccurrence(id: string, date: string, time: string | null): Promise<void> {
-  await apiPost(`/routines/occurrences/${id}/reschedule`, { date, time });
+/** `confirmLocked`: the user confirmed moving just this occurrence of a time-locked routine. */
+export async function rescheduleOccurrence(id: string, date: string, time: string | null, confirmLocked = false): Promise<void> {
+  await apiPost(`/routines/occurrences/${id}/reschedule`, { date, time, confirmLocked });
   scheduleReminderSync();
 }

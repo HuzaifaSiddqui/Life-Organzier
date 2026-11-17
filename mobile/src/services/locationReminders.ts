@@ -328,6 +328,9 @@ export async function setLocationRemindersEnabled(on: boolean): Promise<Permissi
  * creates, edits and deletes all write it) while the user is Pro and has the toggle on. Never opens the
  * permission dialog itself: a task with a place while reminders can't fire shows a "Grant" snackbar.
  */
+const PROMPT_AT_KEY = "life-organizer:location-prompt-at";
+const PROMPT_COOLDOWN_MS = 3 * 86400000;
+
 export function startLocationReminders(opts: { isPro: boolean }): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let seen: Set<string> | null = null;
@@ -345,6 +348,12 @@ export function startLocationReminders(opts: { isPro: boolean }): () => void {
     seen = new Set(located);
     if (fresh.length && enabled && !denied) await announceIfHere(fresh);
     if (!ask) return;
+    // At app start (no place just added) the hint comes at most every 3 days, not on every launch.
+    if (!fresh.length) {
+      const last = Number((await AsyncStorage.getItem(PROMPT_AT_KEY).catch(() => null)) ?? 0);
+      if (Date.now() - last < PROMPT_COOLDOWN_MS) return;
+    }
+    void AsyncStorage.setItem(PROMPT_AT_KEY, String(Date.now())).catch(() => undefined);
     // Access refused → "Grant"; access fine but the Settings toggle off → "Turn on". Both turn the toggle on.
     const label = await tr(denied ? "location.grant" : "location.enable");
     showLocationSnackbar({ text: await tr(denied ? "location.grantHint" : "location.enableHint"), action: { label, onPress: () => void setLocationRemindersEnabled(true) } });
