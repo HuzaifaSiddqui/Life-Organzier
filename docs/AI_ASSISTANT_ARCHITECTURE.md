@@ -174,7 +174,7 @@ topic switch) → NLU (rules → LLM if unsure) → handler → reply with cards
 The same engine serves the app chat, voice, and WhatsApp, so memory is shared across channels.
 
 **Medical advice (safety, no flag).** Right after the crisis check, a question asking for a dose, how much of a
-medicine, which medicine for a symptom, or whether medicines can be mixed (English and Roman Urdu;
+medicine, which medicine for a symptom, or whether medicines can be mixed (English only;
 `medicalQuestion` in `appQuestions.ts`) gets a fixed reply ("I can't give medical advice… ask a doctor or
 pharmacist. In an emergency, call 1122.") with a "Remind me to call the doctor" button. The model never answers it.
 Reminders and routines about medicine ("remind me to take my medicine at 9") are unchanged. The chat-reply prompt
