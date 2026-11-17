@@ -1,3 +1,4 @@
+import { legacyFor, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { useState, type ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type TextStyle } from "react-native";
 import { usePreferences } from "../context/PreferencesContext";
@@ -129,29 +130,39 @@ const font = (v: keyof typeof typeScale): TextStyle => {
  * @deprecated Static light-theme styles for screens not yet migrated (docs/design.md migration log).
  * Migrated screens use primitives + useTheme() instead.
  */
-export const ui = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: light.canvas },
+export function makeUi({ p }: Legacy) {
+  return StyleSheet.create({
+  screen: { flex: 1, backgroundColor: p.canvas },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 120 },
-  h1: { ...font("title1"), color: light.text },
-  h2: { ...font("headline"), color: light.text },
-  body: { ...font("body"), color: light.text },
-  meta: { ...font("caption"), color: light.textSecondary },
+  h1: { ...font("title1"), color: p.text },
+  h2: { ...font("headline"), color: p.text },
+  body: { ...font("body"), color: p.text },
+  meta: { ...font("caption"), color: p.textSecondary },
   row: { flexDirection: "row", alignItems: "center" },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   input: {
     ...font("body"),
     minHeight: 48,
     borderWidth: 1,
-    borderColor: light.hairline,
+    borderColor: p.hairline,
     borderRadius: radii.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: light.surface,
-    color: light.text,
+    backgroundColor: p.surface,
+    color: p.text,
   },
-  label: { ...font("label"), color: light.textSecondary, marginBottom: 6 },
-  error: { ...font("callout"), color: light.danger.fg },
+  label: { ...font("label"), color: p.textSecondary, marginBottom: 6 },
+  error: { ...font("callout"), color: p.danger.fg },
 });
+}
+
+/** @deprecated Light-theme legacy styles for module-level use; inside components use `useUi()`. */
+export const ui = makeUi(legacyFor("light"));
+
+/** The legacy `ui.*` styles for the current theme (dark mode). */
+export function useUi() {
+  return useLegacyStyles(makeUi);
+}
 
 const styles = StyleSheet.create({
   flexShrink: { flexShrink: 1 },

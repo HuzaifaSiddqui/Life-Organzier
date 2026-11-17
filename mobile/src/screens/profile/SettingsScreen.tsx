@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { signOutGuest } from "../../services/guest";
 import { LockedFeature } from "../../components/LockedFeature";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -6,7 +7,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, SectionTitle, Snackbar, ui } from "../../components/ui";
+import { Button, Card, Chip, SectionTitle, Snackbar, ui, useUi } from "../../components/ui";
 import { Icon } from "../../components/icons/Icon";
 import { colors, palette } from "../../constants/theme";
 import { palettes } from "../../theme/tokens";
@@ -15,6 +16,8 @@ import { usePreferences } from "../../context/PreferencesContext";
 import { useLocale } from "../../i18n/LocaleProvider";
 import type { StringKey } from "../../i18n/strings";
 import { SettingsHub } from "./SettingsHub";
+import { Segmented } from "../../components/primitives";
+import { useTheme } from "../../theme/ThemeProvider";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -70,6 +73,10 @@ export type SettingsSection = "account" | "reminders" | "connected" | "day" | "l
  * own page (this screen with `section`), so nobody scrolls past twelve sections to find one switch.
  */
 export function SettingsScreen({ navigation, route }: Props) {
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
+  const ui = useUi();
   const section = route.params?.section;
   const show = (k: SettingsSection) => section === k;
   const { firebaseUser, dbUser, patchDbUser } = useAuth();
@@ -184,6 +191,21 @@ export function SettingsScreen({ navigation, route }: Props) {
         ) : null}
         {show("language") ? (
           <>
+        {/* UI v3: dark mode. System follows the phone; the choice is kept on this device. */}
+        <SectionTitle title={t("settings.appearance")} />
+        <Card style={{ gap: 10 }}>
+          <Segmented
+            accessibilityLabel={t("settings.appearance")}
+            value={themeMode}
+            onChange={setThemeMode}
+            options={[
+              { value: "system", label: t("settings.theme.system") },
+              { value: "light", label: t("settings.theme.light") },
+              { value: "dark", label: t("settings.theme.dark") },
+            ]}
+          />
+          <Text style={styles.meta}>{t("settings.themeHint")}</Text>
+        </Card>
         <SectionTitle title={platformFeatures.voiceInput ? "Language & voice" : "Language"} />
         <Card style={{ gap: 10 }}>
           <View style={ui.wrap}>
@@ -652,7 +674,7 @@ export function SettingsScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, lineHeight: 17 },

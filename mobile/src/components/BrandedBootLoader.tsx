@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { LogoMark } from "./branding/LogoMark";
 import { colors, radii, shadow } from "../constants/theme";
@@ -7,6 +8,8 @@ type Props = {
 };
 
 export function BrandedBootLoader({ message }: Props) {
+  const { colors } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   return (
     <View style={styles.wrap}>
       <LogoMark size={44} />
@@ -18,7 +21,7 @@ export function BrandedBootLoader({ message }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   wrap: {
     alignItems: "center",
     gap: 20,

@@ -1,9 +1,10 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { DeadlineReviewItem, type ReviewFlags } from "../DeadlineReviewItem";
 import { InstructionPanel } from "../DocumentInstruction";
 import { DocumentTextView } from "../DocumentTextView";
-import { Button, Card, Chip, SectionTitle, ui } from "../ui";
+import { Button, Card, Chip, SectionTitle, ui, useUi } from "../ui";
 import { Icon } from "../icons/Icon";
 import { colors, palette } from "../../constants/theme";
 import { useLocale } from "../../i18n/LocaleProvider";
@@ -78,6 +79,9 @@ export function DocumentReview({
   onToast: (text: string) => void;
   onAddManually: () => void;
 }) {
+  const ui = useUi();
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const { t } = useLocale();
   const [result, setResult] = useState<ProcessResult>(initial);
   const [deadlines, setDeadlines] = useState<EditableDeadline[]>(() => initial.extracted.deadlines.map(toEditable));
@@ -322,7 +326,7 @@ export function DocumentReview({
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
   rowBetween: { flexDirection: "row", alignItems: "center", gap: 10 },
   box: { width: 26, height: 26, borderRadius: 7, borderWidth: 2, borderColor: colors.primary, alignItems: "center", justifyContent: "center" },

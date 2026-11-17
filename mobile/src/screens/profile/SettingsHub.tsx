@@ -19,7 +19,7 @@ const LANGUAGE_NAMES: Record<string, string> = { en: "English", ur: "اردو", 
  * people see their answer without opening anything.
  */
 export function SettingsHub({ onOpen }: { onOpen: (s: SettingsSection) => void }) {
-  const { colors, radii, spacing } = useTheme();
+  const { colors, radii, spacing, mode } = useTheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
@@ -41,7 +41,7 @@ export function SettingsHub({ onOpen }: { onOpen: (s: SettingsSection) => void }
     { key: "connected", icon: "globe", summary: t("settings.hub.connected") },
     { key: "day", icon: "today", summary: settings ? t("settings.hub.day", { work: range(settings.workStart, settings.workEnd), quiet: range(settings.quietStart, settings.quietEnd) }) : "" },
     { key: "labels", icon: "tag", summary: t("settings.hub.labels", { count: categories.length }) },
-    { key: "language", icon: "speaker", summary: LANGUAGE_NAMES[settings?.language ?? "en"] ?? settings?.language ?? "" },
+    { key: "language", icon: "speaker", summary: `${LANGUAGE_NAMES[settings?.language ?? "en"] ?? settings?.language ?? ""} · ${t(`settings.theme.${mode}` as StringKey)}` },
   ];
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: insets.bottom + spacing.xxl }}>

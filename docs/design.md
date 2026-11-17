@@ -481,6 +481,16 @@ Per UI v2 PR: what changed for whoever builds the next screen. Audit, flows and 
 
 ## Migration log
 
+**UI v3, dark mode (17 Nov 2026).** `DARK_MODE_READY` on. Appearance: System / Light / Dark (`Segmented`) in Settings
+→ Language, look and help (hub summary shows it). Legacy screens (26 files on `constants/theme`, 11 on `ui.*`) follow
+the theme through `theme/legacy.ts`: `useLegacy()` gives `colors` / `palette` for the current palette, a screen's
+module-level styles became `make_styles(legacy)` read with `useLegacyStyles()` (built once per theme, shared), `ui.*`
+via `useUi()`, the task-form field styles via `useTaskFormStyles()`; charts, the navigation container theme and the
+window background follow the theme too. The Next up card keeps the light theme's deep blues in both themes (white text
+stays AA). Android: `userInterfaceStyle: "automatic"` and `plugins/withNavBarContrast.js` (no system scrim behind the
+3-button navigation bar, so it shows the canvas). Converting those screens to primitives stays open (visual parity
+already holds in both themes).
+
 **UI v3, phase 1 (navigation + Plan, 17 Nov 2026).** Real tab navigator with the floating `TabBar` (Today · Plan ·
 assistant · Insights · Me) replacing the per-screen `BottomNav` (deleted). New Plan screen (Day / Week / Month time
 grid, drag to move / resize with Undo, tap a slot to add). New primitive `Segmented`. New icons `sparkle`, `plan`,

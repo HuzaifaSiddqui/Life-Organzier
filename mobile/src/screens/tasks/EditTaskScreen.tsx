@@ -1,8 +1,9 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { ui } from "../../components/ui";
+import { ui, useUi } from "../../components/ui";
 import { palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -14,6 +15,8 @@ import { TaskForm, toPayload, valuesFromTask, type TaskFormValues } from "./Task
 type Props = NativeStackScreenProps<MainStackParamList, "EditTask">;
 
 export function EditTaskScreen({ navigation, route }: Props) {
+  const { palette } = useLegacy();
+  const ui = useUi();
   const { taskId } = route.params;
   const [initial, setInitial] = useState<TaskFormValues | null>(null);
   const [locations, setLocations] = useState<TaskLocation[]>([]);

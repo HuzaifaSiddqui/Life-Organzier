@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { OutboxRefused, send, type SendInput } from "../../services/outbox";
 import { useCacheLoader } from "../../hooks/useCachedQuery";
 import { useFocusEffect } from "@react-navigation/native";
@@ -5,7 +6,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, ConfidenceMeter, EmptyState, HelpButton, SectionTitle, Snackbar, ui } from "../../components/ui";
+import { Button, Card, Chip, ConfidenceMeter, EmptyState, HelpButton, SectionTitle, Snackbar, ui, useUi } from "../../components/ui";
 import { colors, palette } from "../../constants/theme";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage, isNetworkError } from "../../services/api";
@@ -31,6 +32,9 @@ function pretty(content: string): string {
 }
 
 export function MemoryScreen({ navigation }: Props) {
+  const { palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
+  const ui = useUi();
   const [memories, setMemories] = useState<MemoryItem[] | null>(null);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [draft, setDraft] = useState("");
@@ -207,7 +211,7 @@ export function MemoryScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   action: { color: palette.ai, fontFamily: "Inter_600SemiBold", fontSize: 13 },

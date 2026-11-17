@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { OutboxRefused, send, type SendInput } from "../../services/outbox";
 import { readCache, writeCache } from "../../services/localCache";
 import { scheduleReminderSync } from "../../services/reminders";
@@ -7,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueDateTimePickers";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
+import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui, useUi } from "../../components/ui";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -79,6 +80,9 @@ function adherence(r: Routine): { pct: number; total: number } | null {
 }
 
 export function RoutineScreen({ navigation, route }: Props) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
+  const ui = useUi();
   const { t } = useLocale();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -490,7 +494,7 @@ export function RoutineScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, paddingVertical: 6 },

@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, G, Path, Rect } from "react-native-svg";
@@ -10,9 +11,11 @@ import { palettes } from "../../theme/tokens";
  * sequential single-hue heatmap, values always reachable by tap (no color-only identity).
  */
 
-const BAR_HUE = palettes.light.accent; // legacy chart: light theme, like the screens around it
 
 export function BarChart({ data, height = 140, unit = "" }: { data: Array<{ label: string; value: number }>; height?: number; unit?: string }) {
+  // Charts follow the current theme (dark mode).
+  const themeP = useLegacy().p;
+  const styles = useLegacyStyles(make_styles);
   const [active, setActive] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
   const max = Math.max(1, ...data.map((d) => d.value));
@@ -24,7 +27,7 @@ export function BarChart({ data, height = 140, unit = "" }: { data: Array<{ labe
       <Text style={styles.readout}>{shown ? `${shown.label}: ${shown.value}${unit}` : "Tap a bar to see its value"}</Text>
       <Svg width={width} height={height}>
         {[0.5, 1].map((f) => (
-          <Rect key={f} x={0} y={height - f * (height - 4)} width={width} height={1} fill={palettes.light.chartGrid} />
+          <Rect key={f} x={0} y={height - f * (height - 4)} width={width} height={1} fill={themeP.chartGrid} />
         ))}
         {data.map((d, i) => {
           const h = Math.max(d.value > 0 ? 3 : 0, (d.value / max) * (height - 6));
@@ -35,7 +38,7 @@ export function BarChart({ data, height = 140, unit = "" }: { data: Array<{ labe
             <G key={d.label + i}>
               <Path
                 d={`M${x},${height} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + barW - r},${y} Q${x + barW},${y} ${x + barW},${y + r} L${x + barW},${height} Z`}
-                fill={BAR_HUE}
+                fill={themeP.accent}
                 opacity={active === null || active === i ? 1 : 0.35}
               />
               <Rect x={x - gap / 2} y={0} width={barW + gap} height={height} fill="transparent" onPress={() => setActive(active === i ? null : i)} />
@@ -60,6 +63,9 @@ function arc(cx: number, cy: number, r: number, start: number, end: number): str
 
 /** Category share donut with a labelled values list (secondary encoding). */
 export function Donut({ data, size = 132 }: { data: Array<{ label: string; value: number; color: string }>; size?: number }) {
+  // Charts follow the current theme (dark mode).
+  const themeP = useLegacy().p;
+  const styles = useLegacyStyles(make_styles);
   const total = data.reduce((s, d) => s + d.value, 0);
   const r = size / 2 - 10;
   let angle = -Math.PI / 2;
@@ -67,7 +73,7 @@ export function Donut({ data, size = 132 }: { data: Array<{ label: string; value
   return (
     <View style={styles.donutRow}>
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={palettes.light.chartGrid} strokeWidth={14} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={themeP.chartGrid} strokeWidth={14} fill="none" />
         {total > 0 &&
           data.map((d) => {
             const sweep = (d.value / total) * Math.PI * 2;
@@ -98,10 +104,12 @@ export function Donut({ data, size = 132 }: { data: Array<{ label: string; value
 }
 
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
-const HEAT = palettes.light.heat;
 
 /** Completions by weekday × hour (sequential, single hue). Tap a cell for its count. */
 export function Heatmap({ grid }: { grid: number[][] }) {
+  // Charts follow the current theme (dark mode).
+  const themeP = useLegacy().p;
+  const styles = useLegacyStyles(make_styles);
   const [active, setActive] = useState<{ d: number; h: number } | null>(null);
   const max = Math.max(1, ...grid.flat());
   const hours = Array.from({ length: 18 }, (_, i) => i + 6);
@@ -120,7 +128,7 @@ export function Heatmap({ grid }: { grid: number[][] }) {
               <Pressable
                 key={h}
                 onPress={() => setActive({ d, h })}
-                style={[styles.cell, { backgroundColor: HEAT[step] }, active?.d === d && active.h === h && styles.cellActive]}
+                style={[styles.cell, { backgroundColor: themeP.heat[step] }, active?.d === d && active.h === h && styles.cellActive]}
               />
             );
           })}
@@ -135,7 +143,7 @@ export function Heatmap({ grid }: { grid: number[][] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   readout: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, marginBottom: 6 },
   axisRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
   axis: { fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textMuted },

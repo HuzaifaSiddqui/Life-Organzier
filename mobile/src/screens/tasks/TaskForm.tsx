@@ -1,10 +1,11 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { useTheme } from "../../theme/ThemeProvider";
 import { LockedFeature } from "../../components/LockedFeature";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TaskFormDueDateRow, TaskFormDueTimeRow } from "../../components/DueDateTimePickers";
-import { Button, Card, Chip, ui } from "../../components/ui";
+import { Button, Card, Chip, ui, useUi } from "../../components/ui";
 import { Icon } from "../../components/icons/Icon";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -174,6 +175,9 @@ export function TaskForm({
   /** Shown under the form, above the button (the new-task screen's "Share with"). */
   extra?: ReactNode;
 }) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
+  const ui = useUi();
   const { categories, settings, isPro } = usePreferences();
   const [v, setV] = useState<TaskFormValues>(initial);
   const [busy, setBusy] = useState(false);
@@ -539,7 +543,7 @@ export function TaskForm({
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   content: { padding: 16, gap: 14, paddingBottom: 24 },
   moreRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48 },
   footer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 8 },

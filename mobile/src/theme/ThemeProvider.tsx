@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { NavigationBar } from "expo-navigation-bar";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform, useColorScheme } from "react-native";
@@ -8,10 +9,10 @@ import { elevation, motion, palettes, radii, spacing, typeScale, type ColorSchem
 export type ThemeMode = "system" | "light" | "dark";
 
 /**
- * Dark mode stays off until every screen is migrated to the token system (see docs/design.md
- * migration log) — otherwise unmigrated light screens would sit inside dark chrome.
+ * Dark mode (UI v3): on. Every screen follows the theme, migrated ones through useTheme() and the rest through the
+ * legacy names built from the current palette (theme/legacy.ts).
  */
-const DARK_MODE_READY = false;
+const DARK_MODE_READY = true;
 
 const STORAGE_KEY = "ui.themeMode";
 
@@ -65,6 +66,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 
   const bars = scheme === "dark" ? "light" : "dark";
+  // The window behind the app (seen during transitions and the keyboard) matches the canvas.
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(palettes[scheme].canvas).catch(() => undefined);
+  }, [scheme]);
   return (
     <ThemeContext.Provider value={value}>
       <StatusBar style={bars} />

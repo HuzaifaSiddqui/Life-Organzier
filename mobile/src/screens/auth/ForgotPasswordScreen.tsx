@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
@@ -27,6 +28,8 @@ type FormValues = z.infer<typeof schema>;
 type Props = NativeStackScreenProps<AuthStackParamList, "ForgotPassword">;
 
 export function ForgotPasswordScreen({ navigation }: Props) {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -103,7 +106,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,

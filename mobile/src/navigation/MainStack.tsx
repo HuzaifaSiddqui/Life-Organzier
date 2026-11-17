@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { DocumentReviewScreen } from "../screens/documents/DocumentReviewScreen";
 import { CreateAccountScreen } from "../screens/auth/CreateAccountScreen";
 import { StyleSheet, View } from "react-native";
@@ -101,6 +102,7 @@ const Tab = createBottomTabNavigator<TabParamList>();
 const RISE = new Set(["AddTask", "Assistant", "CatchUp"]);
 
 function MainTabs() {
+  const { colors } = useLegacy();
   const reduceMotion = useReducedMotion();
   return (
     <Tab.Navigator
@@ -121,6 +123,8 @@ function MainTabs() {
 }
 
 export function MainStack() {
+  const { colors } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const { isWide } = useLayout();
   // Desktop layout (docs/design.md): the same stack beside a start-side Sidebar, reading width capped. The tree has the
   // same shape either way, so resizing a window across `layout.wideMin` keeps the navigation state.
@@ -136,13 +140,14 @@ export function MainStack() {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   row: { flex: 1, flexDirection: "row" },
   flex: { flex: 1 },
   capped: { width: "100%", maxWidth: layout.contentMax, alignSelf: "center" },
 });
 
 function Screens() {
+  const { colors } = useLegacy();
   const reduceMotion = useReducedMotion();
   return (
     <Stack.Navigator

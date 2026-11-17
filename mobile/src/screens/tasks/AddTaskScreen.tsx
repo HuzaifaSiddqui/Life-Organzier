@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { ScreenHeader } from "../../components/ScreenHeader";
-import { ui } from "../../components/ui";
+import { ui, useUi } from "../../components/ui";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { ShareWithField, type ShareValue } from "../../components/collab/ShareWithField";
 import { apiErrorCode, getApiErrorMessage, isNetworkError } from "../../services/api";
@@ -19,6 +19,7 @@ import { EMPTY_VALUES, TaskForm, toPayload, type TaskFormValues } from "./TaskFo
 type Props = NativeStackScreenProps<MainStackParamList, "AddTask">;
 
 export function AddTaskScreen({ navigation, route }: Props) {
+  const ui = useUi();
   const prefill = route.params?.prefill;
   const places = useRef<SavedLocation[]>([]);
   const { t } = useLocale();

@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../../theme/legacy";
 import { reload, sendEmailVerification, signOut } from "firebase/auth";
 import { useCallback, useState } from "react";
 import {
@@ -18,6 +19,8 @@ import { colors, radii, shadow, palette } from "../../constants/theme";
 
 /** Shown from root when Firebase user exists but email is not verified yet. */
 export function EmailVerificationScreen() {
+  const { colors } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const { firebaseUser, refreshProfile } = useAuth();
   const email = firebaseUser?.email ?? "your email";
   const [busy, setBusy] = useState<"resend" | "reload" | "signout" | null>(null);
@@ -147,7 +150,7 @@ export function EmailVerificationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bg,

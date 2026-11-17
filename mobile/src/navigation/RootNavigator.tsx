@@ -1,3 +1,4 @@
+import { useLegacy, useLegacyStyles, type Legacy } from "../theme/legacy";
 import { canUseApp } from "../utils/guest";
 import { OutboxNotices } from "../components/OutboxNotices";
 import { NavigationContainer, DefaultTheme, type Theme } from "@react-navigation/native";
@@ -34,23 +35,27 @@ import { AuthStack } from "./AuthStack";
 import { MainStack } from "./MainStack";
 import { flushPendingNavigation, navigationRef } from "./navigationRef";
 
-/** Explicit `fonts` avoids incomplete theme objects that break navigation internals on some setups. */
-const theme: Theme = {
-  dark: DefaultTheme.dark,
-  fonts: DefaultTheme.fonts,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.bg,
-    primary: colors.primary,
-    card: colors.surface,
-    border: colors.border,
-    text: colors.text,
-  },
-};
+/** Explicit `fonts` avoids incomplete theme objects that break navigation internals on some setups. Follows the app theme. */
+function navTheme(l: Legacy): Theme {
+  return {
+    dark: l.scheme === "dark",
+    fonts: DefaultTheme.fonts,
+    colors: {
+      ...DefaultTheme.colors,
+      background: l.colors.bg,
+      primary: l.colors.primary,
+      card: l.colors.surface,
+      border: l.colors.border,
+      text: l.colors.text,
+    },
+  };
+}
 
 const Stack = createNativeStackNavigator();
 
 function SyncErrorScreen() {
+  const { colors, palette } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const { refreshProfile, firebaseUser } = useAuth();
   const [ipDraft, setIpDraft] = useState("");
   const [hint, setHint] = useState<string | null>(null);
@@ -141,6 +146,8 @@ function SyncErrorScreen() {
 }
 
 export function RootNavigator() {
+  const { colors } = useLegacy();
+  const styles = useLegacyStyles(make_styles);
   const { firebaseUser, dbUser, bootstrapping, authReady } = useAuth();
   // Finding the server and syncing the profile run in the background; the app opens as soon as
   // Firebase restores the session (no network needed). Only a first sign-in on this device, with
@@ -157,7 +164,7 @@ export function RootNavigator() {
 
   return (
     <KeyboardPad style={{ backgroundColor: colors.bg }}>
-      <NavigationContainer theme={theme} ref={navigationRef} onReady={flushPendingNavigation}>
+      <NavigationContainer theme={useLegacyStyles(navTheme)} ref={navigationRef} onReady={flushPendingNavigation}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!firebaseUser ? (
             <Stack.Screen name="Auth" component={AuthStack} />
@@ -185,7 +192,7 @@ export function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const make_styles = ({ colors, palette, p }: Legacy) => StyleSheet.create({
   centered: {
     flex: 1,
     alignItems: "center",

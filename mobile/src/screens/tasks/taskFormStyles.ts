@@ -1,9 +1,12 @@
 import { StyleSheet } from "react-native";
-import { colors, radii, shadow } from "../../constants/theme";
+import { radii, shadow } from "../../constants/theme";
+import { legacyFor, useLegacyStyles, type Legacy } from "../../theme/legacy";
 
 export const TASK_FIELD_INPUT_HEIGHT = 56;
 
-const inputBase = {
+/** Task form field styles for a theme (dark mode): `useTaskFormStyles()` inside components. */
+export function makeTaskFormStyles({ colors }: Legacy) {
+  const inputBase = {
   borderWidth: 1,
   borderColor: colors.border,
   borderRadius: radii.md,
@@ -13,7 +16,7 @@ const inputBase = {
   color: colors.text,
 };
 
-export const taskFormStyles = StyleSheet.create({
+  return StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 8,
@@ -92,3 +95,10 @@ export const taskFormStyles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+}
+
+export const taskFormStyles = makeTaskFormStyles(legacyFor("light"));
+
+export function useTaskFormStyles() {
+  return useLegacyStyles(makeTaskFormStyles);
+}
