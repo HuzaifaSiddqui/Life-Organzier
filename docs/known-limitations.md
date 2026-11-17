@@ -95,7 +95,14 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Language:** chat uploads are read with English OCR. A photo in another script gets the usual warning; the user
   sends it again and says the language (the old per-upload language chips are gone).
 - **Pasting text** for extraction is no longer a separate box; paste it into the chat as a message.
-- **My documents** (under Me) lists, reviews and deletes files. Documents is no longer in the sidebar / main navigation.
+- **My documents** (under Me) shows files as tiles with a preview, opens them, and deletes them. Documents is no longer
+  in the sidebar / main navigation.
+- **Previews need the kept file.** From 17 Nov 2026 the original upload is kept on the server (`STORAGE_DIR`,
+  default `backend/storage`) with a tile image; documents uploaded before then, and pasted text, show only the text
+  that was read. Word files have no page images: their preview is the text read (open the file in another app for
+  the layout). PDFs preview at most 50 pages; pages are made on first view (a second or two each).
+- **Files on the server's disk** count toward its space; deleting a document or the account removes them. A server
+  move must copy `STORAGE_DIR` too.
 
 ## Notification buttons
 
@@ -225,42 +232,26 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 
 ## Phone calendar (`CALENDAR_SYNC`, off)
 
-- **Events go into the Google calendar of the signed-up account** when that account is on the phone, mixed with the
-  user's own events, and Google syncs them to its servers (titles and times of tasks and routines). Only the app's own
-  events (marked "Created by Life Organizer" in their notes) are ever changed or deleted. Android doesn't allow an app
-  to create a separate calendar inside a Google account; a real separate Google calendar would need Google sign-in and
-  the Calendar API.
-- **Another Google account, or none, on the phone:** the separate local "Life Organizer" calendar is used. Google
-  Calendar may not list local calendars at all; widgets and other calendar apps show them.
-
-- **Needs a new development build** (`expo-calendar` is native). Older dev clients run normally; calendar actions say
-  "The calendar needs the latest version of the app".
-- **Two-way for task events only, and not instant.** Calendar edits (time, title, "✓", delete) come back when the app
-  opens, comes to the foreground, or every 15 minutes while it's open; never in the background. Routine events stay
-  one-way: edits there are overwritten on the routine's next change. A due-time event's length can't be changed from
-  the calendar (it goes back to 30 min). Conflicts on Android go to the calendar edit (Android gives no last-modified
-  time). A deleted event never deletes its task; the event stays gone until the task changes. Events in other
-  calendars are never imported (design and estimate in docs/calendar.md).
-- **Routines: 14 days ahead.** Later occurrences are added as the window moves (on the next re-plan). Past routine events
-  stay in the calendar and are no longer updated; "Remove all" deletes them, and Undo doesn't bring them back.
-- **Busy time is what the phone has.** Google / Outlook events count only once they have synced to the phone's calendar.
-  Free time uses fixed day hours, 8 AM – 10 PM, not quiet hours or the plan's free slots.
+- **One-way: calendar → app** (since 17 Nov 2026). Events are offered as tasks and the user adds or skips each one;
+  the app never adds, changes or deletes calendar events (except the one-time clean-up below). Editing an added task
+  doesn't change its calendar event, and editing the event later doesn't change the task.
+- **Clean-up after the update** deletes the events older versions wrote (marked "Created by Life Organizer"), once,
+  when the app next runs with calendar access. A phone that never runs the new version keeps those events until the
+  user deletes them.
+- **30 days ahead, every calendar.** Holiday and birthday calendars on the phone are offered too (the user skips them;
+  skipped events aren't offered again). There is no per-calendar choice yet.
+- **Not instant:** new events are found when the app opens, comes to the foreground, or every 15 minutes while it's
+  open; never in the background.
+- **Per phone.** Added / skipped choices are kept on each phone: a second phone offers the same events again (an added
+  one is then recognised as an existing task by title and time and not offered).
+- **Busy time is what the phone has.** Google / Outlook events count only once they have synced to the phone's
+  calendar. Free time uses fixed day hours, 8 AM – 10 PM, not quiet hours or the plan's free slots.
 - **Chat clash warning comes after the task is created** (Keep / Undo), because the server creates a clear task at once
   and never sees the phone's calendar. The task form warns before saving. Dashboard suggestions don't check clashes.
-- **All-day events on Android** are stored at UTC midnight (Android's rule); a calendar app in an unusual timezone
-  setup may show them a day off (phone checklist step 4).
-- **A task created offline** gets its event at once; when it reaches the server it gets a new id, so the event is
-  deleted and created again (it may flicker in an open calendar app).
-- **Per phone.** The switch and the event map are kept on each phone; two phones with the switch on each make their own
-  "Life Organizer" calendar, and if both sync to the same Google account the user sees two copies. Signing out leaves
-  the events; another account signed in on the same phone writes into the same "Life Organizer" calendar.
-- **English only** for the Settings line, chat cards and clash messages until after 10 Nov (Urdu falls back to English).
-- **The switch off stops updates only**; events already written stay until "Remove all".
-- **A second calendar after a reinstall.** If the app's storage is lost and its old "Life Organizer" calendar holds
-  any event without the app's marker (the user added one), the old calendar is left alone and a new "Life Organizer
-  (2)" is made, so the old calendar's events show as well until the user deletes that calendar.
-- **"Am I free …" needs the switch.** With the switch off (or an older app that doesn't send it) the question gets the
-  task-list answer plus a line about Settings, never the calendar.
+- **All-day events on Android** are stored at UTC midnight (Android's rule); their day is read in UTC.
+- **English only** for the Settings line, the import screen and clash messages (Urdu falls back to English).
+- **"Am I free …" needs the switch.** With the switch off the question gets the task-list answer plus a line about
+  Settings, never the calendar.
 
 ## Documents and OCR
 
@@ -819,3 +810,15 @@ The desktop app is the phone app built for the web inside an Electron shell ([de
   the device, not synced. Android notifications and the home-screen icon keep their own colours. Screens still written
   with the legacy names follow the theme through `theme/legacy.ts` (same colours, built per theme), not yet the
   primitives.
+
+## Profile photo and data export (17 Nov 2026)
+
+- **Profile photo.** A Google account's photo is used until the user picks or removes their own; after that, signing
+  in again never brings the Google photo back. An uploaded photo is a 512 px square (cropped in a circle frame on the
+  phone or computer) kept on the server's disk (`STORAGE_DIR/avatars`) and served at `/media/avatars/<random name>`:
+  anyone with that exact link can see it (like a Google photo link), nobody can list them. People connected through
+  sharing see it; strangers don't. Desktop has no camera option (gallery / file only).
+- **Export** (Settings → Export my data; Insights → Export, Pro) asks Excel (.xlsx, one sheet each for tasks, routines
+  and mood, dates in the user's time zone) or CSV (one file, the three tables one after another; UTF-8 with a BOM so
+  Excel shows Urdu). The phone hands the file to the share sheet (Drive, WhatsApp, "Save to device"…); the desktop
+  saves it. No PDF export.

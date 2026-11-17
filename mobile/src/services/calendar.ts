@@ -1,61 +1,74 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, Platform } from "react-native";
 import { auth } from "../lib/firebase";
-import { palettes } from "../theme/tokens";
 import {
-  applyOps,
   atClock,
-  CALENDAR_TITLE,
-  freeTitle,
-  isOurEvent,
-  isOurTitle,
   clashesWith,
-  desiredEvents,
-  expoPort,
   freeSlots,
-  planOps,
-  pullChanges,
+  importCandidates,
+  IMPORT_DAYS,
+  isOurEvent,
+  pruneDecided,
+  taskFromEvent,
   taskSpan,
-  type Pulled,
-  type ReadEvent,
   type BusyEvent,
-  type EventMap,
-  type Feed,
+  type Decided,
+  type ImportCandidate,
 } from "../utils/calendarSync";
 import { formatTime } from "../utils/format";
 import { apiGet } from "./api";
 import { readTasks } from "./syncEngine";
 
 /**
- * CALENDAR_SYNC (server flag, off by default; docs/calendar.md). Writes tasks and routine occurrences into the phone's
- * own "Life Organizer" calendar and reads busy time from the phone's other calendars. Other calendars are only read,
- * never written, and nothing read from them is sent anywhere.
- * Two-way for the app's own task events: edits made in the calendar app (time, title, "✓", delete) are found when the
- * app opens or comes to the foreground, and every 15 minutes while it's open, not instantly.
+ * CALENDAR_SYNC (server flag, off by default; docs/calendar.md). One-way: events in the phone's calendars (the next
+ * IMPORT_DAYS days) are offered as tasks, and the user adds or skips each one ("From your calendar"). The app never
+ * writes to a calendar. Events are read when the app opens or comes to the foreground, and every 15 minutes while it's
+ * open; nothing read from the calendar is sent to the server except the tasks the user adds.
+ * Earlier versions wrote tasks into the calendar: the first sync after the update deletes those events once (only
+ * events carrying the app's marker, or the separate calendar the app created itself).
  *
  * expo-calendar is loaded lazily: a dev client built before this module existed has no native calendar, and the
  * import must not break the app there (the feature then reports itself unavailable).
  */
 
 const FEATURE_KEY = "life-organizer:calendar-feature";
-const stateKey = () => `life-organizer:calendar:v1:${auth.currentUser?.uid ?? "guest"}`;
+const uid = () => auth.currentUser?.uid ?? "guest";
+const stateKey = () => `life-organizer:calendar:v2:${uid()}`;
+/** Two-way versions' state: which calendar the app wrote to and its events. Removed after the clean-up. */
+const legacyKey = () => `life-organizer:calendar:v1:${uid()}`;
 
-/** `owned`: this app created `calendarId` (only then may Remove all delete the calendar itself). */
-type State = { on: boolean; calendarId: string | null; owned: boolean; map: EventMap };
+/** `pending`: events waiting for Add / Skip. `decided`: keys already added or skipped. */
+type State = { on: boolean; decided: Decided; pending: ImportCandidate[] };
+type LegacyState = { on?: boolean; calendarId?: string | null; owned?: boolean; map?: Record<string, { eventId: string }> };
 type ExpoCalendarModule = typeof import("expo-calendar");
 
 let featureCache: boolean | null = null;
 let inFlight: Promise<void> | null = null;
 let again = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
+const DAY_MS = 86400000;
+const allDayUtc = () => Platform.OS === "android";
+
+async function readLegacy(): Promise<LegacyState | null> {
+  try {
+    const raw = await AsyncStorage.getItem(legacyKey());
+    return raw ? (JSON.parse(raw) as LegacyState) : null;
+  } catch {
+    return null;
+  }
+}
 
 async function readState(): Promise<State> {
   try {
     const raw = await AsyncStorage.getItem(stateKey());
-    const s = raw ? (JSON.parse(raw) as Partial<State>) : {};
-    return { on: Boolean(s.on), calendarId: s.calendarId ?? null, owned: s.owned === true, map: s.map && typeof s.map === "object" ? s.map : {} };
+    if (raw) {
+      const s = JSON.parse(raw) as Partial<State>;
+      return { on: Boolean(s.on), decided: s.decided && typeof s.decided === "object" ? s.decided : {}, pending: Array.isArray(s.pending) ? s.pending : [] };
+    }
+    // First run after the update: the switch keeps its old position.
+    return { on: Boolean((await readLegacy())?.on), decided: {}, pending: [] };
   } catch {
-    return { on: false, calendarId: null, owned: false, map: {} };
+    return { on: false, decided: {}, pending: [] };
   }
 }
 
@@ -63,7 +76,7 @@ async function writeState(s: State): Promise<void> {
   try {
     await AsyncStorage.setItem(stateKey(), JSON.stringify(s));
   } catch {
-    // storage unavailable: the next sync starts from the last saved map (the events are found by their ids again)
+    // storage unavailable: events may be offered again next time
   }
 }
 
@@ -105,84 +118,35 @@ async function everyEvent(cal: ExpoCalendar) {
   return [...seen.values()];
 }
 
-/** A "Life Organizer" calendar is ours to adopt only when every event in it carries our marker; its events are returned. */
-async function adoptable(cal: ExpoCalendar) {
-  if (!cal.allowsModifications || !isOurTitle(cal.title)) return null;
-  const events = await everyEvent(cal);
-  return events.every((e) => isOurEvent(e.notes)) ? events : null;
-}
-
 /**
- * The Google calendar of the account the user signed up with (matched by email), when that account is on this phone:
- * its primary, writable calendar. Android doesn't let an app create a calendar inside a Google account, so the app
- * writes its events into this one (they show in Google Calendar and sync to Google) and touches only its own events.
+ * Removes what the two-way versions wrote, once: the separate calendar the app created, or (in any other calendar it
+ * used, e.g. the user's Google calendar) only the events carrying the app's marker. The user's own events are never
+ * touched. Done when the old state is gone; a failure leaves it for the next sync.
  */
-function googleTarget(calendars: ExpoCalendar[]): ExpoCalendar | undefined {
-  const email = auth.currentUser?.email?.trim().toLowerCase();
-  if (!email) return undefined;
-  const mine = calendars.filter((c) => c.allowsModifications && !c.source?.isLocalAccount && (c.source?.name ?? "").toLowerCase() === email);
-  return mine.find((c) => c.isPrimary) ?? mine.find((c) => (c.ownerAccount ?? "").toLowerCase() === email);
-}
-
-/** Deletes what the app wrote to a calendar: the whole calendar if the app created it, else only its own (marked) events. */
-async function removeOurs(Cal: ExpoCalendarModule, cal: ExpoCalendar, s: State): Promise<void> {
-  if (s.owned) return cal.delete();
-  for (const { eventId } of Object.values(s.map)) await Cal.ExpoCalendarEvent.get(eventId).then((e) => e.delete()).catch(() => undefined);
-  for (const e of await everyEvent(cal)) if (isOurEvent(e.notes)) await e.delete().catch(() => undefined);
-}
-
-/**
- * Our calendar and the state that goes with it. The Google calendar of the signed-up account comes first (see
- * googleTarget): moving there removes what the app wrote to its previous calendar, and any marked events already in the
- * Google calendar (a reinstall lost the map), then rebuilds. Without that account, the stored id first. When it's gone (e.g. a reinstall cleared the
- * app's storage), a "Life Organizer" calendar whose events all carry our marker is adopted: those events are deleted,
- * since without the map they can't be matched and rebuilding next to them would duplicate everything. A calendar with
- * any unmarked event (the user's own) is never adopted or touched; a new one is created, "Life Organizer (2)" if the
- * name is taken.
- */
-async function resolveCalendar(Cal: ExpoCalendarModule, s: State): Promise<{ cal: ExpoCalendar; state: State }> {
-  const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
-  const stored = s.calendarId ? calendars.find((c) => c.id === s.calendarId) : undefined;
-  const google = googleTarget(calendars);
-  if (google) {
-    if (stored?.id === google.id) return { cal: google, state: s };
-    if (stored) await removeOurs(Cal, stored, s);
-    for (const e of await everyEvent(google)) if (isOurEvent(e.notes)) await e.delete().catch(() => undefined);
-    return { cal: google, state: { ...s, calendarId: google.id, owned: false, map: {} } };
+async function cleanUpLegacy(Cal: ExpoCalendarModule): Promise<void> {
+  const old = await readLegacy();
+  if (!old) return;
+  const cal = old.calendarId ? (await Cal.getCalendars(Cal.EntityTypes.EVENT)).find((c) => c.id === old.calendarId) : undefined;
+  if (cal && old.owned) await cal.delete();
+  else if (cal) {
+    for (const { eventId } of Object.values(old.map ?? {})) await Cal.ExpoCalendarEvent.get(eventId).then((e) => e.delete()).catch(() => undefined);
+    for (const e of await everyEvent(cal)) if (isOurEvent(e.notes)) await e.delete().catch(() => undefined);
   }
-  if (stored) return { cal: stored, state: s };
-  for (const c of calendars) {
-    const events = await adoptable(c);
-    if (!events) continue;
-    for (const e of events) await e.delete().catch(() => undefined);
-    return { cal: c, state: { ...s, calendarId: c.id, owned: false, map: {} } };
-  }
-  const title = freeTitle(calendars.map((c) => c.title));
-  const source = Platform.OS === "ios" ? Cal.getDefaultCalendarSync().source : { isLocalAccount: true, name: CALENDAR_TITLE, type: "LOCAL" };
-  const cal = await Cal.createCalendar({
-    title,
-    name: "life-organizer",
-    color: palettes.light.accent,
-    entityType: Cal.EntityTypes.EVENT,
-    ...(Platform.OS === "ios" ? { sourceId: source.id } : {}),
-    source,
-    ownerAccount: "personal",
-    accessLevel: Cal.CalendarAccessLevel.OWNER,
-  });
-  return { cal, state: { ...s, calendarId: cal.id, owned: true, map: {} } };
+  // The switch keeps its old position once the old state is gone.
+  if (!(await AsyncStorage.getItem(stateKey()))) await writeState({ on: Boolean(old.on), decided: {}, pending: [] });
+  await AsyncStorage.removeItem(legacyKey());
 }
 
 export type EnableResult = "on" | "denied" | "unavailable";
 
-/** Turns the switch on: asks for calendar access (the reason is in the OS dialog), finds or makes our calendar, syncs. */
+/** Turns the switch on: asks for calendar access (the reason is in the OS dialog), then looks for events. */
 export async function enableCalendarSync(): Promise<EnableResult> {
   const Cal = await loadModule();
   if (!Cal) return "unavailable";
   try {
     const perm = await Cal.requestCalendarPermissions();
     if (!perm.granted) return "denied";
-    const { state } = await resolveCalendar(Cal, await readState());
-    await writeState({ ...state, on: true });
+    await writeState({ ...(await readState()), on: true });
   } catch (error) {
     console.warn("Calendar could not be set up", error);
     return "unavailable";
@@ -191,41 +155,63 @@ export async function enableCalendarSync(): Promise<EnableResult> {
   return "on";
 }
 
-/** Stops updating the calendar. Events already there stay (Remove all clears them). */
+/** Stops reading the calendar; events waiting for a decision are dropped. */
 export async function disableCalendarSync(): Promise<void> {
-  await writeState({ ...(await readState()), on: false });
+  await writeState({ ...(await readState()), on: false, pending: [] });
+  notify([]);
 }
 
-/** How many events "Remove all" would delete (the preview). */
-export async function ourEventCount(): Promise<number> {
-  return Object.keys((await readState()).map).length;
+const importListeners = new Set<(pending: ImportCandidate[]) => void>();
+function notify(pending: ImportCandidate[]) {
+  importListeners.forEach((l) => l(pending));
+}
+
+/** Events waiting for Add / Skip; the listener runs after every sync that changes them and after every decision. */
+export function subscribeCalendarImports(listener: (pending: ImportCandidate[]) => void): () => void {
+  importListeners.add(listener);
+  return () => importListeners.delete(listener);
+}
+
+/** Events waiting for Add / Skip (ones that ended meanwhile are left out). */
+export async function pendingImports(now = Date.now()): Promise<ImportCandidate[]> {
+  const s = await readState();
+  return s.on ? s.pending.filter((c) => Date.parse(c.end) > now) : [];
+}
+
+async function decide(keys: string[]): Promise<ImportCandidate[]> {
+  const s = await readState();
+  const want = new Set(keys);
+  const chosen = s.pending.filter((c) => want.has(c.key));
+  const decided = { ...s.decided };
+  for (const c of chosen) decided[c.key] = Date.parse(c.start);
+  const pending = s.pending.filter((c) => !want.has(c.key));
+  await writeState({ ...s, decided, pending });
+  notify(pending);
+  return chosen;
 }
 
 /**
- * "Remove all Life Organizer events": only the stored calendar is touched. One this app created is deleted with all its
- * events; any other (the user's Google calendar, or one adopted by title) keeps the calendar and every event the user
- * made, and loses only the app's own events. The switch goes off. Undo = turn it on again, which re-creates the current tasks and routine occurrences.
+ * Adds the chosen events as tasks (through the offline queue like any task). `note` goes in each task's notes
+ * ("From your calendar"). Returns how many were added.
  */
-export async function removeAllCalendarEvents(): Promise<boolean> {
-  const Cal = await loadModule();
-  const s = await readState();
-  if (!Cal) return false;
-  try {
-    const cal = s.calendarId ? (await Cal.getCalendars(Cal.EntityTypes.EVENT)).find((c) => c.id === s.calendarId) : undefined;
-    if (cal) await removeOurs(Cal, cal, s);
-  } catch (error) {
-    console.warn("Could not remove the Life Organizer events", error);
-    return false;
+export async function addImports(keys: string[], note: string): Promise<number> {
+  const chosen = await decide(keys);
+  const { createTask } = await import("./tasksApi"); // lazy: tasksApi → reminders → calendar
+  let added = 0;
+  for (const c of chosen) {
+    try {
+      await createTask(taskFromEvent(c, note, allDayUtc()));
+      added += 1;
+    } catch (error) {
+      console.warn("Calendar event not added", error);
+    }
   }
-  await writeState({ on: false, calendarId: null, owned: false, map: {} });
-  return true;
+  return added;
 }
 
-const changeListeners = new Set<(pulled: Pulled[]) => void>();
-/** Edits found in the calendar (shown to the user as a short note). */
-export function subscribeCalendarChanges(listener: (pulled: Pulled[]) => void): () => void {
-  changeListeners.add(listener);
-  return () => changeListeners.delete(listener);
+/** Skipped events are not offered again. */
+export async function skipImports(keys: string[]): Promise<void> {
+  await decide(keys);
 }
 
 /** Sync when the app comes to the foreground, and every 15 minutes while it is open. */
@@ -245,42 +231,25 @@ export function startCalendarWatch(): () => void {
 }
 
 async function runSync(): Promise<void> {
-  const s = await readState();
-  if (!s.on || !auth.currentUser || !(await calendarFeatureOn())) return;
+  if (!auth.currentUser) return;
+  // Off and nothing left to clean up: no server call, no calendar call.
+  if (!(await readState()).on && !(await readLegacy())) return;
+  if (!(await calendarFeatureOn())) return;
   const Cal = await loadModule();
   if (!Cal) return;
   try {
     if (!(await Cal.getCalendarPermissions()).granted) return; // revoked in system settings: nothing to do
-    let feed: Feed | null = null;
-    try {
-      const r = await apiGet<{ enabled: boolean } & Partial<Feed>>("/calendar/feed");
-      if (!r.enabled) return;
-      if (r.windowStart && r.windowEnd && r.occurrences) feed = { windowStart: r.windowStart, windowEnd: r.windowEnd, occurrences: r.occurrences };
-    } catch {
-      feed = null; // offline: tasks still sync, routine events stay as they are
-    }
-    const { cal, state } = await resolveCalendar(Cal, s);
-    const port = expoPort(cal, (id) => Cal.ExpoCalendarEvent.get(id), { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, allDayUtc: Platform.OS === "android" });
-    // Two-way: read the app's task events back and bring the user's calendar edits to the tasks first.
-    let tasks = await readTasks();
-    const read = new Map<string, ReadEvent | null>();
-    for (const [key, e] of Object.entries(state.map)) {
-      if (!key.startsWith("t:") || e.detached) continue;
-      const ev = await port.readEvent(e.eventId);
-      if (ev !== undefined) read.set(key, ev);
-    }
-    const pulled = pullChanges(state.map, read, tasks);
-    const applied = pulled.pulled.filter((p) => p.kind === "apply");
-    if (applied.length) {
-      const { updateTask } = await import("./tasksApi"); // lazy: tasksApi → reminders → calendar
-      for (const p of applied) await updateTask(p.taskId, p.changes).catch((error) => console.warn("Calendar change not applied", error));
-      tasks = await readTasks();
-    }
-    if (pulled.pulled.length) changeListeners.forEach((l) => l(pulled.pulled));
-    const ops = planOps(desiredEvents(tasks, feed), pulled.map, feed);
-    if (!ops.length && state === s && JSON.stringify(pulled.map) === JSON.stringify(state.map)) return;
-    const { map } = await applyOps(port, ops, pulled.map);
-    await writeState({ ...state, on: true, map });
+    await cleanUpLegacy(Cal).catch((error) => console.warn("Old calendar events not removed yet", error));
+    const s = await readState();
+    if (!s.on) return;
+    const now = Date.now();
+    const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
+    const events = calendars.length ? await Cal.listEvents(calendars, new Date(now - DAY_MS), new Date(now + IMPORT_DAYS * DAY_MS)) : [];
+    const pending = importCandidates(events, s.decided, await readTasks(), now, { allDayUtc: allDayUtc() });
+    const next: State = { on: true, decided: pruneDecided(s.decided, now), pending };
+    if (JSON.stringify(next) === JSON.stringify(s)) return;
+    await writeState(next);
+    notify(pending);
   } catch (error) {
     console.warn("Calendar sync failed", error);
   }
@@ -314,8 +283,8 @@ export function scheduleCalendarSync(delayMs = 2000): void {
 /* ------------------------------------------------------------------ reading (stays on the phone) */
 
 /**
- * Events between two instants. `others`: everything except the app's own events (clash warnings); otherwise those too
- * (agenda, free time). Null when calendar sync isn't active or access was taken away.
+ * Events between two instants. `others`: leave out events older versions of the app wrote (until the clean-up has
+ * run); otherwise all. Null when calendar sync isn't active or access was taken away.
  */
 export async function readEvents(from: number, to: number, opts: { others?: boolean } = {}): Promise<BusyEvent[] | null> {
   if (!(await calendarSyncActive())) return null;
@@ -325,7 +294,6 @@ export async function readEvents(from: number, to: number, opts: { others?: bool
     if (!(await Cal.getCalendarPermissions()).granted) return null;
     const calendars = await Cal.getCalendars(Cal.EntityTypes.EVENT);
     if (!calendars.length) return [];
-    // `others`: leave out the app's own events by their marker, not by calendar (the Google calendar holds both).
     const events = (await Cal.listEvents(calendars, new Date(from), new Date(to))).filter((e) => !opts.others || !isOurEvent(e.notes));
     return events.map((e) => ({
       title: e.title || "Busy",
@@ -340,7 +308,7 @@ export async function readEvents(from: number, to: number, opts: { others?: bool
   }
 }
 
-/** Events on the phone's other calendars that overlap the task's time (empty when nothing to check). */
+/** Events on the phone's calendars that overlap the task's time (empty when nothing to check). */
 export async function clashesForTask(task: Parameters<typeof taskSpan>[0]): Promise<BusyEvent[]> {
   const span = taskSpan(task);
   if (!span) return [];

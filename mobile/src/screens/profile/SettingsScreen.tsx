@@ -43,7 +43,7 @@ import { syncReminders } from "../../services/reminders";
 import { getCollabSummary } from "../../services/collabApi";
 import type { UserSettings } from "../../types/models";
 import { showAlert } from "../../services/dialog";
-import { shareText } from "../../services/share";
+import { chooseAndExport } from "../../services/exportData";
 import { platformFeatures } from "../../constants/platformFeatures";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Settings">;
@@ -547,16 +547,9 @@ export function SettingsScreen({ navigation, route }: Props) {
         <SectionTitle title="Data & account" />
         <Card style={{ gap: 10 }}>
           <Button
-            title="Export my data (CSV)"
+            title={t("export.myData")}
             kind="secondary"
-            onPress={async () => {
-              try {
-                const { csv, filename } = await exportAllData();
-                await shareText(filename, csv);
-              } catch (e) {
-                setToast(getApiErrorMessage(e));
-              }
-            }}
+            onPress={() => chooseAndExport(exportAllData, t, (e) => setToast(getApiErrorMessage(e)))}
           />
           <Button
             title="Re-sync from cloud"

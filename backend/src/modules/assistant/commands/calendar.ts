@@ -9,14 +9,17 @@ import { norm, refFrom, TASK_WORD } from "./lexicon.js";
 import type { Command, CommandArgs, ParseCtx, Prepared } from "./types.js";
 
 /**
- * CALENDAR_SYNC (off): chat about the phone's calendar. The phone's calendar never reaches the server, so these
- * replies carry a `calendar` card that the app fills in on the phone (agenda, free time, "added"). The server
+ * CALENDAR_SYNC (off): chat about the phone's calendar. The sync is one-way (the phone's events can be added to the
+ * app; the app never writes to the calendar). The phone's calendar never reaches the server, so agenda and free-time
+ * replies carry a `calendar` card that the app fills in on the phone. "Add X to my calendar" puts X in the plan. The server
  * only picks the day (entities.ts) and the task. WhatsApp can't see the phone, so it gets a pointer to the app.
  */
 
 const CAL = "(?:phone |google |outlook )?(?:calendar|calender|calander)";
 const dayArgs = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).passthrough();
 const onPhoneOnly = (turn: Turn) => turn.channel === "WHATSAPP" || turn.channel === "WHATSAPP_AGENT";
+/** One-way sync: the app reads the phone's calendar and never writes to it. */
+const READ_ONLY = "It's in your Life Organizer plan. I read your phone calendar but don't add to it.";
 const PHONE_ONLY: Out = { content: "Your calendar lives on your phone, so ask me this in the Life Organizer app.", intent: "calendar_phone_only" };
 
 const dayOf = (text: string, ctx: ParseCtx) => extractEntities(text, ctx.opts).date?.ymd ?? ctx.todayYmd;
@@ -60,25 +63,19 @@ export function parseCalendarFree(text: string, ctx: ParseCtx): CommandArgs | nu
 }
 
 /**
- * Nothing matched: the message is a new task. A clear one is created (it then syncs like any other) and the phone
- * shows Keep / Undo; anything else (a question back, a draft) is the normal creation reply.
+ * Nothing matched: the message is a new task. The calendar sync is one-way (phone calendar → app), so it goes in the
+ * plan only; the reply says so once.
  */
 async function newTask(turn: Turn, text: string): Promise<Out> {
   const out = await runCommand(turn, "create_task", { text });
-  const card = out.cards?.find((c) => c.type === "task");
-  if (out.intent !== "task_created" || card?.type !== "task") return out;
-  return {
-    ...out,
-    content: `No task matched, so I added it.\n${out.content}`,
-    cards: [...(out.cards ?? []), { type: "calendar", kind: "new", date: turn.todayYmd, taskId: card.task.id, title: card.task.title }],
-    actions: (out.actions ?? []).filter((a) => a.payload.type !== "undo_task"),
-  };
+  if (out.intent !== "task_created") return out;
+  return { ...out, content: `${out.content}\n${READ_ONLY}` };
 }
 
 const calendarAdd: Command = {
   name: "calendar_add",
   category: "tasks",
-  summary: "Put a task in your phone's calendar",
+  summary: "\"Add to my calendar\": the task goes in your plan (the app doesn't write to the calendar)",
   enabled: calendarSyncOn,
   examples: ["Add this to my calendar", "Put the essay in my calendar"],
   schema: z.object({ ref: z.string().max(120).default(""), taskId: z.string().uuid().optional(), text: z.string().max(1000).optional() }).passthrough(),
@@ -91,7 +88,7 @@ const calendarAdd: Command = {
     const r = await resolveTaskRef(turn.user.id, ref, turn.state.focus, { listed: turn.state.listed });
     if (r.task) return { args: { ...args, taskId: r.task.id } };
     if (r.candidates.length && ref) return { out: askChoice(turn, "calendar_add", args, "taskId", r.candidates.map((t) => ({ id: t.id, label: t.title })), "Which task do you mean?") };
-    // "add dentist appointment on Friday to my calendar" with no such task: it's a new task (which then syncs).
+    // "add dentist appointment on Friday to my calendar" with no such task: it's a new task in the plan.
     if (ref) return { out: await newTask(turn, String(args.text || ref)) };
     return { out: { content: "Which task should go in your calendar?", intent: "not_found" } };
   },
@@ -100,9 +97,9 @@ const calendarAdd: Command = {
     if (!task) return { content: "I couldn't find that task anymore.", intent: "not_found" };
     focusOn(turn, task.id);
     if (!task.dueDate && !task.scheduledStart) {
-      return { content: `"${task.title}" has no date yet. Give it one and it goes in your calendar.`, actions: [{ label: "Set a date", payload: { type: "open_task", taskId: task.id } }], intent: "calendar_add" };
+      return { content: `"${task.title}" has no date yet. Give it one and it shows on your plan.`, actions: [{ label: "Set a date", payload: { type: "open_task", taskId: task.id } }], intent: "calendar_add" };
     }
-    return { content: `"${task.title}" in your phone calendar:`, cards: [{ type: "calendar", kind: "add", date: turn.todayYmd, taskId: task.id, title: task.title }], intent: "calendar_add" };
+    return { content: `"${task.title}" is already in your plan. I read your phone calendar but don't add to it.`, actions: [{ label: "Open", payload: { type: "open_task", taskId: task.id } }], intent: "calendar_add" };
   },
 };
 

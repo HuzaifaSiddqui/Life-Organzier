@@ -120,6 +120,10 @@ export type DocumentSummary = {
   ocrConfidence: number | null;
   createdAt: string;
   extracted: ProcessResult["extracted"] | null;
+  /** Previews: the original is kept (open / share), a tile image exists, and how many PDF pages can be shown. */
+  fileStored?: boolean;
+  hasThumbnail?: boolean;
+  pageCount?: number | null;
 };
 
 /** A document sent in chat: the server writes "file + request" and its summary into this conversation. */
@@ -230,6 +234,52 @@ export async function listDocuments(): Promise<{ documents: DocumentSummary[]; u
 
 export async function deleteDocument(id: string): Promise<void> {
   await apiDelete(`/documents/${id}`);
+  thumbs.delete(id);
+}
+
+/* -------- previews */
+
+export type DocKindLabel = "image" | "pdf" | "word" | "text" | "other";
+
+/** What a document is, from its type or name (the tile's look and the preview's layout). */
+export function documentKind(mimeType: string, fileName: string): DocKindLabel {
+  const name = fileName.toLowerCase();
+  if (mimeType.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?)$/.test(name)) return "image";
+  if (mimeType === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  if (/wordprocessingml|msword/.test(mimeType) || /\.docx?$/.test(name)) return "word";
+  if (mimeType.startsWith("text/") || name.endsWith(".txt")) return "text";
+  return "other";
+}
+
+const thumbs = new Map<string, Promise<string | null>>();
+const asDataUri = (r: { mime: string; data: string }) => `data:${r.mime};base64,${r.data}`;
+
+/** The tile image as a data URI (fetched once per app run). Null when there's none or it can't load. */
+export function documentThumbnail(id: string): Promise<string | null> {
+  let p = thumbs.get(id);
+  if (!p) {
+    p = apiGet<{ mime: string; data: string }>(`/documents/${id}/thumbnail`).then(asDataUri, () => {
+      thumbs.delete(id); // try again next time
+      return null;
+    });
+    thumbs.set(id, p);
+  }
+  return p;
+}
+
+/** One page (PDF page from 1, or the photo) as a data URI. */
+export async function documentPage(id: string, page: number): Promise<string> {
+  return asDataUri(await apiGet<{ mime: string; data: string }>(`/documents/${id}/pages/${page}`, { timeout: 60000 }));
+}
+
+/** The original file (base64) for "Open in another app" / download. */
+export function documentFile(id: string): Promise<{ filename: string; mime: string; data: string }> {
+  return apiGet(`/documents/${id}/file`, { timeout: 120000 });
+}
+
+/** The text read from a document (Word files, pasted text, and documents without a kept file). */
+export async function documentText(id: string): Promise<string> {
+  return (await apiGet<{ document: { text?: string } }>(`/documents/${id}`)).document.text ?? "";
 }
 
 export async function applyDocument(

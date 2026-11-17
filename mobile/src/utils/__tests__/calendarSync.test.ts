@@ -1,120 +1,83 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../../types/models";
-import {
-  applyOps,
-  atClock,
-  clashesWith,
-  desiredEvents,
-  expoPort,
-  freeSlots,
-  freeTitle,
-  planOps,
-  taskEvent,
-  taskSpan,
-  type EventMap,
-  type Feed,
-} from "../calendarSync";
-import { mockExpoCalendar } from "./mockCalendar";
+import { atClock, clashesWith, eventKey, freeSlots, importCandidates, pruneDecided, taskFromEvent, taskSpan, type PhoneEvent } from "../calendarSync";
 
 const task = (over: Partial<Task>): Task =>
   ({ id: "t1", title: "Physics report", status: "PENDING", dueDate: null, dueTime: null, dueAt: null, scheduledStart: null, scheduledEnd: null, durationMinutes: null, archived: false, ...over }) as Task;
 
 const FRIDAY_3PM = "2026-11-06T10:00:00.000Z";
 const dated = task({ dueDate: "2026-11-06T00:00:00.000Z", dueTime: "3 PM", dueAt: FRIDAY_3PM });
-const feed = (occurrences: Feed["occurrences"]): Feed => ({ windowStart: "2026-11-03T19:00:00.000Z", windowEnd: "2026-11-17T19:00:00.000Z", occurrences });
-const gym = (id: string, start: string, status = "PENDING") => ({ id, title: "Gym", start, end: new Date(Date.parse(start) + 45 * 60000).toISOString(), allDay: false, status });
+const NOW = Date.parse("2026-11-05T05:00:00.000Z");
+const ev = (over: Partial<PhoneEvent> & { id: string }): PhoneEvent => ({
+  title: "Dentist",
+  startDate: "2026-11-06T11:00:00.000Z",
+  endDate: "2026-11-06T11:45:00.000Z",
+  allDay: false,
+  notes: "",
+  location: null,
+  ...over,
+});
 
-async function sync(cal: ReturnType<typeof mockExpoCalendar>, tasks: Task[], f: Feed | null, map: EventMap) {
-  return (await applyOps(cal.port, planOps(desiredEvents(tasks, f), map, f), map)).map;
-}
+describe("one-way import: which calendar events are offered", () => {
+  it("upcoming events are offered once, sorted by start; ended, untitled and old app-written events are not", () => {
+    const events = [
+      ev({ id: "b", title: "Team meeting", startDate: "2026-11-07T04:00:00.000Z", endDate: "2026-11-07T05:00:00.000Z" }),
+      ev({ id: "a" }),
+      ev({ id: "a" }), // the same instance twice (two calendars listed)
+      ev({ id: "old", startDate: "2026-11-04T04:00:00.000Z", endDate: "2026-11-04T05:00:00.000Z" }),
+      ev({ id: "ours", title: "Physics report", notes: "Created by Life Organizer" }),
+      ev({ id: "blank", title: "  " }),
+    ];
+    const out = importCandidates(events, {}, [], NOW);
+    expect(out.map((c) => c.title)).toEqual(["Dentist", "Team meeting"]);
+    expect(out[0]).toEqual({ key: "a@2026-11-06T11:00:00.000Z", title: "Dentist", start: "2026-11-06T11:00:00.000Z", end: "2026-11-06T11:45:00.000Z", allDay: false, location: null });
+  });
 
-describe("calendar events from tasks", () => {
-  it("a timed deadline is 30 min at the due time; a work block wins; a date-only deadline is all-day; no date: none", () => {
-    expect(taskEvent(dated)).toEqual({ title: "Physics report", start: FRIDAY_3PM, end: "2026-11-06T10:30:00.000Z", allDay: false });
-    expect(taskEvent({ ...dated, scheduledStart: "2026-11-05T09:00:00.000Z", durationMinutes: 120 })).toMatchObject({ start: "2026-11-05T09:00:00.000Z", end: "2026-11-05T11:00:00.000Z" });
-    const allDay = taskEvent(task({ dueDate: new Date(2026, 10, 6).toISOString() }));
-    expect(allDay).toMatchObject({ allDay: true, start: new Date(2026, 10, 6).toISOString(), end: new Date(2026, 10, 7).toISOString() });
-    expect(taskEvent(task({}))).toBeNull();
-    expect(taskEvent({ ...dated, status: "DELETED" })).toBeNull();
-    expect(taskEvent({ ...dated, archived: true })).toBeNull();
-    expect(taskEvent({ ...dated, status: "COMPLETED" })?.title).toBe("✓ Physics report");
+  it("each instance of a repeating event is its own; added or skipped ones are not offered again", () => {
+    const monday = ev({ id: "class", title: "Lab", startDate: "2026-11-09T04:00:00.000Z", endDate: "2026-11-09T05:00:00.000Z" });
+    const nextMonday = { ...monday, startDate: "2026-11-16T04:00:00.000Z", endDate: "2026-11-16T05:00:00.000Z" };
+    expect(importCandidates([monday, nextMonday], {}, [], NOW)).toHaveLength(2);
+    const decided = { [eventKey(monday)]: Date.parse("2026-11-09T04:00:00.000Z") };
+    expect(importCandidates([monday, nextMonday], decided, [], NOW).map((c) => c.start)).toEqual(["2026-11-16T04:00:00.000Z"]);
+  });
+
+  it("an event already in the app (same title, same start or same day) is not offered", () => {
+    const planned = task({ title: "dentist", scheduledStart: "2026-11-06T11:00:00.000Z" });
+    expect(importCandidates([ev({ id: "a" })], {}, [planned], NOW)).toEqual([]);
+    expect(importCandidates([ev({ id: "a" })], {}, [{ ...planned, status: "DELETED" }], NOW)).toHaveLength(1);
+    const allDay = ev({ id: "h", title: "Holiday", allDay: true, startDate: new Date(2026, 10, 9).toISOString(), endDate: new Date(2026, 10, 10).toISOString() });
+    expect(importCandidates([allDay], {}, [task({ title: "Holiday", dueDate: new Date(2026, 10, 9).toISOString() })], NOW)).toEqual([]);
+  });
+
+  it("decisions for events that started over a day ago are forgotten", () => {
+    expect(pruneDecided({ old: NOW - 2 * 86400000, recent: NOW - 3600000, soon: NOW + 3600000 }, NOW)).toEqual({ recent: NOW - 3600000, soon: NOW + 3600000 });
   });
 });
 
-describe("eventId sync (mocked expo-calendar)", () => {
-  it("create, edit, complete, delete and undo: one event per task, never a duplicate", async () => {
-    const cal = mockExpoCalendar();
-    let map = await sync(cal, [dated], null, {});
-    expect(cal.events.size).toBe(1);
-    const id = map["t:t1"].eventId;
-
-    map = await sync(cal, [dated], null, map); // nothing changed: no calls
-    expect(cal.calls).toEqual({ create: 1, update: 0, delete: 0 });
-
-    const moved = { ...dated, dueAt: "2026-11-09T10:00:00.000Z", dueDate: "2026-11-09T00:00:00.000Z" };
-    map = await sync(cal, [moved], null, map); // edit → same event updated
-    expect(map["t:t1"].eventId).toBe(id);
-    expect(cal.events.get(id)?.startDate.toISOString()).toBe("2026-11-09T10:00:00.000Z");
-
-    map = await sync(cal, [{ ...moved, status: "COMPLETED" }], null, map);
-    expect(cal.events.get(id)?.title).toBe("✓ Physics report");
-    map = await sync(cal, [{ ...moved, status: "PENDING" }], null, map); // reopened / undo of complete
-    expect(cal.events.get(id)?.title).toBe("Physics report");
-
-    map = await sync(cal, [{ ...moved, status: "DELETED" }], null, map);
-    expect(cal.events.size).toBe(0);
-    expect(map["t:t1"]).toBeUndefined();
-
-    map = await sync(cal, [moved], null, map); // undo delete → back once
-    expect(cal.events.size).toBe(1);
-    map = await sync(cal, [moved], null, map);
-    expect(cal.events.size).toBe(1);
+describe("one-way import: the task made from an event", () => {
+  it("a timed event is planned for its span, due on its day at its start time", () => {
+    const start = new Date(2026, 10, 6, 16, 0).toISOString();
+    const end = new Date(2026, 10, 6, 16, 45).toISOString();
+    const t = taskFromEvent({ key: "a", title: "Dentist", start, end, allDay: false, location: "Clinic, F-7" }, "From your calendar");
+    expect(t).toMatchObject({
+      title: "Dentist",
+      description: "From your calendar\nClinic, F-7",
+      dueDate: new Date(2026, 10, 6).toISOString(),
+      dueTime: "4:00 PM",
+      durationMinutes: 45,
+      scheduledStart: start,
+      scheduledEnd: end,
+      taskType: "FIXED",
+      source: "MANUAL",
+    });
   });
 
-  it("an event deleted in the calendar app comes back on the task's next change; a task that loses its date loses its event", async () => {
-    const cal = mockExpoCalendar();
-    let map = await sync(cal, [dated], null, {});
-    cal.events.clear();
-    map = await sync(cal, [{ ...dated, title: "Physics report v2" }], null, map);
-    expect(cal.events.size).toBe(1);
-    expect([...cal.events.values()][0].title).toBe("Physics report v2");
-    map = await sync(cal, [{ ...dated, dueDate: null, dueTime: null, dueAt: null }], null, map);
-    expect(cal.events.size).toBe(0);
-  });
-
-  it("routine occurrences: added and marked done; a removed one inside the window is deleted, a past one is kept and forgotten; offline leaves them alone", async () => {
-    const cal = mockExpoCalendar();
-    const thu = gym("o1", "2026-11-05T14:00:00.000Z");
-    const fri = gym("o2", "2026-11-06T14:00:00.000Z");
-    let map = await sync(cal, [], feed([thu, fri]), {});
-    expect(cal.events.size).toBe(2);
-
-    map = await sync(cal, [], feed([{ ...thu, status: "COMPLETED" }, fri]), map);
-    expect(cal.events.get(map["r:o1"].eventId)?.title).toBe("✓ Gym");
-
-    map = await sync(cal, [], null, map); // feed unavailable: nothing touched
-    expect(cal.events.size).toBe(2);
-
-    map = await sync(cal, [], feed([thu]), map); // routine paused for Friday
-    expect(cal.events.size).toBe(1);
-
-    const later = { windowStart: "2026-11-06T19:00:00.000Z", windowEnd: "2026-11-20T19:00:00.000Z", occurrences: [] };
-    map = await sync(cal, [], later, map); // Thursday is now in the past: history stays in the calendar
-    expect(cal.events.size).toBe(1);
-    expect(map).toEqual({});
-  });
-
-  it("Android all-day events go to UTC midnight in the UTC zone", async () => {
-    const created: Array<{ startDate: Date; timeZone: string }> = [];
-    const port = expoPort({ createEvent: async (d) => (created.push(d), { id: "x" }) }, async () => ({ update: async () => undefined, delete: async () => undefined }), { timeZone: "Asia/Karachi", allDayUtc: true });
-    await port.createEvent({ title: "Essay", start: new Date(2026, 10, 6).toISOString(), end: new Date(2026, 10, 7).toISOString(), allDay: true });
-    expect(created[0]).toMatchObject({ startDate: new Date("2026-11-06T00:00:00.000Z"), timeZone: "UTC", notes: "Created by Life Organizer" });
-  });
-
-  it("a new calendar's title avoids taken names", () => {
-    expect(freeTitle(["Work"])).toBe("Life Organizer");
-    expect(freeTitle(["Life Organizer"])).toBe("Life Organizer (2)");
-    expect(freeTitle(["Life Organizer", "Life Organizer (2)"])).toBe("Life Organizer (3)");
+  it("an all-day event is due that day with no time; Android's UTC all-day dates keep their day", () => {
+    const local = taskFromEvent({ key: "h", title: "Holiday", start: new Date(2026, 10, 9).toISOString(), end: new Date(2026, 10, 10).toISOString(), allDay: true, location: null }, "From your calendar");
+    expect(local).toMatchObject({ dueDate: new Date(2026, 10, 9).toISOString(), dueTime: null, taskType: "DEADLINE", description: "From your calendar" });
+    expect(local.scheduledStart).toBeUndefined();
+    const utc = taskFromEvent({ key: "h", title: "Holiday", start: "2026-11-09T00:00:00.000Z", end: "2026-11-10T00:00:00.000Z", allDay: true, location: null }, "x", true);
+    expect(utc.dueDate).toBe(new Date(2026, 10, 9).toISOString());
   });
 });
 
@@ -123,11 +86,16 @@ describe("busy time (clash warning, free time)", () => {
   const holiday = { title: "Holiday", start: Date.parse("2026-11-05T19:00:00.000Z"), end: Date.parse("2026-11-06T19:00:00.000Z"), allDay: true };
   const tentative = { title: "Maybe coffee", start: Date.parse("2026-11-06T10:00:00.000Z"), end: Date.parse("2026-11-06T11:00:00.000Z"), allDay: false, free: true };
 
+  it("a task's span: its work block, else 30 minutes at the due time, else none", () => {
+    expect(taskSpan(dated)).toEqual({ start: Date.parse(FRIDAY_3PM), end: Date.parse("2026-11-06T10:30:00.000Z") });
+    expect(taskSpan({ ...dated, scheduledStart: "2026-11-05T09:00:00.000Z", durationMinutes: 120 })).toEqual({ start: Date.parse("2026-11-05T09:00:00.000Z"), end: Date.parse("2026-11-05T11:00:00.000Z") });
+    expect(taskSpan(task({ dueDate: "2026-11-06T00:00:00.000Z" }))).toBeNull();
+  });
+
   it("overlap clashes; touching, all-day and free events don't", () => {
     const span = taskSpan(dated)!;
     expect(clashesWith([lecture, holiday, tentative], span.start, span.end).map((b) => b.title)).toEqual(["Lecture"]);
     expect(clashesWith([lecture], Date.parse("2026-11-06T10:30:00.000Z"), Date.parse("2026-11-06T11:00:00.000Z"))).toEqual([]);
-    expect(taskSpan(task({ dueDate: "2026-11-06T00:00:00.000Z" }))).toBeNull();
   });
 
   it("free slots around busy events, at least 30 minutes", () => {

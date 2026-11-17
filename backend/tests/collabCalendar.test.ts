@@ -18,9 +18,8 @@ import { setPushProvider } from "../src/modules/push/pushService.js";
 import { dbAvailable, TZ } from "./fixtures.js";
 
 /**
- * CALENDAR_SYNC × COLLAB_TASKS, server side: the phone's calendar mirrors the tasks the sync pull sends it
- * (mobile/src/utils/calendarSync.ts; the phone side is mobile/src/utils/__tests__/calendarCollab.test.ts). These checks
- * pin what that pull holds for the owner and the recipient at each step of a share.
+ * COLLAB_TASKS × the sync pull: what each person's task list holds at each step of a share (written when the phone
+ * mirrored tasks into its calendar; the calendar is one-way since 17 Nov 2026, but these checks still pin the pull).
  */
 const skip = !dbAvailable && "no database";
 const FRIDAY = new Date("2026-11-13T00:00:00Z");

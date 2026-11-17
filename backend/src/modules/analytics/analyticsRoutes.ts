@@ -2,7 +2,7 @@ import { Router } from "express";
 import { handle, HttpError, requireUser } from "../../lib/http.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
-import { exportCsv, getAnalytics, type RangeKey } from "./analyticsService.js";
+import { exportFile, exportFormat, getAnalytics, type RangeKey } from "./analyticsService.js";
 
 export const analyticsRouter = Router();
 analyticsRouter.use(requireFirebaseUser, requireUser);
@@ -17,11 +17,11 @@ analyticsRouter.get(
   }),
 );
 
-/** CSV export of analytics data (Pro tier, FR-AN-002 §5). */
+/** Export of analytics data as CSV or Excel (`?format=xlsx`) (Pro tier, FR-AN-002 §5). */
 analyticsRouter.get(
   "/export",
   handle(async (req, res) => {
     if (req.settings.tier !== "PRO") throw new HttpError(403, "PRO_REQUIRED", "Analytics export is a Pro feature");
-    sendSuccess(res, { filename: `life-organizer-${new Date().toISOString().slice(0, 10)}.csv`, csv: await exportCsv(req.user.id) });
+    sendSuccess(res, await exportFile(req.user.id, exportFormat(req.query.format), "life-organizer", req.settings.timezone));
   }),
 );

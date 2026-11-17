@@ -28,7 +28,7 @@ import {
 import { EmailVerificationScreen } from "../screens/auth/EmailVerificationScreen";
 import { CheckinSheet } from "../components/CheckinSheet";
 import { LocationSnackbar } from "../components/LocationSnackbar";
-import { CalendarChangesSnackbar } from "../components/CalendarChangesSnackbar";
+import { CalendarImportsSnackbar } from "../components/CalendarImportsSnackbar";
 import { DialogHost } from "../components/DialogHost";
 import { KeyboardPad } from "../components/primitives";
 import { AuthStack } from "./AuthStack";
@@ -184,7 +184,7 @@ export function RootNavigator() {
         </Stack.Navigator>
         {canUseApp(firebaseUser) && !firstSync ? <CheckinSheet /> : null}
         {canUseApp(firebaseUser) && !firstSync ? <LocationSnackbar /> : null}
-        {canUseApp(firebaseUser) && !firstSync ? <CalendarChangesSnackbar /> : null}
+        {canUseApp(firebaseUser) && !firstSync ? <CalendarImportsSnackbar /> : null}
         {canUseApp(firebaseUser) && !firstSync ? <OutboxNotices /> : null}
         {Platform.OS === "web" ? <DialogHost /> : null}
       </NavigationContainer>

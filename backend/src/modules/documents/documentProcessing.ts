@@ -1,3 +1,4 @@
+import { storeDocumentFile } from "./documentFiles.js";
 import { guessDocType } from "./docTypeGuess.js";
 import crypto from "node:crypto";
 import { Prisma, Priority, RoutineFrequency, RoutinePriority, TaskSource, TaskStatus, TaskType, type User, type UserSettings } from "@prisma/client";
@@ -357,7 +358,7 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
   const { text, deadlines, schedules, course } = a;
   const raw = { confidence: a.ocrConfidence, needsLanguage: a.needsLanguage };
 
-  const document = await prisma.document.create({
+  let document = await prisma.document.create({
     data: {
       userId: user.id,
       fileName: input.fileName.slice(0, 200),
@@ -370,6 +371,11 @@ async function processDocumentOnce(user: User, settings: UserSettings, input: Pr
       contentHash,
     },
   });
+  // Previews (My documents): the original file and its tile image. Pasted text has no file.
+  if (input.buffer) {
+    const files = await storeDocumentFile(user.id, document.id, input.buffer, input.mimeType, input.fileName);
+    if (files.fileStored) document = await prisma.document.update({ where: { id: document.id }, data: files });
+  }
 
   const extracted: Extracted = { deadlines, schedules, course, ocrConfidence: a.ocrConfidence, warning: a.warning, needsLanguage: a.needsLanguage, method: a.method, extractorVersion: EXTRACTOR_VERSION, ...(a.kind ? { kind: a.kind } : {}) };
   const todayYmd = localYmd(new Date(), tz);

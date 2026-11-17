@@ -1,37 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Switch, View } from "react-native";
 import { useLocale } from "../i18n/LocaleProvider";
-import {
-  calendarFeatureOn,
-  calendarSyncActive,
-  disableCalendarSync,
-  enableCalendarSync,
-  ourEventCount,
-  removeAllCalendarEvents,
-  type EnableResult,
-} from "../services/calendar";
+import { calendarFeatureOn, calendarSyncActive, disableCalendarSync, enableCalendarSync, type EnableResult } from "../services/calendar";
 import { useTheme } from "../theme/ThemeProvider";
 import { Icon } from "./icons/Icon";
-import { Button, Card, ListItem, SectionTitle, Text } from "./ui";
-import { showAlert } from "../services/dialog";
+import { Card, ListItem, SectionTitle, Text } from "./ui";
 
 /**
- * CALENDAR_SYNC: Settings → Phone calendar. Hidden while the server flag is off. The switch asks for calendar access
- * the first time; "Remove all" shows how many events go, asks, then offers Undo (turning sync back on re-creates them).
+ * CALENDAR_SYNC: Settings → Phone calendar. Hidden while the server flag is off. One-way: the switch asks for calendar
+ * access the first time, then upcoming events are offered as tasks (screens/tasks/CalendarImportScreen.tsx).
  */
-export function CalendarSettingsCard({ onToast }: { onToast: (text: string, action?: { label: string; onPress: () => void }) => void }) {
+export function CalendarSettingsCard(_props: { onToast?: (text: string, action?: { label: string; onPress: () => void }) => void }) {
   const { colors, spacing } = useTheme();
   const { t } = useLocale();
   const [feature, setFeature] = useState(false);
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Exclude<EnableResult, "on"> | null>(null);
-  const [count, setCount] = useState(0);
 
   const refresh = useCallback(async () => {
     setFeature(await calendarFeatureOn(true));
     setOn(await calendarSyncActive());
-    setCount(await ourEventCount());
   }, []);
 
   useEffect(() => {
@@ -52,26 +41,6 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
     await disableCalendarSync();
     setProblem(null);
     await refresh();
-  };
-
-  const removeAll = async () => {
-    const n = await ourEventCount();
-    showAlert(t("calendar.removeTitle"), t("calendar.removeBody", { count: String(n) }), [
-      { text: t("calendar.cancel"), style: "cancel" },
-      {
-        text: t("calendar.remove"),
-        style: "destructive",
-        onPress: () =>
-          void (async () => {
-            setBusy(true);
-            const ok = await removeAllCalendarEvents();
-            setBusy(false);
-            await refresh();
-            if (!ok) return onToast(t("calendar.removeFailed"));
-            onToast(t("calendar.removed"), { label: t("calendar.undo"), onPress: () => void turnOn() });
-          })(),
-      },
-    ]);
   };
 
   if (!feature) return null;
@@ -99,15 +68,11 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
           <Text variant="caption" color="secondary">
             {t("calendar.offNote")}
           </Text>
-          <Text variant="caption" color="secondary">
-            {t("calendar.twoWayHint")}
-          </Text>
           {problem ? (
             <Text variant="caption" color="danger">
               {t(problem === "denied" ? "calendar.denied" : "calendar.unavailable")}
             </Text>
           ) : null}
-          {count > 0 ? <Button title={t("calendar.removeAll")} kind="ghost" size="sm" disabled={busy} onPress={() => void removeAll()} style={styles.start} /> : null}
         </View>
       </Card>
     </>
@@ -116,5 +81,4 @@ export function CalendarSettingsCard({ onToast }: { onToast: (text: string, acti
 
 const styles = StyleSheet.create({
   below: { paddingHorizontal: 4 },
-  start: { alignSelf: "flex-start" },
 });

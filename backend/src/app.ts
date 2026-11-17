@@ -1,3 +1,4 @@
+import { avatarDir } from "./lib/storage.js";
 import { changesUserData } from "./modules/push/pushRules.js";
 import { scheduleSyncPush } from "./modules/push/pushService.js";
 import type { UserRequest } from "./lib/http.js";
@@ -72,6 +73,9 @@ app.get("/health/ai", (_req, res) => {
   res.json({ ok: true, aiEnabled: getAi().enabled, baseline: { provider: process.env.AI_PROVIDER ?? "ollama", model: process.env.OLLAMA_MODEL ?? "qwen2.5:7b" }, jobs, providers: chains.status() });
 });
   });
+
+  // Profile photos (lib/storage.ts): public by their unguessable file name, like a Google photo URL.
+  app.use("/media/avatars", express.static(avatarDir(), { maxAge: "365d", immutable: true, fallthrough: false, index: false }));
 
   app.get("/", (_req, res) => {
     res.json({ ok: true, message: "Life Organizer API is running", health: "/health", apiBase: "/api" });

@@ -14,6 +14,8 @@ import { analyzeDocument, DOC_INPUT_TYPES, DOC_TYPES, EXTRACTOR_VERSION, process
 import { recordUploadInChat } from "./chatUpload.js";
 import { docInstructionsOn } from "./instructions.js";
 import { localYmd } from "../../lib/time.js";
+import { removeDocumentFiles } from "../../lib/storage.js";
+import { readOriginal, readPage, readThumbnail } from "./documentFiles.js";
 import { extractDeadlines } from "./extraction.js";
 import { DOC_KINDS, docFlag, itemsFromPickedLines } from "./routing.js";
 import { OcrBusyError } from "./textExtraction.js";
@@ -140,7 +142,7 @@ documentRouter.get(
     const documents = await prisma.document.findMany({
       where: { userId: req.user.id },
       orderBy: { createdAt: "desc" },
-      select: { id: true, fileName: true, mimeType: true, sizeBytes: true, docType: true, ocrConfidence: true, createdAt: true, extracted: true },
+      select: { id: true, fileName: true, mimeType: true, sizeBytes: true, docType: true, ocrConfidence: true, createdAt: true, extracted: true, fileStored: true, hasThumbnail: true, pageCount: true },
     });
     const usedBytes = documents.reduce((s, d) => s + d.sizeBytes, 0);
     sendSuccess(res, { documents, usedBytes, features: { instructions: docInstructionsOn() } });
@@ -162,7 +164,49 @@ documentRouter.delete(
   handle(async (req, res) => {
     const result = await prisma.document.deleteMany({ where: { id: req.params.id, userId: req.user.id } });
     if (!result.count) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+    await removeDocumentFiles(req.user.id, req.params.id).catch((error: unknown) => console.warn("Document files not removed", error));
     sendSuccess(res, {}, "Document deleted");
+  }),
+);
+
+async function ownDocument(userId: string, id: string) {
+  const doc = await prisma.document.findFirst({ where: { id, userId }, select: { id: true, fileName: true, mimeType: true, pageCount: true, fileStored: true, hasThumbnail: true } });
+  if (!doc) throw new HttpError(404, "DOCUMENT_NOT_FOUND", "Document not found");
+  return doc;
+}
+
+/** The tile image (JPEG, base64): a photo or a PDF's first page. 404 when the document has none. */
+documentRouter.get(
+  "/:id/thumbnail",
+  handle(async (req, res) => {
+    const doc = await ownDocument(req.user.id, req.params.id);
+    const image = doc.hasThumbnail ? await readThumbnail(req.user.id, doc.id) : null;
+    if (!image) throw new HttpError(404, "NO_PREVIEW", "No preview for this document");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    sendSuccess(res, { mime: "image/jpeg", data: image.toString("base64") });
+  }),
+);
+
+/** One page for the preview screen (JPEG, base64): PDF page `page` (from 1), or the photo itself. */
+documentRouter.get(
+  "/:id/pages/:page",
+  handle(async (req, res) => {
+    const doc = await ownDocument(req.user.id, req.params.id);
+    const image = doc.fileStored ? await readPage(req.user.id, doc, Number(req.params.page)) : null;
+    if (!image) throw new HttpError(404, "NO_PREVIEW", "No preview for this page");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    sendSuccess(res, { mime: "image/jpeg", data: image.toString("base64"), page: Number(req.params.page), pageCount: doc.pageCount });
+  }),
+);
+
+/** The original file (base64), for "Open in another app" / download. */
+documentRouter.get(
+  "/:id/file",
+  handle(async (req, res) => {
+    const doc = await ownDocument(req.user.id, req.params.id);
+    const file = doc.fileStored ? await readOriginal(req.user.id, doc.id) : null;
+    if (!file) throw new HttpError(404, "NO_FILE", "The original file isn't kept for this document");
+    sendSuccess(res, { filename: doc.fileName, mime: doc.mimeType, data: file.toString("base64") });
   }),
 );
 

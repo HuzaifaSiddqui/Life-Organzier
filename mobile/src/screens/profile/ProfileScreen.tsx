@@ -10,6 +10,7 @@ import { GuestBanner } from "../../components/GuestBanner";
 import { Icon, type IconName } from "../../components/icons/Icon";
 import { promptUnlock, useFeatureLock } from "../../components/LockedFeature";
 import { clockLabel } from "../../components/plan/clock";
+import { ProfilePhoto } from "../../components/profile/ProfilePhoto";
 import { Card, PressableScale, Skeleton, SyncBadge, Text } from "../../components/primitives";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -30,14 +31,6 @@ import { opacity, tabBar, withAlpha } from "../../theme/tokens";
 import { useLayout } from "../../theme/useLayout";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Profile">;
-
-function initials(displayName: string | null | undefined, email: string | null | undefined): string {
-  if (displayName?.trim()) {
-    const parts = displayName.trim().split(/\s+/);
-    return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
-  }
-  return (email?.split("@")[0]?.slice(0, 2) ?? "?").toUpperCase();
-}
 
 /**
  * UI v3 Me (docs/design.md "Me"): who you are (avatar, plan), how your week went (opens Insights), your things as
@@ -103,14 +96,7 @@ export function ProfileScreen({ navigation }: Props) {
 
         {/* Who */}
         <Animated.View entering={enter(0)} style={[styles.row, { gap: spacing.lg }]}>
-          <View style={styles.avatarRing}>
-            <LinearGradient colors={[colors.brand, colors.accentStrong]} style={[StyleSheet.absoluteFill, { borderRadius: 40 }]} />
-            <View style={[styles.avatar, { backgroundColor: colors.surface }]}>
-              <Text variant="title2" style={{ color: colors.accentStrong }}>
-                {initials(dbUser?.displayName, dbUser?.email)}
-              </Text>
-            </View>
-          </View>
+          <ProfilePhoto size={72} />
           <View style={[styles.flex, { gap: 2 }]}>
             <Text variant="title2" numberOfLines={1}>
               {name}
@@ -299,8 +285,6 @@ const styles = StyleSheet.create({
   statusFade: { position: "absolute", top: 0, left: 0, right: 0 },
   row: { flexDirection: "row", alignItems: "center" },
   flex: { flex: 1 },
-  avatarRing: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center" },
-  avatar: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
   plan: { paddingHorizontal: 10, paddingVertical: 3 },
   sectionLabel: { marginBottom: 8 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },

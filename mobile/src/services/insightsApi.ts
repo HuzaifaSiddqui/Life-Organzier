@@ -1,3 +1,4 @@
+import type { ExportFile, ExportFormat } from "./exportData";
 import type { CrisisPayload, MemoryItem, Mood, MoodLog, MoodRecommendation, Pattern, Recommendation } from "../types/models";
 import { apiDelete, apiGet, apiPost, apiPut } from "./api";
 
@@ -70,8 +71,9 @@ export async function getAnalytics(range: "week" | "month" | "3months" | "all"):
   return (await apiGet<{ analytics: Analytics }>(`/analytics?range=${range}`)).analytics;
 }
 
-export async function exportAnalyticsCsv(): Promise<{ filename: string; csv: string }> {
-  return apiGet("/analytics/export");
+/** Analytics export (Pro) as CSV or Excel. */
+export async function exportAnalytics(format: ExportFormat): Promise<ExportFile> {
+  return apiGet(`/analytics/export?format=${format}`);
 }
 
 /* -------- events */

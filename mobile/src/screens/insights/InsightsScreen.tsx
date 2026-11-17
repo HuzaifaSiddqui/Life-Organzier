@@ -17,8 +17,8 @@ import { colors, palette, radii } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage, isNetworkError } from "../../services/api";
-import { exportAnalyticsCsv, getAnalytics, getInsights, type Analytics } from "../../services/insightsApi";
-import { shareText } from "../../services/share";
+import { exportAnalytics, getAnalytics, getInsights, type Analytics } from "../../services/insightsApi";
+import { chooseAndExport } from "../../services/exportData";
 import type { Pattern, Recommendation } from "../../types/models";
 import { categoryColor } from "../../utils/priorityColors";
 import { useLayout } from "../../theme/useLayout";
@@ -118,12 +118,7 @@ export function InsightsScreen({ navigation }: Props) {
       promptUnlock(lock, tr("lock.name.export"), tr);
       return;
     }
-    try {
-      const { csv, filename } = await exportAnalyticsCsv();
-      await shareText(filename, csv);
-    } catch (e) {
-      setToast(getApiErrorMessage(e));
-    }
+    chooseAndExport(exportAnalytics, tr, (e) => setToast(getApiErrorMessage(e)));
   };
 
   const t = data?.totals;
@@ -143,7 +138,7 @@ export function InsightsScreen({ navigation }: Props) {
           <Text style={[styles.h1, { flex: 1 }]}>Insights</Text>
           <Pressable onPress={() => void exportCsv()} style={[styles.exportBtn, lockFor("analyticsExport") ? { opacity: opacity.disabled } : null]}>
             {lockFor("analyticsExport") ? <Icon name="lock" size={14} color={palette.ai} /> : null}
-            <Text style={styles.link}>Export CSV</Text>
+            <Text style={styles.link}>{tr("export.button")}</Text>
           </Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>

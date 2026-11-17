@@ -91,7 +91,16 @@
           "isIosBackgroundLocationEnabled": true
         }
       ],
-      "expo-task-manager"
+      "expo-task-manager",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Life Organizer uses a photo you choose as your profile picture.",
+          "cameraPermission": "Life Organizer uses the camera only when you take a profile picture.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

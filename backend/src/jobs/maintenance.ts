@@ -2,6 +2,7 @@ import { staleGuestCutoff } from "../modules/guest/guestRules.js";
 import { TaskStatus } from "@prisma/client";
 import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
+import { removeUserFiles } from "../lib/storage.js";
 import { computeDueAt } from "../lib/time.js";
 import { expireCheckins } from "../modules/checkins/checkinService.js";
 import { sendMissedPhoneReminders } from "../modules/push/missedReminders.js";
@@ -23,6 +24,7 @@ export async function runMaintenance(now = new Date()): Promise<void> {
   const expired = await prisma.user.findMany({ where: { deletionRequestedAt: { lt: new Date(now.getTime() - 30 * 86400000) } } });
   for (const user of expired) {
     await prisma.user.delete({ where: { id: user.id } });
+    await removeUserFiles(user.id).catch((error: unknown) => console.warn("Could not delete user files", error));
     try {
       await getFirebaseAuth().deleteUser(user.firebaseUid);
     } catch (error) {
@@ -38,6 +40,7 @@ export async function runMaintenance(now = new Date()): Promise<void> {
   });
   for (const guest of staleGuests) {
     await prisma.user.delete({ where: { id: guest.id } });
+    await removeUserFiles(guest.id).catch((error: unknown) => console.warn("Could not delete user files", error));
     await getFirebaseAuth()
       .deleteUser(guest.firebaseUid)
       .catch((error: unknown) => console.warn("Could not delete Firebase guest", error instanceof Error ? error.message : error));
