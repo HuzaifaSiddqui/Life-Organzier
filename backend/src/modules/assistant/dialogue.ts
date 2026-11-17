@@ -89,7 +89,7 @@ import { getCommand, matchCommand, parseCtx } from "./commands/registry.js";
 import { capabilityReply, unknownReply } from "./commands/capabilities.js";
 import { meaningRoute, meaningRouterOn, RULES_UNSURE } from "./commands/meaning.js";
 import { routeWithLlm } from "./commands/router.js";
-import { appQuestionReply } from "./appQuestions.js";
+import { appQuestionReply, MEDICAL_REPLY, medicalQuestion } from "./appQuestions.js";
 import { addToExistingReply, correctionTarget, OTHER_ONE } from "./repairs.js";
 import { collabOn } from "../collab/collabRules.js";
 import { getAi } from "../../ai/llm.js";
@@ -398,6 +398,11 @@ export async function handleText(turn: Turn, text: string): Promise<Out> {
       actions: [{ label: turn.settings.language === "ur" ? "آج کے غیر ضروری کام ہٹا دیں" : "Clear today's non-urgent tasks", payload: { type: "postpone_nonurgent" } }],
       intent: "crisis",
     };
+  }
+
+  // Safety (no flag): medical advice (doses, which medicine) is never answered, by the rules or the model.
+  if (medicalQuestion(text)) {
+    return { content: MEDICAL_REPLY, actions: [sayAction("Remind me to call the doctor", "create_task", "remind me to call the doctor")], intent: "medical_question" };
   }
 
   // PR B: "actually move it to friday", "ok add milk": a filler word in front of a command is not part of it.

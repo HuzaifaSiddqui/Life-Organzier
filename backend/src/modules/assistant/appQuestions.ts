@@ -45,6 +45,41 @@ export function progressReport(text: string, durationMinutes: number | null): st
   return `Nice work — ${durationWords(durationMinutes)} of ${ACTIVITY[verb] ?? "work"}.`;
 }
 
+/**
+ * Safety (no flag, like the crisis check): a question asking for medical advice (a dose, how much of a medicine,
+ * which medicine for a symptom, whether medicines can be taken together) gets a fixed reply; the model never answers
+ * it. Requests to remember or schedule medicine ("remind me to take my medicine at 9") are not questions and pass.
+ */
+/** Medicine words; "tablet" only where taking it is asked ("which tablet should I buy" is a device). */
+const MED_NAMES =
+  "medicines?|medications?|meds|pills?|capsules?|syrups?|drops|injections?|antibiotics?|painkillers?|paracetamol|panadol|calpol|ibuprofen|brufen|aspirin|disprin|amoxicillin|augmentin|azithromycin|metformin|insulin|cetirizine|antihistamines?|dawai|dawa|goli|golian";
+const MED = `tablets?|${MED_NAMES}`;
+const SYMPTOM =
+  "fever|temperature|headaches?|migraines?|colds?|coughs?|flu|pain|aches?|infections?|allerg(?:y|ies)|diarrh?o?ea|vomiting|nausea|sore throat|stomach ?ache|acidity|rash|bukhar|sar ?dard|zukam|khansi";
+const MEDICAL_ASK = [
+  // "what is the dose of amoxicillin for a child of 15 kg?", "how many mg of paracetamol", "safe dosage for ibuprofen"
+  /\b(?:what(?:'s| is| are)?|how (?:much|many)|tell me|correct|right|safe|max(?:imum)?|recommended|usual|normal)\b[^.?!]{0,40}\b(?:doses?|dosages?|milligrams?)\b|\bhow (?:much|many) (?:mg|ml)\b|\b\d+\s?(?:mg|ml)\b[^.?!]{0,30}\b(?:enough|safe|too much|ok(?:ay)?)\b/i,
+  // "how many tablets can I take", "how much panadol should I give my son"
+  new RegExp(`\\bhow (?:much|many)\\b[^.?!]{0,30}\\b(?:${MED})\\b[^.?!]{0,30}\\b(?:take|give)\\b`, "i"),
+  // "what medicine should I take for fever", "which antibiotic for a sore throat"
+  new RegExp(`\\b(?:what|which)\\s+(?:${MED_NAMES}|drugs?)\\b[^.?!]{0,30}\\b(?:for|should|can|to take|to give)\\b`, "i"),
+  // "what should I take for a headache", "what can I give my daughter for a cough"
+  new RegExp(`\\bwhat (?:should|can|could|do) (?:i|we)\\s+(?:take|give)\\b[^.?!]{0,40}\\bfor\\s+(?:a |an |my |the |his |her |this )?(?:${SYMPTOM})\\b`, "i"),
+  // "can I take ibuprofen with amoxicillin", "is it safe to give panadol to a baby"
+  new RegExp(`\\b(?:can|could|should|is it (?:safe|ok(?:ay)?) to)\\s+(?:i\\s+|we\\s+)?(?:take|give|mix|combine)\\b[^.?!]{0,40}\\b(?:${MED_NAMES})\\b`, "i"),
+  // Roman Urdu: "panadol kitni leni chahiye", "bukhar ke liye kaun si dawai lun"
+  new RegExp(`\\b(?:kitni|kitna|kitne|kaun ?si|konsi)\\b[^.?!]{0,30}\\b(?:${MED}|dose)\\b|\\b(?:${MED}|dose)\\b[^.?!]{0,30}\\b(?:kitni|kitna|kitne|kaun ?si|konsi)\\b`, "i"),
+];
+/** Remember / schedule / log something, or ask about the user's own reminder ("when is my dose?"): not advice. */
+const NOT_MEDICAL_ASK = /^\s*(?:please\s+)?(?:remind|add|create|schedule|set|note|log|mark|make|save|track)\b|\b(?:task|routine|reminder|what time|when (?:is|was|do|should i take) my|did i|have i)\b/i;
+
+export const MEDICAL_REPLY = "I can't give medical advice, like doses or which medicine to take. Please ask a doctor or pharmacist. In an emergency, call 1122.";
+
+export function medicalQuestion(text: string): boolean {
+  const t = text.trim();
+  return !NOT_MEDICAL_ASK.test(t) && MEDICAL_ASK.some((re) => re.test(t));
+}
+
 /** PR B: weather questions ("what's the weather like in Lahore?", "will it rain tomorrow?"): the app can't check. */
 /** Not "temperature" ("what temperature for baking?" is not about the weather). */
 const WEATHER = /\b(?:weather|forecast|rain(?:ing|s)?|snow(?:ing|s)?|sunny|humid(?:ity)?|mausam|موسم)\b/i;

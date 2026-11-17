@@ -168,10 +168,17 @@ requests, so it never adds latency.
 
 ## Turn pipeline (`backend/src/modules/assistant`)
 
-`crisis check → chat command rules (registry) → working-memory resolution (answer to the open question, or
+`crisis check → medical-advice check → chat command rules (registry) → working-memory resolution (answer to the open question, or
 topic switch) → NLU (rules → LLM if unsure) → handler → reply with cards + one-tap actions → background learning`.
 
 The same engine serves the app chat, voice, and WhatsApp, so memory is shared across channels.
+
+**Medical advice (safety, no flag).** Right after the crisis check, a question asking for a dose, how much of a
+medicine, which medicine for a symptom, or whether medicines can be mixed (English and Roman Urdu;
+`medicalQuestion` in `appQuestions.ts`) gets a fixed reply ("I can't give medical advice… ask a doctor or
+pharmacist. In an emergency, call 1122.") with a "Remind me to call the doctor" button. The model never answers it.
+Reminders and routines about medicine ("remind me to take my medicine at 9") are unchanged. The chat-reply prompt
+also says never to give medical advice, as a second line for wording the rules miss.
 
 ### Chat commands (`assistant/commands/`)
 

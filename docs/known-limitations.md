@@ -593,6 +593,10 @@ Pro only, on by default (`WHATSAPP_AGENT=off` switches it off; docs/whatsapp-age
 
 ## Safety
 
+- **The medical-advice check is a phrase list** (`medicalQuestion` in `backend/src/modules/assistant/appQuestions.ts`):
+  dose, how-much, which-medicine and mixing questions in English and Roman Urdu, with a list of common medicine and
+  symptom words. Other wording reaches the chat model, whose prompt says never to give medical advice; that second
+  line is a prompt rule, not a guarantee. Urdu script is not covered.
 - Crisis detection is a deterministic phrase list (English, Roman Urdu, Urdu script) in
   `backend/src/modules/mood/crisis.ts`. It must be reviewed by a native Urdu speaker before release, and the
   helpline numbers in `CRISIS_RESOURCES` must be verified (`// VERIFY BEFORE RELEASE`). A mental-health helpline
