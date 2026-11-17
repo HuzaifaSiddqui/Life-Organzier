@@ -2,9 +2,9 @@ import { addDaysYmd, localYmd, parseClock, zonedTimeToUtc } from "../../lib/time
 import { generateRoutineOccurrences, occurrenceEnd, occurrenceStart, occurrencesBetween } from "../routines/routineService.js";
 
 /**
- * CALENDAR_SYNC (default off): the phone writes tasks and routine occurrences into its own "Life Organizer"
- * calendar (expo-calendar, see docs/calendar.md). The server only supplies routine occurrences for the window;
- * tasks come from the phone's task store. Nothing from the phone's calendars is ever sent here.
+ * CALENDAR_SYNC (default off): the flag for the phone calendar (expo-calendar, see docs/calendar.md). One-way since
+ * 17 Nov 2026: the phone offers its calendar events as tasks the user adds (they arrive as ordinary tasks) and never
+ * writes to the calendar. The feed's routine occurrences are no longer used by the app (kept for older builds).
  */
 export const calendarSyncOn = () => process.env.CALENDAR_SYNC?.toLowerCase() === "on";
 

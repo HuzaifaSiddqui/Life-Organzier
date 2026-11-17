@@ -110,6 +110,18 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 - `GET /api/documents/:id` adds `result`: the saved reading in the upload's response shape (created / existing flags as of
   now), used by the review screen.
 
+### Document previews (`documents/documentFiles.ts`)
+
+- Uploads keep the original file and a tile image in `STORAGE_DIR/documents/<userId>/<documentId>/`. `Document` gains
+  `fileStored`, `hasThumbnail`, `pageCount` (also in `GET /api/documents`).
+- `GET /api/documents/:id/thumbnail` → `{ mime: "image/jpeg", data }` (base64, 480 px wide: the photo or a PDF's first
+  page); 404 `NO_PREVIEW` when there is none (Word, text, older uploads).
+- `GET /api/documents/:id/pages/:page` → `{ mime, data, page, pageCount }`: a PDF page (from 1, at most 50) or the photo,
+  1240 px wide, made on first request and cached on disk; 404 `NO_PREVIEW` past the last page.
+- `GET /api/documents/:id/file` → `{ filename, mime, data }` (the original, base64) for "Open in another app"; 404
+  `NO_FILE` when it isn't kept.
+- `DELETE /api/documents/:id` also removes the files; deleting the account removes all of the user's files.
+
 ### Documents teach the assistant (`DOC_KNOWLEDGE`)
 
 - After a chat upload (`chat=true`) the response has `chat.learning: true` and the server, in the background, cuts the
@@ -144,6 +156,15 @@ There is **no custom JWT** issued by this API; the bearer token is a **Firebase 
 | **Errors** | **404** `USER_NOT_FOUND` if sync never ran |
 
 **Mobile usage:** `api.get("/users/me")` in `AuthContext.tsx`.
+
+**Profile photo** (`users/photoService.ts`):
+- `PUT /api/users/me/photo` `{ image }` (base64 JPEG / PNG / WebP, at most 1.5 MB; the app sends a 512 px square crop)
+  → `{ user }`. The server squares and shrinks it to a 512 px JPEG, stores it as `STORAGE_DIR/avatars/<userId>-<random>.jpg`
+  and sets `photoUrl` to `/media/avatars/<file>` (served publicly by that unguessable name, outside `/api`). 400
+  `BAD_PHOTO`, 413 `PHOTO_TOO_LARGE`.
+- `DELETE /api/users/me/photo` → `{ user }` with `photoUrl: null`.
+- Both set `photoChosen`: from then on `/auth/sync-user` no longer copies the Google photo (`picture` claim, asked for at
+  400 px) over the user's choice.
 
 **Response data:** `{ user: User }`.
 
@@ -257,7 +278,8 @@ switched off with `WHATSAPP_AGENT=off`; connect and test need Pro (403 `PRO_REQU
 - **`POST /api/whatsapp-agent/test`** sends a short message (3 a minute). **`PATCH /api/whatsapp-agent/settings`** `{ reminders?: "OFF"|"WHATSAPP"|"BOTH", voice?: boolean }` (409 when switched off on the server). **`DELETE /api/whatsapp-agent`** stops polling and deletes the key.
 - `GET /api/reminders/plan` → `settings.viaWhatsappAgent`: true when the phone should leave task and routine reminders to WhatsApp.
 - `POST /api/documents/:id/apply` now calls `documents/applyItems.ts` (same behaviour); the WhatsApp Agent's "Add all" uses it too.
-- **`GET /api/calendar/feed`** (CALENDAR_SYNC, docs/calendar.md) → `{ enabled: false }` when the flag is off; on: `{ enabled: true, windowStart, windowEnd, occurrences: [{ id, routineId, title, start, end, allDay, status }] }` — routine occurrences from the start of today for 14 days, every context. The phone writes them (and its own tasks) into its "Life Organizer" calendar; nothing is sent back.
+- **`GET /api/calendar/feed`** (CALENDAR_SYNC, docs/calendar.md) → `{ enabled: false }` when the flag is off; on: `{ enabled: true, windowStart, windowEnd, occurrences: [...] }`. Since the sync became one-way (phone calendar → app, 17 Nov 2026) the phone uses only `enabled`; the occurrences are no longer written anywhere.
+- **Exports:** `GET /api/account/export` and `GET /api/analytics/export` (Pro) take `?format=csv|xlsx` (default csv) → `{ filename, mime, data }` (base64 file; CSV is UTF-8 with a BOM) and, for CSV, the old `csv` text too. Excel: one sheet each for tasks, routines and mood logs, bold frozen header, dates as Excel dates in the user's time zone (`lib/xlsx.ts`, no dependency).
 - Assistant replies may carry a `calendar` card `{ type: "calendar", kind: "agenda" | "free" | "add" | "new", date, taskId?, title? }` (CALENDAR_SYNC on, app and voice only): the phone fills it in from its own calendars (`new`: "add X to my calendar" created X; the card has Keep / Undo).
 - `POST /api/assistant/message` takes `calendar` (boolean, optional): the phone's calendar switch is on with access granted. "Am I free …" uses the calendar card only when it is `true`; otherwise the usual answer plus a line about Settings.
 - **Document routing flags (all off by default; additive fields the app tolerates missing):**
@@ -437,6 +459,7 @@ These **use** the APIs above but add client-only behavior:
 | Variable | Where | Purpose |
 |----------|--------|---------|
 | `DATABASE_URL` | Backend | PostgreSQL connection string |
+| `STORAGE_DIR` | Backend | Folder for uploaded files (profile photos, document originals and previews); default `backend/storage` |
 | `PORT` | Backend | Listen port (default `5000` in code) |
 | Firebase admin keys / project | Backend `config/firebase.ts` | Verify ID tokens |
 | `EXPO_PUBLIC_API_BASE_URL` | Mobile | API base ending with `/api` |

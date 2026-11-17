@@ -304,9 +304,38 @@ Ask the assistant, Archive, Delete.
 
 ### Me (UI v3)
 
-Avatar with a gradient ring, name, email, plan pill; "Your week" card (done count, on-time %, a bar per day, best hour;
+Profile photo (`components/profile/ProfilePhoto.tsx`: the photo or initials in a gradient ring, a 28 dp camera badge;
+a tap opens a sheet: Choose from gallery, Take a photo (phone only), Remove photo), name, email, plan pill; "Your week" card (done count, on-time %, a bar per day, best hour;
 opens Insights); "Your things" 2 × 2 tiles (Routines, Mood, Documents, What I know); People & sharing (badge for what
 waits), Settings, Saved places; Sign out (outlined, danger).
+
+### Photo crop (17 Nov 2026)
+
+`PhotoCropScreen`: always dark (`palettes.dark`, a photo editor), the photo behind a circle frame (min(area − 48, 380) dp)
+drawn as an SVG scrim with a circular hole and a 2 dp `onBrand` ring. Drag to move, pinch or − / + (`zoomOut` /
+`zoomIn` icons, for computers) to zoom 1–5×; the photo always covers the circle (`utils/photoCrop.ts`). "Use photo"
+(primary) crops the square under the circle to 512 px and uploads it. Opens with a fade.
+
+### My documents and preview (17 Nov 2026)
+
+- **Grid** (`DocumentTile`): 2 columns on a phone, 3 from 560 dp, 4 from 900 dp of grid width. A tile: preview area
+  (78 % of its width, top corners `radii.lg`) with the photo or the PDF's first page (fades in), otherwise the doc /
+  image icon on the type's tint (PDF `danger`, Word `info`, photo `success`, other `warning`); a type badge top-left
+  ("PDF", "DOCX", "JPG"), "N pages" bottom-right; under it the name (bodyStrong, 1 line), "17 Nov · 3 deadlines", and
+  a ⋯ button (Preview, What was found, Open in another app, Delete) in a `Sheet`. Tiles enter with a short stagger.
+- **Preview** (`DocumentPreviewScreen`): top bar with back, name and "Page 2 of 5"; PDF pages full width one under
+  another (skeleton at A4 height until loaded, retry tile on error, tap → `ImageViewer`: full-screen dark, pinch /
+  double-tap zoom, drag); Word / text / older uploads show the text read in a `Card` (selectable). Bottom bar: "What
+  was found" (tonal) and "Open in another app" (secondary).
+
+### From your calendar (17 Nov 2026)
+
+`CalendarImportScreen`: back, title, hint; events grouped by day ("Today", "Tomorrow", "Tue, 18 Nov") as rows: a time
+column with a 3 dp accent bar (start / end, or "All day"), title (2 lines) and location (pin icon), a ✕ (Skip) icon
+button and an "Add" tonal button. Rows fade out when decided. Bottom bar with Skip all (ghost) and Add all (N)
+(primary) when there are two or more. Empty: calendar icon, "You're all caught up". Today shows one `NudgeCard`
+(calendar icon, `info` tone, "New in your calendar · N events you can add", Review); an app-level `Snackbar`
+announces newly found events with a Review action.
 
 ### Settings (UI v3)
 
@@ -462,7 +491,9 @@ All installed with `npx expo install`. The native ones need a **new development 
 | `@expo-google-fonts/inter`, `@expo-google-fonts/noto-nastaliq-urdu` | Font files | no |
 | `expo-location`, `expo-task-manager` | FR-LB-001 geofence reminders (config plugin in `app.json` adds fine/coarse/background location) | yes |
 | `react-native-webview` | FR-LB-001 map picker (Leaflet page) | yes |
-| `expo-calendar` | CALENDAR_SYNC: the "Life Organizer" calendar and busy time (config plugin in `app.json` adds the calendar permissions and the iOS reason text); loaded lazily so older dev clients keep working | yes |
+| `expo-calendar` | CALENDAR_SYNC: reading the phone's calendars (import, busy time) and the one-time clean-up (config plugin in `app.json` adds the calendar permissions and the iOS reason text); loaded lazily so older dev clients keep working | yes |
+| `expo-image-picker`, `expo-image-manipulator` | Profile photo: pick from the gallery / camera, crop and shrink (config plugin in `app.json` adds the camera / photos reason text) | yes |
+| `expo-file-system`, `expo-sharing` | Exports and "Open in another app": save a file in the cache and open the share sheet | yes |
 | `leaflet` (dev dependency) | Inlined into `components/map/leaflet.generated.ts` by `npm run map:assets`; nothing loads from a CDN | no |
 
 App-level transient messages with no screen of their own (e.g. the one-time location-permission hint, `components/LocationPermissionHint.tsx`) use the same `Snackbar`, mounted once next to `CheckinSheet` in `RootNavigator` and fed by a small listener in the service.
@@ -542,12 +573,13 @@ controls.
 | Settings / Profile (theme + language switch flow) | ⏳ (the new "Phone calendar" section is a migrated component, `CalendarSettingsCard`; the screen around it is not) |
 | Shared: BottomNav, ScreenHeader, TaskCard, AssistantCards, Charts, ListeningWaveform, BreathingExercise, splash | ⏳ (migrated alongside their first screen) |
 | People & sharing (`CollabScreen`, `SharedTaskEditScreen`) | Built on primitives + `useTheme()` from the start, copy in `strings.ts` (`collab.*`, English only until after 10 Nov 2026); not yet checked in dark / Urdu / 360 dp. `SharedTaskEditScreen` reuses the legacy date/time rows. `ShareWithField` sits inside the legacy `TaskForm` |
-| Calendar changes note (`CalendarChangesSnackbar`, app level next to `LocationSnackbar`) | `Snackbar` primitive; copy `calendar.pulled.*` ("\"X\" moved from your calendar", "… deleted from your calendar. The task is still in the app …", "N tasks updated …") with an "Open" action for one task. Settings → Phone calendar adds a caption (`calendar.twoWayHint`) saying calendar edits come back on open or every 15 minutes, not instantly. Chat routine card (`AssistantCards`) is now a `Pressable` that opens the routine |
+| Calendar note (`CalendarImportsSnackbar`, app level next to `LocationSnackbar`; replaced `CalendarChangesSnackbar` when the sync became one-way, 17 Nov 2026) | `Snackbar` primitive; copy `calendar.import.snack*` ("2 new in your calendar") with a Review action that opens From your calendar. Chat routine card (`AssistantCards`) is a `Pressable` that opens the routine |
 | Documents in chat (`DocumentCard` in AssistantCards, "+" and attachment chip in the Assistant composer, `DocumentReviewScreen`, My documents) | `DocumentCard` and My documents are built on primitives + `useTheme()`; copy `chatDoc.*` / `docs.*` in `strings.ts` (en + ur). The review itself (`components/documents/DocumentReview.tsx`) was moved unchanged from the old Documents screen and is still on the legacy palette (`ui.*`, `constants/theme`). The composer's "+" (`ComposerPlusMenu`) is a 44 dp round button: a tap turns the "+" 45° into a "×" (filled `text` colour) and opens a small menu above it (elevation 2, 48 dp rows, icon + label; only "Upload a file" for now), shown in a transparent overlay so taps work on Android; "×", a choice, Back or a tap outside closes it and turns it back (`motion.duration.base`; reduce motion: no turn or slide); the attachment chip sits above the input with a close icon (10 dp hit slop). A sent file shows a doc icon + file name inside the user's bubble |
 | Notifications (Android, `services/reminders.ts`, `utils/notificationLook.ts`) | Small icon: the logo's checkmark, white on transparent (`assets/branding/notification-icon.png`, 24 dp, generated from the app icon); tint `palettes.light.accent`, or `danger.fg` for Due soon / Due now; sub-text label (copy `notif.*`, en + ur). Button labels from `strings.ts` (`notif.*`, `checkin.*`, `location.*`); answers run in the background, only View / Update… open the app |
 | Google sign-in (`GoogleSignInButton` on Welcome, Login, guest Create account) | `Button` secondary, full width, "Continue with Google" (copy `google.*`, en + ur); no Google logo (line icons only, and the brand mark would need Google's asset). Error as a centred danger caption under it. On Create account it sits above the form with "or create one with your email" |
 | Document facts card (`DocumentFactsCard`, DOC_KNOWLEDGE) | Built on primitives + `useTheme()`; copy `docFacts.*` (en + ur). A list of 44 dp checkbox rows (24 dp box, accent fill when ticked; role `checkbox`), all ticked at first; "Keep N selected" (primary, small) and "None of these" (ghost). After the choice the card shows "Remembered N" with the kept facts and a success tick each. Facts drop the leading "User" for display |
 | Guest mode (`GuestBanner` on Home and Me, `CreateAccountScreen`, Welcome "Continue as guest") | Built on primitives + `useTheme()`; copy `guest.*` in `strings.ts` (en + ur). Banner: neutral card for 30 days, `warning` tone after ("Sign up to save your data"). Create account: name / email / password fields (bordered `TextInput`, 48 dp) and a two-option radio group (Keep my data · Start fresh). Guest locks reuse `LockedFeature` with "Create a free account". The Welcome button is a text link under the two existing buttons (Welcome is still on the legacy palette) |
-| Offline changes notice (`OutboxNotices`, app level next to `CalendarChangesSnackbar`) | `Snackbar` primitive, tone warning; copy `offline.*` in `strings.ts` (en + ur): "Couldn't save that change, so it was put back", "{label}: a change made offline couldn't be saved and was undone". Screens show saved copies at once and apply changes before the server answers (known-limitations.md → Offline sync) |
+| Offline changes notice (`OutboxNotices`, app level next to `CalendarImportsSnackbar`) | `Snackbar` primitive, tone warning; copy `offline.*` in `strings.ts` (en + ur): "Couldn't save that change, so it was put back", "{label}: a change made offline couldn't be saved and was undone". Screens show saved copies at once and apply changes before the server answers (known-limitations.md → Offline sync) |
+| UI v3, profile photo / documents / calendar import / export (17 Nov 2026) | New, built on primitives + `useTheme()`: `ProfilePhoto` + `Avatar` (Me), `PhotoCropScreen` (always dark), `DocumentTile` grid in My documents, `DocumentPreviewScreen`, `ImageViewer`, `CalendarImportScreen`. Copy `photo.*`, `docs.*`, `preview.*`, `export.*` (en + ur); `calendar.import.*` English only (calendar copy is English-only). Exports ask CSV / Excel in a dialog (`services/exportData.ts`). New icons: `camera`, `image`, `zoomIn`, `zoomOut` |
 
 A screen counts as migrated when it uses primitives and `useTheme()` only (no `constants/theme`, no `ui.*`, no raw hex), all copy is in `strings.ts`, it has skeleton / empty / error / offline states, and it passes the accessibility checklist (contrast, 48dp targets, font scaling, RTL, reduce motion, TalkBack order) in light + dark, English + Urdu, at 360 dp.

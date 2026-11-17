@@ -21,7 +21,10 @@ model User {
   /// Last request (updated at most every few hours). Guests unused for 60 days are deleted.
   lastSeenAt          DateTime?
   displayName         String?
+  /// A Google photo URL, or "/media/avatars/<file>" for one the user uploaded (cropped, 512 px).
   photoUrl            String?
+  /// The user uploaded or removed a photo: sign-in no longer copies the Google photo over it.
+  photoChosen         Boolean   @default(false)
   /// WhatsApp number (E.164). Set only by the LINK flow, together with phoneVerifiedAt.
   phoneNumber         String?   @unique
   phoneVerifiedAt     DateTime?
@@ -504,6 +507,12 @@ model Document {
   contentHash   String?
   /// DOC_KNOWLEDGE: facts about the user suggested from this document and what the user kept (status, facts, messageId).
   knowledge     Json?
+  /// The original file is kept in STORAGE_DIR (documents/<userId>/<id>/) for previews; false for text or older uploads.
+  fileStored    Boolean  @default(false)
+  /// A small preview image exists (images, PDFs).
+  hasThumbnail  Boolean  @default(false)
+  /// PDFs: pages that can be previewed.
+  pageCount     Int?
   createdAt     DateTime @default(now())
 
   user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -14,6 +14,7 @@ import { Button, Card, Chip, Dot, ListItem, PressableScale, Sheet, Skeleton, Sna
 import { AgendaRow } from "../../components/today/AgendaRow";
 import { DayRing } from "../../components/today/DayRing";
 import { NudgeCard } from "../../components/today/NudgeCard";
+import { useCalendarImports } from "../../hooks/useCalendarImports";
 import { TutorialTip } from "../../components/ui";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -257,6 +258,7 @@ export function DashboardScreen({ navigation }: Props) {
   const nudge = nudges[0] ?? null;
   // The Catch up card counts exactly what Catch up will show (overdue now, earlier today included).
   const slipped = useMemo(() => catchUpQueue(tasks, now).length, [tasks, now]);
+  const fromCalendar = useCalendarImports().length;
   const b = briefing;
   const part = dayPart(now);
   const name = firstName(dbUser?.displayName) ?? firstName(auth.currentUser?.displayName);
@@ -395,6 +397,18 @@ export function DashboardScreen({ navigation }: Props) {
               text={t("catch.card.text")}
               primary={{ label: t("catch.card.go"), onPress: () => navigation.navigate("CatchUp") }}
               onPress={() => navigation.navigate("CatchUp")}
+            />
+          </Animated.View>
+        ) : null}
+        {fromCalendar ? (
+          <Animated.View entering={enter(1)} layout={layout}>
+            <NudgeCard
+              icon="calendar"
+              tone="info"
+              title={t("calendar.import.nudgeTitle")}
+              text={fromCalendar === 1 ? t("calendar.import.nudgeOne") : t("calendar.import.nudgeMany", { count: String(fromCalendar) })}
+              primary={{ label: t("calendar.import.review"), onPress: () => navigation.navigate("CalendarImport") }}
+              onPress={() => navigation.navigate("CalendarImport")}
             />
           </Animated.View>
         ) : null}

@@ -1,6 +1,7 @@
 import { RoutineOccurrenceStatus, TaskStatus, type Task } from "@prisma/client";
 import { prisma } from "../../config/db.js";
 import { addDaysYmd, dayName, formatClock, localParts, localYmd, shortDateLabel, startOfLocalDay } from "../../lib/time.js";
+import { toCsv, toXlsx, type Table } from "../../lib/xlsx.js";
 
 /** "calendar_week": Monday of this week to today (chat, CHAT_FIXES_V2: "this week" said); "week": the last 7 days. */
 export type RangeKey = "week" | "calendar_week" | "month" | "3months" | "all";
@@ -182,38 +183,52 @@ export async function getAnalytics(userId: string, tz: string, key: RangeKey = "
   };
 }
 
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const s = value instanceof Date ? value.toISOString() : String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-export async function exportCsv(userId: string): Promise<string> {
+/** Tasks, routines and mood logs as tables (CSV and Excel exports, FR-AP-001 §3, FR-AN-002 §5). */
+export async function exportTables(userId: string): Promise<Table[]> {
   const [tasks, routines, moods] = await Promise.all([
     prisma.task.findMany({ where: { userId, status: { not: TaskStatus.DELETED } }, orderBy: { createdAt: "asc" } }),
     prisma.routine.findMany({ where: { userId }, include: { occurrences: true } }),
     prisma.moodLog.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
   ]);
-  const lines: string[] = [];
-  lines.push("TASKS");
-  lines.push(["title", "status", "priority", "category", "type", "due", "completed_at", "progress", "duration_min", "tags", "created_at"].join(","));
-  for (const t of tasks) {
-    lines.push(
-      [t.title, t.status, t.priority, t.category, t.taskType, t.dueAt, t.completedAt, t.progress, t.durationMinutes, Array.isArray(t.tags) ? (t.tags as string[]).join(" ") : "", t.createdAt]
-        .map(csvCell)
-        .join(","),
-    );
+  return [
+    {
+      name: "Tasks",
+      headers: ["title", "status", "priority", "category", "type", "due", "completed_at", "progress", "duration_min", "tags", "created_at"],
+      rows: tasks.map((t) => [t.title, t.status, t.priority, t.category, t.taskType, t.dueAt, t.completedAt, t.progress, t.durationMinutes, Array.isArray(t.tags) ? (t.tags as string[]).join(" ") : "", t.createdAt]),
+    },
+    {
+      name: "Routines",
+      headers: ["title", "frequency", "time", "priority", "completed", "skipped", "missed"],
+      rows: routines.map((r) => {
+        const count = (s: RoutineOccurrenceStatus) => r.occurrences.filter((o) => o.status === s).length;
+        return [r.title, r.frequency, r.dueTime, r.priority, count("COMPLETED"), count("SKIPPED"), count("MISSED")];
+      }),
+    },
+    { name: "Mood logs", headers: ["mood", "score", "source", "note", "logged_at"], rows: moods.map((m) => [m.mood, m.score, m.source, m.note, m.createdAt]) },
+  ];
+}
+
+export type ExportFormat = "csv" | "xlsx";
+export const exportFormat = (raw: unknown): ExportFormat => (raw === "xlsx" ? "xlsx" : "csv");
+
+/**
+ * The export as a file for the app: CSV keeps its old shape (`csv` text) and also comes as `data` (base64) like
+ * Excel, so the app saves and shares a real file either way.
+ */
+export async function exportFile(userId: string, format: ExportFormat, base: string, tz: string): Promise<{ filename: string; mime: string; data: string; csv?: string }> {
+  const tables = await exportTables(userId);
+  const day = new Date().toISOString().slice(0, 10);
+  if (format === "xlsx") {
+    return { filename: `${base}-${day}.xlsx`, mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data: toXlsx(tables, tz).toString("base64") };
   }
-  lines.push("", "ROUTINES");
-  lines.push(["title", "frequency", "time", "priority", "completed", "skipped", "missed"].join(","));
-  for (const r of routines) {
-    const count = (s: RoutineOccurrenceStatus) => r.occurrences.filter((o) => o.status === s).length;
-    lines.push([r.title, r.frequency, r.dueTime, r.priority, count("COMPLETED"), count("SKIPPED"), count("MISSED")].map(csvCell).join(","));
-  }
-  lines.push("", "MOOD LOGS");
-  lines.push(["mood", "score", "source", "note", "logged_at"].join(","));
-  for (const m of moods) lines.push([m.mood, m.score, m.source, m.note, m.createdAt].map(csvCell).join(","));
-  return lines.join("\n");
+  const csv = toCsv(tables);
+  // A byte-order mark so Excel opens the UTF-8 file with Urdu and other scripts intact.
+  return { filename: `${base}-${day}.csv`, mime: "text/csv", data: Buffer.from(String.fromCharCode(0xfeff) + csv, "utf8").toString("base64"), csv };
+}
+
+/** Kept for callers of the CSV text. */
+export async function exportCsv(userId: string): Promise<string> {
+  return toCsv(await exportTables(userId));
 }
 
 /**

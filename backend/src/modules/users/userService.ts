@@ -1,5 +1,6 @@
 import type { User } from "@prisma/client";
 import { prisma } from "../../config/db.js";
+import { photoAtSignIn } from "./photoService.js";
 
 /**
  * Creates or refreshes the user for a Firebase account. A guest (FR-OB-003) has no email; once the same Firebase
@@ -13,6 +14,9 @@ export async function syncUserFromFirebase(input: {
   photoUrl?: string | null;
 }): Promise<User> {
   const isGuest = Boolean(input.isGuest) && !input.email;
+  const current = await prisma.user.findUnique({ where: { firebaseUid: input.firebaseUid }, select: { photoUrl: true, photoChosen: true } });
+  // The Google photo is used until the user uploads or removes their own (photoService.ts).
+  const photoUrl = photoAtSignIn(current, input.photoUrl);
   return prisma.user.upsert({
     where: { firebaseUid: input.firebaseUid },
     create: {
@@ -20,13 +24,13 @@ export async function syncUserFromFirebase(input: {
       email: input.email,
       isGuest,
       displayName: input.displayName ?? null,
-      photoUrl: input.photoUrl ?? null,
+      photoUrl: photoUrl ?? null,
     },
     update: {
       // Never clear a known email: a guest token can't turn an account back into a guest.
       ...(input.email ? { email: input.email, isGuest: false } : {}),
       displayName: input.displayName ?? undefined,
-      photoUrl: input.photoUrl ?? undefined,
+      photoUrl,
     },
   });
 }

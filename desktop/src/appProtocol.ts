@@ -39,12 +39,15 @@ export function isExternalAllowed(url: string): boolean {
   }
 }
 
-/** Content Security Policy for the app pages: own code only; API / Firebase calls over http(s). */
+/**
+ * Content Security Policy for the app pages: own code only; API / Firebase calls over http(s). Images over http(s)
+ * too: profile photos come from the API's host (plain http on a local network) or Google.
+ */
 export const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  "img-src 'self' data: blob: http: https:",
   "font-src 'self' data:",
   "connect-src 'self' http: https:",
   "object-src 'none'",

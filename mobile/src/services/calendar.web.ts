@@ -1,8 +1,8 @@
-import type { BusyEvent, Pulled, taskSpan } from "../utils/calendarSync";
+import type { BusyEvent, ImportCandidate, taskSpan } from "../utils/calendarSync";
 
 /**
- * Web / desktop build of services/calendar.ts. CALENDAR_SYNC writes into the *phone's* calendar (expo-calendar), which
- * a computer doesn't have, so on desktop the feature reports itself off: the Settings card hides, chat's "am I free"
+ * Web / desktop build of services/calendar.ts. CALENDAR_SYNC reads the *phone's* calendar (expo-calendar), which
+ * a computer doesn't have (events added on the phone arrive here as tasks through sync), so on desktop the feature reports itself off: the Settings card hides, chat's "am I free"
  * falls back to tasks only, and there are no clash cards. Same exports.
  */
 
@@ -24,17 +24,19 @@ export async function enableCalendarSync(): Promise<EnableResult> {
 
 export async function disableCalendarSync(): Promise<void> {}
 
-export async function ourEventCount(): Promise<number> {
+export function subscribeCalendarImports(_listener: (pending: ImportCandidate[]) => void): () => void {
+  return () => undefined;
+}
+
+export async function pendingImports(_now = Date.now()): Promise<ImportCandidate[]> {
+  return [];
+}
+
+export async function addImports(_keys: string[], _note: string): Promise<number> {
   return 0;
 }
 
-export async function removeAllCalendarEvents(): Promise<boolean> {
-  return true;
-}
-
-export function subscribeCalendarChanges(_listener: (pulled: Pulled[]) => void): () => void {
-  return () => undefined;
-}
+export async function skipImports(_keys: string[]): Promise<void> {}
 
 export function startCalendarWatch(): () => void {
   return () => undefined;

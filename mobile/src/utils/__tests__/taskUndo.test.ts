@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "../../types/models";
-import { taskEvent } from "../calendarSync";
 import { mergeStatusProgress, undoStatusChanges } from "../taskUndo";
 
 /** Swipe "Done" (toggle) then Undo, through the same local rule the phone applies. */
@@ -25,12 +24,5 @@ describe("swipe Undo restores the exact previous status and progress", () => {
     const { swiped, undone } = swipeThenUndo(task({ status: "COMPLETED", progress: 100 }));
     expect(swiped.status).toBe("PENDING");
     expect([undone.status, undone.progress]).toEqual(["COMPLETED", 100]);
-  });
-  it("the calendar event (with or without the ✓ mark) is exactly what it was", () => {
-    for (const t of [task({}), task({ status: "COMPLETED", progress: 100 })]) {
-      const { swiped, undone } = swipeThenUndo(t);
-      expect(taskEvent(swiped)?.title).not.toBe(taskEvent(t)?.title);
-      expect(taskEvent(undone)).toEqual(taskEvent(t));
-    }
   });
 });

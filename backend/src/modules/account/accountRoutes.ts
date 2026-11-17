@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../config/db.js";
+import { removeUserFiles } from "../../lib/storage.js";
 import { handle, HttpError, parseBody, requireUser } from "../../lib/http.js";
 import { getFirebaseAuth } from "../../config/firebase.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
-import { exportCsv } from "../analytics/analyticsService.js";
+import { exportFile, exportFormat } from "../analytics/analyticsService.js";
 
 export const accountRouter = Router();
 accountRouter.use(requireFirebaseUser, requireUser);
@@ -32,11 +33,11 @@ accountRouter.put(
   }),
 );
 
-/** Full data export (FR-AP-001 §3): tasks, routines and mood logs as CSV. */
+/** Full data export (FR-AP-001 §3): tasks, routines and mood logs as CSV or Excel (`?format=xlsx`). */
 accountRouter.get(
   "/export",
   handle(async (req, res) => {
-    sendSuccess(res, { filename: `life-organizer-data-${new Date().toISOString().slice(0, 10)}.csv`, csv: await exportCsv(req.user.id) });
+    sendSuccess(res, await exportFile(req.user.id, exportFormat(req.query.format), "life-organizer-data", req.settings.timezone));
   }),
 );
 
@@ -50,6 +51,7 @@ accountRouter.post(
   handle(async (req, res) => {
     if (!req.user.isGuest) throw new HttpError(403, "NOT_GUEST", "Only a guest account can be discarded this way.");
     await prisma.user.delete({ where: { id: req.user.id } });
+    await removeUserFiles(req.user.id).catch((error: unknown) => console.warn("Could not delete user files", error));
     await getFirebaseAuth()
       .deleteUser(req.user.firebaseUid)
       .catch((error: unknown) => console.warn("Could not delete Firebase guest", error instanceof Error ? error.message : error));

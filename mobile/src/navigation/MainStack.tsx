@@ -31,6 +31,9 @@ import { SavedPlacesScreen } from "../screens/places/SavedPlacesScreen";
 import { TaskDetailScreen } from "../screens/tasks/TaskDetailScreen";
 import { TaskListScreen } from "../screens/tasks/TaskListScreen";
 import { CatchUpScreen } from "../screens/tasks/CatchUpScreen";
+import { CalendarImportScreen } from "../screens/tasks/CalendarImportScreen";
+import { PhotoCropScreen } from "../screens/profile/PhotoCropScreen";
+import { DocumentPreviewScreen } from "../screens/documents/DocumentPreviewScreen";
 import type { ActionPayload, Priority, TaskType } from "../types/models";
 
 export type TaskFormPrefill = {
@@ -88,8 +91,14 @@ export type MainStackParamList = {
   CreateAccount: undefined;
   /** The review of one document's reading (from its chat card or My documents). */
   DocumentReview: { documentId: string };
+  /** My documents → a tile: the pages, the photo or the text read. */
+  DocumentPreview: { documentId: string };
   /** UI v3: sort overdue tasks one by one. */
   CatchUp: undefined;
+  /** CALENDAR_SYNC (one-way): upcoming phone-calendar events to add as tasks. */
+  CalendarImport: undefined;
+  /** Me → profile photo: crop the picked photo in a circle frame. */
+  PhotoCrop: { uri: string; width: number; height: number };
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -176,7 +185,10 @@ function Screens() {
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
       <Stack.Screen name="DocumentReview" component={DocumentReviewScreen} />
+      <Stack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
       <Stack.Screen name="CatchUp" component={CatchUpScreen} />
+      <Stack.Screen name="CalendarImport" component={CalendarImportScreen} />
+      <Stack.Screen name="PhotoCrop" component={PhotoCropScreen} options={{ animation: "fade" }} />
     </Stack.Navigator>
   );
 }

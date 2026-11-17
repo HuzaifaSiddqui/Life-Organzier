@@ -1,3 +1,4 @@
+import type { ExportFile, ExportFormat } from "./exportData";
 import type { Category, User, UserSettings } from "../types/models";
 import { apiDelete, apiGet, apiPost, apiPut } from "./api";
 import { scheduleReminderSync } from "./reminders";
@@ -60,8 +61,9 @@ export async function updateProfile(displayName: string): Promise<User> {
   return (await apiPut<{ user: User }>("/account/profile", { displayName })).user;
 }
 
-export async function exportAllData(): Promise<{ filename: string; csv: string }> {
-  return apiGet("/account/export");
+/** Everything (tasks, routines, mood logs) as CSV or Excel (FR-AP-001 §3). */
+export async function exportAllData(format: ExportFormat): Promise<ExportFile> {
+  return apiGet(`/account/export?format=${format}`);
 }
 
 export async function requestAccountDeletion(): Promise<string> {
