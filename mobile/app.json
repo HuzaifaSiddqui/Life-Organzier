@@ -15,6 +15,7 @@
       "bundleIdentifier": "com.anonymous.lifeorganizer"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/branding/adaptive-foreground.png",
         "backgroundImage": "./assets/branding/adaptive-background.png",
@@ -55,7 +56,13 @@
           }
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/branding/notification-icon.png",
+          "color": "#0A6FD6"
+        }
+      ],
       [
         "expo-speech-recognition",
         {

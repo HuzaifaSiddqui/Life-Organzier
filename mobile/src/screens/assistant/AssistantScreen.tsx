@@ -1,3 +1,5 @@
+import { scheduleReminderSync } from "../../services/reminders";
+import { syncNow } from "../../services/syncEngine";
 import { ComposerPlusMenu } from "../../components/assistant/ComposerPlusMenu";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { isOnline, pickChatDocument, type PickedDoc } from "../../services/chatDocuments";
@@ -48,6 +50,9 @@ const STARTERS = [
   "I'm feeling stressed",
   "Daily meditation at 6 AM for 10 minutes",
 ];
+
+/** Replies that changed nothing in the user's tasks or routines (no sync needed after them). */
+const CHAT_ONLY = /^(?:chat|chat_fallback|smalltalk|support|greeting|thanks|help|unclear|capabilities|document_answer|read_back)$/;
 
 const CLIENT_SCREENS: Record<string, keyof MainStackParamList> = {
   Routines: "Routines",
@@ -155,6 +160,9 @@ export function AssistantScreen({ navigation, route }: Props) {
           reply.message,
         ]);
         if (reply.message.intent === "task_created") void addClashCard(reply.message);
+        // Chat can add, change or finish tasks and routines: bring the phone's copy and its reminders up to date now,
+        // or a task added here gets no phone reminder until the next sync (WhatsApp would still remind).
+        if (!CHAT_ONLY.test(reply.message.intent ?? "")) void syncNow().then(() => scheduleReminderSync(0));
         // Settings changed (or undone) from chat: refresh what the app shows and plans with.
         if (/^(?:settings_|checkin|undone)/.test(reply.message.intent ?? "")) void reload();
         const shouldSpeak = speakReplies || input.voice || reply.message.intent === "read_back";

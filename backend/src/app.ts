@@ -1,3 +1,6 @@
+import { changesUserData } from "./modules/push/pushRules.js";
+import { scheduleSyncPush } from "./modules/push/pushService.js";
+import type { UserRequest } from "./lib/http.js";
 import { guestModeOn } from "./modules/guest/guestRules.js";
 import cors, { type CorsOptions } from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
@@ -72,6 +75,15 @@ app.get("/health/ai", (_req, res) => {
 
   app.get("/", (_req, res) => {
     res.json({ ok: true, message: "Life Organizer API is running", health: "/health", apiBase: "/api" });
+  });
+
+  // After a request that changed the user's data, their other phones are told to sync (silent push, push/pushRules.ts).
+  app.use("/api", (req, res, next) => {
+    res.on("finish", () => {
+      const r = req as UserRequest;
+      if (r.user && res.statusCode < 400 && changesUserData(req.method, req.originalUrl, req.body)) scheduleSyncPush(r.user.id, r.deviceId ?? null);
+    });
+    next();
   });
 
   app.use("/api/auth", authRouter);

@@ -26,6 +26,8 @@ export type DesktopBridge = {
   onReminderClick(cb: (item: DesktopReminder) => void): () => void;
   getLaunchAtLogin(): Promise<boolean>;
   setLaunchAtLogin(on: boolean): Promise<void>;
+  /** "Continue with Google" in the shell's own sign-in window: an id token, or null when the user closed it. */
+  googleSignIn?(clientId: string): Promise<string | null>;
 };
 
 export function desktopBridge(): DesktopBridge | null {

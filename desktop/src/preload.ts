@@ -11,6 +11,7 @@ const CH = {
   click: "reminders:click",
   getLogin: "app:get-launch-at-login",
   setLogin: "app:set-launch-at-login",
+  google: "auth:google",
 };
 
 contextBridge.exposeInMainWorld("lifeOrganizer", {
@@ -26,4 +27,6 @@ contextBridge.exposeInMainWorld("lifeOrganizer", {
   },
   getLaunchAtLogin: () => ipcRenderer.invoke(CH.getLogin),
   setLaunchAtLogin: (on: boolean) => ipcRenderer.invoke(CH.setLogin, Boolean(on)),
+  /** "Continue with Google": the shell's own Google sign-in window; resolves with an id token, or null if closed. */
+  googleSignIn: (clientId: string) => ipcRenderer.invoke(CH.google, String(clientId)),
 });

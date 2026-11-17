@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { handle, parseBody, requireUser } from "../../lib/http.js";
+import { prisma } from "../../config/db.js";
 import { requireFirebaseUser } from "../../middleware/authMiddleware.js";
 import { sendSuccess } from "../../utils/apiResponse.js";
 import { logEvent } from "../events/eventService.js";
@@ -16,6 +17,8 @@ reminderRouter.get(
   "/plan",
   handle(async (req, res) => {
     const days = Math.min(14, Math.max(1, Number(req.query.days ?? 7)));
+    // This phone now has every reminder as of now (push/missedReminders.ts sends only what changed after this).
+    if (req.deviceId) await prisma.pushToken.updateMany({ where: { userId: req.user.id, deviceId: req.deviceId }, data: { planSyncedAt: new Date() } });
     const reminders = await planReminders(req.user.id, req.settings, new Date(), days);
     // FR-RN-004: separate list; the phone schedules reminders first, then check-ins, within its cap.
     const checkins = await planCheckins(req.user.id, req.settings, new Date(), days);

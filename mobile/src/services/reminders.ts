@@ -1,3 +1,5 @@
+import { palettes } from "../theme/tokens";
+import { notificationLook, type NotificationKind } from "../utils/notificationLook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
@@ -94,38 +96,43 @@ async function uiLanguage(): Promise<Language> {
 }
 
 /**
- * Action buttons. Every action opens the app, so its JS runs even when the app was closed (no
- * background task handler). Check-in labels follow the UI language and are re-registered on each plan sync.
+ * Action buttons. Answers (Mark done, Snooze, Skip, Started…) run in the background without opening the app: on
+ * Android expo-notifications runs the notification task (services/notificationActions.ts) for them when the app isn't
+ * in front, and the listener below when it is. Only "View details" and "Update…" open the app. Check-in labels follow
+ * the UI language and are re-registered on each plan sync.
  */
 async function registerCategories(): Promise<void> {
   const lang = await uiLanguage();
+  lookLanguage = lang;
   const t = (k: StringKey) => dictionaries[lang][k] ?? dictionaries.en[k];
   const open = { opensAppToForeground: true };
+  // Answered in the background: the notification goes, the app stays closed.
+  const quiet = { opensAppToForeground: false };
   await Notifications.setNotificationCategoryAsync(CATEGORY_TASK, [
-    { identifier: "DONE", buttonTitle: "Mark done", options: open },
-    { identifier: "SNOOZE", buttonTitle: "Snooze 15 min", options: open },
-    { identifier: "OPEN", buttonTitle: "View details", options: open },
+    { identifier: "DONE", buttonTitle: t("notif.markDone"), options: quiet },
+    { identifier: "SNOOZE", buttonTitle: t("notif.snooze15"), options: quiet },
+    { identifier: "OPEN", buttonTitle: t("notif.view"), options: open },
   ]);
   // Android shows at most 3 actions; a plain tap opens the routine.
   await Notifications.setNotificationCategoryAsync(CATEGORY_ROUTINE, [
-    { identifier: "DONE", buttonTitle: "Done", options: open },
-    { identifier: "SNOOZE", buttonTitle: `Snooze ${SNOOZE_MINUTES} min`, options: open },
-    { identifier: "SKIP", buttonTitle: "Skip today", options: open },
+    { identifier: "DONE", buttonTitle: t("notif.done"), options: quiet },
+    { identifier: "SNOOZE", buttonTitle: t("notif.snoozeMin").replace("{minutes}", String(SNOOZE_MINUTES)), options: quiet },
+    { identifier: "SKIP", buttonTitle: t("notif.skipToday"), options: quiet },
   ]);
   await Notifications.setNotificationCategoryAsync(CATEGORY_CHECKIN_START, [
-    { identifier: "STARTED", buttonTitle: t("checkin.started"), options: open },
-    { identifier: "NOT_TODAY", buttonTitle: t("checkin.notToday"), options: open },
+    { identifier: "STARTED", buttonTitle: t("checkin.started"), options: quiet },
+    { identifier: "NOT_TODAY", buttonTitle: t("checkin.notToday"), options: quiet },
   ]);
-  // Android shows at most 3 actions; completion uses exactly 3.
+  // Android shows at most 3 actions; completion uses exactly 3. "Update…" opens the sheet to type an answer.
   await Notifications.setNotificationCategoryAsync(CATEGORY_CHECKIN_DONE, [
-    { identifier: "DONE", buttonTitle: t("checkin.done"), options: open },
-    { identifier: "PLUS_30", buttonTitle: t("checkin.plus30"), options: open },
+    { identifier: "DONE", buttonTitle: t("checkin.done"), options: quiet },
+    { identifier: "PLUS_30", buttonTitle: t("checkin.plus30"), options: quiet },
     { identifier: "UPDATE", buttonTitle: t("checkin.update"), options: open },
   ]);
   // "Dismiss" needs no app: the 4 h once-per-visit mark is already set when the notification is shown.
   await Notifications.setNotificationCategoryAsync(CATEGORY_LOCATION, [
-    { identifier: "LOCATION_DONE", buttonTitle: t("location.done"), options: open },
-    { identifier: "LOCATION_DISMISS", buttonTitle: t("location.dismiss"), options: { opensAppToForeground: false } },
+    { identifier: "LOCATION_DONE", buttonTitle: t("location.done"), options: quiet },
+    { identifier: "LOCATION_DISMISS", buttonTitle: t("location.dismiss"), options: quiet },
   ]);
 }
 
@@ -136,6 +143,15 @@ export async function ensureNotificationCategories(): Promise<void> {
 
 type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
 let lastChannel: Channel = CHANNELS.SOUND_VIBRATION;
+
+let lookLanguage: Language = "en";
+
+/** The label next to the app name and the tint of the icon and buttons (utils/notificationLook.ts). */
+function look(kind: NotificationKind, level?: string | null): { subtitle: string; color: string } {
+  const l = notificationLook(kind, level);
+  const dict = dictionaries[lookLanguage];
+  return { subtitle: dict[l.label] ?? dictionaries.en[l.label], color: l.tone === "danger" ? palettes.light.danger.fg : palettes.light.accent };
+}
 
 /** Schedules one check-in notification (from the plan, or the "next" returned by the respond endpoint). */
 export async function scheduleCheckin(c: PlannedCheckin, channel: Channel = lastChannel): Promise<boolean> {
@@ -149,6 +165,7 @@ export async function scheduleCheckin(c: PlannedCheckin, channel: Channel = last
         body: c.body,
         sound: channel.sound,
         categoryIdentifier: c.category === "START" ? CATEGORY_CHECKIN_START : CATEGORY_CHECKIN_DONE,
+        ...look("checkin"),
         data: { kind: "lo-checkin", checkinId: c.id, taskId: c.taskId, category: c.category },
         ...(Platform.OS === "android" ? { priority: Notifications.AndroidNotificationPriority.HIGH } : {}),
       },
@@ -213,6 +230,7 @@ async function scheduleRepeat(r: { occurrenceId: string; fireAt: string; title: 
         body: r.body,
         sound: channel.sound,
         categoryIdentifier: CATEGORY_ROUTINE,
+        ...look("routine"),
         data: { taskId: null, routineOccurrenceId: r.occurrenceId, fireAt: r.fireAt, level: "critical", kind: "lo-reminder" },
         ...(Platform.OS === "android" ? { priority: Notifications.AndroidNotificationPriority.MAX } : {}),
       },
@@ -261,7 +279,7 @@ async function scheduleTaskSnooze(s: TaskSnooze, channel: Channel = lastChannel)
   try {
     await Notifications.scheduleNotificationAsync({
       identifier: `${PREFIX}${s.identifier}`,
-      content: { title: s.title, body: s.body, sound: channel.sound, data: s.data, categoryIdentifier: s.categoryIdentifier ?? CATEGORY_TASK },
+      content: { title: s.title, body: s.body, sound: channel.sound, data: s.data, categoryIdentifier: s.categoryIdentifier ?? CATEGORY_TASK, ...look("task", "urgent") },
       trigger:
         Platform.OS === "android"
           ? { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: channel.id }
@@ -331,6 +349,7 @@ export async function syncReminders(): Promise<number | null> {
           body: r.body,
           sound: channel.sound,
           categoryIdentifier: r.taskId ? CATEGORY_TASK : CATEGORY_ROUTINE,
+          ...look(r.taskId ? "task" : "routine", r.level),
           data: { taskId: r.taskId, routineOccurrenceId: r.routineOccurrenceId, fireAt: r.fireAt, level: r.level, kind: "lo-reminder" },
           ...(Platform.OS === "android"
             ? { priority: r.prominent ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.HIGH }
@@ -437,11 +456,10 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   const content = response.notification.request.content;
   const data = (content.data ?? {}) as { taskId?: string | null; routineOccurrenceId?: string | null; fireAt?: string; kind?: string; checkinId?: string; category?: string };
   const action = response.actionIdentifier;
-  // Remove the notification from the tray once its action is handled.
-  const dismiss = () => Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => undefined);
+  // Remove the notification from the tray at once, so a button visibly does something; the work follows.
+  await Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => undefined);
   if (data.kind === "lo-checkin") {
     await handleCheckinAction(data, action, content.title ?? "", content.body ?? "");
-    await dismiss();
     return;
   }
   if (data.kind === "lo-location") {
@@ -452,14 +470,12 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
     } else if (action !== "LOCATION_DISMISS") {
       onOpen({ taskId: taskIds.length === 1 ? taskIds[0] : null, routineOccurrenceId: null, taskIds });
     }
-    await dismiss();
     return;
   }
   if (data.kind !== "lo-reminder") return;
   const target = { taskId: data.taskId ?? null, routineOccurrenceId: data.routineOccurrenceId ?? null };
   if (!target.taskId && target.routineOccurrenceId) {
     await handleRoutineAction(target.routineOccurrenceId, action, content, () => onOpen(target));
-    await dismiss();
     return;
   }
   if (action === "DONE") {
@@ -489,7 +505,6 @@ async function handleResponse(response: Notifications.NotificationResponse, onOp
   } else {
     onOpen(target);
   }
-  await dismiss();
   const mapped = action === "DONE" ? "DONE" : action === "SNOOZE" ? "SNOOZE" : "OPEN";
   apiPost("/reminders/action", { taskId: target.taskId, fireAt: data.fireAt ?? null, action: mapped }).catch(() => undefined);
 }
@@ -505,8 +520,9 @@ async function handleRoutineAction(occurrenceId: string, action: string, content
     delete snoozes[occurrenceId];
     await writeSnoozes(snoozes);
     try {
-      const { updateRoutineOccurrence } = await import("./routinesApi");
-      await updateRoutineOccurrence(occurrenceId, action === "DONE" ? "COMPLETED" : "SKIPPED", true);
+      // Through the outbox: sent now, or kept and sent when the phone is online (also from the background task).
+      const { send } = await import("./outbox");
+      await send({ method: "PATCH", path: `/routines/occurrences/${occurrenceId}`, body: { status: action === "DONE" ? "COMPLETED" : "SKIPPED", confirmMandatory: true }, key: `occurrence:${occurrenceId}`, label: "Routine" });
     } catch (error) {
       console.warn("Could not update routine from notification", error);
     }
@@ -534,6 +550,24 @@ async function claimResponse(r: Notifications.NotificationResponse): Promise<boo
     // storage unavailable: handle it rather than risk losing the tap
   }
   return true;
+}
+
+/** A message from a server push ("Added from WhatsApp", a shared task…), shown now with the app's look; a tap opens the app. */
+export async function showPushNotification(title: string, body: string, data: Record<string, string>): Promise<void> {
+  await Notifications.scheduleNotificationAsync({
+    content: { title, body, ...look("task"), data: { ...data, kind: "lo-push" } },
+    trigger: Platform.OS === "android" ? { channelId: lastChannel.id } : null,
+  });
+}
+
+/**
+ * A notification button answered while the app isn't in front (services/notificationActions.ts runs this from the
+ * notification task, without opening the app). Only the quiet buttons arrive here; same code and the same
+ * once-only claim as the listener below, so an answer is never applied twice.
+ */
+export async function handleBackgroundNotificationResponse(r: Notifications.NotificationResponse): Promise<void> {
+  if (!(await claimResponse(r))) return;
+  await handleResponse(r, () => undefined);
 }
 
 /**

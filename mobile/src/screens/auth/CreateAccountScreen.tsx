@@ -1,3 +1,4 @@
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
@@ -93,6 +94,11 @@ export function CreateAccountScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
         <Text variant="body" color="secondary">
           {t("guest.create.intro")}
+        </Text>
+        {/* Google keeps the guest data (the account is linked); the form below offers Keep / Start fresh. */}
+        <GoogleSignInButton onDone={() => navigation.goBack()} />
+        <Text variant="caption" color="tertiary" center>
+          {t("google.or")}
         </Text>
         <Card style={{ gap: spacing.sm }}>
           <Text variant="callout">{t("guest.create.name")}</Text>

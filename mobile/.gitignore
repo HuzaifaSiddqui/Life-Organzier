@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase Android config (push, Google sign-in): download from the Firebase console, see docs/push-setup.md
+/google-services.json

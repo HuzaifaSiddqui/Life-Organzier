@@ -1,3 +1,4 @@
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { useEffect, useState } from "react";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { continueAsGuest, guestModeAvailable } from "../../services/guest";
@@ -93,6 +94,7 @@ export function WelcomeScreen({ navigation }: Props) {
             >
               <Text style={styles.secondaryText}>Create account</Text>
             </Pressable>
+            <GoogleSignInButton />
             {guestOn ? (
               <Pressable
                 style={({ pressed }) => [styles.guest, pressed && styles.btnPressed]}

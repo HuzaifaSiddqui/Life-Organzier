@@ -1,3 +1,4 @@
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
@@ -123,6 +124,7 @@ export function LoginScreen({ navigation }: Props) {
               disabled={busy}
               style={{ marginTop: 8 }}
             />
+            <GoogleSignInButton />
             <Text style={styles.footer}>
               Need an account?{" "}
               <Text style={styles.footerLink} onPress={() => navigation.replace("Signup")}>

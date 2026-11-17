@@ -17,6 +17,10 @@ import type * as FirebaseNative from "../lib/firebase";
 import type * as FirebaseWeb from "../lib/firebase.web";
 import type * as MapNative from "../components/MapPicker";
 import type * as MapWeb from "../components/MapPicker.web";
+import type * as GoogleNative from "../services/googleSignIn";
+import type * as GoogleWeb from "../services/googleSignIn.web";
+import type * as NotifActionsNative from "../services/notificationActions";
+import type * as NotifActionsWeb from "../services/notificationActions.web";
 
 type Covers<Native, Web> = Web extends Pick<Native, keyof Native> ? true : false;
 type Assert<T extends true> = T;
@@ -29,4 +33,6 @@ export type PlatformParity = [
   Assert<Covers<typeof ShareNative, typeof ShareWeb>>,
   Assert<Covers<typeof FirebaseNative, typeof FirebaseWeb>>,
   Assert<Covers<typeof MapNative, typeof MapWeb>>,
+  Assert<Covers<typeof GoogleNative, typeof GoogleWeb>>,
+  Assert<Covers<typeof NotifActionsNative, typeof NotifActionsWeb>>,
 ];

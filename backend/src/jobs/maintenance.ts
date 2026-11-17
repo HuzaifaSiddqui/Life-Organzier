@@ -4,6 +4,7 @@ import { prisma } from "../config/db.js";
 import { getFirebaseAuth } from "../config/firebase.js";
 import { computeDueAt } from "../lib/time.js";
 import { expireCheckins } from "../modules/checkins/checkinService.js";
+import { sendMissedPhoneReminders } from "../modules/push/missedReminders.js";
 import { checkPushReceipts } from "../modules/push/pushService.js";
 import { purgeOldInbound, recoverStuckInbound } from "../modules/whatsapp/inbound.js";
 import { purgeProcessedUpdates, runAgentJobs } from "../modules/whatsappAgent/index.js";
@@ -69,6 +70,11 @@ export async function runWhatsappJobs(now = new Date()): Promise<void> {
   await checkPushReceipts(now.getTime());
 }
 
+/** Milliseconds until the next whole minute (0 exactly on one). */
+export function msToNextMinute(now: number): number {
+  return (60000 - (now % 60000)) % 60000;
+}
+
 export function startJobs(): () => void {
   const safe = (name: string, fn: () => Promise<unknown>) => () => {
     fn().catch((error) => console.warn(`Job ${name} failed:`, error instanceof Error ? error.message : error));
@@ -77,11 +83,23 @@ export function startJobs(): () => void {
   safe("maintenance", () => runMaintenance())();
   const hourly = setInterval(safe("maintenance", () => runMaintenance()), 3600000);
   const whatsapp = setInterval(safe("whatsapp", () => runWhatsappJobs()), 5 * 60000);
-  // WhatsApp Agent reminders (does nothing unless WHATSAPP_AGENT and WHATSAPP_AGENT_REMINDERS are on).
-  const agent = setInterval(safe("whatsapp-agent", () => runAgentJobs()), 60000);
+  // WhatsApp Agent reminders (does nothing unless WHATSAPP_AGENT and WHATSAPP_AGENT_REMINDERS are on). Reminders are
+  // due on whole minutes, so the job runs 1 s after each minute starts (a 5:02 reminder goes at 5:02:01, not up to a
+  // minute late as with a plain interval counted from the server's start).
+  let agent: NodeJS.Timeout | null = null;
+  const first = setTimeout(() => {
+    const minute = () => {
+      safe("whatsapp-agent", () => runAgentJobs())();
+      // Reminders a phone missed (task changed elsewhere, app frozen): a visible push at fire time.
+      safe("missed-reminders", () => sendMissedPhoneReminders())();
+    };
+    minute();
+    agent = setInterval(minute, 60000);
+  }, msToNextMinute(Date.now()) + 1000);
   return () => {
     clearInterval(hourly);
     clearInterval(whatsapp);
-    clearInterval(agent);
+    clearTimeout(first);
+    if (agent) clearInterval(agent);
   };
 }

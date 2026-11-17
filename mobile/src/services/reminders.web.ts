@@ -122,6 +122,12 @@ export function startReminderResponses(onOpen: (target: ReminderOpenTarget) => v
   });
 }
 
+/** Phone push messages (services/notificationActions.ts). The desktop gets changes by polling instead. */
+export async function showPushNotification(_title: string, _body: string, _data: Record<string, string>): Promise<void> {}
+
+/** Phone notification buttons answered in the background (services/notificationActions.ts). Desktop notifications have no buttons. */
+export async function handleBackgroundNotificationResponse(_r: unknown): Promise<void> {}
+
 /** Clears every scheduled reminder (sign out). */
 export async function clearAllReminders(): Promise<void> {
   if (replanTimer) clearInterval(replanTimer);

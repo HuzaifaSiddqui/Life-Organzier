@@ -12,10 +12,13 @@ import { openAppScreen } from "../navigation/navigationRef";
 import { noticeTarget } from "../utils/collab";
 
 /**
- * P2: a task added on WhatsApp reaches the phone straight away. The server sends a visible push
- * ("Added from WhatsApp", data {type: "sync"}); receiving or tapping it pulls the new task and re-plans
- * the local alarms. Needs an EAS projectId in the app config (see docs/push-setup.md); without one, push
- * is skipped and the next sync still picks the task up. The token is never logged.
+ * P2: changes made elsewhere (WhatsApp, the desktop, another phone) reach this phone straight away, so its alarms are
+ * re-planned without opening the app. Two ways, the token decides on the server (push/pushRules.ts):
+ * - Firebase Cloud Messaging (default; needs mobile/google-services.json): the device token is registered and the
+ *   server sends data-only pushes; the background task (services/notificationActions.ts) syncs, re-plans and shows
+ *   "Added from WhatsApp" itself.
+ * - Expo push, when the app config has an EAS projectId (docs/push-setup.md).
+ * The token is never logged.
  */
 
 const TOKEN_KEY = "life-organizer:push-token";
@@ -50,14 +53,20 @@ export async function registerForPush(): Promise<void> {
   try {
     if (!(await Notifications.getPermissionsAsync()).granted) return;
     const id = projectId();
-    if (!id) {
-      console.info("Push: no EAS projectId in the app config, skipping (see docs/push-setup.md)");
-      return;
-    }
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id });
+    // No EAS project: this phone's Firebase Cloud Messaging token (Android, google-services.json in the build).
+    const getToken = async () =>
+      id
+        ? (await Notifications.getExpoPushTokenAsync({ projectId: id })).data
+        : Platform.OS === "android"
+          ? String((await Notifications.getDevicePushTokenAsync()).data)
+          : null;
+    // Google Play services can hang without network; give up and try again on the next start.
+    const token = await Promise.race([getToken(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("token timeout")), 20000))]);
+    if (!token) return;
     await writeQueue(withoutToken(await readQueue(), token)); // signed back in: a pending unregister must not undo this
     await apiPost("/push/register", { token, platform: Platform.OS === "ios" ? "ios" : "android", deviceId: await getDeviceId() });
     await AsyncStorage.setItem(TOKEN_KEY, token);
+    console.info(`Push: registered (${id ? "expo" : "fcm"})`);
   } catch (error) {
     console.warn("Push registration failed:", error instanceof Error ? error.message : "unknown error");
   }

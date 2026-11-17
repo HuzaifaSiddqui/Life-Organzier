@@ -97,6 +97,40 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **Pasting text** for extraction is no longer a separate box; paste it into the chat as a message.
 - **My documents** (under Me) lists, reviews and deletes files. Documents is no longer in the sidebar / main navigation.
 
+## Notification buttons
+
+- **Answered without opening the app** (Android): Mark done, Snooze, Done / Skip today (routines), Started / Not today /
+  Done / +30 min (check-ins), and Done at a place run in a background task (`services/notificationActions.ts`) and
+  the notification goes away. Only "View" and "Update…" open the app. Offline, a routine answer waits in the outbox
+  and a task answer in the sync queue until the phone is online.
+- **Needs the app's session on the phone:** a signed-out app does nothing with a button.
+- **Not on desktop:** Windows notifications have no buttons (a click opens the app).
+- **Installing or updating the APK clears its scheduled reminders** (Android removes an app's alarms); they come
+  back when the app is opened once. Without push (no push token registered), a task added on another device or user
+  reaches this phone's reminders only when the app is opened or comes to the front (or the 6-hour sync); WhatsApp
+  reminders are sent by the server and don't depend on this. A task added in this phone's chat re-plans at once.
+- **Look:** a monochrome checkmark icon (`assets/branding/notification-icon.png`), the accent colour (red for "Due
+  soon" / "Due now"), and a short label next to the app name (Task, Due soon, Due now, Routine, Check-in, Nearby).
+  Android decides the rest of the layout, which differs by phone maker.
+
+## Google sign-in ("Continue with Google")
+
+- **Shown only when the app is built with** `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (mobile/.env). Setup, once:
+  1. Firebase console → Authentication → Sign-in method → **Google** → Enable; copy the **Web client ID**.
+  2. Firebase project settings → the Android app `com.anonymous.lifeorganizer` → add the **SHA-1** of the key the APK is
+     signed with (`keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android`).
+     A different signing key (a real release key, Play App Signing) needs its own SHA-1, or the phone sign-in fails.
+  3. Desktop app: Google Cloud console → APIs & Services → Credentials → the **Web client** → Authorized redirect URIs →
+     add `http://localhost:53682/google-auth`.
+- **Phone:** the native Google account sheet (`@react-native-google-signin/google-signin`, needs Google Play services).
+- **Desktop:** Firebase's popup can't run on `app://`, so the shell opens Google's sign-in in its own window and catches
+  the redirect to the address above (nothing listens there). **Browser** (`expo start --web`): Firebase's popup.
+- **Guests keep their data:** the Google account is linked to the guest account. If that Google account already has a
+  Life Organizer account, the guest is asked before switching to it (the guest data is then deleted).
+- An email + password account and a Google account with the **same email** are one Firebase account only if Firebase's
+  "one account per email" setting links them; otherwise signing in with Google shows Firebase's error message.
+- No other providers (Facebook, GitHub, Apple).
+
 ## Documents teach the assistant (DOC_KNOWLEDGE, off by default)
 
 - **Only documents sent in chat** are read for facts and search (not those sent before this feature, not WhatsApp
@@ -448,7 +482,8 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
 - **In-memory state per server process.** The per-number message queue, link-failure counts, "once an hour/day" notices and push tickets awaiting a receipt (each capped at 10,000 entries, oldest dropped first) reset on restart (lost messages are covered by the "please resend" sweep every 5 minutes). Several backend instances would need these in the database.
 - **Lost messages.** A message still unanswered after 5 minutes and not being processed (e.g. the server restarted mid-way) gets "Sorry, I missed that, please resend". A slow job on the same server is left alone; with several backend instances one instance can't see another's jobs.
 - **Crisis messages are answered for everyone.** The crisis check runs on every WhatsApp text before the link/Pro checks, so unlinked numbers and Free accounts get the support resources too; nothing about such a message is stored.
-- **Push needs EAS setup** (projectId, FCM V1 key, `google-services.json`, dev-client rebuild; `docs/push-setup.md`). Without it, a task added on WhatsApp appears at the next sync. The push text (task title) passes through Expo and Google FCM. Pending push receipts are kept in memory, so a restart skips their check (a dead token is removed the next time a push to it fails).
+- **Push needs Firebase setup** (`google-services.json` in the build, and the backend service account allowed to send FCM; `docs/push-setup.md`). Without it, a task added on WhatsApp appears at the next sync.
+- **Reminders a phone missed come without buttons.** When a task changes elsewhere and the phone hasn't fetched its plan since (battery saver froze the app), the server sends the reminder at fire time as a plain notification shown by Android (a tap opens the task; no Mark done / Snooze buttons). Task reminders only; the server process keeps which ones it sent in memory, so a restart may repeat one minute's. The push text (task title) passes through Expo and Google FCM. Pending push receipts are kept in memory, so a restart skips their check (a dead token is removed the next time a push to it fails).
 - **Urgent alerts** are WhatsApp messages only (no calls), one per task, for pending HIGH/URGENT tasks due within 3 hours. Tasks already started (IN_PROGRESS) get none. Outside the 24-hour window none is sent (logged once per task) and the app's local notification is relied on; if the user messages while the task is still urgent, the alert goes out on the next run.
 - **Reminder texts are English only.** WhatsApp reminders, urgent alerts, snooze replies and the "Added from WhatsApp" push are written in English, whatever the app language.
 - **Snooze** only works by replying to a WhatsApp reminder sent in the last 6 hours (otherwise "Nothing to snooze right now"; max 3 per task, 15 min–4 h, never past the due time). A snooze that lands in quiet hours or Do Not Disturb moves to when they end and the reply says the new time; it is refused only if that is after the due time. In the app, use the notification's Snooze button.
