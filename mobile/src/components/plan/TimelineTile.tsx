@@ -204,7 +204,7 @@ export function TimelineTile({ item, dayIndex, days, colW, color, onTap, onDrop,
         </View>
       </GestureDetector>
       <Animated.View pointerEvents="none" style={[styles.badge, { backgroundColor: colors.inverseSurface, borderRadius: radii.sm }, badge]}>
-        <LiveTime start={snapStart} end={snapEnd} />
+        <LiveTime start={snapStart} end={snapEnd} from={item.start} to={item.end} />
       </Animated.View>
       {canResize ? (
         <GestureDetector gesture={resize}>
@@ -217,10 +217,13 @@ export function TimelineTile({ item, dayIndex, days, colW, color, onTap, onDrop,
   );
 }
 
-/** The time shown on a lifted tile while it moves; React re-renders only on a 15-minute step. */
-function LiveTime({ start, end }: { start: SharedValue<number>; end: SharedValue<number> }) {
+/**
+ * The time shown on a lifted tile while it moves; React re-renders only on a 15-minute step. It starts from the tile's
+ * own times (the shared values start there too): reading `.value` during render trips Reanimated's strict-mode warning.
+ */
+function LiveTime({ start, end, from, to }: { start: SharedValue<number>; end: SharedValue<number>; from: number; to: number }) {
   const { colors } = useTheme();
-  const [range, setRange] = useState<[number, number]>([start.value, end.value]);
+  const [range, setRange] = useState<[number, number]>([from, to]);
   useAnimatedReaction(
     () => start.value * 10000 + end.value,
     (next, prev) => {

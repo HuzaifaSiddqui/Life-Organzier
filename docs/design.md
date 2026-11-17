@@ -146,6 +146,7 @@ Shadows are invisible on dark canvases, so in dark mode depth comes from lighter
 
 Rules:
 - Use Reanimated for all new animation, never the legacy `Animated` API. Animate only `transform` and `opacity`, and never layout properties.
+- Never read a shared value (`.value` / `.get()`) during render, including a `useState` first value or a JSX prop: Reanimated's strict mode warns ("Open debugger to view warnings"). Read it in worklets or `useAnimatedReaction`, and give a component its first value as a plain prop.
 - No linear easing. Use springs for press feedback and timing curves for fades.
 - **Reduce motion:** `PressableScale` drops the scale, `Skeleton` stops pulsing, and `useEntrance` returns nothing.
 - Entrance animation runs only on a screen's first render and only for the first 8 items. It never replays on scroll, refresh or re-render.
@@ -547,6 +548,8 @@ controls.
 - No screen was restyled. Unmigrated screens keep their legacy styles in the capped column.
 
 **UI v2, PR 5 (motion, 12 Nov 2026).** Screen transitions per screen type (tab fade, detail slide, Add task slide-up; none with reduce motion), done-tick pop on task rows, bell-badge pop. Reanimated 4 only; no new native module. Task rows tried `PressableScale` and went back to a plain `Pressable` after measuring scroll jank (3 runs each vs main: scroll p90 10 ms on both, janky ≤ 0.56 % vs main's worst 1.60 %). `ListItem` got optional `titleLines` / `subtitleLines` (default 1 / 2; 0 = wrap): the Settings → Phone calendar switch row wraps its title and explanation instead of cutting them off.
+
+**Fix (17 Nov 2026).** Plan timeline: `LiveTime` (the time badge on a lifted tile) read its shared values in `useState` on every render, so every tile raised Reanimated's strict-mode warning on the Plan screen. It now starts from the tile's own times (`from` / `to` props); the live update while dragging is unchanged.
 
 **UI v2, PR 4 (polish, 12 Nov 2026).** O: action names unified (Tasks header and long-press, task detail, Add screen title). M: haptics on done / start / chips / move / before delete. K: empty states with next actions on Tasks, Home Today and Routines. E: evening order on Home (check-in + Tomorrow card first after 18:00). Tasks also follows its `filter` parameter when opened again.
 
