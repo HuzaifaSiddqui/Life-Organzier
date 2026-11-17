@@ -1,4 +1,4 @@
-import { detectCrisis } from "../mood/crisis.js";
+import { CRISIS_RESOURCES, detectCrisis } from "../mood/crisis.js";
 import { NEGATIVE, type MoodDetection } from "../mood/moodService.js";
 
 /**
@@ -72,7 +72,7 @@ const MEDICAL_ASK = [
 /** Remember / schedule / log something, or ask about the user's own reminder ("when is my dose?"): not advice. */
 const NOT_MEDICAL_ASK = /^\s*(?:please\s+)?(?:remind|add|create|schedule|set|note|log|mark|make|save|track)\b|\b(?:task|routine|reminder|what time|when (?:is|was|do|should i take) my|did i|have i)\b/i;
 
-export const MEDICAL_REPLY = "I can't give medical advice, like doses or which medicine to take. Please ask a doctor or pharmacist. In an emergency, call 1122.";
+export const MEDICAL_REPLY = `I can't give medical advice, like doses or which medicine to take. Please ask a doctor or pharmacist. In an emergency, call ${CRISIS_RESOURCES.emergency}.`;
 
 export function medicalQuestion(text: string): boolean {
   const t = text.trim();
