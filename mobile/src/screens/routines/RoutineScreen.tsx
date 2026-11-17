@@ -9,6 +9,10 @@ import { InlineTimePickerField, TaskFormDueDateRow } from "../../components/DueD
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, EmptyState, HelpButton, KeyboardPad, ProgressBar, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
 import { useLocale } from "../../i18n/LocaleProvider";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "../../theme/ThemeProvider";
+import { Icon } from "../../components/icons/Icon";
+import { IconButton, PressableScale, Text as PText } from "../../components/primitives";
 import { colors, palette } from "../../constants/theme";
 import { usePreferences } from "../../context/PreferencesContext";
 import type { MainStackParamList } from "../../navigation/MainStack";
@@ -76,6 +80,8 @@ function adherence(r: Routine): { pct: number; total: number } | null {
 
 export function RoutineScreen({ navigation, route }: Props) {
   const { t } = useLocale();
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { settings } = usePreferences();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [today, setToday] = useState<Array<RoutineOccurrence & { routine: Routine }>>([]);
@@ -200,90 +206,124 @@ export function RoutineScreen({ navigation, route }: Props) {
 
   const contexts = settings?.contexts ?? [];
 
+  const leadColor = (pct: number) => (pct >= 80 ? theme.colors.success.fg : pct >= 50 ? theme.colors.warning.fg : theme.colors.danger.fg);
+
   return (
-    <View style={ui.screen}>
-      <ScreenHeader
-        title="Routines"
-        onBack={() => navigation.goBack()}
-        right={<HelpButton title="Routines" text="Recurring activities. Time-locked routines (prayer, morning walk) are never moved — if missed, the next one is ready. Flexible ones (dentist, bills) can be rescheduled. Mandatory routines are scheduled first." example={'Tell the assistant: "Mandatory daily prayer at 5 AM"'} />}
-      />
-      <ScrollView contentContainerStyle={ui.content}>
-        <Button title="Add routine" onPress={() => setForm({ ...EMPTY })} accessibilityLabel="Add routine" />
-        <TutorialTip id="routines" title="Create recurring activities here" text="Try “Daily meditation at 6 AM for 10 minutes” in the assistant, or tap Add routine." />
-        <SectionTitle title="Today" right={settings?.currentContext ? <Text style={styles.meta}>{settings.currentContext}</Text> : undefined} />
+    <View style={[styles.root, { backgroundColor: theme.colors.canvas, paddingTop: insets.top }]}>
+      {/* UI v3 list (docs/design.md "Routines"); the form below keeps its v2 layout. */}
+      <View style={styles.topBar}>
+        <IconButton icon={<Icon name="back" size={22} color={theme.colors.text} />} onPress={() => navigation.goBack()} accessibilityLabel={t("common.back")} />
+        <PText variant="title1" style={styles.flex}>
+          {t("routines.title")}
+        </PText>
+        <HelpButton title="Routines" text="Recurring activities. Time-locked routines (prayer, morning walk) are never moved — if missed, the next one is ready. Flexible ones (dentist, bills) can be rescheduled. Mandatory routines are scheduled first." example={'Tell the assistant: "Mandatory daily prayer at 5 AM"'} />
+        <Button title={t("routines.add")} size="sm" icon={<Icon name="plus" size={16} color={theme.colors.onAccent} />} onPress={() => setForm({ ...EMPTY })} accessibilityLabel="Add routine" />
+      </View>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}>
+        <TutorialTip id="routines" title="Create recurring activities here" text="Try “Daily meditation at 6 AM for 10 minutes” in the assistant, or tap Add." />
+        <View style={styles.sectionHead}>
+          <PText variant="label" color="tertiary">
+            {t("routines.today").toUpperCase()}
+          </PText>
+          {settings?.currentContext ? (
+            <PText variant="caption" color="tertiary">
+              {settings.currentContext}
+            </PText>
+          ) : null}
+        </View>
         {today.length ? (
-          today.map((o) => (
-            <Card key={o.id} style={styles.occ}>
-              <View style={{ flex: 1 }}>
-                <Text style={[ui.body, { fontFamily: "Inter_600SemiBold" }, o.status !== "PENDING" && { color: colors.textMuted }]}>
-                  
-                  {o.routine.title}
-                </Text>
-                <Text style={styles.meta}>
-                  {o.dueTime ?? "Any time"}
-                  {o.routine.durationMinutes ? ` · ${formatDuration(o.routine.durationMinutes)}` : ""}
-                  {o.routine.timeLocked ? " · time-locked" : ""}
-                  {o.status !== "PENDING" ? ` · ${o.status.toLowerCase()}` : ""}
-                </Text>
-              </View>
-              {o.status === "PENDING" ? (
-                <View style={{ flexDirection: "row", gap: 6 }}>
-                  <Chip small selected label="Done" onPress={() => void setOccurrence(o, "COMPLETED")} />
-                  <Chip small label="Skip" onPress={() => void setOccurrence(o, "SKIPPED")} />
+          <Card style={styles.listCard}>
+            {today.map((o, i) => {
+              const done = o.status === "COMPLETED";
+              const pending = o.status === "PENDING";
+              return (
+                <View key={o.id} style={[styles.occRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.hairline }]}>
+                  <Pressable
+                    onPress={() => (pending ? void setOccurrence(o, "COMPLETED") : undefined)}
+                    hitSlop={11}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: done, disabled: !pending }}
+                    accessibilityLabel={t(done ? "today.untick" : "today.tick", { title: o.routine.title })}
+                    style={[styles.tick, { borderColor: done ? theme.colors.success.fg : theme.colors.textTertiary, backgroundColor: done ? theme.colors.success.fg : "transparent" }]}
+                  >
+                    {done ? <Icon name="check" size={15} color={theme.colors.onAccent} strokeWidth={2.4} /> : null}
+                  </Pressable>
+                  <View style={styles.flex}>
+                    <PText variant="bodyStrong" style={!pending ? { color: theme.colors.textTertiary, textDecorationLine: done ? "line-through" : "none" } : undefined}>
+                      {o.routine.title}
+                    </PText>
+                    <View style={styles.metaRow}>
+                      {o.routine.timeLocked ? <Icon name="lock" size={12} color={theme.colors.textTertiary} /> : null}
+                      <PText variant="caption" color="secondary">
+                        {[o.dueTime ?? t("routines.anyTime"), o.routine.durationMinutes ? formatDuration(o.routine.durationMinutes) : null, !pending && !done ? o.status.toLowerCase() : null].filter(Boolean).join(" · ")}
+                      </PText>
+                    </View>
+                  </View>
+                  {pending ? <Button title={t("routines.skip")} size="sm" kind="ghost" onPress={() => void setOccurrence(o, "SKIPPED")} /> : null}
                 </View>
-              ) : null}
-            </Card>
-          ))
+              );
+            })}
+          </Card>
         ) : (
-          <Text style={styles.meta}>No routines today{settings?.currentContext ? ` for ${settings.currentContext}` : ""}.</Text>
+          <PText variant="callout" color="secondary">
+            {t("routines.noneToday")}
+          </PText>
         )}
 
-        <SectionTitle
-          title="All routines"
-          right={contexts.length ? <Chip small label={showAll ? "All contexts" : "This context"} onPress={() => setShowAll((v) => !v)} /> : undefined}
-        />
+        <View style={[styles.sectionHead, { marginTop: theme.spacing.xl }]}>
+          <PText variant="label" color="tertiary">
+            {t("routines.all").toUpperCase()}
+          </PText>
+          {contexts.length ? <Chip small label={showAll ? t("routines.allPlaces") : t("routines.thisPlace")} onPress={() => setShowAll((v) => !v)} /> : null}
+        </View>
         {routines.length === 0 ? (
           <EmptyState title={t("empty.routines.title")} text={t("empty.routines.text")} action={<Button title={t("empty.routines.add")} size="sm" onPress={() => setForm({ ...EMPTY })} />} />
         ) : (
-          routines.map((r) => {
-            const a = adherence(r);
-            return (
-              <Pressable
-                key={r.id}
-                onPress={() => setForm(formFor(r))}
-              >
-                <Card style={{ gap: 6, opacity: r.active ? 1 : 0.55 }}>
-                  <View style={styles.rowBetween}>
-                    <Text style={[ui.body, { fontFamily: "Inter_600SemiBold", flex: 1 }]}>
-                      
-                      {r.title}
-                    </Text>
-                    <Switch
-                      value={r.active}
-                      onValueChange={(active) => {
-                        setRoutines((list) => list.map((x) => (x.id === r.id ? { ...x, active } : x)));
-                        void sendChange({ method: "PUT", path: `/routines/${r.id}`, body: { active }, key: `routine:${r.id}`, merge: true, label: "Routine" });
-                      }}
-                    />
+          <View style={{ gap: theme.spacing.md }}>
+            {routines.map((r) => {
+              const a = adherence(r);
+              return (
+                <PressableScale
+                  key={r.id}
+                  onPress={() => setForm(formFor(r))}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${r.title}, ${freqLabel(r)}`}
+                  style={[styles.routineCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.hairline, borderRadius: theme.radii.lg, opacity: r.active ? 1 : 0.55 }]}
+                >
+                  <View style={[styles.routineIcon, { backgroundColor: theme.colors.accentSoft, borderRadius: theme.radii.md }]}>
+                    <Icon name={r.timeLocked ? "lock" : "repeat"} size={18} color={theme.colors.accentStrong} />
                   </View>
-                  <Text style={styles.meta}>
-                    {freqLabel(r)} · {r.dueTime ?? "no reminder"}
-                    {r.durationMinutes ? ` · ${formatDuration(r.durationMinutes)}` : ""}
-                    {r.locationContext ? ` · ${r.locationContext}` : ""}
-                    {r.timeLocked ? " · Time-locked" : ""}
-                  </Text>
-                  {a ? (
-                    <View style={{ gap: 3 }}>
-                      <ProgressBar value={a.pct} color={a.pct >= 80 ? palette.success : a.pct >= 50 ? palette.warning : palette.danger} height={5} />
-                      <Text style={styles.meta}>
-                        {a.pct}% kept over the last {a.total} times{a.pct >= 90 && a.total >= 7 ? " · Reliable" : ""}
-                      </Text>
-                    </View>
-                  ) : null}
-                </Card>
-              </Pressable>
-            );
-          })
+                  <View style={[styles.flex, { gap: 3 }]}>
+                    <PText variant="bodyStrong" numberOfLines={1}>
+                      {r.title}
+                    </PText>
+                    <PText variant="caption" color="secondary" numberOfLines={2}>
+                      {[freqLabel(r), r.dueTime ?? t("routines.noReminder"), r.durationMinutes ? formatDuration(r.durationMinutes) : null, r.locationContext].filter(Boolean).join(" · ")}
+                    </PText>
+                    {a ? (
+                      <View style={{ gap: 3, marginTop: 4 }}>
+                        <View style={[styles.bar, { backgroundColor: theme.colors.chartGrid }]}>
+                          <View style={{ width: `${a.pct}%`, height: "100%", backgroundColor: leadColor(a.pct), borderRadius: 2 }} />
+                        </View>
+                        <PText variant="caption" color="tertiary">
+                          {t("routines.kept", { pct: a.pct, total: a.total })}
+                          {a.pct >= 90 && a.total >= 7 ? ` · ${t("routines.reliable")}` : ""}
+                        </PText>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Switch
+                    value={r.active}
+                    accessibilityLabel={t(r.active ? "routines.on" : "routines.off", { title: r.title })}
+                    onValueChange={(active) => {
+                      setRoutines((list) => list.map((x) => (x.id === r.id ? { ...x, active } : x)));
+                      void sendChange({ method: "PUT", path: `/routines/${r.id}`, body: { active }, key: `routine:${r.id}`, merge: true, label: "Routine" });
+                    }}
+                  />
+                </PressableScale>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
@@ -451,6 +491,18 @@ export function RoutineScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  flex: { flex: 1 },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
+  content: { paddingHorizontal: 20, paddingTop: 8, gap: 10 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
+  listCard: { padding: 0, overflow: "hidden" },
+  occRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, minHeight: 64, paddingVertical: 10 },
+  tick: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  routineCard: { flexDirection: "row", alignItems: "flex-start", gap: 14, padding: 16, borderWidth: StyleSheet.hairlineWidth },
+  routineIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  bar: { height: 4, borderRadius: 2, overflow: "hidden", width: "80%" },
   meta: { fontFamily: "Inter_400Regular", fontSize: 13, color: colors.textMuted },
   occ: { flexDirection: "row", alignItems: "center", gap: 10 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },

@@ -1,6 +1,7 @@
 import { promptUnlock, useFeatureLock } from "../../components/LockedFeature";
 import { opacity } from "../../theme/tokens";
 import { Icon } from "../../components/icons/Icon";
+import { IconButton } from "../../components/primitives";
 import { useLocale } from "../../i18n/LocaleProvider";
 import { OutboxRefused, send, type SendInput } from "../../services/outbox";
 import { useCacheLoader } from "../../hooks/useCachedQuery";
@@ -9,7 +10,6 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BottomNav } from "../../components/BottomNav";
 import { BarChart, Donut, Heatmap } from "../../components/charts/Charts";
 import { Card, Chip, ConfidenceMeter, ProgressBar, SectionTitle, Snackbar, TutorialTip } from "../../components/ui";
 import { colors, palette, radii } from "../../constants/theme";
@@ -131,7 +131,11 @@ export function InsightsScreen({ navigation }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(range, true); }} />}
       >
         <View style={styles.header}>
-          <Text style={styles.h1}>Insights</Text>
+          {/* Opened from Me (UI v3), so it has a way back. */}
+          {navigation.canGoBack() ? (
+            <IconButton icon={<Icon name="back" size={22} color={colors.text} />} onPress={() => navigation.goBack()} accessibilityLabel={tr("common.back")} />
+          ) : null}
+          <Text style={[styles.h1, { flex: 1 }]}>Insights</Text>
           <Pressable onPress={() => void exportCsv()} style={[styles.exportBtn, lockFor("analyticsExport") ? { opacity: opacity.disabled } : null]}>
             {lockFor("analyticsExport") ? <Icon name="lock" size={14} color={palette.ai} /> : null}
             <Text style={styles.link}>Export CSV</Text>
@@ -267,9 +271,6 @@ export function InsightsScreen({ navigation }: Props) {
         ) : null}
       </ScrollView>
       <Snackbar text={toast} onHide={() => setToast(null)} />
-      <View style={[styles.navDock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-        <BottomNav active="Insights" onChange={(tab) => navigation.navigate(tab)} />
-      </View>
     </View>
   );
 }
@@ -299,5 +300,4 @@ const styles = StyleSheet.create({
   insightDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
   dismiss: { color: colors.textMuted, fontFamily: "Inter_600SemiBold" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
 });

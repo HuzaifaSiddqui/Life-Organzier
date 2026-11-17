@@ -1,87 +1,74 @@
-import { GuestBanner } from "../../components/GuestBanner";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import Animated, { FadeInDown, LinearTransition, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
-import { BottomNav } from "../../components/BottomNav";
-import { FloatingAddButton } from "../../components/FloatingAddButton";
-import { QuickTiles } from "../../components/home/QuickTiles";
-import { Icon as LineIcon } from "../../components/icons/Icon";
-import { MicIcon } from "../../components/icons/MicIcon";
-import { platformFeatures } from "../../constants/platformFeatures";
-import { Button, Card, Chip, Dot, ProgressBar, Skeleton, Snackbar, SyncBadge, Text, TutorialTip } from "../../components/ui";
 import { NotificationBell, SharedWithYouCard } from "../../components/collab/HomeShared";
+import { FloatingAddButton } from "../../components/FloatingAddButton";
+import { GuestBanner } from "../../components/GuestBanner";
+import { Icon } from "../../components/icons/Icon";
+import { clockLabel } from "../../components/plan/clock";
+import { Button, Card, Chip, Dot, ListItem, PressableScale, Sheet, Skeleton, Snackbar, SyncBadge, Text } from "../../components/primitives";
+import { AgendaRow } from "../../components/today/AgendaRow";
+import { DayRing } from "../../components/today/DayRing";
+import { NudgeCard } from "../../components/today/NudgeCard";
+import { TutorialTip } from "../../components/ui";
+import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
+import { useDayData } from "../../hooks/useDayData";
 import { useLocale } from "../../i18n/LocaleProvider";
 import type { StringKey } from "../../i18n/strings";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
-import { hapticDone, hapticTap } from "../../services/haptics";
 import { getApiErrorMessage } from "../../services/api";
 import { getBriefing, sendToAssistant } from "../../services/assistantApi";
-import { cancelTaskSnooze, scheduleReminderSync, snoozeTaskReminder } from "../../services/reminders";
-import { OutboxRefused, send } from "../../services/outbox";
+import { hapticDone, hapticTap } from "../../services/haptics";
 import { readCache, writeCache } from "../../services/localCache";
-import { useAuth } from "../../context/AuthContext";
-import { subscribeTasks } from "../../services/syncEngine";
+import { OutboxRefused, send } from "../../services/outbox";
+import { cancelTaskSnooze, scheduleReminderSync, snoozeTaskReminder } from "../../services/reminders";
+import { getCachedTasks, setTaskStatus } from "../../services/tasksApi";
 import { useTheme } from "../../theme/ThemeProvider";
-import type { ActionPayload, AttentionItem, Briefing, Mood, QuickAction, RoutineOccurrenceStatus, Task } from "../../types/models";
-import { formatDuration, formatTime } from "../../utils/format";
-import { isEvening, moodCaption, routinesCaption, summaryParts, thenUp, tomorrowPreview } from "../../utils/homeCards";
-import { getCachedTasks } from "../../services/tasksApi";
-import { NEXT_UP_SNOOZE_MINUTES } from "../../utils/taskSnooze";
+import { tabBar, withAlpha } from "../../theme/tokens";
 import { useLayout } from "../../theme/useLayout";
+import type { ActionPayload, AttentionItem, Briefing, Mood, QuickAction, Task } from "../../types/models";
+import { formatDuration, formatTime } from "../../utils/format";
+import { isEvening, thenUp, tomorrowPreview } from "../../utils/homeCards";
+import { NEXT_UP_SNOOZE_MINUTES } from "../../utils/taskSnooze";
+import type { TimelineItem } from "../../utils/timeline";
+import { dayPart, firstName, nudgeLook, nudgesFrom, todayAgenda } from "../../utils/today";
+import { catchUpQueue } from "../../utils/catchUp";
 
 type Props = NativeStackScreenProps<MainStackParamList, "Dashboard">;
 
-const MOODS: Array<{ mood: Mood; label: string; score: number }> = [
-  { mood: "calm", label: "Calm", score: 7 },
-  { mood: "motivated", label: "Motivated", score: 8 },
-  { mood: "happy", label: "Good", score: 8 },
-  { mood: "tired", label: "Tired", score: 4 },
-  { mood: "stressed", label: "Stressed", score: 3 },
-  { mood: "sad", label: "Low", score: 3 },
-  { mood: "overwhelmed", label: "Overwhelmed", score: 2 },
+const MOODS: Array<{ mood: Mood; key: StringKey; score: number }> = [
+  { mood: "calm", key: "mood.calm", score: 7 },
+  { mood: "motivated", key: "mood.motivated", score: 8 },
+  { mood: "happy", key: "mood.happy", score: 8 },
+  { mood: "tired", key: "mood.tired", score: 4 },
+  { mood: "stressed", key: "mood.stressed", score: 3 },
+  { mood: "sad", key: "mood.sad", score: 3 },
+  { mood: "overwhelmed", key: "mood.overwhelmed", score: 2 },
 ];
-
-function Icon({ d, size = 18, color }: { d: string; size?: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d={d} stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-const ICON = {
-  ask: "M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4 4v-4h0A2 2 0 0 1 4 14V6.5Z",
-  chevron: "M9 6l6 6-6 6",
-  check: "M5 12.5l4.5 4.5L19 7.5",
-  repeat: "M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4",
-  doc: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5ZM14 3v5h5M9 13h6M9 17h4",
-  pulse: "M3 12h4l3-8 4 16 3-8h4",
-  memory: "M12 3a6 6 0 0 0-6 6c0 2.2 1.2 3.6 2 4.5.6.7 1 1.5 1 2.5v1h6v-1c0-1 .4-1.8 1-2.5.8-.9 2-2.3 2-4.5a6 6 0 0 0-6-6ZM9.5 21h5",
-};
-
-/** The name comes from the saved profile first, so it shows at once and offline. */
-function greetingFor(b: Briefing | null, profileName: string | null | undefined): string {
-  const h = new Date().getHours();
-  const part = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const name =
-    profileName?.trim().split(/\s+/)[0] || auth.currentUser?.displayName?.trim().split(/\s+/)[0] || b?.greeting.split(",")[1]?.trim();
-  return name ? `${part}, ${name}` : part;
-}
 
 const CACHE_BRIEFING = "briefing";
 
+/**
+ * UI v3 Today (docs/design.md "Today"): what now, and what's left today.
+ * Header (progress ring, honest counts, place) → Needs you → Next up → today's agenda around "now" → check-in →
+ * suggestions → tomorrow (evening). Tasks and routines come from the same store as Plan, so both always agree and the
+ * screen opens instantly offline; the briefing (Next up, attention, suggestions, mood) loads behind it.
+ */
 export function DashboardScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { bottomPad } = useLayout();
   const { colors, spacing, radii } = useTheme();
   const { t } = useLocale();
+  const reduce = useReducedMotion();
   const { settings, update } = usePreferences();
   const { dbUser } = useAuth();
+  const { tasks, routines, routinesQ, now } = useDayData();
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [aiOnline, setAiOnline] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -90,14 +77,15 @@ export function DashboardScreen({ navigation }: Props) {
   const [snack, setSnack] = useState<{ text: string; action?: { label: string; onPress: () => void } } | null>(null);
   const setToast = useCallback((text: string | null) => setSnack(text ? { text } : null), []);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const onboardingChecked = useRef(false);
   const [tomorrow, setTomorrow] = useState<Task[]>([]);
-  const evening = isEvening();
+  const evening = isEvening(now);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      // Evening order (UI v2): tomorrow's first tasks from the phone's task store (no extra request).
       if (isEvening()) void getCachedTasks().then((all) => setTomorrow(tomorrowPreview(all)), () => undefined);
       const res = await getBriefing();
       setBriefing(res.briefing);
@@ -116,7 +104,7 @@ export function DashboardScreen({ navigation }: Props) {
   useEffect(() => {
     void readCache<Briefing>(CACHE_BRIEFING).then((saved) => {
       if (!saved) return;
-      setBriefing((now) => now ?? saved);
+      setBriefing((cur) => cur ?? saved);
       setLoading(false);
     });
   }, []);
@@ -126,8 +114,6 @@ export function DashboardScreen({ navigation }: Props) {
       void load(true);
     }, [load]),
   );
-
-  useEffect(() => subscribeTasks(() => void load(true)), [load]);
 
   // First-run onboarding (FR-OB-001).
   useEffect(() => {
@@ -160,9 +146,7 @@ export function DashboardScreen({ navigation }: Props) {
       try {
         const reply = await sendToAssistant({ payload: payload as ActionPayload, label: action.label });
         setToast(reply.message.content.split("\n")[0]);
-        if (reply.message.actions?.length && reply.message.intent !== "task_created") {
-          navigation.navigate("Assistant");
-        }
+        if (reply.message.actions?.length && reply.message.intent !== "task_created") navigation.navigate("Assistant");
         await load(true);
       } catch (e) {
         setToast(getApiErrorMessage(e));
@@ -173,7 +157,7 @@ export function DashboardScreen({ navigation }: Props) {
     [load, navigation, setToast],
   );
 
-  /** Next up → "Snooze 1 h": a local reminder in an hour (the notification-snooze path), with Undo. */
+  /** Next up → "Remind in 1 h": a local reminder in an hour (the notification-snooze path), with Undo. */
   const snoozeNext = async (task: Task) => {
     const at = await snoozeTaskReminder(task, NEXT_UP_SNOOZE_MINUTES).catch(() => null);
     if (!at) return setToast(t("home.snoozeFailed"));
@@ -186,10 +170,11 @@ export function DashboardScreen({ navigation }: Props) {
   // A one-tap check-in has no text to check for a crisis, so it is shown at once and sent now or when back online.
   const checkIn = async (m: (typeof MOODS)[number]) => {
     hapticTap();
+    const label = t(m.key);
     setBriefing((prev) => (prev ? { ...prev, mood: { ...prev.mood, latest: { mood: m.mood, score: m.score, at: new Date().toISOString() }, checkinDue: false } } : prev));
     setToast(t("offline.moodSaved"));
     if (["stressed", "overwhelmed", "sad", "anxious"].includes(m.mood)) {
-      navigation.navigate("Assistant", { payload: { type: "log_mood", mood: m.mood, score: m.score }, label: `I'm feeling ${m.label.toLowerCase()}`, nonce: Date.now() });
+      navigation.navigate("Assistant", { payload: { type: "log_mood", mood: m.mood, score: m.score }, label: `I'm feeling ${label.toLowerCase()}`, nonce: Date.now() });
     }
     try {
       const res = await send<{ recommendation: { message: string } }>({ method: "POST", path: "/mood", body: { mood: m.mood, score: m.score, source: "CHECKIN" }, label: "Mood" });
@@ -203,7 +188,10 @@ export function DashboardScreen({ navigation }: Props) {
   };
 
   const switchContext = async (ctx: string | null) => {
+    setPlaceOpen(false);
+    hapticTap();
     await update({ currentContext: ctx });
+    void routinesQ.reload();
     await load(true);
   };
 
@@ -221,30 +209,67 @@ export function DashboardScreen({ navigation }: Props) {
     }
   };
 
-  // Ticked at once; sent now or when back online. A refusal puts it back.
-  const completeRoutine = async (id: string) => {
-    hapticDone();
-    const setStatus = (status: RoutineOccurrenceStatus) =>
-      setBriefing((prev) => (prev ? { ...prev, today: { ...prev.today, routines: prev.today.routines.map((r) => (r.id === id ? { ...r, status } : r)) } } : prev));
-    setStatus("COMPLETED");
+  /** Tick / untick an agenda item: shown at once, saved behind it (tasks in the phone's store, routines via the outbox). */
+  const toggle = async (item: TimelineItem) => {
+    const toDone = !item.done;
+    if (toDone) hapticDone();
+    else hapticTap();
+    if (item.kind === "task") {
+      await setTaskStatus(item.id, toDone ? "COMPLETED" : "PENDING");
+      setSnack({
+        text: t(toDone ? "today.doneToast" : "today.undoneToast", { title: item.title }),
+        action: { label: t("home.undo"), onPress: () => void setTaskStatus(item.id, toDone ? "PENDING" : "COMPLETED") },
+      });
+      return;
+    }
+    const status = toDone ? "COMPLETED" : "PENDING";
+    const setStatus = (s: string) => routinesQ.mutate((prev) => (prev ?? []).map((r) => ({ ...r, occurrences: r.occurrences.map((o) => (o.id === item.id ? { ...o, status: s as typeof o.status } : o)) })));
+    setStatus(status);
     try {
-      const sent = await send({ method: "PATCH", path: `/routines/occurrences/${id}`, body: { status: "COMPLETED", confirmMandatory: false }, key: `occurrence:${id}`, label: "Routine" });
+      const sent = await send({ method: "PATCH", path: `/routines/occurrences/${item.id}`, body: { status, confirmMandatory: false }, key: `occurrence:${item.id}`, label: "Routine" });
       scheduleReminderSync();
-      if (sent) void load(true);
+      if (sent) void routinesQ.reload();
     } catch (e) {
       if (!(e instanceof OutboxRefused)) throw e;
-      setStatus("PENDING");
+      setStatus(toDone ? "PENDING" : "COMPLETED");
       setToast(e.message);
     }
   };
 
-  const b = briefing;
-  const loadPct = b ? Math.min(100, Math.round((b.today.loadMinutes / Math.max(1, b.today.capacityMinutes)) * 100)) : 0;
-  const dateLine = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
-  const severityColor = (s: AttentionItem["severity"]) => (s === "critical" ? colors.danger.fg : s === "warning" ? colors.warning.fg : colors.info.fg);
-  const taskMeta = (t: Task) => [t.dueTime, t.category].filter(Boolean).join(" · ");
+  const openItem = (i: TimelineItem) => {
+    if (i.kind === "task") navigation.navigate("TaskDetail", { taskId: i.id });
+    else navigation.navigate("Routines", { routineId: i.routineId });
+  };
 
-  const sectionHeader = (title: string, right?: React.ReactNode) => (
+  const colorOf = useCallback(
+    (i: TimelineItem) => {
+      if (i.kind === "routine") return colors.category[1];
+      if (!i.category) return colors.accent;
+      let h = 0;
+      for (const ch of i.category) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      return colors.category[h % colors.category.length];
+    },
+    [colors],
+  );
+
+  const agenda = useMemo(() => todayAgenda(tasks, routines, now), [tasks, routines, now]);
+  const nudges = useMemo(() => nudgesFrom(briefing?.attention ?? [], dismissed), [briefing?.attention, dismissed]);
+  const nudge = nudges[0] ?? null;
+  // The Catch up card counts exactly what Catch up will show (overdue now, earlier today included).
+  const slipped = useMemo(() => catchUpQueue(tasks, now).length, [tasks, now]);
+  const b = briefing;
+  const part = dayPart(now);
+  const name = firstName(dbUser?.displayName) ?? firstName(auth.currentUser?.displayName);
+  const hello = name ? t(`today.helloName.${part}` as StringKey, { name }) : t(`today.hello.${part}` as StringKey);
+  const dateLine = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  const statusLine = agenda.total === 0 ? t("today.free") : agenda.left === 0 ? t("today.allDone") : t("today.left", { left: agenda.left });
+  const severityColor = (s: AttentionItem["severity"]) => (s === "critical" ? colors.danger.fg : s === "warning" ? colors.warning.fg : colors.info.fg);
+  const place = settings?.currentContext ?? b?.context ?? null;
+  const contexts = b?.contexts ?? [];
+  const enter = (i: number) => (reduce ? undefined : FadeInDown.delay(40 * i).duration(220));
+  const layout = reduce ? undefined : LinearTransition.springify().damping(22);
+
+  const section = (title: string, right?: ReactNode) => (
     <View style={styles.sectionHeader}>
       <Text variant="label" color="tertiary" accessibilityRole="header">
         {title.toUpperCase()}
@@ -252,421 +277,355 @@ export function DashboardScreen({ navigation }: Props) {
       {right}
     </View>
   );
-
+  const link = (label: string, onPress: () => void) => (
+    <Pressable onPress={onPress} hitSlop={12} accessibilityRole="button">
+      <Text variant="label" color="accent">
+        {label}
+      </Text>
+    </Pressable>
+  );
   const divider = <View style={[styles.divider, { backgroundColor: colors.hairline }]} />;
 
-  const moodCheckin =
+  const nowDivider = (
+    <View style={styles.nowRow} accessibilityRole="text" accessibilityLabel={`${t("today.now")} ${clockLabel(now.getHours() * 60 + now.getMinutes())}`}>
+      <View style={[styles.nowDot, { backgroundColor: colors.danger.fg }]} />
+      <Text variant="label" style={{ color: colors.danger.fg }}>
+        {t("today.now")} · {clockLabel(now.getHours() * 60 + now.getMinutes())}
+      </Text>
+      <View style={[styles.nowLine, { backgroundColor: colors.danger.fg }]} />
+    </View>
+  );
+
+  const checkinCard =
     b && (b.mood.checkinDue || !b.mood.latest) ? (
-      <View>
-        {sectionHeader("Check in", <Pressable onPress={() => navigation.navigate("Mood")} hitSlop={8}><Text variant="label" color="accent">More</Text></Pressable>)}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {MOODS.map((m) => (
-            <Chip key={m.mood} label={m.label} onPress={() => !busyAction && void checkIn(m)} />
-          ))}
-        </ScrollView>
-      </View>
+      <Animated.View entering={enter(4)} layout={layout}>
+        <Card style={{ gap: spacing.md }}>
+          <View style={styles.row}>
+            <Icon name="pulse" size={18} color={colors.accentStrong} />
+            <Text variant="bodyStrong" style={[styles.flex, { marginStart: spacing.sm }]}>
+              {t("today.checkin")}
+            </Text>
+            {link(t("home.tiles.mood"), () => navigation.navigate("Mood"))}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            {MOODS.map((m) => (
+              <Chip key={m.mood} label={t(m.key)} onPress={() => !busyAction && void checkIn(m)} />
+            ))}
+          </ScrollView>
+        </Card>
+      </Animated.View>
     ) : null;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.canvas }]}>
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: bottomPad(insets.bottom + 160), gap: spacing.xl }]}
-        refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.textTertiary} onRefresh={() => { setRefreshing(true); void load(true); }} />}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm, paddingBottom: bottomPad(insets.bottom + tabBar.height + 72), gap: spacing.xl }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={colors.textTertiary}
+            onRefresh={() => {
+              setRefreshing(true);
+              void routinesQ.reload();
+              void load(true);
+            }}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={{ gap: spacing.xs }}>
+        {/* A soft wash of the logo blue behind the header. */}
+        <LinearGradient pointerEvents="none" colors={[withAlpha(colors.brand, 0.16), withAlpha(colors.brand, 0)]} style={[styles.wash, { height: insets.top + 260 }]} />
+
+        {/* Header: date, greeting, progress, place */}
+        <Animated.View entering={enter(0)} style={{ gap: spacing.md }}>
           <View style={styles.row}>
-            <Text variant="label" color="tertiary" style={styles.flex}>
+            <Text variant="label" color="secondary" style={styles.flex}>
               {dateLine}
             </Text>
             <SyncBadge />
             <NotificationBell onPress={() => navigation.navigate("Notifications")} />
           </View>
-          <Text variant="title1">{greetingFor(b, dbUser?.displayName)}</Text>
-          {b ? (
-            <Text variant="callout" color="secondary" tabular accessibilityLabel={summaryParts(b.stats).map((p) => t(p.key as StringKey, p.vars)).join(", ")}>
-              {summaryParts(b.stats).map((p, i) => (
-                <Text key={p.key} variant="callout" color={p.key === "home.summary.overdue" ? "danger" : "secondary"} tabular>
-                  {i ? " · " : ""}
-                  {t(p.key as StringKey, p.vars)}
+          <Text variant="title1" accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {hello}
+          </Text>
+          <View style={[styles.row, { gap: spacing.lg }]}>
+            <DayRing done={agenda.done} total={agenda.total} />
+            <View style={[styles.flex, { gap: spacing.xs }]} accessible accessibilityLabel={[statusLine, agenda.total ? t("today.ring", { done: agenda.done, total: agenda.total }) : null].filter(Boolean).join(". ")}>
+              <Text variant="title2">{statusLine}</Text>
+              {agenda.plannedMinutes > 0 ? (
+                <Text variant="callout" color="secondary">
+                  {t("today.planned", { time: formatDuration(agenda.plannedMinutes) })}
                 </Text>
-              ))}
-            </Text>
-          ) : null}
-          {b?.headline || loading ? (
-            <Text variant="callout" color="secondary">
-              {b?.headline ?? "Preparing your day…"}
-            </Text>
-          ) : null}
+              ) : agenda.total ? (
+                <Text variant="callout" color="secondary">
+                  {t("today.doneOf", { done: agenda.done, total: agenda.total })}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <View style={[styles.row, styles.wrap, { gap: spacing.sm }]}>
+            {contexts.length ? (
+              <Chip
+                small
+                leading={<Icon name="pin" size={14} color={colors.accentStrong} />}
+                label={place ? place.replace(/^At\s+/i, "") : t("today.anywhere")}
+                onPress={() => setPlaceOpen(true)}
+                accessibilityLabel={`${t("today.where")}: ${place ?? t("today.anywhere")}`}
+              />
+            ) : null}
+            {b?.peak.learned ? <Chip small leading={<Icon name="star" size={14} color={colors.accentStrong} />} label={t("today.peak", { time: b.peak.label })} /> : null}
+          </View>
           {!aiOnline ? (
             <Text variant="caption" color="warning">
-              Assistant is running in offline mode.
+              {t("today.offlineAi")}
             </Text>
           ) : null}
-        </View>
+        </Animated.View>
 
         <GuestBanner />
 
-        {/* Ask */}
-        <View style={{ gap: spacing.md }}>
-          <Pressable
-            onPress={() => navigation.navigate("Assistant")}
-            accessibilityRole="button"
-            accessibilityLabel="Ask the assistant or add a task"
-            style={({ pressed }) => [styles.ask, { backgroundColor: colors.surface, borderColor: colors.hairline, borderRadius: radii.md }, pressed && { backgroundColor: colors.accentSoft }]}
-          >
-            <Icon d={ICON.ask} color={colors.textTertiary} />
-            <Text variant="body" color="tertiary" style={styles.flex}>
-              Ask anything or add a task
-            </Text>
-            {platformFeatures.voiceInput ? (
-            <Pressable
-              onPress={() => navigation.navigate("Assistant", { voice: true, nonce: Date.now() })}
-              accessibilityRole="button"
-              accessibilityLabel="Speak to the assistant"
-              hitSlop={8}
-              style={[styles.mic, { backgroundColor: colors.text }]}
-            >
-              <MicIcon size={16} color={colors.canvas} />
-            </Pressable>
-            ) : null}
-          </Pressable>
-
-          <View style={[styles.row, { gap: spacing.sm }]}>
-            <Button title={t("home.quick.task")} kind="tonal" size="sm" accessibilityLabel={t("home.quick.taskA11y")} onPress={() => navigation.navigate("AddTask")} style={styles.flex} />
-            <Button title={t("home.quick.upload")} kind="secondary" size="sm" accessibilityLabel={t("home.quick.uploadA11y")} onPress={() => navigation.navigate("Assistant", { attach: true, nonce: Date.now() })} style={styles.flex} />
-          </View>
-
-          {b && b.contexts.length ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-              <Chip small label="Anywhere" selected={!b.context} onPress={() => void switchContext(null)} />
-              {b.contexts.map((c) => (
-                <Chip key={c} small label={c.replace(/^At\s+/i, "")} selected={b.context === c} onPress={() => void switchContext(c)} />
-              ))}
-            </ScrollView>
-          ) : null}
-        </View>
-
+        {/* Decisions, not paragraphs: shared invitations, one Catch up card for everything overdue, one nudge at a time. */}
         <SharedWithYouCard onOpen={(id) => navigation.navigate("SharedTaskEdit", { id, mode: "accept" })} />
-
-        {/* Evening (from 18:00): check in first, then a look at tomorrow; the day's work follows */}
-        {evening ? moodCheckin : null}
-        {evening && tomorrow.length ? (
-          <View>
-            {sectionHeader(t("home.tomorrow.title"), <Pressable onPress={() => navigation.navigate("TaskList", { filter: "tomorrow" })} hitSlop={8} accessibilityRole="button"><Text variant="label" color="accent">{t("home.tomorrow.all")}</Text></Pressable>)}
-            <Card style={styles.listCard}>
-              {tomorrow.map((task, i) => (
-                <View key={task.id}>
-                  {i > 0 ? divider : null}
-                  <Pressable
-                    onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                    accessibilityRole="button"
-                    style={({ pressed }) => [styles.item, { paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.accentSoft }]}
-                  >
-                    <View style={styles.dotWrap}>
-                      <Dot color={colors.priority[task.priority]} />
-                    </View>
-                    <Text variant="body" numberOfLines={1} style={styles.flex}>
-                      {task.title}
-                    </Text>
-                    <Text variant="caption" color="secondary" tabular>
-                      {task.dueTime ?? ""}
-                    </Text>
-                  </Pressable>
-                </View>
-              ))}
-            </Card>
-          </View>
+        {slipped ? (
+          <Animated.View entering={enter(1)} layout={layout}>
+            <NudgeCard
+              icon="flag"
+              tone="danger"
+              title={slipped === 1 ? t("catch.card.title1") : t("catch.card.title", { count: slipped })}
+              text={t("catch.card.text")}
+              primary={{ label: t("catch.card.go"), onPress: () => navigation.navigate("CatchUp") }}
+              onPress={() => navigation.navigate("CatchUp")}
+            />
+          </Animated.View>
+        ) : null}
+        {nudge ? (
+          <Animated.View key={nudge.id} entering={enter(1)} layout={layout}>
+            <NudgeCard
+              icon={nudgeLook(nudge.kind).icon}
+              tone={nudgeLook(nudge.kind).tone}
+              title={nudge.title}
+              text={nudge.message.startsWith(nudge.title) ? nudge.message.slice(nudge.title.length).replace(/^[.:\s]+/, "") || undefined : nudge.message}
+              badge={nudges.length > 1 ? `1/${nudges.length}` : undefined}
+              primary={nudge.actions[0] ? { label: (nudge.actions.find((a) => a.style === "primary") ?? nudge.actions[0]).label, loading: busyAction === nudge.id, onPress: () => void runAction(nudge.actions.find((a) => a.style === "primary") ?? nudge.actions[0], nudge.id) } : undefined}
+              secondary={{ label: t("nudge.notNow"), onPress: () => setDismissed((d) => new Set(d).add(nudge.id)) }}
+            />
+          </Animated.View>
         ) : null}
 
-        {/* Next up (UI v2): Start / Done / Snooze 1 h, and what comes after */}
+        {/* Evening: check in first, then a look at tomorrow */}
+        {evening ? checkinCard : null}
+
+        {/* Next up: one focus card in the brand gradient */}
         {b?.nextUp ? (
-          <View>
-            {sectionHeader(t("home.next.title"), b.peak.learned ? <Text variant="caption" color="tertiary">Focus peak {b.peak.label}</Text> : undefined)}
-            <Card tone="accent" onPress={() => navigation.navigate("TaskDetail", { taskId: b.nextUp!.id })} accessibilityLabel={`${t("home.next.title")}: ${b.nextUp.title}`} style={{ gap: spacing.lg }}>
-              <View style={{ gap: spacing.xs }}>
-                <View style={styles.row}>
-                  <Dot color={colors.priority[b.nextUp.priority]} />
-                  <Text variant="caption" color="secondary" style={{ marginLeft: spacing.sm }}>
-                    {b.nextUp.priority.charAt(0) + b.nextUp.priority.slice(1).toLowerCase()} priority
-                    {b.nextUp.isOverdue ? " · Overdue" : ""}
-                  </Text>
-                </View>
-                <Text variant="headline">{b.nextUp.title}</Text>
-                {taskMeta(b.nextUp) ? (
-                  <Text variant="callout" color="secondary">
-                    {taskMeta(b.nextUp)}
-                  </Text>
+          <Animated.View entering={enter(2)} layout={layout}>
+            <PressableScale onPress={() => navigation.navigate("TaskDetail", { taskId: b.nextUp!.id })} accessibilityRole="button" accessibilityLabel={`${t("home.next.title")}: ${b.nextUp.title}`} style={[styles.hero, { borderRadius: radii.xl }]}>
+              <LinearGradient colors={[colors.accent, colors.accentStrong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <View style={[styles.row, { gap: spacing.sm }]}>
+                <Text variant="label" style={{ color: colors.onBrand, opacity: 0.85 }}>
+                  {t("home.next.title").toUpperCase()}
+                </Text>
+                {b.nextUp.isOverdue ? (
+                  <View style={[styles.badge, { backgroundColor: withAlpha(colors.onBrand, 0.2) }]}>
+                    <Text variant="label" style={{ color: colors.onBrand, fontSize: 11 }}>
+                      {t("plan.overdue")}
+                    </Text>
+                  </View>
                 ) : null}
               </View>
-              <View style={styles.actions}>
-                <Button title={t("home.next.start")} size="sm" icon={<LineIcon name="play" size={16} color={colors.onAccent} />} onPress={() => { hapticTap(); void runAction({ label: "Start", payload: { type: "start_task", taskId: b.nextUp!.id } }); }} />
-                <Button title={t("home.next.done")} size="sm" kind="secondary" icon={<LineIcon name="check" size={16} color={colors.text} />} onPress={() => { hapticDone(); void runAction({ label: "Done", payload: { type: "complete_task", taskId: b.nextUp!.id } }); }} />
-                <Button title={t("home.next.snooze")} size="sm" kind="ghost" icon={<LineIcon name="clock" size={16} color={colors.accentStrong} />} onPress={() => void snoozeNext(b.nextUp!)} />
+              <Text variant="title1" numberOfLines={2} style={{ color: colors.onBrand }}>
+                {b.nextUp.title}
+              </Text>
+              {b.nextUp.dueAt ? (
+                <View style={[styles.row, { gap: spacing.xs }]}>
+                  <Icon name="clock" size={14} color={colors.onBrand} />
+                  <Text variant="callout" style={{ color: colors.onBrand, opacity: 0.9 }}>
+                    {new Date(b.nextUp.dueAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={[styles.actions, { marginTop: spacing.sm }]}>
+                <HeroButton
+                  primary
+                  icon="play"
+                  label={t("home.next.start")}
+                  onPress={() => {
+                    hapticTap();
+                    void runAction({ label: "Start", payload: { type: "start_task", taskId: b.nextUp!.id } });
+                  }}
+                />
+                <HeroButton
+                  icon="check"
+                  label={t("home.next.done")}
+                  onPress={() => {
+                    hapticDone();
+                    void runAction({ label: "Done", payload: { type: "complete_task", taskId: b.nextUp!.id } });
+                  }}
+                />
+                <HeroButton icon="clock" label={t("home.next.later")} onPress={() => void snoozeNext(b.nextUp!)} />
               </View>
               {(() => {
                 const then = thenUp(b);
                 return then ? (
-                  <Text variant="caption" color="tertiary" numberOfLines={1}>
+                  <Text variant="caption" numberOfLines={1} style={{ color: colors.onBrand, opacity: 0.8 }}>
                     {then.time ? t("home.next.thenAt", { title: then.title, time: then.time }) : t("home.next.then", { title: then.title })}
                   </Text>
                 ) : null;
               })()}
-            </Card>
-          </View>
+            </PressableScale>
+          </Animated.View>
+        ) : loading && !b ? (
+          <Skeleton height={180} radius={radii.xl} />
         ) : null}
 
-        {/* Quick-access tiles (UI v2): live captions from the briefing; plain hints while loading */}
-        <QuickTiles
-          tiles={[
-            { key: "assistant", icon: "assistant", label: "home.tiles.assistant", hint: "home.tiles.assistantHint", caption: null, onPress: () => navigation.navigate("Assistant") },
-            { key: "routines", icon: "repeat", label: "home.tiles.routines", hint: "home.tiles.routinesHint", caption: b ? routinesCaption(b.today.routines) : null, onPress: () => navigation.navigate("Routines") },
-            { key: "documents", icon: "doc", label: "home.tiles.documents", hint: "home.tiles.documentsHint", caption: null, onPress: () => navigation.navigate("Documents") },
-            {
-              key: "mood",
-              icon: "pulse",
-              label: "home.tiles.mood",
-              hint: "home.tiles.moodCheckin",
-              caption: b ? (({ key, vars }) => ({ key, vars: vars ? { mood: MOODS.find((m) => m.mood === vars.mood)?.label.toLowerCase() ?? vars.mood } : undefined }))(moodCaption(b.mood)) : null,
-              onPress: () => navigation.navigate("Mood"),
-            },
-          ]}
-        />
+        {/* Today's agenda: the same items as Plan, in time order around "now" */}
+        <Animated.View entering={enter(3)} layout={layout}>
+          {section(t("today.agenda"), link(t("today.openPlan"), () => navigation.navigate("Plan")))}
+          <Card style={styles.listCard}>
+            {agenda.total === 0 ? (
+              <View style={{ padding: spacing.lg, gap: spacing.md }}>
+                <Text variant="callout" color="secondary">
+                  {t("today.empty")}
+                </Text>
+                <View style={styles.actions}>
+                  <Button title={t("action.addTask")} size="sm" kind="tonal" onPress={() => navigation.navigate("AddTask")} />
+                  <Button title={t("today.planDay")} size="sm" kind="secondary" onPress={() => navigation.navigate("Assistant", { payload: { type: "plan_day" }, label: t("today.planDay"), nonce: Date.now() })} />
+                </View>
+              </View>
+            ) : (
+              <>
+                {agenda.earlier.map((i, k) => (
+                  <View key={i.key}>
+                    {k > 0 ? divider : null}
+                    <AgendaRow item={i} past color={colorOf(i)} onOpen={() => openItem(i)} onToggle={() => void toggle(i)} />
+                  </View>
+                ))}
+                {agenda.earlier.length || agenda.later.length ? nowDivider : null}
+                {agenda.later.map((i, k) => (
+                  <View key={i.key}>
+                    {k > 0 ? divider : null}
+                    <AgendaRow item={i} color={colorOf(i)} onOpen={() => openItem(i)} onToggle={() => void toggle(i)} />
+                  </View>
+                ))}
+                {agenda.anyTime.length ? (
+                  <View style={[styles.groupHead, { backgroundColor: colors.canvas }]}>
+                    <Text variant="label" color="tertiary">
+                      {t("today.anyTime").toUpperCase()}
+                    </Text>
+                  </View>
+                ) : null}
+                {agenda.anyTime.map((i, k) => (
+                  <View key={i.key}>
+                    {k > 0 ? divider : null}
+                    <AgendaRow item={i} color={colorOf(i)} onOpen={() => openItem(i)} onToggle={() => void toggle(i)} />
+                  </View>
+                ))}
+              </>
+            )}
+          </Card>
+        </Animated.View>
 
-        <TutorialTip id="home" title="Your day at a glance" text="Items that need a decision come first, then your next task and today's plan. Tap the bar above to talk to the assistant." />
+        {evening ? null : checkinCard}
 
-        {loading && !b ? (
-          <View style={{ gap: spacing.md }}>
-            <Skeleton height={160} radius={radii.md} />
-            <Skeleton height={120} radius={radii.md} />
-          </View>
-        ) : error && !b ? (
+        {evening && tomorrow.length ? (
+          <Animated.View entering={enter(5)} layout={layout}>
+            {section(t("home.tomorrow.title"), link(t("home.tomorrow.all"), () => navigation.navigate("TaskList", { filter: "tomorrow" })))}
+            <Card style={styles.listCard}>
+              {tomorrow.map((task, i) => (
+                <View key={task.id}>
+                  {i > 0 ? divider : null}
+                  <ListItem title={task.title} subtitle={task.dueTime ?? undefined} leading={<Dot color={colors.priority[task.priority]} />} onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })} />
+                </View>
+              ))}
+            </Card>
+          </Animated.View>
+        ) : null}
+
+        {/* Suggestions: compact cards; the confidence the FRs require shows as a badge. */}
+        {b?.recommendations.length ? (
+          <Animated.View entering={enter(6)} layout={layout} style={{ gap: spacing.md }}>
+            {section(t("today.suggestions"))}
+            {b.recommendations.slice(0, 3).map((r) => (
+              <NudgeCard
+                key={r.id}
+                icon="sparkle"
+                tone="accent"
+                title={t("today.idea")}
+                text={r.text}
+                badge={t("today.confidence", { pct: Math.round(r.confidence * (r.confidence <= 1 ? 100 : 1)) })}
+                primary={{ label: r.acceptLabel, onPress: () => void decideInsight(r.id, "accept") }}
+                secondary={{ label: t("today.notNow"), onPress: () => void decideInsight(r.id, "dismiss") }}
+              />
+            ))}
+          </Animated.View>
+        ) : null}
+
+        {error && !b ? (
           <Card>
             <Text variant="body">{error}</Text>
             <Button title="Try again" kind="secondary" size="sm" onPress={() => void load()} style={{ marginTop: spacing.md, alignSelf: "flex-start" }} />
           </Card>
-        ) : b ? (
-          <>
-            {/* Needs attention */}
-            {b.attention.length ? (
-              <View>
-                {sectionHeader("Needs attention")}
-                <Card style={styles.listCard}>
-                  {b.attention.map((item, i) => (
-                    <View key={item.id}>
-                      {i > 0 ? divider : null}
-                      <View style={[styles.attention, { padding: spacing.lg, gap: spacing.md }]}>
-                        <View style={styles.row}>
-                          <View style={styles.dotWrap}>
-                            <Dot color={severityColor(item.severity)} />
-                          </View>
-                          <Text variant="callout" style={styles.flex}>
-                            {item.message}
-                          </Text>
-                        </View>
-                        {item.actions.length ? (
-                          <View style={[styles.actions, { paddingLeft: 20 }]}>
-                            {item.actions.map((a) => (
-                              <Button
-                                key={a.label}
-                                title={a.label}
-                                size="sm"
-                                kind={a.style === "primary" ? "secondary" : "ghost"}
-                                loading={busyAction === item.id && a.style === "primary"}
-                                disabled={Boolean(busyAction)}
-                                onPress={() => void runAction(a, item.id)}
-                              />
-                            ))}
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
-                  ))}
-                </Card>
-              </View>
-            ) : null}
-
-            {/* Today */}
-            <View>
-              {sectionHeader(
-                "Today",
-                <Pressable onPress={() => navigation.navigate("Assistant", { payload: { type: "plan_day" }, label: "Plan my day", nonce: Date.now() })} hitSlop={8} accessibilityRole="button">
-                  <Text variant="label" color="accent">
-                    Plan my day
-                  </Text>
-                </Pressable>,
-              )}
-              <View style={{ gap: spacing.xs, marginBottom: spacing.sm }}>
-                <View style={styles.row}>
-                  <Text variant="caption" color="secondary" style={styles.flex}>
-                    {t("home.workload")}
-                  </Text>
-                  <Text variant="caption" color="secondary" tabular>
-                    {formatDuration(b.today.loadMinutes) || "0 min"} / {formatDuration(b.today.capacityMinutes)}
-                  </Text>
-                </View>
-                <ProgressBar value={loadPct} height={4} color={loadPct > 100 ? colors.danger.fg : loadPct > 80 ? colors.warning.fg : colors.accent} accessibilityLabel={t("home.workload")} />
-              </View>
-              <Card style={styles.listCard}>
-                {b.today.routines.map((r, i) => {
-                  const done = r.status === "COMPLETED";
-                  const missed = r.status === "MISSED";
-                  return (
-                    <View key={r.id}>
-                      {i > 0 ? divider : null}
-                      <View style={[styles.item, { paddingHorizontal: spacing.lg }]}>
-                        <Pressable
-                          onPress={() => r.status === "PENDING" && void completeRoutine(r.id)}
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked: done }}
-                          accessibilityLabel={`Complete ${r.title}`}
-                          hitSlop={10}
-                          style={[styles.check, { borderColor: done ? colors.text : colors.textTertiary }, done && { backgroundColor: colors.text }]}
-                        >
-                          {done ? <Icon d={ICON.check} size={13} color={colors.canvas} /> : null}
-                        </Pressable>
-                        <View style={styles.flex}>
-                          <Text variant="body" color={done || missed ? "tertiary" : "primary"} numberOfLines={1} style={done ? styles.struck : undefined}>
-                            {r.title}
-                          </Text>
-                          <Text variant="caption" color="tertiary">
-                            {r.priority === "MANDATORY" ? "Mandatory routine" : "Routine"}
-                            {missed ? " · Missed" : ""}
-                          </Text>
-                        </View>
-                        <Text variant="caption" color="secondary" tabular>
-                          {r.time ?? "Anytime"}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-                {b.today.tasks.slice(0, 6).map((t, i) => (
-                  <View key={t.id}>
-                    {i > 0 || b.today.routines.length ? divider : null}
-                    <Pressable
-                      onPress={() => navigation.navigate("TaskDetail", { taskId: t.id })}
-                      accessibilityRole="button"
-                      style={({ pressed }) => [styles.item, { paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.accentSoft }]}
-                    >
-                      <View style={styles.dotWrap}>
-                        <Dot color={colors.priority[t.priority]} />
-                      </View>
-                      <View style={styles.flex}>
-                        <Text variant="body" numberOfLines={1}>
-                          {t.title}
-                        </Text>
-                        <Text variant="caption" color={t.isOverdue ? "danger" : "tertiary"}>
-                          {t.isOverdue ? "Overdue" : t.category ?? "Task"}
-                        </Text>
-                      </View>
-                      <Text variant="caption" color="secondary" tabular>
-                        {t.dueTime ?? ""}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ))}
-                {!b.today.tasks.length && !b.today.routines.length ? (
-                  <View style={{ padding: spacing.lg, gap: spacing.md }}>
-                    <Text variant="callout" color="secondary">
-                      {t("empty.home.today")}
-                    </Text>
-                    <View style={[styles.actions]}>
-                      <Button title={t("action.addTask")} size="sm" kind="tonal" onPress={() => navigation.navigate("AddTask")} />
-                      <Button title={t("empty.planDay")} size="sm" kind="secondary" onPress={() => navigation.navigate("Assistant", { payload: { type: "plan_day" }, label: "Plan my day", nonce: Date.now() })} />
-                    </View>
-                  </View>
-                ) : null}
-              </Card>
-            </View>
-
-            {/* Mood check-in (in the evening it moves to the top) */}
-            {evening ? null : moodCheckin}
-
-            {/* Insights */}
-            {b.recommendations.length ? (
-              <View>
-                {sectionHeader("Insights")}
-                <Card style={styles.listCard}>
-                  {b.recommendations.map((r, i) => (
-                    <View key={r.id}>
-                      {i > 0 ? divider : null}
-                      <View style={{ padding: spacing.lg, gap: spacing.md }}>
-                        <Text variant="callout">{r.text}</Text>
-                        <View style={styles.row}>
-                          <Text variant="caption" color="tertiary" tabular style={styles.flex}>
-                            {Math.round(r.confidence * (r.confidence <= 1 ? 100 : 1))}% confidence
-                          </Text>
-                          <Button
-                            title="Not now"
-                            size="sm"
-                            kind="ghost"
-                            onPress={() => void decideInsight(r.id, "dismiss")}
-                          />
-                          <Button
-                            title={r.acceptLabel}
-                            size="sm"
-                            kind="secondary"
-                            onPress={() => void decideInsight(r.id, "accept")}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </Card>
-              </View>
-            ) : null}
-
-            {/* Shortcuts: Routines, Documents and Mood are tiles above; Memory stays here (and in Me) */}
-            <View>
-              {sectionHeader("Organize")}
-              <Card style={styles.listCard}>
-                <Pressable
-                  onPress={() => navigation.navigate("Memory")}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.item, { paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.accentSoft }]}
-                >
-                  <Icon d={ICON.memory} color={colors.textSecondary} />
-                  <Text variant="body" style={styles.flex}>
-                    What the assistant knows
-                  </Text>
-                  <Icon d={ICON.chevron} size={16} color={colors.textTertiary} />
-                </Pressable>
-              </Card>
-            </View>
-          </>
         ) : null}
+
+        <TutorialTip id="today-v3" title={t("today.agenda")} text={t("plan.dragHint")} />
       </ScrollView>
 
-      {/* The "+" shares the strip above the nav with the snackbar: it steps aside while one shows (Undo stays reachable). */}
+      {/* Content scrolling under the status bar fades out behind it. */}
+      <LinearGradient pointerEvents="none" colors={[colors.canvas, withAlpha(colors.canvas, 0)]} style={[styles.statusFade, { height: insets.top + 12 }]} />
       {snack ? null : <FloatingAddButton onPress={() => navigation.navigate("AddTask")} />}
       <Snackbar text={snack?.text ?? null} action={snack?.action} onHide={() => setSnack(null)} />
-      <View style={[styles.navDock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-        <BottomNav active="Dashboard" onChange={(tab) => navigation.navigate(tab)} />
-      </View>
+
+      <Sheet visible={placeOpen} onClose={() => setPlaceOpen(false)} title={t("today.where")}>
+        <Text variant="callout" color="secondary" style={{ marginBottom: spacing.md }}>
+          {t("today.whereHint")}
+        </Text>
+        {[null, ...contexts].map((c) => (
+          <ListItem
+            key={c ?? "anywhere"}
+            title={c ? c.replace(/^At\s+/i, "") : t("today.anywhere")}
+            leading={<Icon name="pin" size={18} color={colors.textSecondary} />}
+            trailing={place === c ? <Icon name="check" size={18} color={colors.accentStrong} /> : undefined}
+            onPress={() => void switchContext(c)}
+          />
+        ))}
+      </Sheet>
     </View>
+  );
+}
+
+/** A button on the Next up gradient: white fill for the main action, translucent for the others. */
+function HeroButton({ label, icon, onPress, primary }: { label: string; icon: "play" | "check" | "clock"; onPress: () => void; primary?: boolean }) {
+  const { colors, radii } = useTheme();
+  const fg = primary ? colors.accentStrong : colors.onBrand;
+  return (
+    <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.heroBtn, { borderRadius: radii.pill, backgroundColor: primary ? colors.onBrand : withAlpha(colors.onBrand, 0.18) }]}>
+      <Icon name={icon} size={16} color={fg} strokeWidth={2.2} />
+      <Text variant="label" maxFontSizeMultiplier={1.2} style={{ color: fg, fontSize: 14 }}>
+        {label}
+      </Text>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 16 },
+  content: { paddingHorizontal: 20 },
+  wash: { position: "absolute", top: 0, left: 0, right: 0 },
   row: { flexDirection: "row", alignItems: "center" },
+  wrap: { flexWrap: "wrap" },
   flex: { flex: 1 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8, minHeight: 20 },
-  ask: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, paddingLeft: 16, paddingRight: 6, height: 52 },
-  mic: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  chips: { gap: 8, paddingRight: 8 },
-  stat: { flex: 1, alignItems: "flex-start", gap: 2, paddingLeft: 4 },
-  vRule: { width: StyleSheet.hairlineWidth, alignSelf: "stretch", marginHorizontal: 12 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8, minHeight: 24 },
+  chips: { gap: 8, paddingEnd: 8 },
   listCard: { padding: 0, overflow: "hidden" },
-  divider: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
-  attention: {},
+  divider: { height: StyleSheet.hairlineWidth, marginStart: 96 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   dotWrap: { width: 20, alignItems: "flex-start" },
-  item: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 10 },
-  check: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
-  struck: { textDecorationLine: "line-through" },
-  navDock: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  hero: { padding: 20, gap: 8, overflow: "hidden" },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  heroBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 44, paddingHorizontal: 10 },
+  nowRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  nowDot: { width: 8, height: 8, borderRadius: 4 },
+  nowLine: { flex: 1, height: 1.5 },
+  groupHead: { paddingHorizontal: 16, paddingVertical: 8 },
+  more: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 48, borderTopWidth: StyleSheet.hairlineWidth },
+  statusFade: { position: "absolute", top: 0, left: 0, right: 0 },
 });

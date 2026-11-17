@@ -13,6 +13,8 @@ import { palettes } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useLocale } from "../../i18n/LocaleProvider";
+import type { StringKey } from "../../i18n/strings";
+import { SettingsHub } from "./SettingsHub";
 import { auth } from "../../lib/firebase";
 import type { MainStackParamList } from "../../navigation/MainStack";
 import { getApiErrorMessage } from "../../services/api";
@@ -61,7 +63,15 @@ function to12h(hhmm: string): string {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m ?? 0).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
-export function SettingsScreen({ navigation }: Props) {
+export type SettingsSection = "account" | "reminders" | "connected" | "day" | "labels" | "language";
+
+/**
+ * UI v3 Settings (docs/design.md "Settings"): a short hub of six groups with a live summary each; a group opens on its
+ * own page (this screen with `section`), so nobody scrolls past twelve sections to find one switch.
+ */
+export function SettingsScreen({ navigation, route }: Props) {
+  const section = route.params?.section;
+  const show = (k: SettingsSection) => section === k;
   const { firebaseUser, dbUser, patchDbUser } = useAuth();
   const { settings, update, categories, setCategories } = usePreferences();
   const { t } = useLocale();
@@ -124,8 +134,11 @@ export function SettingsScreen({ navigation }: Props) {
 
   return (
     <View style={ui.screen}>
-      <ScreenHeader title="Settings" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
+      <ScreenHeader title={section ? t(`settings.section.${section}` as StringKey) : t("me.settings")} onBack={() => navigation.goBack()} />
+      {!section ? <SettingsHub onOpen={(k) => navigation.push("Settings", { section: k })} /> : null}
+      <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled" style={section ? undefined : styles.hidden}>
+        {show("account") ? (
+          <>
         <SectionTitle title="Profile" />
         <Card style={{ gap: 10 }}>
           <Text style={ui.label}>Display name</Text>
@@ -152,6 +165,10 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.meta}>{firebaseUser?.email}</Text>
         </Card>
 
+          </>
+        ) : null}
+        {show("account") ? (
+          <>
         <SectionTitle title="Plan" />
         <Card style={{ gap: 8 }}>
           <View style={styles.row}>
@@ -163,6 +180,10 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.meta}>Pro adds deeper AI conversations for emotional support, WhatsApp reminders and analytics export. (Demo switch — payments are out of scope.)</Text>
         </Card>
 
+          </>
+        ) : null}
+        {show("language") ? (
+          <>
         <SectionTitle title={platformFeatures.voiceInput ? "Language & voice" : "Language"} />
         <Card style={{ gap: 10 }}>
           <View style={ui.wrap}>
@@ -184,6 +205,10 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         </Card>
 
+          </>
+        ) : null}
+        {show("day") ? (
+          <>
         <SectionTitle title="Your day" />
         <Card style={{ gap: 10 }}>
           <Text style={ui.label}>Quiet hours (no reminders)</Text>
@@ -206,6 +231,10 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         </Card>
 
+          </>
+        ) : null}
+        {show("reminders") ? (
+          <>
         <SectionTitle title="Notifications" />
         <Card style={{ gap: 10 }}>
           <Text style={ui.label}>How often</Text>
@@ -331,6 +360,10 @@ export function SettingsScreen({ navigation }: Props) {
           />
         </Card>
 
+          </>
+        ) : null}
+        {show("day") ? (
+          <>
         <SectionTitle title="Contexts" />
         <Card style={{ gap: 10 }}>
           <Text style={styles.meta}>Places with their own routines and tasks. The current one filters what you see.</Text>
@@ -361,6 +394,10 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         </Card>
 
+          </>
+        ) : null}
+        {show("labels") ? (
+          <>
         <SectionTitle title="Categories" />
         <Card style={{ gap: 10 }}>
           <View style={ui.wrap}>
@@ -418,6 +455,10 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         </Card>
 
+          </>
+        ) : null}
+        {show("labels") ? (
+          <>
         <SectionTitle title="Tags" />
         <Card style={{ gap: 8 }}>
           {tags.length ? (
@@ -448,6 +489,10 @@ export function SettingsScreen({ navigation }: Props) {
           )}
         </Card>
 
+          </>
+        ) : null}
+        {show("connected") ? (
+          <>
         <SectionTitle title="WhatsApp" />
         <WhatsappLinkCard />
         <WhatsappAgentCard />
@@ -459,6 +504,10 @@ export function SettingsScreen({ navigation }: Props) {
           }}
         />
 
+          </>
+        ) : null}
+        {show("language") ? (
+          <>
         <SectionTitle title="Help & tutorials" />
         <Card style={{ gap: 8 }}>
           <View style={styles.rowBetween}>
@@ -469,6 +518,10 @@ export function SettingsScreen({ navigation }: Props) {
           <Button title="Run setup again" kind="secondary" onPress={() => navigation.navigate("Onboarding")} />
         </Card>
 
+          </>
+        ) : null}
+        {show("account") ? (
+          <>
         <SectionTitle title="Data & account" />
         <Card style={{ gap: 10 }}>
           <Button
@@ -577,6 +630,8 @@ export function SettingsScreen({ navigation }: Props) {
           )}
           <Text style={styles.meta}>Privacy: your data is stored in your Life Organizer database and the AI runs on your own server — nothing is sold or shared.</Text>
         </Card>
+          </>
+        ) : null}
       </ScrollView>
       <Snackbar
         text={toast}
@@ -603,4 +658,5 @@ const styles = StyleSheet.create({
   meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted, lineHeight: 17 },
   swatch: { width: 26, height: 26, borderRadius: 13 },
   swatchOn: { borderWidth: 3, borderColor: palette.ink },
+  hidden: { display: "none" },
 });

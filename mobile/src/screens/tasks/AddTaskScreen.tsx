@@ -55,10 +55,10 @@ export function AddTaskScreen({ navigation, route }: Props) {
             try {
               const { title, description, dueDate, dueTime, priority, category, durationMinutes, taskType } = payload;
               const shared = await shareTask({ title, description, dueDate, dueTime, priority, category, durationMinutes, taskType }, share.kind, share.people.map((p) => p.id));
-              navigation.replace("TaskList", {
+              navigation.popTo("Tabs", { screen: "TaskList", params: {
                 toast: t("collab.share.sent", { names: share.people.map(personLabel).join(", ") }),
                 undoShare: { id: shared.id, taskId: shared.myTaskId },
-              });
+              } });
               return null;
             } catch (e) {
               return t(collabErrorKey(apiErrorCode(e), isNetworkError(e)) as StringKey);
@@ -72,9 +72,9 @@ export function AddTaskScreen({ navigation, route }: Props) {
               placesLeft = false;
               for (const p of places.current) await attachPlace(task.id, p.id).catch(() => (placesLeft = true));
             }
-            navigation.replace("TaskList", {
+            navigation.popTo("Tabs", { screen: "TaskList", params: {
               toast: placesLeft ? t("location.pendingOffline") : task.pendingSync ? "Saved on this phone — it will sync when you're online." : `Added "${task.title}"`,
-            });
+            } });
             return null;
           } catch (e) {
             return getApiErrorMessage(e, "Could not save task.");

@@ -801,3 +801,18 @@ The desktop app is the phone app built for the web inside an Electron shell ([de
 - **No auto-update.** A new version is installed over the old one, and the data stays.
 - **UI parity.** The wide layout applies the design rules through primitives. Screens still on the legacy palette look
   the same as on the phone, only wider.
+
+## UI v3 (17 Nov 2026)
+
+- **Hold-to-talk (✦ button)** needs on-device speech recognition (Android / iOS build); on desktop / web a hold opens
+  the chat instead. Android 12 and older can't keep one recognition session open, so the app restarts it while the
+  button is held; a word spoken exactly at that moment can be lost. Screen-reader users tap the button and use the
+  chat's microphone (holding isn't a screen-reader gesture).
+- **Moving a fixed-time routine on Plan** moves only that one occurrence, after a confirmation; the routine keeps its
+  usual time. Tasks move without asking (with Undo).
+- **Plan drag** doesn't scroll the timeline when a block reaches the top or bottom edge, and the timeline can't be
+  zoomed; move a block in steps, or edit its time.
+- **Plan shows routines** for about three weeks around today (the server sends that window); further months show tasks.
+- **"Grant location access" at app start** appears at most every 3 days; right after adding a task with a place it
+  can appear at once.
+- **Dark mode stays off** until the remaining screens on the legacy palette are migrated (docs/design.md migration log).

@@ -7,6 +7,9 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { AssistantCards } from "../../components/assistant/AssistantCards";
 import { CrisisCard } from "../../components/assistant/CrisisCard";
 import { useLocale } from "../../i18n/LocaleProvider";
+import { useTheme } from "../../theme/ThemeProvider";
+import { withAlpha } from "../../theme/tokens";
+import { hapticTap } from "../../services/haptics";
 import { BarChart } from "../../components/charts/Charts";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { Button, Card, Chip, SectionTitle, Snackbar, TutorialTip, ui } from "../../components/ui";
@@ -34,6 +37,7 @@ export function MoodScreen({ navigation }: Props) {
   const [rec, setRec] = useState<MoodRecommendation | null>(null);
   const [crisis, setCrisis] = useState<CrisisPayload | null>(null);
   const { t } = useLocale();
+  const theme = useTheme();
   const [logs, setLogs] = useState<MoodLog[]>([]);
   const [byWeekday, setByWeekday] = useState<Array<{ weekday: number; count: number; avgScore: number | null }>>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -114,13 +118,33 @@ export function MoodScreen({ navigation }: Props) {
         <TutorialTip id="mood" title="Mood shapes your plan" text="When you're stressed I suggest lighter tasks and breaks; when you're energised I suggest your hardest work." />
         <Card style={{ gap: 12 }}>
           <Text style={ui.h2}>Right now I feel… {score ? `${score}/10` : ""}</Text>
+          {/* UI v3: one round button per score, tinted from low (red) to great (green); the chosen one fills. */}
           <View style={styles.scale}>
-            {SCALE.map((e, i) => (
-              <Pressable key={e} onPress={() => setScore(i + 1)} style={[styles.scaleBtn, score === i + 1 && styles.scaleActive]}>
-                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 22 }}>{e}</Text>
-                <Text style={styles.scaleNum}>{i + 1}</Text>
-              </Pressable>
-            ))}
+            {SCALE.map((e, i) => {
+              const n = i + 1;
+              const tint = n <= 3 ? theme.colors.danger.fg : n <= 6 ? theme.colors.warning.fg : theme.colors.success.fg;
+              const on = score === n;
+              return (
+                <Pressable
+                  key={e}
+                  onPress={() => {
+                    hapticTap();
+                    setScore(n);
+                  }}
+                  hitSlop={4}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={t("mood.score", { score: n })}
+                  style={[styles.scaleBtn, { borderColor: tint, backgroundColor: on ? tint : withAlpha(tint, 0.08) }]}
+                >
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: on ? theme.colors.onAccent : tint }}>{e}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.scaleEnds}>
+            <Text style={styles.scaleNum}>{t("mood.low")}</Text>
+            <Text style={styles.scaleNum}>{t("mood.great")}</Text>
           </View>
           <View style={ui.wrap}>
             {MOODS.map((m) => (
@@ -198,7 +222,8 @@ export function MoodScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   scale: { flexDirection: "row", justifyContent: "space-between" },
-  scaleBtn: { alignItems: "center", paddingVertical: 4, borderRadius: 10, width: "9.5%" },
+  scaleBtn: { alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 14, borderWidth: 1.5 },
+  scaleEnds: { flexDirection: "row", justifyContent: "space-between", marginTop: -4 },
   scaleActive: { backgroundColor: palette.aiSoft },
   scaleNum: { fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textMuted },
   meta: { fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textMuted },

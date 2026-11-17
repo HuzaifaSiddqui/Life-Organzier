@@ -5,7 +5,11 @@ import { useReducedMotion } from "react-native-reanimated";
 import { Sidebar } from "../components/Sidebar";
 import { layout, motion } from "../theme/tokens";
 import { useLayout } from "../theme/useLayout";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { TabBar } from "../components/TabBar";
+import { PlanScreen } from "../screens/plan/PlanScreen";
 import { colors } from "../constants/theme";
 import { AssistantScreen } from "../screens/assistant/AssistantScreen";
 import { CollabScreen } from "../screens/collab/CollabScreen";
@@ -25,6 +29,7 @@ import { NotificationsScreen } from "../screens/collab/NotificationsScreen";
 import { SavedPlacesScreen } from "../screens/places/SavedPlacesScreen";
 import { TaskDetailScreen } from "../screens/tasks/TaskDetailScreen";
 import { TaskListScreen } from "../screens/tasks/TaskListScreen";
+import { CatchUpScreen } from "../screens/tasks/CatchUpScreen";
 import type { ActionPayload, Priority, TaskType } from "../types/models";
 
 export type TaskFormPrefill = {
@@ -38,8 +43,24 @@ export type TaskFormPrefill = {
   tags?: string[];
 };
 
-export type MainStackParamList = {
+/**
+ * UI v3 tabs (docs/design.md "Navigation"): Today, Plan, (assistant button), Tasks, Me. Tasks is a tab because Plan
+ * only shows dated items; Insights (a weekly look-back) lives in Me.
+ */
+export type TabParamList = {
   Dashboard: undefined;
+  Plan: undefined;
+  TaskList: MainStackParamList["TaskList"];
+  Profile: undefined;
+};
+
+export const TAB_ROUTES: ReadonlyArray<keyof TabParamList> = ["Dashboard", "Plan", "TaskList", "Profile"];
+
+export type MainStackParamList = {
+  /** The tab screens. Their names are also listed below so screens can still be typed by name. */
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
+  Dashboard: undefined;
+  Plan: undefined;
   /** attach: open the file picker (send a document in chat). */
   Assistant: { voice?: boolean; prefill?: string; autoSend?: boolean; payload?: ActionPayload; label?: string; nonce?: number; attach?: boolean } | undefined;
   TaskList: { toast?: string; toastTone?: "success" | "warning"; /** A share just made from the task form: the toast offers Undo. */ undoShare?: { id: string; taskId: string | null }; filter?: "overdue" | "today" | "tomorrow"; /** Only these tasks (e.g. from a location reminder). */ ids?: string[] } | undefined;
@@ -52,7 +73,8 @@ export type MainStackParamList = {
   Memory: undefined;
   Mood: undefined;
   Documents: undefined;
-  Settings: undefined;
+  /** No section: the hub; a section: that group of settings on its own page. */
+  Settings: { section?: "account" | "reminders" | "connected" | "day" | "labels" | "language" } | undefined;
   SavedPlaces: undefined;
   Onboarding: undefined;
   Profile: undefined;
@@ -65,15 +87,38 @@ export type MainStackParamList = {
   CreateAccount: undefined;
   /** The review of one document's reading (from its chat card or My documents). */
   DocumentReview: { documentId: string };
+  /** UI v3: sort overdue tasks one by one. */
+  CatchUp: undefined;
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
+const Tab = createBottomTabNavigator<TabParamList>();
 
 /**
- * UI v2 motion (docs/ux-audit.md §8): the five bottom-nav screens fade into each other (switching tabs isn't moving
- * deeper); detail screens slide in from the right; Add task slides up. Reduce motion: no transition.
+ * UI v3 motion (docs/design.md "Motion"): tabs keep their screens alive and cross-fade; detail screens slide in from the
+ * right; the assistant and Add task slide up (they are things you do, not places you go). Reduce motion: no transition.
  */
-const TAB_SCREENS = new Set(["Dashboard", "TaskList", "Assistant", "Insights", "Profile"]);
+const RISE = new Set(["AddTask", "Assistant", "CatchUp"]);
+
+function MainTabs() {
+  const reduceMotion = useReducedMotion();
+  return (
+    <Tab.Navigator
+      screenOptions={{ headerShown: false, animation: reduceMotion ? "none" : "fade", sceneStyle: { backgroundColor: colors.bg } }}
+      tabBar={(props) => (
+        <TabBar
+          {...props}
+          onAssistant={(voice) => (props.navigation as unknown as { navigate: (n: string, p?: object) => void }).navigate("Assistant", voice ? { voice: true } : undefined)}
+        />
+      )}
+    >
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Plan" component={PlanScreen} />
+      <Tab.Screen name="TaskList" component={TaskListScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export function MainStack() {
   const { isWide } = useLayout();
@@ -103,14 +148,13 @@ function Screens() {
     <Stack.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        animation: reduceMotion ? "none" : TAB_SCREENS.has(route.name) ? "fade" : route.name === "AddTask" ? "slide_from_bottom" : "slide_from_right",
+        animation: reduceMotion ? "none" : RISE.has(route.name) ? "slide_from_bottom" : "slide_from_right",
         animationDuration: motion.duration.slow,
         contentStyle: { backgroundColor: colors.bg },
       })}
     >
-      <Stack.Screen name="Dashboard" component={DashboardScreen} />
+      <Stack.Screen name="Tabs" component={MainTabs} />
       <Stack.Screen name="Assistant" component={AssistantScreen} />
-      <Stack.Screen name="TaskList" component={TaskListScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <Stack.Screen name="AddTask" component={AddTaskScreen} />
       <Stack.Screen name="EditTask" component={EditTaskScreen} />
@@ -122,12 +166,12 @@ function Screens() {
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="SavedPlaces" component={SavedPlacesScreen} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ gestureEnabled: false }} />
-      <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Collab" component={CollabScreen} />
       <Stack.Screen name="SharedTaskEdit" component={SharedTaskEditScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="CreateAccount" component={CreateAccountScreen} />
       <Stack.Screen name="DocumentReview" component={DocumentReviewScreen} />
+      <Stack.Screen name="CatchUp" component={CatchUpScreen} />
     </Stack.Navigator>
   );
 }
