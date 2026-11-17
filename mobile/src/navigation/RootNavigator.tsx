@@ -149,6 +149,8 @@ export function RootNavigator() {
   const { colors } = useLegacy();
   const styles = useLegacyStyles(make_styles);
   const { firebaseUser, dbUser, bootstrapping, authReady } = useAuth();
+  // Every hook runs before the early return below (a hook after it changes the hook order once auth is ready).
+  const navigationTheme = useLegacyStyles(navTheme);
   // Finding the server and syncing the profile run in the background; the app opens as soon as
   // Firebase restores the session (no network needed). Only a first sign-in on this device, with
   // no cached profile yet, waits for the server to create the account.
@@ -164,7 +166,7 @@ export function RootNavigator() {
 
   return (
     <KeyboardPad style={{ backgroundColor: colors.bg }}>
-      <NavigationContainer theme={useLegacyStyles(navTheme)} ref={navigationRef} onReady={flushPendingNavigation}>
+      <NavigationContainer theme={navigationTheme} ref={navigationRef} onReady={flushPendingNavigation}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {!firebaseUser ? (
             <Stack.Screen name="Auth" component={AuthStack} />
