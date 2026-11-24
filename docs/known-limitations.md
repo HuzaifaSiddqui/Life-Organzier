@@ -110,6 +110,19 @@ Gaps and platform restrictions in the current release. Feature status: [AI_ASSIS
   Done / +30 min (check-ins), and Done at a place run in a background task (`services/notificationActions.ts`) and
   the notification goes away. Only "View" and "Update…" open the app. Offline, a routine answer waits in the outbox
   and a task answer in the sync queue until the phone is online.
+- **A task marked done, skipped, deleted or moved drops its scheduled reminders on the phone at once, also offline**
+  (`cancelTaskReminders`, `utils/taskReminders.ts`): from the app, a notification button, a place reminder or a
+  check-in "Done". Its kept snooze goes too, and the task goes on a cancelled list so a sync that fetched its plan
+  before the change cannot bring the reminders back. Only the server computes the plan, so:
+  - a **moved task** (new day, time, planned start or end) has **no reminders until the next trusted plan**: one asked
+    for after the change, once the change has reached the server (online, a second or two; offline, when the phone
+    is back online). A save counts as a move only when both the moment in time and the stored fields changed, so an
+    unchanged save (also on a phone in another time zone, or a chat-made task saved from the form) keeps them;
+  - a **task reopened offline** (Undo after Done) has no reminders until the next sync;
+  - an entry stays on the list for at most **7 days**: after that the task's reminders come back from the next plan
+    even if its change never synced (a stuck queue).
+  Other edits (title, priority, reminder mode…) keep the old reminders until the next sync. Check-ins, routine
+  reminders and place reminders are not touched by this. A notification already showing in the tray stays there.
 - **Needs the app's session on the phone:** a signed-out app does nothing with a button.
 - **Not on desktop:** Windows notifications have no buttons (a click opens the app).
 - **Installing or updating the APK clears its scheduled reminders** (Android removes an app's alarms); they come

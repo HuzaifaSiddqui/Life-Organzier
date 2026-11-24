@@ -2,7 +2,8 @@ import { mergeStatusProgress } from "../utils/taskUndo";
 import type { Priority, ReminderMode, Task, TaskSource, TaskStatus, TaskType } from "../types/models";
 import { apiGet, apiPost, getApiErrorMessage } from "./api";
 import { enqueue, isLocalId, newId, readTasks, serverIdFor, syncNow, writeTasks } from "./syncEngine";
-import { scheduleReminderSync } from "./reminders";
+import { remindersOutdated } from "../utils/taskReminders";
+import { cancelTaskReminders, scheduleReminderSync } from "./reminders";
 
 export type TaskInput = {
   title: string;
@@ -144,6 +145,8 @@ export async function updateTask(id: string, changes: TaskChanges): Promise<Task
   };
   await writeTasks(all.map((t) => (t.id === id ? updated : t)));
   await enqueue(isLocalId(id) ? { op: "update", taskId: id, changes: normalized } : { op: "update", taskId: id, baseVersion: existing.version, changes: normalized });
+  // Done, skipped, deleted or moved: its old reminders go now, before the network (works offline).
+  if (remindersOutdated(existing, updated)) await cancelTaskReminders(id);
   await syncNow();
   scheduleReminderSync();
   return (await readTasks()).find((t) => t.id === id) ?? updated;
@@ -157,6 +160,7 @@ export async function deleteTask(id: string): Promise<void> {
   const all = await readTasks();
   await writeTasks(all.map((t) => (t.id === id ? { ...t, status: "DELETED", deletedAt: new Date().toISOString(), pendingSync: true } : t)));
   await enqueue({ op: "delete", taskId: id });
+  await cancelTaskReminders(id);
   await syncNow();
   scheduleReminderSync();
 }

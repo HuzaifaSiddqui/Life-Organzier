@@ -10,6 +10,7 @@ import { scheduleCalendarSync } from "./calendar";
 import { answerCheckin, showCheckinSheet, type CheckinResponse, type PlannedCheckin } from "./checkins";
 import { addSnooze, applySnoozes, pruneSnoozes, SNOOZE_MINUTES, snoozeRepeats, type Snoozes } from "../utils/routineSnooze";
 import { addTaskSnooze, liveTaskSnoozes, TASK_SNOOZE_MINUTES, withoutTask, type TaskSnooze } from "../utils/taskSnooze";
+import { cancelledToClear, pendingTaskIds, suppressedTasks, taskReminderIdentifiers, type CancelledTasks } from "../utils/taskReminders";
 
 /**
  * Offline-first reminders (FR-RN-001/002): the server computes an escalating, quiet-hours-aware
@@ -263,6 +264,65 @@ async function writeTaskSnoozes(list: TaskSnooze[]): Promise<void> {
   }
 }
 
+/**
+ * Cancelled tasks (utils/taskReminders.ts): one AsyncStorage key per task, so the app and the headless notification
+ * task never overwrite each other's entries (no shared list is read and written back). An entry is removed only if it
+ * still holds the value that was read (a newer cancel of the same task is kept).
+ */
+const CANCELLED_PREFIX = "life-organizer:reminders-cancelled:";
+
+async function readCancelled(): Promise<CancelledTasks> {
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(CANCELLED_PREFIX));
+    const out: CancelledTasks = {};
+    for (const [k, v] of await AsyncStorage.multiGet(keys)) {
+      const at = Number(v);
+      if (at) out[k.slice(CANCELLED_PREFIX.length)] = at;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+async function clearCancelled(ids: string[], seen: CancelledTasks): Promise<void> {
+  for (const id of ids) {
+    try {
+      if (Number(await AsyncStorage.getItem(CANCELLED_PREFIX + id)) === seen[id]) await AsyncStorage.removeItem(CANCELLED_PREFIX + id);
+    } catch {
+      // storage unavailable: the entry is checked again on the next sync
+    }
+  }
+}
+
+/** Every task id on the phone, any status (null when the list can't be read). */
+async function phoneTaskIds(): Promise<Set<string> | null> {
+  try {
+    const { readTasks } = await import("./syncEngine");
+    return new Set((await readTasks()).map((t) => t.id));
+  } catch {
+    return null;
+  }
+}
+
+/** Task and local ids with a change still in the sync queue (empty when it can't be read). */
+async function queuedTaskIds(): Promise<Set<string>> {
+  try {
+    const { readQueue } = await import("./syncEngine");
+    return pendingTaskIds(await readQueue());
+  } catch {
+    return new Set();
+  }
+}
+
+/** Cancels the scheduled reminders of these tasks (one read of the schedule). */
+async function cancelScheduledFor(taskIds: string[]): Promise<void> {
+  if (!taskIds.length) return;
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const ids = new Set(taskIds.flatMap((id) => taskReminderIdentifiers(scheduled, id, PREFIX)));
+  await Promise.all([...ids].map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+}
+
 /** Open task ids from the phone's task list (null when it can't be read). */
 async function openTaskIds(): Promise<Set<string> | null> {
   try {
@@ -305,6 +365,8 @@ export async function syncReminders(): Promise<number | null> {
   // CALENDAR_SYNC: the phone calendar follows the same changes (returns at once while it's off).
   scheduleCalendarSync();
   let plan: PlanResponse;
+  // When this plan was asked for: a task cancelled before this moment and synced since is trusted to it.
+  const planRequestedAt = Date.now();
   try {
     plan = await apiGet<PlanResponse>("/reminders/plan?days=7");
   } catch {
@@ -325,14 +387,21 @@ export async function syncReminders(): Promise<number | null> {
   const repeats = snoozeRepeats(snoozes, plan.pendingOccurrences ?? [], Date.now());
   // WhatsApp Agent reminders instead of notifications: the server sends task and routine reminders there (and a
   // push if a send fails), so the phone leaves them out. Snoozes made on this phone and check-ins stay local.
-  const planned = plan.settings.viaWhatsappAgent ? [] : plan.reminders;
+  // Tasks cancelled on this phone that this plan may not know about yet (done, deleted or moved during the sync, or
+  // offline): their reminders are left out until a plan asked for after the cancel, with the change synced.
+  const cancelled = await readCancelled();
+  const clearCtx = { now: Date.now(), planRequestedAt, pending: await queuedTaskIds(), existing: await phoneTaskIds() };
+  const cleared = cancelledToClear(cancelled, clearCtx);
+  await clearCancelled(cleared, cancelled);
+  const suppressed = suppressedTasks(cancelled, clearCtx);
+  const planned = (plan.settings.viaWhatsappAgent ? [] : plan.reminders).filter((r) => !(r.taskId && suppressed.has(r.taskId)));
   const upcoming = applySnoozes(planned, snoozes)
     .filter((r) => new Date(r.fireAt).getTime() > Date.now() + 5000)
     .sort((a, b) => new Date(a.fireAt).getTime() - new Date(b.fireAt).getTime());
   let count = 0;
   for (const r of repeats) if (await scheduleRepeat(r, channel)) count += 1;
   // Task snoozes made on this phone: the cancel above dropped them, so they are scheduled again (utils/taskSnooze.ts).
-  const taskSnoozes = liveTaskSnoozes(await readTaskSnoozes(), await openTaskIds(), Date.now());
+  const taskSnoozes = liveTaskSnoozes(await readTaskSnoozes(), await openTaskIds(), Date.now()).filter((s) => !suppressed.has(s.taskId));
   await writeTaskSnoozes(taskSnoozes);
   for (const s of taskSnoozes) if (await scheduleTaskSnooze(s, channel)) count += 1;
   const batch = upcoming.slice(0, MAX_LOCAL_REMINDERS - count);
@@ -373,6 +442,14 @@ export async function syncReminders(): Promise<number | null> {
   const room = Math.max(0, MAX_LOCAL_REMINDERS - count);
   for (const c of checkins.slice(0, room)) if (await scheduleCheckin(c, channel)) count += 1;
   if (checkins.length > room) console.info(`Check-ins: skipped ${checkins.length - room} later ones (local notification limit)`);
+  // A task cancelled while this sync was scheduling: drop what was just scheduled for it again.
+  try {
+    const late = await readCancelled();
+    const done = new Set(cleared);
+    await cancelScheduledFor(Object.keys(late).filter((id) => !done.has(id) || late[id] !== cancelled[id]));
+  } catch (error) {
+    console.warn("Could not re-check cancelled reminders", error);
+  }
   return count;
 }
 
@@ -401,6 +478,24 @@ export async function snoozeTaskReminder(task: { id: string; title: string }, mi
   if (!s || !(await scheduleTaskSnooze(s))) return null;
   await writeTaskSnoozes(list);
   return new Date(s.fireAt);
+}
+
+/**
+ * The task was completed, deleted or moved: its scheduled reminders and its kept snooze go at once, before any network
+ * call, so this works offline too. The task is also kept on a cancelled list, so a sync that fetched its plan before
+ * the change (or while offline) doesn't bring them back; the first plan asked for after the change has synced makes
+ * them again (or 7 days pass). Check-ins, routines and location alerts are untouched (utils/taskReminders.ts).
+ * Never throws.
+ */
+export async function cancelTaskReminders(taskId: string): Promise<void> {
+  try {
+    // Marked first, so a sync running now leaves this task out (or drops it again when it finishes).
+    await AsyncStorage.setItem(CANCELLED_PREFIX + taskId, String(Date.now()));
+    await writeTaskSnoozes(withoutTask(await readTaskSnoozes(), taskId));
+    await cancelScheduledFor([taskId]);
+  } catch (error) {
+    console.warn("Could not clear task reminders", error);
+  }
 }
 
 /** Undo for snoozeTaskReminder: drops the kept snooze and its scheduled notification. */
@@ -591,6 +686,8 @@ export function startReminderResponses(onOpen: (target: ReminderOpenTarget) => v
 /** Clears every scheduled reminder (sign out). */
 export async function clearAllReminders(): Promise<void> {
   await cancelOurs();
+  const cancelled = await readCancelled();
+  await clearCancelled(Object.keys(cancelled), cancelled);
   await writeTaskSnoozes([]);
   await writeSnoozes({});
 }

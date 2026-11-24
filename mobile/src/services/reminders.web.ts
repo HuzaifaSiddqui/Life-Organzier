@@ -23,6 +23,9 @@ let lastPlanned: DesktopReminder[] = [];
 
 export async function configureReminders(): Promise<void> {}
 
+/** Phone only (local notifications): the desktop re-plans from the server on the next sync. */
+export async function cancelTaskReminders(_taskId: string): Promise<void> {}
+
 export async function ensureNotificationCategories(): Promise<void> {}
 
 export async function ensureNotificationPermissions(): Promise<boolean> {
