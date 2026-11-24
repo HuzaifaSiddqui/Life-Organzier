@@ -113,6 +113,9 @@ async function patchLocalTask(taskId: string | null, response: CheckinResponse, 
   else if (response.startsWith("PARTIAL_")) tasks[i] = { ...tasks[i], progress: Math.max(tasks[i].progress ?? 0, Number(response.split("_")[1])) };
   else return before;
   await writeTasks(tasks);
+  // "Done" completes the task: its reminders go now, before the answer is sent (works offline). The optimistic patch
+  // only; the server's copy that follows changes nothing more. Lazy import: reminders.ts imports this file.
+  if (response === "DONE" && !server) await (await import("./reminders")).cancelTaskReminders(taskId);
   return before;
 }
 

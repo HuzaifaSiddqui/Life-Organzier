@@ -10,6 +10,7 @@ import { scheduleCalendarSync } from "./calendar";
 import { answerCheckin, showCheckinSheet, type CheckinResponse, type PlannedCheckin } from "./checkins";
 import { addSnooze, applySnoozes, pruneSnoozes, SNOOZE_MINUTES, snoozeRepeats, type Snoozes } from "../utils/routineSnooze";
 import { addTaskSnooze, liveTaskSnoozes, TASK_SNOOZE_MINUTES, withoutTask, type TaskSnooze } from "../utils/taskSnooze";
+import { taskReminderIdentifiers } from "../utils/taskReminders";
 
 /**
  * Offline-first reminders (FR-RN-001/002): the server computes an escalating, quiet-hours-aware
@@ -401,6 +402,21 @@ export async function snoozeTaskReminder(task: { id: string; title: string }, mi
   if (!s || !(await scheduleTaskSnooze(s))) return null;
   await writeTaskSnoozes(list);
   return new Date(s.fireAt);
+}
+
+/**
+ * The task was completed, deleted or moved: its scheduled reminders and its kept snooze go at once, before any network
+ * call, so this works offline too. The next good sync re-makes whatever the server still plans for it. Check-ins,
+ * routines and location alerts are untouched (utils/taskReminders.ts). Never throws.
+ */
+export async function cancelTaskReminders(taskId: string): Promise<void> {
+  try {
+    await writeTaskSnoozes(withoutTask(await readTaskSnoozes(), taskId));
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    await Promise.all(taskReminderIdentifiers(scheduled, taskId, PREFIX).map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+  } catch (error) {
+    console.warn("Could not clear task reminders", error);
+  }
 }
 
 /** Undo for snoozeTaskReminder: drops the kept snooze and its scheduled notification. */
